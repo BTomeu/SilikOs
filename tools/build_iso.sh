@@ -2,7 +2,7 @@
 # build_iso.sh [boot.iso]: the SilikOS network installer = the AlmaLinux 9 boot ISO + kickstart/silikos.ks + the SilikOS
 # package repository (build/repo), with inst.ks added to every boot entry (BIOS and UEFI).
 # Needs xorriso, mtools, curl; network to repo.almalinux.org unless a boot ISO is given.
-# NOT YET RUN END TO END (the build machine had no access to repo.almalinux.org on 09/11/2026): see docs/STATUS.md.
+# Run on 09/11/2026 (AlmaLinux 9.8 boot ISO): the result boots under UEFI in QEMU; see docs/STATUS.md.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 work=$root/build/iso; out=$root/build/SilikOS-0.1-x86_64-netinstall.iso

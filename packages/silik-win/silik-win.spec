@@ -6,7 +6,6 @@ License:        LicenseRef-SilikVolt
 BuildArch:      noarch
 Requires:       silik-tools = %{version}
 Recommends:     wine
-Recommends:     winetricks
 Recommends:     qemu-kvm
 Recommends:     libvirt-daemon-kvm
 Recommends:     libvirt-client

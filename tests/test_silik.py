@@ -53,7 +53,21 @@ class Silik(unittest.TestCase):
 
     def test_eda_run_passes_the_command(self):
         rc, o = run("eda", "run", "ic616", "--", "virtuoso", "-nograph")
-        self.assertIn("$ podman exec -i -w " + os.getcwd() + " silik-eda-ic616 virtuoso -nograph", o)
+        self.assertIn(" silik-eda-ic616 virtuoso -nograph", o)
+        self.assertIn("$ podman exec -i -w ", o)
+
+    def test_eda_run_starts_in_home_outside_the_shared_folders(self):
+        old = os.getcwd()
+        os.chdir("/")
+        try:
+            rc, o = run("eda", "run", "b", "--", "true")
+        finally:
+            os.chdir(old)
+        self.assertIn("-w " + os.path.expanduser("~") + " silik-eda-b true", o)
+
+    def test_eda_setup_feeds_the_repo_file_on_stdin(self):   # exec -i, or the file is written empty
+        rc, o = run("eda", "setup", "b", "--el", "7")
+        self.assertIn("$ podman exec -i --user 0 silik-eda-b sh -c", o)
 
     def test_eda_import_vm(self):
         rc, o = run("eda", "import-vm", "/x/rhel66.vmdk", "--name", "uni")

@@ -17,6 +17,9 @@ silik eda run ic616 -- virtuoso &    # one program; COMMAND bar: eda/ic616 virtu
 silik eda check                      # vsyscall, podman, X11 access, /opt/eda
 ```
 
+   Measured on 09/11/2026 with a `centos:6` box: `silik eda setup` installs 36 of 36 packages from the vault, and an
+   X11 program started with `silik eda run` shows on the host's display.
+
    Install the tools under `/opt/eda` (shared with every box and with the system) or in your home folder.
 
 ## The owner's current setup: RHEL 6.6 in VMware

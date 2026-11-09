@@ -80,7 +80,10 @@ class Ctx:
             p = subprocess.run(argv, check=False, env=env, input=stdin, universal_newlines=True,
                                stdout=subprocess.PIPE if capture else None)
         except FileNotFoundError:
-            die("%s is not installed" % argv[0])
+            if check:
+                die("%s is not installed" % argv[0])
+            print("silik: %s is not installed (skipped)" % argv[0], file=sys.stderr)
+            return 127, ""
         if check and p.returncode != 0:
             die("%s exited %d" % (argv[0], p.returncode), p.returncode)
         return p.returncode, (p.stdout or "")
@@ -222,11 +225,16 @@ def eda_setup(ctx, a):
     v = EL[el]["vault"]
     if v:   # CentOS 6 / 7 are end of life: their packages are in the vault
         repo = VAULT_REPO.format(v=v, m=el)
-        ctx.run(root + ["sh", "-c", "rm -f /etc/yum.repos.d/*.repo && cat > /etc/yum.repos.d/vault.repo"], stdin=repo)
+        ctx.run(["podman", "exec", "-i", "--user", "0", name, "sh", "-c", "rm -f /etc/yum.repos.d/*.repo && cat > /etc/yum.repos.d/vault.repo"], stdin=repo)
     pm = "dnf" if el == "8" else "yum"
     if el == "8":
         ctx.run(root + [pm, "-y", "install", "epel-release"], check=False)
-    ctx.run(root + [pm, "-y", "--setopt=skip_missing_names_on_install=False", "install"] + BOX_PKGS[el].split(), check=False)
+    pkgs = BOX_PKGS[el].split()
+    ctx.run(root + [pm, "-y", "install"] + pkgs, check=False)
+    if not ctx.dry:   # what the release does not have, or what failed: said, not hidden
+        probe = "for p in %s; do rpm -q $p >/dev/null 2>&1 || echo $p; done" % " ".join(pkgs)
+        missing = ctx.query(root + ["sh", "-c", probe]).split()
+        print("box %s: %d of %d packages installed%s" % (a.name, len(pkgs) - len(missing), len(pkgs), "; not installed: " + " ".join(missing) if missing else ""))
     # the FlexLM daemons ask for the LSB loader by name
     ctx.run(root + ["sh", "-c", "[ -e /lib64/ld-lsb-x86-64.so.3 ] || ln -s ld-linux-x86-64.so.2 /lib64/ld-lsb-x86-64.so.3"])
     return 0
@@ -246,7 +254,10 @@ def eda_run(ctx, a):
     name = box_name(a.name)
     ctx.run(["podman", "start", name])
     ctx.run(["xhost", "+si:localuser:" + (os.environ.get("USER") or "root")], check=False)
-    rc, _ = ctx.run(["podman", "exec", "-i", "-w", os.getcwd(), name] + a.cmd, check=False)
+    cwd, home = os.getcwd(), os.path.expanduser("~")   # the box sees $HOME and /opt/eda: elsewhere, start in $HOME
+    if not any(cwd == d or cwd.startswith(d.rstrip("/") + "/") for d in (home, EDA_SHARED)):
+        cwd = home
+    rc, _ = ctx.run(["podman", "exec", "-i", "-w", cwd, name] + a.cmd, check=False)
     return rc
 
 
