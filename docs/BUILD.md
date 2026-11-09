@@ -11,11 +11,17 @@ The ISO is the AlmaLinux 9 boot image with `kickstart/silikos.ks`, the repositor
 `inst.ks=` added to the boot entries. The installation downloads the base system from the AlmaLinux and EPEL
 repositories, so the machine needs a network (cable or a phone's USB tether if the Wi-Fi card is not recognised).
 
-To try the packages on an existing AlmaLinux / Rocky / RHEL 9 without the ISO:
+## Installing
+
+With the ISO (write it to a USB stick): language, keyboard and time zone, then **Installation Destination** (choose the
+disk and how to use it: nothing is preselected or erased), **User Creation**, Begin Installation. A cable or a phone's
+USB tether connects by itself; with Wi-Fi only, join the network in **Network & Host Name** and then open
+**Installation Source** once more. About 750 packages (1.2 GB) are downloaded.
+
+Without the ISO, on an installed AlmaLinux / Rocky / RHEL 9 Workstation:
 
 ```bash
-sudo dnf install epel-release && sudo dnf config-manager --set-enabled crb
-sudo dnf install ./build/repo/*.rpm
+git clone https://github.com/BTomeu/silikos && bash silikos/tools/install_on_alma.sh
 ```
 
 Layout: `packages/<name>/<name>.spec` and its `files/` (the spec installs straight from there), `kickstart/`,

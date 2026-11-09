@@ -20,6 +20,10 @@ Docker Hub, repo.almalinux.org, dl.fedoraproject.org and vault.centos.org).
 | An X11 program of the EL6 box shows on the host's display | `silik eda run x6 -- xterm ...` against an Xvfb display, screenshot | xterm of CentOS 6.10 drawn |
 | The installer ISO builds | `tools/build_iso.sh`: AlmaLinux 9.8 boot ISO + kickstart + repository, 1.5 GB, 1 min | `inst.ks=` in the ISO's and the EFI image's `grub.cfg`; entries read "Install SilikOS 0.1" |
 | The ISO boots under UEFI | QEMU (TCG) + OVMF: GRUB menu, default entry, kernel 5.14.0-687.5.3.el9_8 starts | boots (QEMU's default CPU model lacks x86-64-v2, which EL9 needs: use `-cpu max`; real CPUs since 2009 have it) |
+| The installer takes the kickstart and finds the package sources | the ISO's kernel + installer in QEMU (TCG, `-cpu max`), graphical, screenshots | summary screen: network connected by itself, Installation Source = repo.almalinux.org, Software Selection = Workstation (the six SilikOS packages from the ISO's repository and EPEL resolve); disk, user and time zone left to the person, as designed |
+
+Found by booting the ISO and fixed: the installer did not bring the network up by itself, so the package sources
+failed until it was turned on by hand (the kickstart now activates a wired connection).
 
 Two bugs were found by running `silik eda` for real and fixed: the vault repository file was written empty
 (`podman exec` without `-i`), and a missing optional helper (`xhost`) stopped the command.
@@ -30,6 +34,7 @@ Two bugs were found by running `silik eda` for real and fixed: the vault reposit
 |---|---|---|
 | A complete installation from the ISO (752 packages) and the first boot of the installed system | no KVM here: emulated it would take many hours | any PC with virtualisation, or the Ryzen machine itself |
 | BIOS (non-UEFI) boot of the ISO | not tried | a VM |
+| The installer's own screens say "AlmaLinux 9.8" | they come from the base's installer image, not changed in 0.1 | a later `product.img` |
 | The desktop defaults in a real GNOME session (dconf, Super+Space, X11 default, login logo) | no GNOME session here | after the first installation |
 | `silik eda create` with podman itself (`--userns keep-id`, the home folder and X authority mounts), `import-vm` (libguestfs) | Docker stood in for podman here; no libguestfs | the Ryzen machine |
 | Cadence / Synopsys tools | no installers or licences | the owner |
