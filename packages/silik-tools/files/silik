@@ -1,0 +1,493 @@
+#!/usr/bin/python3
+# SilikOS — `silik`: the one command behind every action of the desktop (the COMMAND bar echoes these lines).
+#   silik status
+#   silik eda   list | create NAME --el 6|7|8 | setup NAME | enter NAME | run NAME -- CMD... | import-vm DISK --name NAME
+#               | rm NAME | check | kernel-arg
+#   silik win   list | create PREFIX | run PREFIX -- PROG.exe [ARGS] | install PREFIX SETUP.exe | rm PREFIX
+#               | vm create --iso WIN.iso [--name N --ram GB --disk GB --cpus N] | vm start [N] | vm stop [N]
+#               | vm app [N] --exe 'C:\path\app.exe' --user U
+#   silik hw    probe | nvidia install | nvidia status
+#   silik update
+# Global: --dry-run prints the commands and runs nothing; -q hides the `$ ...` lines.
+# Python 3.9 (the base system's), standard library only. Every external command is printed as `$ ...` before it runs.
+import argparse
+import json
+import os
+import shlex
+import shutil
+import subprocess
+import sys
+
+VERSION = "0.1.0"
+BOX_PREFIX = "silik-eda-"
+STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
+WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
+EDA_SHARED = os.environ.get("SILIK_EDA_ROOT") or "/opt/eda"
+
+# the userlands a box can have: image, and the repository files its package manager needs today
+EL = {
+    "6": {"image": "docker.io/library/centos:6", "vault": "6.10", "vsyscall": True},
+    "7": {"image": "docker.io/library/centos:7", "vault": "7.9.2009", "vsyscall": False},
+    "8": {"image": "docker.io/library/almalinux:8", "vault": None, "vsyscall": False},
+}
+# what the EDA installers and tools of that era ask for (csh scripts, Motif / X11, 32-bit runtime for licence daemons)
+BOX_PKGS = {
+    "6": "tcsh ksh xterm libXp libXp.i686 libXtst libXrender libXext libXi libXrandr libXcursor libXft libXScrnSaver "
+         "openmotif mesa-libGL mesa-libGLU glibc.i686 libstdc++.i686 libgcc.i686 compat-libstdc++-33 compat-db "
+         "redhat-lsb-core xorg-x11-fonts-75dpi xorg-x11-fonts-100dpi xorg-x11-fonts-misc xorg-x11-fonts-Type1 "
+         "xorg-x11-xauth elfutils-libelf libpng libjpeg-turbo ncurses-libs apr apr-util which time perl",
+    "7": "tcsh ksh xterm libXp libXp.i686 libXtst libXrender libXext libXi libXrandr libXcursor libXft libXScrnSaver "
+         "motif mesa-libGL mesa-libGLU glibc.i686 libstdc++.i686 libgcc.i686 compat-libstdc++-33 compat-db47 "
+         "redhat-lsb-core xorg-x11-fonts-75dpi xorg-x11-fonts-100dpi xorg-x11-fonts-misc xorg-x11-fonts-Type1 "
+         "xorg-x11-xauth elfutils-libelf libpng12 libjpeg-turbo ncurses-libs apr apr-util which time perl libnsl",
+    "8": "tcsh ksh xterm libXp libXtst libXrender libXext libXi libXrandr libXcursor libXft libXScrnSaver motif "
+         "mesa-libGL mesa-libGLU glibc.i686 libstdc++.i686 libgcc.i686 redhat-lsb-core xorg-x11-fonts-75dpi "
+         "xorg-x11-fonts-100dpi xorg-x11-fonts-misc xorg-x11-fonts-Type1 xorg-x11-xauth elfutils-libelf libpng12 "
+         "libjpeg-turbo ncurses-compat-libs apr apr-util which time perl libnsl",
+}
+VAULT_REPO = """[base]
+name=CentOS-{v} - Base (vault)
+baseurl=https://vault.centos.org/{v}/os/$basearch/
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-{m}
+[updates]
+name=CentOS-{v} - Updates (vault)
+baseurl=https://vault.centos.org/{v}/updates/$basearch/
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-{m}
+[extras]
+name=CentOS-{v} - Extras (vault)
+baseurl=https://vault.centos.org/{v}/extras/$basearch/
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-{m}
+"""
+
+
+class Ctx:
+    def __init__(self, dry=False, quiet=False):
+        self.dry, self.quiet = dry, quiet
+
+    def echo(self, argv):
+        if not self.quiet:
+            print("$ " + " ".join(shlex.quote(a) for a in argv), flush=True)
+
+    def run(self, argv, check=True, capture=False, env=None, stdin=None):
+        """prints the command, runs it unless --dry-run; returns (rc, stdout)"""
+        self.echo(argv)
+        if self.dry:
+            return 0, ""
+        try:
+            p = subprocess.run(argv, check=False, env=env, input=stdin, universal_newlines=True,
+                               stdout=subprocess.PIPE if capture else None)
+        except FileNotFoundError:
+            die("%s is not installed" % argv[0])
+        if check and p.returncode != 0:
+            die("%s exited %d" % (argv[0], p.returncode), p.returncode)
+        return p.returncode, (p.stdout or "")
+
+    def query(self, argv):
+        """a read-only command (not echoed, runs under --dry-run too); '' when it is missing or fails"""
+        try:
+            p = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True)
+            return p.stdout if p.returncode == 0 else ""
+        except (FileNotFoundError, PermissionError):
+            return ""
+
+
+def die(msg, rc=1):
+    print("silik: " + msg, file=sys.stderr)
+    sys.exit(rc)
+
+
+def read(path, default=""):
+    try:
+        with open(path) as f:
+            return f.read()
+    except OSError:
+        return default
+
+
+def valid_name(n):
+    return bool(n) and len(n) <= 40 and all(c.isalnum() or c in "-_." for c in n) and n[0].isalnum()
+
+
+# ------------------------------------------------------------------ status
+def kernel_vsyscall():
+    """'emulate' / 'xonly' / 'none' as the running kernel was started, '' when unknown"""
+    for a in read("/proc/cmdline").split():
+        if a.startswith("vsyscall="):
+            return a.split("=", 1)[1]
+    maps = read("/proc/self/maps")
+    if "[vsyscall]" in maps:
+        line = [l for l in maps.splitlines() if "[vsyscall]" in l][0]
+        return "emulate" if line.split()[1].startswith("r") else "xonly"
+    return "none" if maps else ""
+
+
+def gpus(ctx):
+    out = []
+    for l in ctx.query(["lspci", "-nn"]).splitlines():
+        if any(k in l for k in ("VGA compatible", "3D controller", "Display controller")):
+            out.append(l.split(": ", 1)[-1])
+    return out
+
+
+def boxes(ctx):
+    out = ctx.query(["podman", "ps", "-a", "--filter", "name=^" + BOX_PREFIX, "--format", "{{.Names}}\t{{.Image}}\t{{.Status}}"])
+    res = []
+    for l in out.splitlines():
+        p = l.split("\t")
+        if len(p) == 3:
+            res.append({"name": p[0][len(BOX_PREFIX):], "image": p[1], "status": p[2]})
+    return res
+
+
+def prefixes():
+    try:
+        return sorted(d for d in os.listdir(WINE_ROOT) if os.path.isdir(os.path.join(WINE_ROOT, d)))
+    except OSError:
+        return []
+
+
+def cmd_status(ctx, a):
+    rel = read("/etc/silikos-release").strip() or "SilikOS (not installed as a system: running from a checkout)"
+    base = read("/etc/redhat-release").strip() or "-"
+    st = {
+        "silikos": rel, "base": base, "silik": VERSION, "kernel": os.uname().release, "arch": os.uname().machine,
+        "vsyscall": kernel_vsyscall(), "session": os.environ.get("XDG_SESSION_TYPE", "-"), "gpus": gpus(ctx),
+        "eda_boxes": boxes(ctx), "wine_prefixes": prefixes(),
+    }
+    if a.json:
+        print(json.dumps(st, indent=1))
+        return 0
+    print("%-14s %s" % ("system", st["silikos"]))
+    print("%-14s %s" % ("base", st["base"]))
+    print("%-14s %s (%s)" % ("kernel", st["kernel"], st["arch"]))
+    print("%-14s %s" % ("vsyscall", st["vsyscall"] or "unknown"))
+    print("%-14s %s" % ("session", st["session"]))
+    for g in st["gpus"] or ["-"]:
+        print("%-14s %s" % ("gpu", g))
+    for b in st["eda_boxes"]:
+        print("%-14s %s  %s  %s" % ("eda box", b["name"], b["image"], b["status"]))
+    for p in st["wine_prefixes"]:
+        print("%-14s %s" % ("wine prefix", p))
+    return 0
+
+
+# ------------------------------------------------------------------ eda
+def box_name(n):
+    if not valid_name(n):
+        die("box name '%s': letters, digits, - _ . (max 40)" % n, 2)
+    return BOX_PREFIX + n
+
+
+def eda_create(ctx, a):
+    el = EL.get(a.el)
+    if not el:
+        die("--el %s: 6, 7 or 8" % a.el, 2)
+    name = box_name(a.name)
+    image = a.image or el["image"]
+    home = os.path.expanduser("~")
+    host = os.uname().nodename
+    argv = ["podman", "create", "--name", name, "--label", "silik.eda.el=" + a.el,
+            "--hostname", host, "--network", "host", "--ipc", "host", "--userns", "keep-id",
+            "--security-opt", "label=disable", "--init",
+            "-e", "DISPLAY", "-e", "XAUTHORITY", "-e", "LM_LICENSE_FILE", "-e", "CDS_LIC_FILE", "-e", "SNPSLMD_LICENSE_FILE",
+            "-v", "/tmp/.X11-unix:/tmp/.X11-unix", "-v", home + ":" + home, "-w", home]
+    if os.path.isdir(EDA_SHARED) or ctx.dry:
+        argv += ["-v", EDA_SHARED + ":" + EDA_SHARED]
+    xa = os.environ.get("XAUTHORITY")
+    if xa and not xa.startswith(home):
+        argv += ["-v", xa + ":" + xa + ":ro"]
+    argv += [image, "sleep", "infinity"]
+    ctx.run(argv)
+    if el["vsyscall"] and kernel_vsyscall() == "none" and not ctx.dry:
+        print("silik: an EL6 userland calls the vsyscall page and this kernel has it off: run `silik eda kernel-arg` and reboot", file=sys.stderr)
+    print("box %s created; `silik eda setup %s` installs what EDA tools ask for, `silik eda enter %s` opens a shell" % (a.name, a.name, a.name))
+    return 0
+
+
+def box_el(ctx, name):
+    out = ctx.query(["podman", "inspect", "--format", "{{index .Config.Labels \"silik.eda.el\"}}", name]).strip()
+    return out if out in EL else ""
+
+
+def eda_setup(ctx, a):
+    name = box_name(a.name)
+    el = a.el or box_el(ctx, name) or ("6" if ctx.dry else "")
+    if el not in EL:
+        die("box %s: its EL release is unknown, give --el" % a.name, 2)
+    ctx.run(["podman", "start", name])
+    root = ["podman", "exec", "--user", "0", name]
+    v = EL[el]["vault"]
+    if v:   # CentOS 6 / 7 are end of life: their packages are in the vault
+        repo = VAULT_REPO.format(v=v, m=el)
+        ctx.run(root + ["sh", "-c", "rm -f /etc/yum.repos.d/*.repo && cat > /etc/yum.repos.d/vault.repo"], stdin=repo)
+    pm = "dnf" if el == "8" else "yum"
+    if el == "8":
+        ctx.run(root + [pm, "-y", "install", "epel-release"], check=False)
+    ctx.run(root + [pm, "-y", "--setopt=skip_missing_names_on_install=False", "install"] + BOX_PKGS[el].split(), check=False)
+    # the FlexLM daemons ask for the LSB loader by name
+    ctx.run(root + ["sh", "-c", "[ -e /lib64/ld-lsb-x86-64.so.3 ] || ln -s ld-linux-x86-64.so.2 /lib64/ld-lsb-x86-64.so.3"])
+    return 0
+
+
+def eda_enter(ctx, a):
+    name = box_name(a.name)
+    ctx.run(["podman", "start", name])
+    ctx.run(["xhost", "+si:localuser:" + (os.environ.get("USER") or "root")], check=False)
+    rc, _ = ctx.run(["podman", "exec", "-it", name, a.shell], check=False)
+    return rc
+
+
+def eda_run(ctx, a):
+    if not a.cmd:
+        die("silik eda run NAME -- COMMAND [ARGS]", 2)
+    name = box_name(a.name)
+    ctx.run(["podman", "start", name])
+    ctx.run(["xhost", "+si:localuser:" + (os.environ.get("USER") or "root")], check=False)
+    rc, _ = ctx.run(["podman", "exec", "-i", "-w", os.getcwd(), name] + a.cmd, check=False)
+    return rc
+
+
+def eda_import_vm(ctx, a):
+    """the root file system of a virtual machine's disk (VMware .vmdk, VirtualBox .vdi, .qcow2, raw) as a box image"""
+    if not os.path.isfile(a.disk) and not ctx.dry:
+        die("no such disk image: " + a.disk)
+    box_name(a.name)
+    image = "localhost/silik-eda-import/" + a.name.lower()
+    tar = os.path.join(a.tmp or os.environ.get("TMPDIR") or "/var/tmp", "silik-import-%s.tar" % a.name)
+    ctx.run(["virt-tar-out", "-a", a.disk, "/", tar])
+    ctx.run(["podman", "import", "--change", "CMD [\"/bin/bash\"]", tar, image])
+    ctx.run(["rm", "-f", tar])
+    print("image %s; create the box with: silik eda create %s --el %s --image %s" % (image, a.name, a.el, image))
+    return 0
+
+
+def eda_rm(ctx, a):
+    ctx.run(["podman", "rm", "-f", box_name(a.name)])
+    return 0
+
+
+def eda_list(ctx, a):
+    bs = boxes(ctx)
+    if a.json:
+        print(json.dumps(bs, indent=1))
+    else:
+        for b in bs:
+            print("%-20s %-40s %s" % (b["name"], b["image"], b["status"]))
+        if not bs:
+            print("no EDA boxes; `silik eda create NAME --el 6` makes one")
+    return 0
+
+
+def eda_check(ctx, a):
+    ok = True
+    v = kernel_vsyscall()
+    need6 = any("centos:6" in b["image"] or box_el(ctx, BOX_PREFIX + b["name"]) == "6" for b in boxes(ctx))
+    # glibc 2.12 (EL6) executes the vsyscall page: "emulate" and "xonly" both serve it, "none" kills the program
+    print("kernel vsyscall: %s%s" % (v or "unknown", "" if v != "none" or not need6 else "  <- EL6 boxes need the vsyscall page (silik eda kernel-arg)"))
+    ok = ok and (v != "none" or not need6)
+    for exe, why in (("podman", "the boxes"), ("xhost", "X11 access of the boxes"), ("virt-tar-out", "import-vm (libguestfs-tools)")):
+        have = shutil.which(exe) is not None
+        print("%-13s %s%s" % (exe, "found" if have else "missing", "" if have else "  <- " + why))
+        ok = ok and (have or exe == "virt-tar-out")
+    print("session: %s%s" % (os.environ.get("XDG_SESSION_TYPE", "-"), "" if os.environ.get("XDG_SESSION_TYPE") != "wayland" else "  (X11 is the tested session for Virtuoso)"))
+    print("shared tools folder %s: %s" % (EDA_SHARED, "present" if os.path.isdir(EDA_SHARED) else "absent (install the tools there to share them with every box)"))
+    return 0 if ok else 1
+
+
+def eda_kernel_arg(ctx, a):
+    ctx.run(["sudo", "grubby", "--update-kernel=ALL", "--args=vsyscall=emulate"])
+    print("reboot to apply; `silik status` then shows vsyscall emulate")
+    return 0
+
+
+# ------------------------------------------------------------------ win
+def prefix_dir(n):
+    if not valid_name(n):
+        die("prefix name '%s': letters, digits, - _ . (max 40)" % n, 2)
+    return os.path.join(WINE_ROOT, n)
+
+
+def wine_env(d, arch="win64"):
+    e = dict(os.environ)
+    e.update({"WINEPREFIX": d, "WINEARCH": arch, "WINEDEBUG": e.get("WINEDEBUG", "-all")})
+    return e
+
+
+def win_create(ctx, a):
+    d = prefix_dir(a.prefix)
+    if os.path.isdir(d):
+        die("prefix %s exists" % a.prefix)
+    if not ctx.dry:
+        os.makedirs(WINE_ROOT, exist_ok=True)
+    ctx.echo(["env", "WINEPREFIX=" + d, "WINEARCH=" + a.arch, "wineboot", "--init"])
+    if not ctx.dry:
+        subprocess.run(["wineboot", "--init"], env=wine_env(d, a.arch), check=False)
+    return 0
+
+
+def win_run(ctx, a):
+    d = prefix_dir(a.prefix)
+    if not os.path.isdir(d) and not ctx.dry:
+        die("no prefix %s; `silik win create %s`" % (a.prefix, a.prefix))
+    if not a.cmd:
+        die("silik win run PREFIX -- PROGRAM.exe [ARGS]", 2)
+    ctx.echo(["env", "WINEPREFIX=" + d, "wine"] + a.cmd)
+    if ctx.dry:
+        return 0
+    return subprocess.run(["wine"] + a.cmd, env=wine_env(d), check=False).returncode
+
+
+def win_install(ctx, a):
+    a.cmd = [a.setup] + (a.args or [])
+    return win_run(ctx, a)
+
+
+def win_rm(ctx, a):
+    d = prefix_dir(a.prefix)
+    ctx.run(["rm", "-rf", "--", d])
+    return 0
+
+
+def win_list(ctx, a):
+    ps = prefixes()
+    if a.json:
+        print(json.dumps(ps))
+    else:
+        for p in ps:
+            print(p)
+        if not ps:
+            print("no Wine prefixes; `silik win create NAME` makes one")
+    return 0
+
+
+def vm_create(ctx, a):
+    if not os.path.isfile(a.iso) and not ctx.dry:
+        die("no such ISO: " + a.iso)
+    if not valid_name(a.name):
+        die("VM name: letters, digits, - _ .", 2)
+    argv = ["virt-install", "--connect", "qemu:///session", "--name", a.name, "--memory", str(a.ram * 1024), "--vcpus", str(a.cpus),
+            "--cpu", "host-passthrough", "--machine", "q35", "--boot", "uefi", "--tpm", "backend.type=emulator,backend.version=2.0,model=tpm-crb",
+            "--disk", "size=%d,format=qcow2,bus=sata" % a.disk, "--cdrom", a.iso, "--os-variant", a.os_variant,
+            "--network", "passt,model=e1000e,portForward=3389:3389", "--graphics", "spice", "--video", "qxl", "--sound", "ich9", "--noautoconsole"]
+    ctx.run(argv)
+    print("install Windows in the window that `virt-viewer --connect qemu:///session %s` opens; then enable Remote Desktop in it" % a.name)
+    return 0
+
+
+def vm_start(ctx, a):
+    ctx.run(["virsh", "--connect", "qemu:///session", "start", a.name], check=False)
+    return 0
+
+
+def vm_stop(ctx, a):
+    ctx.run(["virsh", "--connect", "qemu:///session", "shutdown", a.name], check=False)
+    return 0
+
+
+def vm_app(ctx, a):
+    """one Windows program of the VM as a window of this desktop (RDP RemoteApp)"""
+    argv = ["xfreerdp", "/v:" + a.host, "/u:" + a.user, "/cert:tofu", "/dynamic-resolution", "+clipboard",
+            "/drive:home," + os.path.expanduser("~"), "/app:program:" + a.exe]
+    ctx.run(argv, check=False)
+    return 0
+
+
+# ------------------------------------------------------------------ hw
+def hw_probe(ctx, a):
+    cpu = [l.split(":", 1)[1].strip() for l in read("/proc/cpuinfo").splitlines() if l.startswith("model name")]
+    info = {"cpu": cpu[0] if cpu else os.uname().machine, "cores": os.cpu_count(), "arch": os.uname().machine, "gpus": gpus(ctx),
+            "nvidia_driver": read("/proc/driver/nvidia/version").splitlines()[0] if os.path.exists("/proc/driver/nvidia/version") else "",
+            "kvm": os.path.exists("/dev/kvm")}
+    if a.json:
+        print(json.dumps(info, indent=1))
+    else:
+        for k in ("cpu", "cores", "arch", "kvm", "nvidia_driver"):
+            print("%-14s %s" % (k, info[k] if info[k] != "" else "-"))
+        for g in info["gpus"] or ["-"]:
+            print("%-14s %s" % ("gpu", g))
+    return 0
+
+
+NVIDIA_REPO = "https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo"
+
+
+def hw_nvidia(ctx, a):
+    if a.action == "status":
+        v = read("/proc/driver/nvidia/version")
+        print(v.strip() or "the NVIDIA kernel module is not loaded")
+        return 0 if v else 1
+    if os.uname().machine != "x86_64" and not ctx.dry:
+        die("the NVIDIA repository used here is for x86_64")
+    # NVIDIA's own EL9 repository, DKMS flavour: the module is rebuilt for each kernel of the base system
+    ctx.run(["sudo", "dnf", "-y", "install", "epel-release", "kernel-devel", "kernel-headers", "dkms"])
+    ctx.run(["sudo", "dnf", "config-manager", "--add-repo", NVIDIA_REPO])
+    ctx.run(["sudo", "dnf", "-y", "module", "install", "nvidia-driver:latest-dkms"])
+    print("reboot; with Secure Boot on, enrol the DKMS key first (mokutil --import /var/lib/dkms/mok.pub)")
+    return 0
+
+
+def cmd_update(ctx, a):
+    ctx.run(["sudo", "dnf", "-y", "upgrade", "--refresh"])
+    return 0
+
+
+# ------------------------------------------------------------------ command line
+def parser():
+    p = argparse.ArgumentParser(prog="silik", description="SilikOS system command")
+    p.add_argument("--dry-run", action="store_true", help="print the commands, run nothing")
+    p.add_argument("-q", "--quiet", action="store_true", help="do not print the `$ ...` lines")
+    p.add_argument("--version", action="version", version="silik " + VERSION)
+    s = p.add_subparsers(dest="group")
+    x = s.add_parser("status"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=cmd_status)
+    x = s.add_parser("update"); x.set_defaults(fn=cmd_update)
+
+    e = s.add_parser("eda", help="EDA boxes: EL6 / EL7 / EL8 userlands for the tools").add_subparsers(dest="cmd")
+    x = e.add_parser("list"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=eda_list)
+    x = e.add_parser("create"); x.add_argument("name"); x.add_argument("--el", default="7"); x.add_argument("--image"); x.set_defaults(fn=eda_create)
+    x = e.add_parser("setup"); x.add_argument("name"); x.add_argument("--el"); x.set_defaults(fn=eda_setup)
+    x = e.add_parser("enter"); x.add_argument("name"); x.add_argument("--shell", default="/bin/bash"); x.set_defaults(fn=eda_enter)
+    x = e.add_parser("run"); x.add_argument("name"); x.add_argument("cmd", nargs=argparse.REMAINDER); x.set_defaults(fn=eda_run)
+    x = e.add_parser("import-vm"); x.add_argument("disk"); x.add_argument("--name", required=True); x.add_argument("--el", default="6"); x.add_argument("--tmp"); x.set_defaults(fn=eda_import_vm)
+    x = e.add_parser("rm"); x.add_argument("name"); x.set_defaults(fn=eda_rm)
+    x = e.add_parser("check"); x.set_defaults(fn=eda_check)
+    x = e.add_parser("kernel-arg"); x.set_defaults(fn=eda_kernel_arg)
+
+    w = s.add_parser("win", help="Windows programs: Wine prefixes and a Windows virtual machine").add_subparsers(dest="cmd")
+    x = w.add_parser("list"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=win_list)
+    x = w.add_parser("create"); x.add_argument("prefix"); x.add_argument("--arch", default="win64", choices=["win64", "win32"]); x.set_defaults(fn=win_create)
+    x = w.add_parser("run"); x.add_argument("prefix"); x.add_argument("cmd", nargs=argparse.REMAINDER); x.set_defaults(fn=win_run)
+    x = w.add_parser("install"); x.add_argument("prefix"); x.add_argument("setup"); x.add_argument("args", nargs="*"); x.set_defaults(fn=win_install)
+    x = w.add_parser("rm"); x.add_argument("prefix"); x.set_defaults(fn=win_rm)
+    v = w.add_parser("vm").add_subparsers(dest="vmcmd")
+    x = v.add_parser("create"); x.add_argument("--iso", required=True); x.add_argument("--name", default="windows")
+    x.add_argument("--ram", type=int, default=8); x.add_argument("--disk", type=int, default=80); x.add_argument("--cpus", type=int, default=4)
+    x.add_argument("--os-variant", default="win11"); x.set_defaults(fn=vm_create)
+    x = v.add_parser("start"); x.add_argument("name", nargs="?", default="windows"); x.set_defaults(fn=vm_start)
+    x = v.add_parser("stop"); x.add_argument("name", nargs="?", default="windows"); x.set_defaults(fn=vm_stop)
+    x = v.add_parser("app"); x.add_argument("--exe", required=True); x.add_argument("--user", required=True)
+    x.add_argument("--host", default="127.0.0.1:3389"); x.set_defaults(fn=vm_app)
+
+    h = s.add_parser("hw", help="hardware: probe, NVIDIA driver").add_subparsers(dest="cmd")
+    x = h.add_parser("probe"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=hw_probe)
+    x = h.add_parser("nvidia"); x.add_argument("action", choices=["install", "status"]); x.set_defaults(fn=hw_nvidia)
+    return p
+
+
+def main(argv=None):
+    p = parser()
+    a = p.parse_args(argv)
+    if not getattr(a, "fn", None):
+        p.print_help()
+        return 2
+    for k in ("cmd",):   # argparse.REMAINDER keeps the "--" separator
+        v = getattr(a, k, None)
+        if isinstance(v, list) and v and v[0] == "--":
+            setattr(a, k, v[1:])
+    return a.fn(Ctx(a.dry_run, a.quiet), a) or 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

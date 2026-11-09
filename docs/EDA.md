@@ -1,0 +1,45 @@
+# EDA tools on SilikOS
+
+## Two ways to run a tool
+
+1. **On the system itself (EL9)**, for releases that support RHEL 9. `silik-eda-compat` brings what installers and
+   tools usually ask for: csh / ksh, xterm, Motif and X11 libraries, the 75 / 100 dpi and Type1 fonts, 32-bit runtime,
+   compatibility libraries (ncurses 5, libcrypt 1, OpenSSL 1.1, libpng12), `libnsl`, and the loader name
+   `/usr/lib64/ld-lsb-x86-64.so.3` that FlexLM daemons (`lmgrd`, vendor daemons) are linked against (EL9 has no
+   `redhat-lsb`). The names are weak dependencies: `tools/check_deps.sh` shows which ones a repository lacks.
+2. **In a box**, for releases made for RHEL 6 / 7 / 8:
+
+```bash
+silik eda create ic616 --el 6        # a CentOS 6 userland (podman container): host network, host name, $HOME, /opt/eda, X11
+silik eda setup ic616                # its package sources (CentOS vault) and what EDA tools ask for
+silik eda enter ic616                # a shell inside; or from the COMMAND bar: eda/ic616
+silik eda run ic616 -- virtuoso &    # one program; COMMAND bar: eda/ic616 virtuoso
+silik eda check                      # vsyscall, podman, X11 access, /opt/eda
+```
+
+   Install the tools under `/opt/eda` (shared with every box and with the system) or in your home folder.
+
+## The owner's current setup: RHEL 6.6 in VMware
+
+`silik eda import-vm disk.vmdk --name uni` reads the root file system of the virtual machine's disk (libguestfs) and
+makes a box image of it; `silik eda create uni --el 6 --image localhost/silik-eda-import/uni` then gives the same
+installation without the virtual machine. The licence is the open point: if it is locked to the virtual machine's MAC
+address or host name, it has to be re-hosted (the box has the host's).
+
+## Why the boxes use the host's network, host name and IPC
+
+FlexLM locks a licence to a host id (a MAC address) and a host name, and the tools talk to the licence daemon and to
+each other over TCP on the host. A separate network namespace would give the box another MAC and name. `--ipc host`
+is for X11 shared memory.
+
+## The vsyscall page
+
+glibc 2.12 (EL6) calls the legacy vsyscall page for `time()` and `gettimeofday()`. A kernel started with
+`vsyscall=none` kills such programs. Measured on 09/11/2026: a `centos:6` userland (glibc 2.12-1.212, python 2.6,
+yum) runs on a 6.18 kernel whose vsyscall page is execute-only (`xonly`). The kickstart sets `vsyscall=xonly`
+explicitly; `silik eda kernel-arg` sets `emulate` (readable too) for a program that reads the page.
+
+## Not in SilikOS
+
+No vendor software and no licences. Cadence and Synopsys support RHEL, not derivatives [A: their platform pages name
+the supported systems; check them for the release in use].

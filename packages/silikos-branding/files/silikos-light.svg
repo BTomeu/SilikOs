@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3840 2160" width="3840" height="2160">
+  <!-- SilikOS wallpaper: the SilikVolt mark (a half circle with a dot on the arc at 82.4 % of it), one ink on paper -->
+  <rect width="3840" height="2160" fill="#f1f0ec"/>
+  <g fill="none" stroke="#d6d4ce" stroke-width="2">
+    <path d="M1120 1400 A800 800 0 0 1 2720 1400"/>
+    <path d="M1320 1400 A600 600 0 0 1 2520 1400" stroke-dasharray="2 22"/>
+  </g>
+  <path d="M1220 1400 A700 700 0 0 1 2620 1400" fill="none" stroke="#1a1b1e" stroke-width="14" stroke-linecap="round"/>
+  <circle cx="2514.9" cy="1031.1" r="30" fill="#1a1b1e"/>
+  <line x1="1120" y1="1400" x2="2720" y2="1400" stroke="#d6d4ce" stroke-width="2"/>
+</svg>

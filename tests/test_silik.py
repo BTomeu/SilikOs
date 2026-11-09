@@ -1,0 +1,154 @@
+# Tests of the `silik` command and of the COMMAND bar's logic (no podman, wine or GTK needed):
+#   python3 -m unittest discover -s tests -v
+import contextlib
+import importlib.machinery
+import importlib.util
+import io
+import os
+import tempfile
+import unittest
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def load(name, path):
+    loader = importlib.machinery.SourceFileLoader(name, path)
+    spec = importlib.util.spec_from_loader(name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+silik = load("silik_cli", os.path.join(ROOT, "packages/silik-tools/files/silik"))
+bar = load("silik_command", os.path.join(ROOT, "packages/silik-command/files/silik-command"))
+
+
+def run(*argv):
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        rc = silik.main(["--dry-run"] + list(argv))
+    return rc, out.getvalue()
+
+
+class Silik(unittest.TestCase):
+    def test_eda_create_el6(self):
+        rc, o = run("eda", "create", "ic616", "--el", "6")
+        self.assertEqual(rc, 0)
+        line = o.splitlines()[0]
+        for part in ("$ podman create --name silik-eda-ic616", "--label silik.eda.el=6", "--network host", "--userns keep-id",
+                     "-v /tmp/.X11-unix:/tmp/.X11-unix", "-e CDS_LIC_FILE", "-e SNPSLMD_LICENSE_FILE", "docker.io/library/centos:6 sleep infinity"):
+            self.assertIn(part, line)
+
+    def test_eda_create_keeps_the_host_name(self):   # licences are locked to the host name / MAC
+        rc, o = run("eda", "create", "b", "--el", "7")
+        self.assertIn("--hostname " + os.uname().nodename, o)
+        self.assertIn("centos:7", o)
+
+    def test_eda_setup_el6_uses_the_vault(self):
+        rc, o = run("eda", "setup", "ic616", "--el", "6")
+        self.assertIn("vault.repo", o)
+        self.assertIn("yum -y", o)
+        self.assertIn("ld-lsb-x86-64.so.3", o)
+        self.assertIn("libXp.i686", o)
+
+    def test_eda_run_passes_the_command(self):
+        rc, o = run("eda", "run", "ic616", "--", "virtuoso", "-nograph")
+        self.assertIn("$ podman exec -i -w " + os.getcwd() + " silik-eda-ic616 virtuoso -nograph", o)
+
+    def test_eda_import_vm(self):
+        rc, o = run("eda", "import-vm", "/x/rhel66.vmdk", "--name", "uni")
+        self.assertIn("$ virt-tar-out -a /x/rhel66.vmdk /", o)
+        self.assertIn("$ podman import", o)
+        self.assertIn("silik eda create uni --el 6 --image localhost/silik-eda-import/uni", o)
+
+    def test_bad_names_are_refused(self):
+        for n in ("../x", "a b", "", "-x", "x" * 41):
+            with self.assertRaises(SystemExit):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    run("eda", "create", n)
+
+    def test_win_run(self):
+        rc, o = run("win", "run", "altium", "--", "C:\\AD\\X2.exe")
+        self.assertIn("WINEPREFIX=", o)
+        self.assertIn("/wine/altium wine", o)
+
+    def test_win_vm_app(self):
+        rc, o = run("win", "vm", "app", "--exe", "C:\\AD\\X2.EXE", "--user", "u")
+        self.assertIn("$ xfreerdp /v:127.0.0.1:3389 /u:u", o)
+        self.assertIn("/app:program:C:\\AD\\X2.EXE", o)
+
+    def test_win_vm_create(self):
+        rc, o = run("win", "vm", "create", "--iso", "/x/Win11.iso", "--ram", "12")
+        self.assertIn("--memory 12288", o)
+        self.assertIn("portForward=3389:3389", o)
+        self.assertIn("--tpm", o)
+
+    def test_nvidia(self):
+        rc, o = run("hw", "nvidia", "install")
+        self.assertIn("cuda-rhel9.repo", o)
+        self.assertIn("nvidia-driver:latest-dkms", o)
+
+    def test_dry_run_runs_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            silik.WINE_ROOT = os.path.join(d, "wine")
+            rc, o = run("win", "create", "p1")
+            self.assertFalse(os.path.exists(silik.WINE_ROOT))
+
+    def test_vsyscall_is_reported(self):
+        self.assertIn(silik.kernel_vsyscall(), ("emulate", "xonly", "none", ""))
+
+
+class Bar(unittest.TestCase):
+    def setUp(self):
+        self.t = bar.TEXT["en"]
+        self.items = bar.system_items(self.t, [{"name": "ic616"}, {"name": "sentaurus"}], ["altium"])
+        self.items.append(bar.Item("app/firefox", "Firefox", ["firefox"]))
+
+    def addresses(self, q):
+        return [i.address for i in bar.match(self.items, q, self.t)]
+
+    def test_empty_query_lists_the_system(self):
+        self.assertTrue(all(a.startswith("sys/") for a in self.addresses("")))
+
+    def test_prefix(self):
+        self.assertEqual(self.addresses("eda"), ["eda/check", "eda/ic616", "eda/sentaurus"])
+        self.assertEqual(self.addresses("fire"), ["app/firefox"])
+
+    def test_run_in_box(self):
+        m = bar.match(self.items, "eda/ic616 virtuoso -nograph", self.t)
+        self.assertEqual(len(m), 1)
+        self.assertEqual(m[0].argv[1:], ["eda", "run", "ic616", "--", "virtuoso", "-nograph"])
+
+    def test_run_in_prefix(self):
+        m = bar.match(self.items, "win/altium X2.exe", self.t)
+        self.assertEqual(m[0].argv[1:], ["win", "run", "altium", "--", "X2.exe"])
+
+    def test_twin_reads_as_typed(self):
+        self.assertEqual(bar.Item("sys/status", "", [bar.SILIK, "status"]).twin, "silik status")
+
+    def test_title_words(self):
+        self.assertIn("sys/update", self.addresses("update system"))
+
+    def test_path(self):
+        self.assertEqual(self.addresses("/etc/hostname")[:1], ["/etc/hostname"] if os.path.exists("/etc/hostname") else [])
+
+    def test_desktop_entries(self):
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "org.x.Editor.desktop"), "w") as f:
+                f.write("[Desktop Entry]\nType=Application\nName=Editor\nName[ca]=Editor de text\nExec=ed %U\n")
+            with open(os.path.join(d, "hidden.desktop"), "w") as f:
+                f.write("[Desktop Entry]\nType=Application\nName=H\nExec=h\nNoDisplay=true\n")
+            it = bar.app_items([d], "ca")
+            self.assertEqual([(i.address, i.title, i.argv) for i in it], [("app/editor", "Editor de text", ["ed"])])
+
+    def test_three_languages_have_the_same_keys(self):
+        self.assertEqual(set(bar.TEXT["en"]), set(bar.TEXT["ca"]))
+        self.assertEqual(set(bar.TEXT["en"]), set(bar.TEXT["es"]))
+
+    def test_language(self):
+        self.assertEqual(bar.lang_of({"LANG": "ca_ES.UTF-8"}), "ca")
+        self.assertEqual(bar.lang_of({"LANG": "de_DE.UTF-8"}), "en")
+
+
+if __name__ == "__main__":
+    unittest.main()

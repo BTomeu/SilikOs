@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=COMMAND
+Name[ca]=COMMAND
+Name[es]=COMMAND
+Comment=Type an address (app/ eda/ win/ sys/) and run it
+Comment[ca]=Escriu una adreça (app/ eda/ win/ sys/) i executa-la
+Comment[es]=Escribe una dirección (app/ eda/ win/ sys/) y ejecútala
+Exec=silik-command
+Icon=org.silikvolt.Command
+Categories=System;Utility;
+StartupNotify=false

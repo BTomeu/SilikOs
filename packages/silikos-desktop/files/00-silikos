@@ -1,0 +1,38 @@
+# SilikOS desktop defaults (dconf system database "local"; a user's own settings win).
+# One ink on paper, the SilikVolt mark as the background, Cascadia Mono for code and terminals,
+# and the COMMAND bar on Super+Space.
+
+[org/gnome/desktop/background]
+picture-uri='file:///usr/share/backgrounds/silikos/silikos-light.svg'
+picture-options='zoom'
+primary-color='#f1f0ec'
+color-shading-type='solid'
+
+[org/gnome/desktop/screensaver]
+picture-uri='file:///usr/share/backgrounds/silikos/silikos-dark.svg'
+picture-options='zoom'
+primary-color='#131416'
+
+[org/gnome/desktop/interface]
+monospace-font-name='Cascadia Mono 11'
+enable-hot-corners=false
+clock-show-weekday=true
+show-battery-percentage=true
+
+[org/gnome/desktop/wm/preferences]
+button-layout='appmenu:minimize,maximize,close'
+
+[org/gnome/desktop/wm/keybindings]
+switch-input-source=['XF86Keyboard']
+switch-input-source-backward=['<Shift>XF86Keyboard']
+
+[org/gnome/shell]
+favorite-apps=['org.silikvolt.Command.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Terminal.desktop', 'firefox.desktop', 'virt-manager.desktop']
+
+[org/gnome/settings-daemon/plugins/media-keys]
+custom-keybindings=['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/silik-command/']
+
+[org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/silik-command]
+name='SilikOS COMMAND'
+command='silik-command'
+binding='<Super>space'

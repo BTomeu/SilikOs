@@ -1,0 +1,3 @@
+# SilikOS: the mark on the login screen
+[org/gnome/login-screen]
+logo='/usr/share/pixmaps/silikos-mark-light.svg'
