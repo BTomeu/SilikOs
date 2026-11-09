@@ -11,6 +11,10 @@ repo --name=epel --baseurl=https://dl.fedoraproject.org/pub/epel/9/Everything/x8
 # the SilikOS packages, on the installation medium (tools/build_iso.sh puts build/repo there)
 repo --name=silikos --baseurl=file:///run/install/repo/silikos
 
+# a wired connection (cable, or a phone's USB tether) is brought up by itself so that the package sources answer;
+# Wi-Fi is joined in the installer's "Network & Host Name" screen, then "Installation Source" is opened once again
+network --bootproto=dhcp --device=link --activate --onboot=yes
+
 graphical
 xconfig --startxonboot
 firstboot --enable
