@@ -209,7 +209,7 @@ def all_items(lang):
 
 # ------------------------------------------------------------------ window
 CSS = """
-window.silik { background: %(paper)s; border: 1px solid %(frame)s; border-radius: 10px; }
+window.silik { background: %(paper)s; border: 1px solid %(frame)s; border-radius: %(radius)s; }
 .silik * { font-family: "Cascadia Mono", "DejaVu Sans Mono", monospace; font-size: 11pt; color: %(ink)s; }
 .silik .prompt { font-weight: 600; padding: 0 2px 0 14px; }
 .silik entry { background: transparent; border: none; box-shadow: none; padding: 12px 8px; caret-color: %(ink)s; }
@@ -221,7 +221,7 @@ window.silik { background: %(paper)s; border: 1px solid %(frame)s; border-radius
 .silik row:selected label { color: %(paper)s; }
 .silik row:selected label.meta { color: %(selmu)s; }
 .silik label.meta { color: %(muted)s; }
-.silik .foot { background: %(paper2)s; border-radius: 0 0 10px 10px; padding: 6px 14px; }
+.silik .foot { background: %(paper2)s; border-radius: 0 0 %(radius)s %(radius)s; padding: 6px 14px; }
 .silik .foot label { font-size: 9.5pt; color: %(muted)s; }
 .silik .foot label.twin { color: %(ink)s; }
 """
@@ -240,7 +240,9 @@ def run_window(query, theme, lang):
     t = TEXT[lang]
     items = all_items(lang)
     css = Gtk.CssProvider()
-    css.load_from_data((CSS % THEMES[theme]).encode())
+    # rounded corners need a compositing window manager (GNOME has one); square without it
+    vals = dict(THEMES[theme], radius="10px" if Gdk.Screen.get_default().is_composited() else "0")
+    css.load_from_data((CSS % vals).encode())
     Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
     win = Gtk.Window(title="SilikOS COMMAND")
