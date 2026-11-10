@@ -1,5 +1,5 @@
 Name:           silikos-branding
-Version:        0.3.0
+Version:        0.4.0
 Release:        1%{?dist}
 Summary:        SilikOS name, marks, backgrounds, boot splash and login logo
 License:        LicenseRef-SilikVolt

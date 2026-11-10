@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
-  <!-- SilikOS system logo (os-release LOGO=silikos-logo-icon): the SilikVolt mark on a paper tile -->
-  <rect x="4" y="4" width="120" height="120" rx="22" fill="#f1f0ec"/>
-  <path d="M24 88 A40 40 0 0 1 104 88" fill="none" stroke="#1a1b1e" stroke-width="7" stroke-linecap="round"/>
-  <circle cx="98" cy="66.9" r="8.5" fill="#1a1b1e"/>
+  <!-- the system's logo icon: the SilikVolt mark, TILE cut (tools/gen_marks.py) -->
+  <rect width="128" height="128" rx="28" fill="#15181c"/>
+  <path d="M20 86 A44 44 0 0 1 108 86" fill="none" stroke="#f1f3f5" stroke-width="9.6" stroke-linecap="round"/>
+  <circle cx="101.4" cy="62.8" r="8.8" fill="#f1f3f5"/>
 </svg>

@@ -1,47 +1,54 @@
 #!/usr/bin/env python3
 """gen_wallpaper.py: the SilikOS backgrounds (packages/silikos-branding/files/silikos-light.svg, silikos-dark.svg).
 
-The sheet is a wafer map: a silicon wafer ruled into dies, where the dies that are filled draw the SilikVolt mark
-(a half circle with a dot on the arc at 82.4 % of it). Around it, the frame of a drawing sheet with its zone marks.
+The sheet is a wafer map: a silicon wafer ruled into dies, inside the frame of a drawing sheet with its zone marks.
+The SilikVolt mark sits on the wafer as itself: the brand's LOGO cut (tools/gen_marks.py), one scale factor, a line
+and a dot. It is not built from dies or approximated; the dies it would touch are left out so it has clear space.
 One ink on paper; the dark sheet is the twin, not an inversion. Nothing on it is a measurement: there are no numbers.
 
     python3 tools/gen_wallpaper.py        (Python 3 standard library)
 """
 import math
 import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import gen_marks  # noqa: E402  (the brand's geometry)
 
 W, H = 3840, 2160
 CX, CY = 2080, 1080            # the wafer sits in the part of the screen the rail leaves free
 R = 800                        # wafer radius
 PITCH = 43                     # die pitch
 DIE = 36                       # die side (the rest is the scribe lane)
-ARC_R = 520                    # the mark's arc, centred a little below the wafer's centre
-ARC_CY = CY + 170
-ARC_W = 88                     # dies whose centre is this close to the arc are filled
-DOT_AT = 0.824                 # where the dot sits on the arc, from its left end
-DOT_R = 112
+K = 10.0                       # the mark's scale: the LOGO cut (radius 49, stroke 2.2, dot 3.4) times K
+MARK_DX, MARK_DY = CX - 60 * K, CY + 150 - 62 * K      # where the LOGO box's origin goes: the arc centred on the wafer's axis
+CLEAR = 46                     # clear space around the mark: no die closer than this to its line or dot
 
-LIGHT = dict(paper="#f1f0ec", ink="#1a1b1e", line="#1a1b1e", die=0.16, frame=0.30, wafer=0.55, fill=1.0)
-DARK = dict(paper="#131416", ink="#ecebe7", line="#ecebe7", die=0.14, frame=0.26, wafer=0.45, fill=0.92)
+LIGHT = dict(paper="#f1f0ec", ink="#1a1b1e", line="#1a1b1e", die=0.16, frame=0.30, wafer=0.55)
+DARK = dict(paper="#131416", ink="#ecebe7", line="#ecebe7", die=0.14, frame=0.26, wafer=0.45)
 
 
 def dies():
-    """(x, y, filled) of every whole die inside the wafer; x, y is the die's top left corner"""
-    a = math.pi * (1.0 - DOT_AT)
-    dx, dy = CX + ARC_R * math.cos(a), ARC_CY - ARC_R * math.sin(a)
+    """(x, y) of every whole die inside the wafer that keeps clear of the mark; x, y is the die's top left corner"""
+    w, h, mx, my, mr, sw, px, py, pr = gen_marks.LOGO
+    acx, acy, ar = MARK_DX + mx * K, MARK_DY + my * K, mr * K
+    dx, dy, dr = MARK_DX + px * K, MARK_DY + py * K, pr * K
     n = int(R // PITCH) + 1
     out = []
     for j in range(-n, n + 1):
         for i in range(-n, n + 1):
             cx, cy = CX + i * PITCH, CY + j * PITCH
-            h = DIE / 2.0
-            if max(math.hypot(cx + sx * h - CX, cy + sy * h - CY) for sx in (-1, 1) for sy in (-1, 1)) > R - 14:
+            hd = DIE / 2.0
+            if max(math.hypot(cx + sx * hd - CX, cy + sy * hd - CY) for sx in (-1, 1) for sy in (-1, 1)) > R - 14:
                 continue                                   # a die cut by the edge is not on the map
             if cy > CY + R - 60 and abs(cx - CX) < 60:
                 continue                                   # the notch
-            on_arc = abs(math.hypot(cx - CX, cy - ARC_CY) - ARC_R) <= ARC_W / 2.0 and cy <= ARC_CY + 1
-            on_dot = math.hypot(cx - dx, cy - dy) <= DOT_R
-            out.append((cx - h, cy - h, on_arc or on_dot))
+            reach = hd * math.sqrt(2) + CLEAR
+            if cy <= acy + reach and abs(math.hypot(cx - acx, cy - acy) - ar) <= sw * K / 2.0 + reach:
+                continue                                   # the mark's arc
+            if math.hypot(cx - dx, cy - dy) <= dr + reach:
+                continue                                   # the mark's dot
+            out.append((cx - hd, cy - hd))
     return out
 
 
@@ -71,7 +78,7 @@ def frame(c):
 
 def sheet(c):
     s = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" width="%d" height="%d">' % (W, H, W, H),
-         '<!-- SilikOS background (tools/gen_wallpaper.py): a wafer map whose filled dies draw the SilikVolt mark -->',
+         '<!-- SilikOS background (tools/gen_wallpaper.py): a wafer map with the SilikVolt mark on it -->',
          '<rect width="%d" height="%d" fill="%s"/>' % (W, H, c["paper"])]
     s += frame(c)
     # the wafer: its edge with the notch, the centre lines
@@ -84,11 +91,9 @@ def sheet(c):
     s.append('<g stroke="%s" stroke-opacity="%.2f" stroke-width="2" stroke-dasharray="26 10 4 10">' % (c["line"], c["frame"]))
     s.append('<path d="M%d %d H%d M%d %d V%d"/>' % (CX - R - 90, CY, CX + R + 90, CX, CY - R - 90, CY + R + 90))
     s.append('</g>')
-    empty, full = [], []
-    for x, y, f in dies():
-        (full if f else empty).append('M%.0f %.0fh%dv%dh-%dz' % (x, y, DIE, DIE, DIE))
-    s.append('<path fill="none" stroke="%s" stroke-opacity="%.2f" stroke-width="2" d="%s"/>' % (c["line"], c["die"], "".join(empty)))
-    s.append('<path fill="%s" fill-opacity="%.2f" d="%s"/>' % (c["ink"], c["fill"], "".join(full)))
+    cells = "".join('M%.0f %.0fh%dv%dh-%dz' % (x, y, DIE, DIE, DIE) for x, y in dies())
+    s.append('<path fill="none" stroke="%s" stroke-opacity="%.2f" stroke-width="2" d="%s"/>' % (c["line"], c["die"], cells))
+    s.append(gen_marks.mark(gen_marks.LOGO, c["ink"], K, MARK_DX, MARK_DY))     # the mark itself, exact
     s.append('</svg>')
     return "\n".join(s) + "\n"
 

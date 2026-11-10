@@ -1,5 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 56" width="300" height="56">
-  <path d="M6 48 A38 38 0 0 1 82 48" fill="none" stroke="#ecebe7" stroke-width="4.6" stroke-linecap="round"/>
-  <circle cx="76.3" cy="28" r="6" fill="#ecebe7"/>
-  <text x="108" y="46" font-family="Cascadia Mono" font-weight="600" font-size="38" fill="#ecebe7">SilikOS</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 186 56" width="186" height="56">
+  <!-- the boot splash: the horizontal logo with the system's name (tools/gen_marks.py) -->
+  <path d="M7.7 43.4 A34.3 34.3 0 0 1 76.3 43.4" fill="none" stroke="#ecebe7" stroke-width="1.54" stroke-linecap="round"/>
+  <circle cx="71.4" cy="25.2" r="2.38" fill="#ecebe7"/>
+  <text x="95.2" y="39.2" font-family="Cascadia Mono" font-weight="400" font-size="21" fill="#ecebe7">SilikOS</text>
 </svg>

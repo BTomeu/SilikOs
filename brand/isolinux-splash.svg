@@ -1,6 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480" width="640" height="480">
+  <!-- the BIOS boot menu: the horizontal logo with the system's name above the menu (tools/gen_marks.py) -->
   <rect width="640" height="480" fill="#17181b"/>
-  <path d="M250 86 A70 70 0 0 1 390 86" fill="none" stroke="#ecebe7" stroke-width="4" stroke-linecap="round"/>
-  <circle cx="379.5" cy="49.1" r="6" fill="#ecebe7"/>
-  <text x="320" y="128" text-anchor="middle" font-family="Cascadia Mono" font-weight="600" font-size="26" fill="#ecebe7">SilikOS</text>
+  <path d="M198.47 102 A49 49 0 0 1 296.47 102" fill="none" stroke="#ecebe7" stroke-width="2.2" stroke-linecap="round"/>
+  <circle cx="289.47" cy="76" r="3.4" fill="#ecebe7"/>
+  <text x="323.47" y="96" font-family="Cascadia Mono" font-weight="400" font-size="30" fill="#ecebe7">SilikOS</text>
 </svg>

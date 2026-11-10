@@ -19,6 +19,10 @@ Read `docs/PLAN.md` and `docs/STATUS.md` first.
 - The kickstart never selects or erases a disk.
 - Every action of the desktop goes through `silik` and prints the commands it runs; the COMMAND bar shows the same
   line. New features keep that.
+- **The SilikVolt mark is never distorted** (owner, 10/11/2026: "this can never happen"): never redrawn, re-weighted,
+  built from other shapes, cut into decoration, put inside another picture, or stretched. Every file that shows it is
+  made by `tools/gen_marks.py` from the brand's three cuts (SilikStudio's `app/img`, `app/js/brand.js`) at one scale
+  factor; never in a square icon box (the shell draws it itself); `tests/test_brand.py` holds the repository to this.
 - UI: one ink on paper (softer than SilikStudio: off-white paper, small radii), Cascadia Mono, EN + CA + ES strings.
 - **It must look like the Silik interface** (owner, 10/11/2026), not like a themed GNOME: the three parts of
   SilikStudio's window are the desktop's: title bar = the command line, a text rail of keys (digit first, inverse

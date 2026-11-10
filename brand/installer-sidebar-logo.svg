@@ -1,5 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 28" width="150" height="28">
-  <path d="M3 24 A19 19 0 0 1 41 24" fill="none" stroke="#ecebe7" stroke-width="2.4" stroke-linecap="round"/>
-  <circle cx="38.15" cy="13.99" r="3.1" fill="#ecebe7"/>
-  <text x="54" y="23" font-family="Cascadia Mono" font-weight="600" font-size="19" fill="#ecebe7">SilikOS</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 157 28" width="157" height="28">
+  <!-- the installer's sidebar: SMALL cut and the system's name (tools/gen_marks.py) -->
+  <path d="M4.2 24.85 A20.3 20.3 0 0 1 44.8 24.85" fill="none" stroke="#ecebe7" stroke-width="3.325" stroke-linecap="round"/>
+  <circle cx="41.755" cy="14.175" r="3.85" fill="#ecebe7"/>
+  <text x="61.25" y="24.85" font-family="Cascadia Mono" font-weight="600" font-size="21.875" fill="#ecebe7">SilikOS</text>
 </svg>

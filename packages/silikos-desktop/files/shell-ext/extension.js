@@ -134,6 +134,28 @@ function monogram(name, size) {
     return a;
 }
 
+/* The SilikVolt mark in the title bar: the brand's SMALL cut (SilikStudio, app/js/brand.js: a 28 x 16 box, arc centre
+ * (14, 14.2), radius 11.6, stroke 1.9, dot radius 2.2 at (23.86, 8.1)), drawn as a line and a dot at one scale in
+ * both directions and in the text colour. It is never put in an icon box: an icon box is square and would stretch it. */
+function markSmall() {
+    const s = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+    const a = new St.DrawingArea({ width: 28 * s, height: 16 * s, style_class: 'silik-mk-mark', y_align: Clutter.ActorAlign.CENTER });
+    a.connect('repaint', () => {
+        const cr = a.get_context();
+        const [w] = a.get_surface_size();
+        const k = w / 28;                                   /* one factor: the box keeps 28 : 16 */
+        Clutter.cairo_set_source_color(cr, a.get_theme_node().get_foreground_color());
+        cr.setLineWidth(1.9 * k);
+        cr.setLineCap(1);                                   /* round */
+        cr.arc(14 * k, 14.2 * k, 11.6 * k, Math.PI, 2 * Math.PI);
+        cr.stroke();
+        cr.arc(23.86 * k, 8.1 * k, 2.2 * k, 0, 2 * Math.PI);
+        cr.fill();
+        cr.$dispose();
+    });
+    return a;
+}
+
 function silikIcon(app, size) {
     let i;
     const sn = symbolicName(app);
@@ -214,12 +236,7 @@ class SilikShell {
         }
         this._mk = new St.Button({ style_class: 'silik-mk', reactive: true, track_hover: true, can_focus: true, y_expand: true });
         const mb = new St.BoxLayout({ y_align: Clutter.ActorAlign.CENTER });
-        const f = Gio.File.new_for_path('/usr/share/pixmaps/silikos-mark-light.svg');
-        const fd = Gio.File.new_for_path('/usr/share/pixmaps/silikos-mark.svg');
-        this._mkLight = f.query_exists(null) ? new Gio.FileIcon({ file: f }) : null;
-        this._mkDark = fd.query_exists(null) ? new Gio.FileIcon({ file: fd }) : this._mkLight;
-        this._mkIcon = this._mkLight ? new St.Icon({ gicon: this._mkLight, style_class: 'silik-mk-icon' }) : null;
-        if (this._mkIcon) mb.add_child(this._mkIcon);
+        mb.add_child(markSmall());
         mb.add_child(new St.Label({ text: 'SilikOS', style_class: 'silik-mk-name', y_align: Clutter.ActorAlign.CENTER }));
         this._mk.set_child(mb);
         this._mk.connect('clicked', () => this._toggleStart());
@@ -390,10 +407,8 @@ class SilikShell {
         this._catcher.show();
         this._startBox.show();
         this._mk.add_style_class_name('silik-on');
-        if (this._mkIcon) this._mkIcon.gicon = this._mkDark;      /* the open key is inverse video */
         if (!Main.pushModal(this._startBox, { actionMode: Shell.ActionMode.POPUP })) {
             this._catcher.hide(); this._startBox.hide(); this._mk.remove_style_class_name('silik-on');
-            if (this._mkIcon) this._mkIcon.gicon = this._mkLight;
             return;
         }
         this._startOpen = true;
@@ -407,7 +422,6 @@ class SilikShell {
         this._catcher.hide();
         this._startBox.hide();
         this._mk.remove_style_class_name('silik-on');
-        if (this._mkIcon) this._mkIcon.gicon = this._mkLight;
     }
 
     _catList() {

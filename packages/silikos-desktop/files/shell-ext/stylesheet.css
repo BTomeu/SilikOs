@@ -5,8 +5,7 @@
 .silik-mk { width: 140px; padding: 0 0 0 12px; color: #f7f6f3; }
 .silik-mk:hover, .silik-mk:focus { background-color: #2c2e32; }
 .silik-mk.silik-on { background-color: #f7f6f3; color: #1a1b1e; }
-.silik-mk-icon { icon-size: 22px; margin-right: 8px; }
-.silik-mk.silik-on .silik-mk-icon { color: #1a1b1e; }
+.silik-mk-mark { margin-right: 8px; }
 .silik-mk-name { font-weight: 600; font-size: 12px; }
 .silik-cmd { width: 520px; margin: 5px 0; padding: 0 10px; background-color: #2c2e32; color: #f7f6f3; font-size: 13px; border-radius: 0; }
 .silik-cmd:hover, .silik-cmd:focus { background-color: #3a3c41; }
