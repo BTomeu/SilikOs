@@ -1,0 +1,21 @@
+# Bench: measurements that decide how a tool is built. Now: ngspice with four sets of compiler flags
+# (tools/bench_ngspice_flags.sh), timed on the two circuits of docs/EDA.md. Its notices are the result; nothing is
+# built for the system here. Runs when the script changes, or by hand.
+name: Bench
+on:
+  push:
+    branches: [main]
+    paths: ['tools/bench_ngspice_flags.sh', '.github/workflows/bench.yml']
+  workflow_dispatch:
+jobs:
+  ngspice-flags:
+    runs-on: ubuntu-24.04
+    container: almalinux:9
+    timeout-minutes: 90
+    steps:
+      - name: Tools
+        run: dnf -y -q install git tar gzip findutils
+      - uses: actions/checkout@v4
+      - name: ngspice built with four sets of flags, each timed
+        shell: bash
+        run: bash tools/bench_ngspice_flags.sh

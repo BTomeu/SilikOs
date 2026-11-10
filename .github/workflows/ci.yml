@@ -7,7 +7,7 @@ on:
   push:
     branches: [main]
     tags: ['v*']
-    paths-ignore: ['docs/**', 'README.md', 'wine/**', 'tools/build_wine.sh', 'tools/build_wine_addons.sh', '.github/workflows/wine.yml', 'eda/**', 'tools/build_eda.sh', '.github/workflows/eda.yml']   # the documents, and the other workflows' own: none of them is in the ISO
+    paths-ignore: ['docs/**', 'README.md', 'wine/**', 'tools/build_wine.sh', 'tools/build_wine_addons.sh', '.github/workflows/wine.yml', 'eda/**', 'tools/build_eda.sh', '.github/workflows/eda.yml', 'tools/bench_ngspice_flags.sh', '.github/workflows/bench.yml']   # the documents, and the other workflows' own: none of them is in the ISO
   pull_request:
   workflow_dispatch:
 concurrency:
