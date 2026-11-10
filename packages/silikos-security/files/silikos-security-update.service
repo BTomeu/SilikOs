@@ -1,0 +1,14 @@
+# SilikOS: installs what the security advisories of the repositories name, with the base's dnf-automatic and a
+# configuration of our own (the unit follows the base's dnf-automatic-install.service).
+[Unit]
+Description=SilikOS automatic security updates (dnf-automatic, security advisories only)
+ConditionPathExists=!/run/ostree-booted
+After=network-online.target
+
+[Service]
+Type=oneshot
+Nice=19
+IOSchedulingClass=2
+IOSchedulingPriority=7
+Environment="ABRT_IGNORE_PYTHON=1"
+ExecStart=/usr/bin/dnf-automatic /etc/silikos/security-update.conf --timer
