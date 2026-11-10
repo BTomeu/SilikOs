@@ -7,7 +7,7 @@ Docker Hub, repo.almalinux.org, dl.fedoraproject.org and vault.centos.org).
 
 | What | How | Result |
 |---|---|---|
-| The six packages build | `tools/build_rpms.sh` (rpmbuild 4.18, noarch `.el9`) | 6 RPMs + repodata |
+| The packages build | `tools/build_rpms.sh` (rpmbuild 4.18, noarch `.el9`) | 7 RPMs + repodata (six until 10/11, then `silikos-security`) |
 | Every dependency name exists | `tools/check_deps.sh` in an `almalinux:9` container with BaseOS, AppStream, CRB, extras, EPEL 9 | all Requires and Recommends found (`winetricks` was not in EPEL 9: dropped) |
 | The whole install resolves | `dnf install --assumeno build/repo/*.rpm` there | 752 packages, 1.2 GB, no conflict reported (the resolver does not see file conflicts: the next row found one) |
 | The desktop packages install for real | `dnf install` / `rpm -U` of `silik-tools`, `silik-command`, `silikos-branding`, `silikos-desktop` in an AlmaLinux 9.8 container with gnome-shell 40.10 | installed, after a fix: `silikos-desktop` shipped `/etc/dconf/profile/user`, which the `dconf` package owns on EL 9 (the transaction was refused; the ISO installation would have stopped there) |
@@ -33,6 +33,13 @@ Docker Hub, repo.almalinux.org, dl.fedoraproject.org and vault.centos.org).
 | The background | `tools/gen_wallpaper.py`, rendered by librsvg on the host and by the shell there | a wafer map whose filled dies draw the mark, inside a drawing-sheet frame; light and dark twins |
 | The GTK theme without Adwaita's blue | `/usr/libexec/silikos/gtk-theme` there (GTK 3.24.31): the theme is made from libgtk-3's own stylesheet; `gtk3-widget-factory`, Files, gedit, screenshots | 0 occurrences of the accent colour in the result; checks, radios, switches, scales, progress bars, tabs, focus rings and selection are ink; ink title bars on client-side (Files, gedit) and on window-manager decorated windows (xterm) |
 | The shell theme | `/usr/libexec/silikos/shell-theme` there, user-theme extension, screenshots | ink panel and menus in Cascadia Mono, square menus without the pointer, calendar with today in inverse video, the base's logo gone from the panel |
+| `silikos-security` builds and installs for real | `tools/build_rpms.sh`; `dnf -q repoquery --whatprovides` for each of its 7 paths, then `dnf install`, `rpm -V`, `rpm -e`, `rpm -U` in an AlmaLinux 9.8 container (firewalld 1.3.4, dnf-automatic 4.14.0) | 7 RPMs; no path belongs to a base package; installed, verify clean; the update timer's link made and removed; dconf database recompiled |
+| The firewall zone `silikos` | `xmllint`, `firewall-offline-cmd --check-config`; firewalld started by hand in a container with its own network namespace (never in a host-network one); two namespaces over a veth pair, TCP listeners, ping | valid; incoming TCP gets no answer, ping lost, outgoing TCP open, loopback and the machine's own address open (IPv4) |
+| `silik secure status` | on the Ubuntu host, in the EL 9 container as root and as a user, with firewalld running in the isolated container | one row per subject with ● ok / ◆ warn / ▼ bad / ? unknown and the fix; what cannot be seen is unknown, never ok; exit 1 when a row is bad |
+| `silik secure apply`, firewall and screen-lock parts | as root in the isolated container (a pass-through `sudo`), `--keep-ssh` and plain; as a user under `dbus-run-session` | default zone switched, ssh kept or closed as asked; a stricter zone (`drop`) is kept; lock off + idle 0 becomes lock on, 300 s |
+| Security-only automatic updates | the timer's service command run by hand in the container (8 updates pending, 2 advisories) | the 6 packages of the advisories upgraded, the others left; `updateinfo list --security` then empty |
+| The kickstart's security lines | `ksvalidator -v RHEL9`; the `firewall-offline-cmd` lines run on a scratch configuration | valid; `DefaultZone=silikos`, ssh out of the public zone, no zone copy left in /etc |
+| Unit tests with the security checks | `python3 -m unittest discover -s tests` on Python 3.13 (host) and 3.9 (container) | 74 / 74 on both |
 
 Found by booting the ISO and fixed: the installer did not bring the network up by itself, so the package sources
 failed until it was turned on by hand (the kickstart now activates a wired connection).
@@ -54,6 +61,10 @@ Two bugs were found by running `silik eda` for real and fixed: the vault reposit
 | ES strings of the shell extension on screen; Start with a full application set (the container has seven) and its scrolling; the Super key opening Start under a real session (here it was sent with xdotool); the overview's application grid beyond two icons; GTK 4 / Qt applications (they do not read the GTK 3 theme) | not run | after the first installation |
 | The clock's colon | Cascadia Mono has no U+2236: without another font it drew as a box in the container; with `dejavu-sans-fonts` (now required) it draws | — |
 | `silik eda create` with podman itself (`--userns keep-id`, the home folder and X authority mounts), `import-vm` (libguestfs) | Docker stood in for podman here; no libguestfs | the Ryzen machine |
+| IPv6 through the firewall zone (neighbour discovery, router advertisements, DHCPv6) | this machine's kernel has no IPv6: the rules exist, no packet crossed them | the first real network; if it misbehaves, `docs/SECURITY.md` has the fallback command |
+| The kernel settings applied (`/usr/lib/sysctl.d/60-silikos-security.conf`); Wine, `gdb`, rootless podman and the EDA tools under `ptrace_scope=1` [A] | nothing may be written to `/proc/sys` here | the Ryzen machine |
+| The SELinux, disk-encryption and Secure Boot rows of `silik secure status` on a system that has them; the update timer firing under systemd; `silik secure apply` with the real `sudo`; the screen actually locking | no SELinux, LUKS disk, UEFI, systemd session or GDM here | after the first installation |
+| The kickstart's `selinux`, `firewall --remove-service=ssh`, `services --disabled=sshd` and `%post` zone line inside the installer | no complete installation yet | with the first installation |
 | Cadence / Synopsys tools | no installers or licences | the owner |
 | Wine, the Windows virtual machine, RDP RemoteApp, Altium | no KVM, no Windows, no licences | the owner |
 | NVIDIA driver (RTX 3050), hybrid graphics, Wi-Fi, suspend | hardware | the owner |

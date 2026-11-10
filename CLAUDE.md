@@ -11,6 +11,10 @@ Read `docs/PLAN.md` and `docs/STATUS.md` first.
   installer that insists on the base's name. SilikOS carries the base's version number (SilikOS 9.8 on EL 9.8).
 - **Never claim something works that was not run.** `docs/STATUS.md` has two tables, verified and not verified: keep
   them true. Assumptions are marked [A].
+- **The system must be secure** (owner, 10/11/2026): `docs/SECURITY.md`. Package scripts never change a running
+  firewall, kernel setting or sshd (it could cut the connection they are installed over): the kickstart does it for
+  a new installation, `silik secure apply` on a running one; `silik secure status` never says ok for what it cannot see.
+- **Never start firewalld / nftables in a host-network test container** (it would cut the build machine's network).
 - No vendor software, licences, keys or the user's files in the repository.
 - The kickstart never selects or erases a disk.
 - Every action of the desktop goes through `silik` and prints the commands it runs; the COMMAND bar shows the same

@@ -9,6 +9,7 @@ an EL9 system. It is a try: `docs/STATUS.md` says what has been run and what has
 |---|---|---|
 | Base | AlmaLinux 9 packages and kernel, from its own repositories | `kickstart/silikos.ks` |
 | Desktop | GNOME Shell on X11 laid out as the Silik interface (command line, text rail, status bar; one ink on paper); the **COMMAND** bar on Super+Space | `packages/silikos-desktop`, `packages/silik-command` |
+| Security | SELinux enforcing (the base's), a firewall zone that drops incoming connections, sshd off, daily security-only updates, screen lock; `silik secure status` audits, `silik secure apply` sets; `docs/SECURITY.md` | `packages/silikos-security` |
 | `silik` | one command behind every action; prints what it runs; `--dry-run` | `packages/silik-tools` |
 | EDA | what Cadence / Synopsys tools ask of EL9, and EL6 / EL7 / EL8 boxes (`silik eda`) | `packages/silik-eda-compat`, `docs/EDA.md` |
 | Windows | Wine prefixes; a Windows virtual machine whose programs open as windows here (`silik win`) | `packages/silik-win`, `docs/WINDOWS.md` |
