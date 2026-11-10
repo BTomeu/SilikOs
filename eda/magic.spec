@@ -19,11 +19,14 @@ EL 9 by SilikVolt (eda/magic.spec); not in the base's repositories or in EPEL 9.
 %setup -q -n magic-%{version}
 
 %build
-./configure --prefix=%{_prefix} --libdir=%{_libdir} --with-tcl=%{_libdir} --with-tk=%{_libdir}
+# (its own files go to <prefix>/lib/magic whatever --libdir says, and the paths compiled in must agree: no --libdir)
+./configure --prefix=%{_prefix} --with-tcl=%{_libdir} --with-tk=%{_libdir}
 make
 
 %install
 make install DESTDIR=%{buildroot}
+# some of its scripts name an interpreter under /usr/local/bin: the system's is /usr/bin
+grep -rIl '^#! */usr/local/bin/' %{buildroot} | while read -r f; do sed -i '1s|^#! */usr/local/bin/|#!/usr/bin/|' "$f"; done
 %licences
 mkdir -p %{buildroot}%{_datadir}/applications
 cat > %{buildroot}%{_datadir}/applications/magic.desktop <<'EOD'

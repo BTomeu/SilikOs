@@ -15,9 +15,9 @@ case "$name" in
     ngspice -b t.cir > out.txt 2>&1 || { cat out.txt; exit 1; }
     grep -q 'v(out) = 5.000000e-01' out.txt && grep -q 'v(twice) = 1.000000e+00' out.txt || { cat out.txt; exit 1; }
     echo "TRIAL-OK $(ngspice -v | grep -m1 -i 'ngspice-' | tr -s ' ') : v(out) = 0.5 V, the XSPICE gain block gives 1 V" ;;
-  magic)     # a cell with one painted box, written to disk and read back
+  magic)     # a cell with one painted box of metal 1 (the scmos technology that comes with it), saved
     printf 'box 0 0 100 100\npaint metal1\nsave trial\nputs "painted [what -list]"\nquit -noprompt\n' > t.tcl
-    magic -dnull -noconsole t.tcl > out.txt 2>&1 || { cat out.txt; exit 1; }
+    magic -dnull -noconsole -T scmos t.tcl > out.txt 2>&1 || { cat out.txt; exit 1; }
     [ -s trial.mag ] && grep -q metal1 trial.mag || { cat out.txt; ls -la; exit 1; }
     echo "TRIAL-OK magic $(magic --version 2>/dev/null | head -1) : a box of metal1 saved to trial.mag" ;;
   xschem)
