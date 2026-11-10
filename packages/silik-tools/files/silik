@@ -7,6 +7,7 @@
 #               | vm create --iso WIN.iso [--name N --ram GB --disk GB --cpus N] | vm start [N] | vm stop [N]
 #               | vm app [N] --exe 'C:\path\app.exe' --user U
 #   silik hw    probe | nvidia install | nvidia status
+#   silik identity show | silikos | base
 #   silik update
 # Global: --dry-run prints the commands and runs nothing; -q hides the `$ ...` lines.
 # Python 3.9 (the base system's), standard library only. Every external command is printed as `$ ...` before it runs.
@@ -18,7 +19,7 @@ import shutil
 import subprocess
 import sys
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -152,8 +153,18 @@ def prefixes():
         return []
 
 
+def os_release(path="/etc/os-release"):
+    d = {}
+    for l in read(path).splitlines():
+        if "=" in l and not l.startswith("#"):
+            k, v = l.split("=", 1)
+            d[k.strip()] = v.strip().strip('"')
+    return d
+
+
 def cmd_status(ctx, a):
-    rel = read("/etc/silikos-release").strip() or "SilikOS (not installed as a system: running from a checkout)"
+    osr = os_release()
+    rel = (osr.get("PRETTY_NAME") if os.path.exists("/etc/silikos-release") else "") or "SilikOS (not installed as a system: running from a checkout)"
     base = read("/etc/redhat-release").strip() or "-"
     st = {
         "silikos": rel, "base": base, "silik": VERSION, "kernel": os.uname().release, "arch": os.uname().machine,
@@ -440,6 +451,22 @@ def hw_nvidia(ctx, a):
     return 0
 
 
+IDENTITY = "/usr/libexec/silikos/identity"
+
+
+def cmd_identity(ctx, a):
+    """the names the system shows: SilikOS (default) or the base's own os-release, for an installer that insists on it"""
+    if a.which == "show":
+        osr = os_release()
+        print("%-14s %s" % ("shown as", osr.get("PRETTY_NAME", "-")))
+        print("%-14s %s %s (ID_LIKE %s)" % ("read as", osr.get("ID", "-"), osr.get("VERSION_ID", "-"), osr.get("ID_LIKE", "-")))
+        print("%-14s %s" % ("release file", read("/etc/redhat-release").strip() or "-"))
+        print("%-14s %s" % ("os-release", "the base's own file" if os.path.islink("/etc/os-release") else "SilikOS display names over the base's"))
+        return 0
+    ctx.run(["sudo", IDENTITY, a.which])
+    return 0
+
+
 def cmd_update(ctx, a):
     ctx.run(["sudo", "dnf", "-y", "upgrade", "--refresh"])
     return 0
@@ -454,6 +481,8 @@ def parser():
     s = p.add_subparsers(dest="group")
     x = s.add_parser("status"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=cmd_status)
     x = s.add_parser("update"); x.set_defaults(fn=cmd_update)
+    x = s.add_parser("identity", help="the names the system shows: silikos | base | show")
+    x.add_argument("which", nargs="?", default="show", choices=["show", "silikos", "base"]); x.set_defaults(fn=cmd_identity)
 
     e = s.add_parser("eda", help="EDA boxes: EL6 / EL7 / EL8 userlands for the tools").add_subparsers(dest="cmd")
     x = e.add_parser("list"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=eda_list)

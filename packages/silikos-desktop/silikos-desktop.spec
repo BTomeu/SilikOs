@@ -1,10 +1,10 @@
 Name:           silikos-desktop
-Version:        0.1.0
+Version:        0.2.0
 Release:        1%{?dist}
 Summary:        SilikOS desktop defaults: one ink on paper, Cascadia Mono, the COMMAND bar on Super+Space
 License:        LicenseRef-SilikVolt AND OFL-1.1
 BuildArch:      noarch
-Requires:       silikos-branding = %{version}
+Requires:       silikos-branding >= 0.2.0
 Requires:       silik-command = %{version}
 Requires:       silik-tools = %{version}
 Requires:       gnome-shell

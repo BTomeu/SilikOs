@@ -1,0 +1,7 @@
+[Main]
+Product=SilikOS
+Version=@VERSION@
+BugURL=https://github.com/BTomeu/silikos/issues
+IsFinal=True
+UUID=@UUID@
+Variant=BaseOS

@@ -108,6 +108,20 @@ class Silik(unittest.TestCase):
             rc, o = run("win", "create", "p1")
             self.assertFalse(os.path.exists(silik.WINE_ROOT))
 
+    def test_identity(self):
+        rc, o = run("identity", "base")
+        self.assertIn("$ sudo /usr/libexec/silikos/identity base", o)
+        rc, o = run("identity")
+        self.assertIn("read as", o)
+
+    def test_os_release_parser(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".osr", delete=False) as f:
+            f.write('# c\nNAME="SilikOS"\nID="almalinux"\nVERSION_ID="9.8"\n')
+        try:
+            self.assertEqual(silik.os_release(f.name), {"NAME": "SilikOS", "ID": "almalinux", "VERSION_ID": "9.8"})
+        finally:
+            os.unlink(f.name)
+
     def test_vsyscall_is_reported(self):
         self.assertIn(silik.kernel_vsyscall(), ("emulate", "xonly", "none", ""))
 

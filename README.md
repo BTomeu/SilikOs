@@ -1,8 +1,9 @@
 # SilikOS (by SilikVolt)
 
-An engineering workstation system: **AlmaLinux 9 underneath, unchanged** (binary compatible with RHEL 9, so that EDA
-tools install and run), with the SilikVolt desktop on top, boxes for older EDA releases, and a layer for Windows
-programs. It is a try: `docs/STATUS.md` says what has been run and what has not.
+An engineering workstation system on an Enterprise Linux 9 base (AlmaLinux's packages and kernel, unchanged, so that
+EDA tools install and run), with the SilikVolt desktop on top, boxes for older EDA releases, and a layer for Windows
+programs. It carries the base's version (SilikOS 9.8) and says SilikOS wherever a person looks; programs still read
+an EL9 system. It is a try: `docs/STATUS.md` says what has been run and what has not.
 
 | Part | What it is | Where |
 |---|---|---|
@@ -11,7 +12,7 @@ programs. It is a try: `docs/STATUS.md` says what has been run and what has not.
 | `silik` | one command behind every action; prints what it runs; `--dry-run` | `packages/silik-tools` |
 | EDA | what Cadence / Synopsys tools ask of EL9, and EL6 / EL7 / EL8 boxes (`silik eda`) | `packages/silik-eda-compat`, `docs/EDA.md` |
 | Windows | Wine prefixes; a Windows virtual machine whose programs open as windows here (`silik win`) | `packages/silik-win`, `docs/WINDOWS.md` |
-| Branding | the SilikVolt mark, backgrounds, login logo | `packages/silikos-branding` |
+| Name and look | os-release display names, boot menu, boot splash, login logo, backgrounds; the installer's screens | `packages/silikos-branding`, `installer/`, `brand/` |
 
 ```bash
 bash tools/build_rpms.sh          # the six packages + repository metadata in build/repo (rpmbuild, createrepo_c)

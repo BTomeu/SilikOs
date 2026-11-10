@@ -9,8 +9,12 @@ be used.
 1. **A derivative, not a new system.** The base is AlmaLinux 9, unchanged: its kernel, glibc and repositories.
    Cadence and Synopsys build and test for RHEL; a system that differs from it underneath loses that. Security updates
    come from AlmaLinux; SilikOS maintains only its own packages.
-2. **The base's identity stays** (`/etc/os-release`, `/etc/redhat-release`): vendor installers read it. SilikOS shows
-   its name where a person looks (login screen, background, boot menu, `/etc/silikos-release`).
+2. **It says SilikOS wherever a person looks; programs still read the base** (owner, 10/11/2026: "it cannot look
+   like AlmaLinux"). The installer (`images/product.img`: name, sidebar, top bar), the boot menus, the boot splash, the
+   login screen, the About logo and `os-release`'s display fields (NAME, VERSION, PRETTY_NAME, LOGO, URLs) are
+   SilikOS. `ID`, `ID_LIKE`, `VERSION_ID`, `PLATFORM_ID`, `CPE_NAME`, `/etc/redhat-release` and `/etc/system-release`
+   stay the base's, because package tools and vendor installers read them. `silik identity base` restores the base's
+   own `os-release` if an installer objects. SilikOS carries the base's version: SilikOS 9.8 is on EL 9.8.
 3. **X11 session by default.** Virtuoso and the tools of its age are X11 programs; EL9 still ships Xorg (EL10 does
    not, which is why the base is 9).
 4. **Old tool releases run in boxes.** The owner's tools today run in a RHEL 6.6 virtual machine. `silik eda` gives

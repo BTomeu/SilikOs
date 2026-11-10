@@ -1,0 +1,53 @@
+#!/bin/bash
+# SilikOS — the names this system shows (silikos-branding).
+#   identity silikos   /etc/os-release = the base's file with the display names changed (NAME, VERSION, PRETTY_NAME,
+#                      LOGO, the URLs); ID, ID_LIKE, VERSION_ID, PLATFORM_ID and CPE_NAME stay the base's, and so do
+#                      /etc/redhat-release and /etc/system-release: package tools and vendor installers read those.
+#                      The boot menu entries are retitled.
+#   identity base      /etc/os-release is the base's own file again (for an installer that insists on its name)
+#   identity show      which of the two is in use
+# The choice is kept in /etc/silikos/identity and applied again when the base's release package is updated.
+set -u
+state=/etc/silikos/identity
+src=/usr/lib/os-release
+url=https://github.com/BTomeu/silikos
+
+retitle() {   # "title <name> (<kernel>) <version>" of the boot loader entries
+  local name=$1 ver=$2 f
+  for f in /boot/loader/entries/*.conf; do
+    [ -f "$f" ] || continue
+    sed -i -E "s/^title [^(]*\(([^)]+)\).*/title $name (\1) $ver/" "$f" 2>/dev/null || :
+  done
+}
+
+case "${1:-show}" in
+  silikos)
+    [ -r "$src" ] || { echo "identity: no $src" >&2; exit 1; }
+    ver=$(. "$src"; echo "${VERSION_ID:-}")
+    base=$(. "$src"; echo "${PRETTY_NAME:-}")
+    tmp=$(mktemp /etc/os-release.XXXXXX) || exit 1
+    {
+      echo "# SilikOS: the base's os-release with the display names changed (\`silik identity base\` restores the base's file)."
+      echo "# ID, ID_LIKE, VERSION_ID, PLATFORM_ID and CPE_NAME are the base's."
+      sed -e 's/^NAME=.*/NAME="SilikOS"/' -e "s/^VERSION=.*/VERSION=\"$ver\"/" \
+          -e "s/^PRETTY_NAME=.*/PRETTY_NAME=\"SilikOS $ver\"/" -e 's/^LOGO=.*/LOGO="silikos-logo-icon"/' \
+          -e 's/^ANSI_COLOR=.*/ANSI_COLOR="0;37"/' -e "s#^HOME_URL=.*#HOME_URL=\"$url\"#" \
+          -e "s#^DOCUMENTATION_URL=.*#DOCUMENTATION_URL=\"$url\"#" -e "s#^BUG_REPORT_URL=.*#BUG_REPORT_URL=\"$url/issues\"#" "$src"
+      echo "SILIKOS_BASE=\"$base\""
+    } > "$tmp"
+    chmod 0644 "$tmp"
+    rm -f /etc/os-release && mv "$tmp" /etc/os-release
+    mkdir -p /etc/silikos && echo silikos > "$state"
+    retitle SilikOS "$ver"
+    ;;
+  base)
+    ln -sfn ../usr/lib/os-release /etc/os-release
+    mkdir -p /etc/silikos && echo base > "$state"
+    retitle "$(. "$src"; echo "${NAME:-Linux}")" "$(. "$src"; echo "${VERSION:-}")"
+    ;;
+  show)
+    if [ -L /etc/os-release ]; then echo base; else echo silikos; fi
+    . /etc/os-release; echo "$PRETTY_NAME"
+    ;;
+  *) echo "usage: identity silikos|base|show" >&2; exit 2;;
+esac

@@ -42,6 +42,13 @@ glibc 2.12 (EL6) calls the legacy vsyscall page for `time()` and `gettimeofday()
 yum) runs on a 6.18 kernel whose vsyscall page is execute-only (`xonly`). The kickstart sets `vsyscall=xonly`
 explicitly; `silik eda kernel-arg` sets `emulate` (readable too) for a program that reads the page.
 
+## What an installer sees
+
+`/etc/redhat-release` reads `AlmaLinux release 9.x`, and `os-release` keeps `ID="almalinux"`, `ID_LIKE="rhel centos
+fedora"` and `VERSION_ID`; only the display names say SilikOS. If an installer or a check script still refuses
+(some compare `NAME` or `PRETTY_NAME`), `silik identity base` puts the base's own `os-release` back until
+`silik identity silikos`; `silik identity` shows both views. Inside a box the userland is CentOS / AlmaLinux as it is.
+
 ## Not in SilikOS
 
 No vendor software and no licences. Cadence and Synopsys support RHEL, not derivatives [A: their platform pages name

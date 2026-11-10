@@ -1,4 +1,4 @@
-# SilikOS 0.1 — kickstart for the installer (AlmaLinux 9 Anaconda), x86_64.
+# SilikOS — kickstart for the installer (the EL9 base's Anaconda), x86_64.
 # What it fixes: the package sources, the package set and the post-install setup. What it leaves to the installer's
 # screens, on purpose: language, keyboard, time zone, the disk (never chosen or erased from here: a machine may hold
 # another system), the user and the root password.

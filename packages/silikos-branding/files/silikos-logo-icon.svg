@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- SilikOS system logo (os-release LOGO=silikos-logo-icon): the SilikVolt mark on a paper tile -->
+  <rect x="4" y="4" width="120" height="120" rx="22" fill="#f1f0ec"/>
+  <path d="M24 88 A40 40 0 0 1 104 88" fill="none" stroke="#1a1b1e" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="98" cy="66.9" r="8.5" fill="#1a1b1e"/>
+</svg>

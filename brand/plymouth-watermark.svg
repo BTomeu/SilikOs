@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 56" width="300" height="56">
+  <path d="M6 48 A38 38 0 0 1 82 48" fill="none" stroke="#ecebe7" stroke-width="4.6" stroke-linecap="round"/>
+  <circle cx="76.3" cy="28" r="6" fill="#ecebe7"/>
+  <text x="108" y="46" font-family="Cascadia Mono" font-weight="600" font-size="38" fill="#ecebe7">SilikOS</text>
+</svg>
