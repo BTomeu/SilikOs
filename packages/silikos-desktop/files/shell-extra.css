@@ -1,0 +1,21 @@
+
+/* ---- SilikOS additions ---- */
+stage { font-family: "Cascadia Mono", "DejaVu Sans Mono", monospace; font-size: 10pt; }
+/* the top bar: the ink slab, regular weight */
+#panel { background-color: #17181b; font-weight: normal; }
+#panel .panel-button { color: #ecebe7; font-weight: normal; }
+#panel .panel-button:hover, #panel .panel-button:active, #panel .panel-button:overview, #panel .panel-button:focus {
+  box-shadow: inset 0 0 0 100px rgba(236, 235, 231, 0.14); }
+/* levels and focus in paper, not in an accent */
+.slider { -barlevel-active-background-color: #ecebe7; -barlevel-active-border-color: #ecebe7; -slider-handle-border-color: #ecebe7; }
+.level-bar { -barlevel-active-background-color: #ecebe7; }
+.workspace-thumbnail-indicator { border-color: #ecebe7; }
+.cycler-highlight, .tile-preview, .select-area-rubberband { border-color: #ecebe7; }
+.tile-preview { background-color: rgba(236, 235, 231, 0.18); }
+/* floating layers: a hairline frame, no glow, smaller corners */
+.popup-menu-content, .candidate-popup-content, .modal-dialog, .switcher-list, .osd-window, .notification-banner {
+  border: 1px solid #55575c; border-radius: 8px; box-shadow: none; }
+.popup-menu-item { border-radius: 4px; }
+StEntry { border-radius: 4px; }
+StEntry:focus { box-shadow: inset 0 0 0 1px #ecebe7; border-color: #ecebe7; }
+.shell-link, .shell-link:hover { color: #ecebe7; text-decoration: underline; }

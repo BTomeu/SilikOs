@@ -1,0 +1,18 @@
+#!/bin/bash
+# SilikOS — the GNOME Shell theme "SilikOS" (silikos-desktop): made on this system from the installed shell's own
+# stylesheet, so that it always matches the shell's version: the accent blue becomes ink greys, the surfaces the ink
+# family, the face Cascadia Mono; then /usr/share/silikos/shell-extra.css (panel, slider, focus) is appended.
+# Run by the package's scriptlets and again whenever gnome-shell is updated. Nothing of the shell's theme is shipped.
+set -u
+res=/usr/share/gnome-shell/gnome-shell-theme.gresource
+out=/usr/share/themes/SilikOS/gnome-shell
+data=/usr/share/silikos
+[ -r "$res" ] && command -v gresource >/dev/null 2>&1 || exit 0
+mkdir -p "$out"
+tmp=$(mktemp "$out/gnome-shell.css.XXXXXX") || exit 0
+if gresource extract "$res" /org/gnome/shell/theme/gnome-shell.css 2>/dev/null | sed -f "$data/shell-theme.sed" > "$tmp" && [ -s "$tmp" ]; then
+  cat "$data/shell-extra.css" >> "$tmp"
+  chmod 0644 "$tmp" && mv -f "$tmp" "$out/gnome-shell.css"
+else
+  rm -f "$tmp"
+fi

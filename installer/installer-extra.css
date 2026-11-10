@@ -1,0 +1,18 @@
+
+/* ---- the installer's own widgets ---- */
+/* the sidebar and the top bar are ink; what sits on them is light */
+.logo-sidebar { background-color: @silikos; }
+AnacondaSpokeWindow #nav-box { background-color: @silikos; color: @silik_onink; border-bottom: 1px solid @silik_ink; }
+AnacondaSpokeWindow #nav-box label { color: @silik_onink; }
+AnacondaSpokeWindow #nav-box button {
+    background-color: @silik_onink; border-color: @silik_onink; box-shadow: none;
+}
+AnacondaSpokeWindow #nav-box button label { color: @silik_ink; }
+AnacondaSpokeWindow #nav-box button:hover { background-color: @silik_onmu; }
+/* a spoke of the summary under the pointer or the keyboard: inverse video, as any selection */
+flowboxchild:hover > * , .spoke:hover { background-color: @silik_paper2; }
+flowboxchild:selected, flowboxchild:selected label, flowboxchild:focus:selected label { color: @silik_onink; }
+/* headings in capitals stay strong, in the UI face */
+.h1, .h2, GtkLabel.title, label.title { font-weight: 600; }
+/* the "complete the items" bar keeps the warning colour (a status), flat */
+infobar.warning box, infobar.warning { background-image: none; box-shadow: none; }

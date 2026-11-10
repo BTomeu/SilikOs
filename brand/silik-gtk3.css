@@ -1,0 +1,216 @@
+/* SilikOS — the Silik look for GTK 3, as overrides on top of Adwaita.
+ * One ink on paper: no blue, no gradients, no shadows; the selection is inverse video; the title bar is an ink slab;
+ * Cascadia Mono. Softer than SilikStudio: off-white paper and 4 px corners on controls.
+ * Used twice: appended to the installer's stylesheet (tools/build_iso.sh, images/product.img) and as the desktop's
+ * GTK theme (packages/silikos-desktop: /usr/share/themes/SilikOS/gtk-3.0/gtk.css imports Adwaita, then this).
+ * Colour is kept for data and for ok / warn / bad only. */
+
+@define-color silik_paper   #f7f6f3;   /* the working surface */
+@define-color silik_paper2  #eeede9;   /* bars inside a window, hover, read-only */
+@define-color silik_field   #fcfbf9;   /* inputs, lists */
+@define-color silik_ink     #1a1b1e;   /* text, frames, primary action, inverse video */
+@define-color silik_ink2    #2c2e32;   /* on the ink slab: hover */
+@define-color silik_muted   #6b6d72;   /* meta, units, disabled text */
+@define-color silik_rule    #dcdad5;   /* hairlines */
+@define-color silik_ctl     #8a8b8f;   /* control borders */
+@define-color silik_onink   #f7f6f3;   /* text on ink */
+@define-color silik_onmu    #b9b8b3;   /* muted text on ink */
+
+/* the named colours Adwaita and applications read */
+@define-color theme_fg_color @silik_ink;
+@define-color theme_text_color @silik_ink;
+@define-color theme_bg_color @silik_paper;
+@define-color theme_base_color @silik_field;
+@define-color theme_selected_bg_color @silik_ink;
+@define-color theme_selected_fg_color @silik_onink;
+@define-color theme_unfocused_selected_bg_color @silik_ink;
+@define-color theme_unfocused_selected_fg_color @silik_onink;
+@define-color insensitive_fg_color @silik_muted;
+@define-color insensitive_bg_color @silik_paper2;
+@define-color borders @silik_ctl;
+@define-color unfocused_borders @silik_rule;
+@define-color link_color @silik_ink;
+@define-color visited_link_color @silik_muted;
+
+* {
+    font-family: "Cascadia Mono", "DejaVu Sans Mono", monospace;
+    outline-color: @silik_ink;
+    -gtk-outline-radius: 2px;
+    text-shadow: none;
+    -gtk-icon-shadow: none;
+}
+
+window, dialog, .background { background-color: @silik_paper; color: @silik_ink; }
+label { color: inherit; }
+label:disabled, *:disabled { color: @silik_muted; }
+.dim-label, label.dim-label { color: @silik_muted; opacity: 1; }
+separator { background-color: @silik_rule; min-height: 1px; min-width: 1px; }
+frame > border, .frame { border: 1px solid @silik_rule; border-radius: 0; box-shadow: none; }
+
+/* selection: inverse video, everywhere */
+*:selected, selection, row:selected, treeview.view:selected, iconview:selected,
+.view:selected, .view:selected:focus, textview text selection, entry selection, label selection,
+flowboxchild:selected, calendar:selected {
+    background-color: @silik_ink;
+    color: @silik_onink;
+    border-color: @silik_ink;
+}
+row:selected label, row:selected image, treeview.view:selected, .view:selected { color: @silik_onink; }
+row:selected .dim-label { color: @silik_onmu; }
+
+/* lists and trees */
+.view, treeview.view, list, textview text, iconview { background-color: @silik_field; color: @silik_ink; }
+list row, row { border-radius: 0; }
+list row:hover, treeview.view:hover { background-color: @silik_paper2; }
+list row:selected:hover { background-color: @silik_ink; }
+treeview.view header button, .view header button {
+    background: @silik_paper2; color: @silik_muted; border: none; border-bottom: 1px solid @silik_rule;
+    border-radius: 0; box-shadow: none; font-weight: 400;
+}
+scrolledwindow, scrolledwindow.frame { border-color: @silik_ctl; }
+scrolledwindow overshoot, scrolledwindow undershoot { background: none; box-shadow: none; }
+
+/* buttons: paper keys with an ink edge; the primary one is ink */
+button, button.flat, button.text-button, button.image-button {
+    background-image: none; background-color: @silik_paper; color: @silik_ink;
+    border: 1px solid @silik_ctl; border-radius: 4px; box-shadow: none; text-shadow: none;
+    padding: 4px 10px; min-height: 22px;
+}
+button.flat { border-color: transparent; background-color: transparent; }
+button:hover { background-color: @silik_paper2; border-color: @silik_ink; }
+button:active, button:checked { background-color: @silik_ink; color: @silik_onink; border-color: @silik_ink; }
+button:checked label, button:active label { color: @silik_onink; }
+button:disabled { background-color: @silik_paper2; color: @silik_muted; border-color: @silik_rule; }
+button:disabled label { color: @silik_muted; }
+button.suggested-action, button.default {
+    background-image: none; background-color: @silik_ink; color: @silik_onink; border-color: @silik_ink;
+}
+button.suggested-action label, button.default label { color: @silik_onink; }
+button.suggested-action:hover, button.default:hover { background-color: @silik_ink2; }
+button.suggested-action:disabled { background-color: @silik_paper2; border-color: @silik_rule; }
+button.suggested-action:disabled label { color: @silik_muted; }
+button.destructive-action { background-image: none; background-color: @silik_paper; color: #a3261d; border-color: #a3261d; }
+button.destructive-action:hover { background-color: #a3261d; color: @silik_onink; }
+button.link, button.link label { color: @silik_ink; text-decoration: underline; border-color: transparent; background: none; }
+*:link, *:visited { color: @silik_ink; }
+
+/* inputs */
+entry, spinbutton, spinbutton.horizontal {
+    background-image: none; background-color: @silik_field; color: @silik_ink; caret-color: @silik_ink;
+    border: 1px solid @silik_ctl; border-radius: 4px; box-shadow: none; min-height: 22px;
+}
+entry:focus, spinbutton:focus-within { border-color: @silik_ink; box-shadow: inset 0 0 0 1px @silik_ink; }
+entry:disabled { background-color: @silik_paper2; color: @silik_muted; border-color: @silik_rule; }
+entry image { color: @silik_muted; }
+entry progress { background-color: @silik_ink; border: none; }
+spinbutton button { border: none; border-radius: 0; background: transparent; }
+combobox button.combo, button.combo { border-radius: 4px; }
+
+/* checks, radios, switches, scales, progress: ink when on */
+check, radio {
+    background-image: none; background-color: @silik_field; border: 1px solid @silik_ctl; box-shadow: none;
+    color: @silik_onink; min-width: 14px; min-height: 14px; -gtk-icon-shadow: none;
+}
+check { border-radius: 3px; }
+check:checked, radio:checked, check:indeterminate, radio:indeterminate {
+    background-image: none; background-color: @silik_ink; border-color: @silik_ink; color: @silik_onink;
+}
+check:hover, radio:hover { border-color: @silik_ink; }
+check:disabled, radio:disabled { background-color: @silik_paper2; border-color: @silik_rule; }
+switch {
+    background-image: none; background-color: @silik_paper2; border: 1px solid @silik_ctl; border-radius: 12px;
+    box-shadow: none; color: transparent;
+}
+switch:checked { background-color: @silik_ink; border-color: @silik_ink; }
+switch slider {
+    background-image: none; background-color: @silik_field; border: 1px solid @silik_ctl; border-radius: 12px; box-shadow: none;
+}
+switch:checked slider { border-color: @silik_ink; }
+scale trough, progressbar trough, levelbar trough {
+    background-image: none; background-color: @silik_paper2; border: 1px solid @silik_rule; border-radius: 2px; box-shadow: none;
+}
+scale highlight, progressbar progress {
+    background-image: none; background-color: @silik_ink; border: 1px solid @silik_ink; border-radius: 2px; box-shadow: none;
+}
+scale slider {
+    background-image: none; background-color: @silik_field; border: 1px solid @silik_ink; border-radius: 10px; box-shadow: none;
+}
+progressbar text { color: @silik_muted; }
+spinner { color: @silik_ink; }
+
+/* the title bar: an ink slab; what sits on it is light */
+headerbar, .titlebar, headerbar.titlebar, window.csd > .titlebar, .titlebar:backdrop, headerbar:backdrop {
+    background-image: none; background-color: @silik_ink; color: @silik_onink;
+    border: none; border-bottom: 1px solid @silik_ink; border-radius: 0; box-shadow: none;
+}
+headerbar .title, .titlebar .title, headerbar label, .titlebar label { color: @silik_onink; font-weight: 600; }
+headerbar .subtitle, .titlebar .subtitle { color: @silik_onmu; }
+headerbar:backdrop .title, headerbar:backdrop label { color: @silik_onmu; }
+headerbar button, .titlebar button, headerbar button.flat, headerbar button.titlebutton {
+    background-image: none; background-color: transparent; color: @silik_onink; border-color: transparent; box-shadow: none;
+}
+headerbar button label, headerbar button image, .titlebar button image { color: @silik_onink; }
+headerbar button:hover, .titlebar button:hover { background-color: @silik_ink2; border-color: @silik_onmu; }
+headerbar button:active, headerbar button:checked, .titlebar button:checked {
+    background-color: @silik_onink; color: @silik_ink; border-color: @silik_onink;
+}
+headerbar button:checked label, headerbar button:checked image, headerbar button:active label, headerbar button:active image { color: @silik_ink; }
+headerbar button:disabled, headerbar button:disabled label, headerbar button:disabled image { color: @silik_onmu; background-color: transparent; border-color: transparent; }
+headerbar button.suggested-action { background-color: @silik_onink; border-color: @silik_onink; }
+headerbar button.suggested-action label { color: @silik_ink; }
+headerbar entry, .titlebar entry {
+    background-color: @silik_ink2; color: @silik_onink; border-color: @silik_onmu; caret-color: @silik_onink;
+}
+headerbar entry:focus { border-color: @silik_onink; box-shadow: inset 0 0 0 1px @silik_onink; }
+headerbar entry image { color: @silik_onmu; }
+headerbar separator, .titlebar separator { background-color: @silik_ink2; }
+headerbar .linked > button { border-color: @silik_onmu; }
+headerbar switch { border-color: @silik_onmu; background-color: @silik_ink2; }
+headerbar switch:checked { background-color: @silik_onink; }
+headerbar switch:checked slider { background-color: @silik_ink; }
+window.csd, decoration { border-radius: 0; }
+decoration { box-shadow: 0 0 0 1px @silik_ink, 0 4px 14px rgba(0, 0, 0, 0.18); }
+decoration:backdrop { box-shadow: 0 0 0 1px @silik_ctl, 0 2px 8px rgba(0, 0, 0, 0.10); }
+
+/* bars inside a window */
+toolbar, .toolbar, actionbar, .inline-toolbar, statusbar, .sidebar, stacksidebar, placessidebar, searchbar {
+    background-image: none; background-color: @silik_paper2; border-color: @silik_rule; box-shadow: none; color: @silik_ink;
+}
+.sidebar row:selected, stacksidebar row:selected, placessidebar row:selected { background-color: @silik_ink; color: @silik_onink; }
+.sidebar row:selected label, .sidebar row:selected image, placessidebar row:selected label, placessidebar row:selected image { color: @silik_onink; }
+
+/* tabs: the open one carries an ink line */
+notebook > header { background-color: @silik_paper2; border-color: @silik_rule; }
+notebook > header tab { background: none; border: none; color: @silik_muted; padding: 4px 12px; }
+notebook > header tab:checked { color: @silik_ink; box-shadow: inset 0 -2px 0 @silik_ink; }
+notebook > header tab:hover { color: @silik_ink; box-shadow: inset 0 -2px 0 @silik_ctl; }
+notebook > stack { background-color: @silik_paper; }
+stackswitcher button:checked { background-color: @silik_ink; }
+
+/* floating layers: paper with an ink frame, no shadow glow */
+menu, .menu, .context-menu, popover, popover.background, .popup {
+    background-image: none; background-color: @silik_paper; color: @silik_ink; border: 1px solid @silik_ink;
+    border-radius: 6px; box-shadow: none;
+}
+menu menuitem, .menu menuitem, modelbutton, popover modelbutton { border-radius: 4px; padding: 5px 10px; }
+menu menuitem:hover, .menu menuitem:hover, modelbutton:hover, popover modelbutton:hover {
+    background-color: @silik_ink; color: @silik_onink;
+}
+menu menuitem:hover label, modelbutton:hover label { color: @silik_onink; }
+menubar, .menubar { background-color: @silik_paper2; color: @silik_ink; box-shadow: inset 0 -1px @silik_rule; }
+menubar > menuitem:hover { background-color: @silik_ink; color: @silik_onink; }
+tooltip, tooltip.background { background-color: @silik_ink; border: none; border-radius: 4px; box-shadow: none; }
+tooltip label, tooltip * { color: @silik_onink; }
+
+/* scrollbars: a thin muted bar */
+scrollbar { background-color: transparent; border: none; }
+scrollbar slider { background-color: @silik_ctl; border: 3px solid transparent; border-radius: 8px; min-width: 6px; min-height: 6px; }
+scrollbar slider:hover, scrollbar slider:active { background-color: @silik_ink; }
+
+/* messages keep their meaning in colour: ok / warn / bad */
+infobar, infobar.info > revealer > box { background-color: @silik_paper2; color: @silik_ink; }
+levelbar block.filled { background-color: @silik_ink; border-color: @silik_ink; }
+calendar { background-color: @silik_field; color: @silik_ink; border: 1px solid @silik_ctl; }
+calendar.header, calendar.button { color: @silik_ink; }
+expander arrow, treeview.view.expander { color: @silik_muted; }
+paned > separator { background-color: @silik_rule; }

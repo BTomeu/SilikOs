@@ -1,6 +1,6 @@
 # SilikOS desktop defaults (dconf system database "local"; a user's own settings win).
-# One ink on paper, the SilikVolt mark as the background, Cascadia Mono for code and terminals,
-# and the COMMAND bar on Super+Space.
+# The Silik look: the GTK theme and the shell theme "SilikOS" (one ink on paper, ink title bars, inverse-video
+# selection, Cascadia Mono), the SilikVolt mark as the background, and the COMMAND bar on Super+Space.
 
 [org/gnome/desktop/background]
 picture-uri='file:///usr/share/backgrounds/silikos/silikos-light.svg'
@@ -14,6 +14,8 @@ picture-options='zoom'
 primary-color='#131416'
 
 [org/gnome/desktop/interface]
+gtk-theme='SilikOS'
+font-name='Cascadia Mono 10'
 monospace-font-name='Cascadia Mono 11'
 enable-hot-corners=false
 clock-show-weekday=true
@@ -21,12 +23,17 @@ show-battery-percentage=true
 
 [org/gnome/desktop/wm/preferences]
 button-layout='appmenu:minimize,maximize,close'
+titlebar-font='Cascadia Mono Semi-Bold 10'
 
 [org/gnome/desktop/wm/keybindings]
 switch-input-source=['XF86Keyboard']
 switch-input-source-backward=['<Shift>XF86Keyboard']
 
+[org/gnome/shell/extensions/user-theme]
+name='SilikOS'
+
 [org/gnome/shell]
+enabled-extensions=['user-theme@gnome-shell-extensions.gcampax.github.com']
 favorite-apps=['org.silikvolt.Command.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Terminal.desktop', 'firefox.desktop', 'virt-manager.desktop']
 
 [org/gnome/settings-daemon/plugins/media-keys]
