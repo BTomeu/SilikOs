@@ -17,6 +17,10 @@ an EL9 system. It is a try: `docs/STATUS.md` says what has been run and what has
 | Windows | a double-click on an `.exe` runs it in a sandbox that does not see the rest of the home folder (`silik win open`); installed programs are applications of the desktop; a Windows virtual machine for what Wine cannot run. **Wine itself is not installable from EPEL on EL 9.8 today: see `docs/STATUS.md`** | `packages/silik-win`, `docs/WINDOWS.md` |
 | Name and look | os-release display names, boot menu, boot splash, login logo, backgrounds; the installer's screens | `packages/silikos-branding`, `installer/`, `brand/` |
 
+![SilikOS installed by the CI, the COMMAND bar open](docs/img/installed.png)
+
+The system as installed by the CI in a virtual machine on 10/11/2026 (real session, Super+Space pressed).
+
 ![The SilikOS desktop](docs/img/desktop.png)
 
 ![Start](docs/img/start.png)

@@ -1,0 +1,15 @@
+# SilikOS: the GTK and shell themes are made from the installed stylesheets by the package's scripts; if one is
+# missing at boot (a script that could not run inside an installer), it is made now, before the login screen.
+[Unit]
+Description=SilikOS themes (made from the installed GTK and GNOME Shell stylesheets when missing)
+ConditionPathExists=|!/usr/share/themes/SilikOS/gnome-shell/gnome-shell.css
+ConditionPathExists=|!/usr/share/themes/SilikOS/gtk-3.0/gtk.css
+Before=display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=-/usr/libexec/silikos/shell-theme
+ExecStart=-/usr/libexec/silikos/gtk-theme
+
+[Install]
+WantedBy=multi-user.target

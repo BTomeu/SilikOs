@@ -38,6 +38,13 @@ class InstallCi(unittest.TestCase):
                 self.assertNotIn("tests/install", text, os.path.relpath(p, ROOT))
                 self.assertNotIn("ci.ks", text, os.path.relpath(p, ROOT))
 
+    def test_no_package_script_needs_a_tool_of_a_devel_package(self):
+        # `gresource` is in glib2-devel on EL 9: the first complete installation had no theme because of it
+        for rel in ("packages/silikos-desktop/files/shell-theme", "packages/silikos-desktop/files/gtk-theme"):
+            code = "\n".join(l for l in read(rel).splitlines() if not l.lstrip().startswith("#"))
+            self.assertNotIn("gresource ", code, rel)
+            self.assertIn("resource-extract", code, rel)
+
     def test_the_combined_kickstart_is_valid(self):
         if not shutil.which("ksvalidator"):
             self.skipTest("ksvalidator (pykickstart) is not installed")

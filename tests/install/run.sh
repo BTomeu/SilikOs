@@ -108,6 +108,7 @@ for i in $(seq 1 $((t_boot * 6))); do
   if grep -q 'SILIKOS-CI|DONE' "$out/boot.log"; then done_=1; break; fi
 done
 if kill -0 $qpid 2> /dev/null; then
+  key esc || true; sleep 2                                 # (a dialog of the first login, if there is one)
   shot desktop || true
   key meta_l || true; sleep 4; shot start || true          # the Super key: Start
   key esc || true; sleep 2

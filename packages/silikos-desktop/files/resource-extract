@@ -1,0 +1,38 @@
+#!/usr/bin/python3
+"""resource-extract: one file out of a GLib resource bundle, to standard output.
+
+    resource-extract gtk  /org/gtk/libgtk/theme/Adwaita/gtk-contained.css       GTK 3's own resources (inside libgtk-3)
+    resource-extract FILE.gresource /org/gnome/shell/theme/gnome-shell.css      a resource file
+
+The theme makers of this package (gtk-theme, shell-theme) read the installed stylesheets with it. The command-line
+tool for this, `gresource`, is part of glib2-devel on EL 9 and is not on an installed system (found by the first
+complete installation, 10/11/2026: no theme had been made); python3-gobject is. No display is needed.
+"""
+import sys
+
+import gi
+
+gi.require_version("Gio", "2.0")
+from gi.repository import Gio, GLib  # noqa: E402
+
+
+def main(argv):
+    if len(argv) != 3:
+        sys.stderr.write(__doc__)
+        return 2
+    try:
+        if argv[1] == "gtk":
+            gi.require_version("Gtk", "3.0")
+            from gi.repository import Gtk  # noqa: F401  (loading it registers its resources)
+            data = Gio.resources_lookup_data(argv[2], Gio.ResourceLookupFlags.NONE)
+        else:
+            data = Gio.Resource.load(argv[1]).lookup_data(argv[2], Gio.ResourceLookupFlags.NONE)
+    except (GLib.Error, ValueError, ImportError) as e:
+        sys.stderr.write("resource-extract: %s\n" % e)
+        return 1
+    sys.stdout.buffer.write(data.get_data())
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

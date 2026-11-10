@@ -3,7 +3,8 @@
 #   SILIKOS-CI|<name>|ok or FAIL or info|<what was seen>
 # and SILIKOS-CI|DONE at the end. Read by tests/install/run.sh. Only in the CI's test installation.
 out=/dev/ttyS0
-say() { printf 'SILIKOS-CI|%s|%s|%s\r\n' "$1" "$2" "$(echo "$3" | tr '\n|' ' /' | cut -c1-300)" > $out; }
+# (each line starts on a line of its own: the kernel and systemd write to the same port)
+say() { printf '\r\nSILIKOS-CI|%s|%s|%s\r\n' "$1" "$2" "$(echo "$3" | tr '\n|' ' /' | cut -c1-300)" > $out; }
 is() { if [ "$2" = "$3" ]; then say "$1" ok "$2"; else say "$1" FAIL "saw '$2', wanted '$3'"; fi; }
 has() { case "$2" in *"$3"*) say "$1" ok "$3";; *) say "$1" FAIL "no '$3' in: $2";; esac; }
 uid=$(id -u tester)
@@ -40,8 +41,15 @@ has desktop.extension "$(asuser gnome-extensions info silik-shell@silikvolt.com)
 is desktop.shell-js-errors "$(journalctl -b --no-pager 2>/dev/null | grep -c 'JS ERROR')" 0
 is desktop.gtk-theme "$(asuser gsettings get org.gnome.desktop.interface gtk-theme)" "'SilikOS'"
 is desktop.icon-theme "$(asuser gsettings get org.gnome.desktop.interface icon-theme)" "'SilikOS'"
+# the themes are made on the system from the installed stylesheets: made, from the real stylesheet (no import of
+# Adwaita as a fallback), without the accent blue
+has desktop.gtk-theme-made "$(head -c 200 /usr/share/themes/SilikOS/gtk-3.0/gtk.css 2>&1)" "made by"
+is desktop.gtk-theme-import "$(grep -c '^@import' /usr/share/themes/SilikOS/gtk-3.0/gtk.css 2>&1)" 0
 is desktop.gtk-theme-blue "$(grep -c 3584e4 /usr/share/themes/SilikOS/gtk-3.0/gtk.css 2>&1)" 0
-has desktop.shell-theme "$(head -c 400 /usr/share/themes/SilikOS/gnome-shell/gnome-shell.css 2>&1 | tr -d '\n')" "{"
+has desktop.shell-theme "$(grep -c '{' /usr/share/themes/SilikOS/gnome-shell/gnome-shell.css 2>&1 | sed 's/^[1-9][0-9]*$/& rules: made/')" "made"
+is desktop.shell-theme-blue "$(grep -ci '3584e4' /usr/share/themes/SilikOS/gnome-shell/gnome-shell.css 2>&1)" 0
+has desktop.user-theme "$(asuser gnome-extensions info user-theme@gnome-shell-extensions.gcampax.github.com)" "ENABLED"
+is desktop.user-theme-name "$(asuser gsettings get org.gnome.shell.extensions.user-theme name)" "'SilikOS'"
 has desktop.super-space "$(asuser gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings)" "silik-command"
 has boot.plymouth "$(plymouth-set-default-theme 2>&1)" silikos
 s=$(silik status 2>&1); say silik.status "$([ $? = 0 ] && echo ok || echo FAIL)" "$(echo "$s" | head -3)"
@@ -70,4 +78,4 @@ else
 fi
 say system.failed-units info "$(systemctl --failed --no-legend | awk '{print $2}' | tr '\n' ' ')"
 say system.packages info "$(rpm -qa | wc -l) packages, $(df -h / | awk 'NR==2 {print $3}') used"
-printf 'SILIKOS-CI|DONE\r\n' > $out
+printf '\r\nSILIKOS-CI|DONE\r\n' > $out

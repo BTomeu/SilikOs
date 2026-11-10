@@ -7,12 +7,16 @@ set -u
 res=/usr/share/gnome-shell/gnome-shell-theme.gresource
 out=/usr/share/themes/SilikOS/gnome-shell
 data=/usr/share/silikos
-[ -r "$res" ] && command -v gresource >/dev/null 2>&1 || exit 0
+extract=${SILIKOS_EXTRACT:-/usr/libexec/silikos/resource-extract}
+[ -r "$res" ] || { echo "shell-theme: no $res (gnome-shell not installed yet)"; exit 0; }
 mkdir -p "$out"
-tmp=$(mktemp "$out/gnome-shell.css.XXXXXX") || exit 0
-if gresource extract "$res" /org/gnome/shell/theme/gnome-shell.css 2>/dev/null | sed -f "$data/shell-theme.sed" > "$tmp" && [ -s "$tmp" ]; then
+tmp=$(mktemp "$out/gnome-shell.css.XXXXXX") || exit 1
+if "$extract" "$res" /org/gnome/shell/theme/gnome-shell.css | sed -f "$data/shell-theme.sed" > "$tmp" && [ -s "$tmp" ]; then
   cat "$data/shell-extra.css" >> "$tmp"
   chmod 0644 "$tmp" && mv -f "$tmp" "$out/gnome-shell.css"
+  echo "shell-theme: $out/gnome-shell.css"
 else
   rm -f "$tmp"
+  echo "shell-theme: the shell's stylesheet could not be read: no theme made" >&2
+  exit 1
 fi

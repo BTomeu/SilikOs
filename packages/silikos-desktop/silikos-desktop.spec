@@ -1,5 +1,5 @@
 Name:           silikos-desktop
-Version:        0.8.0
+Version:        0.9.0
 Release:        1%{?dist}
 Summary:        The SilikOS desktop: the Silik layout (command line, rail, status bar), GTK and shell themes, Cascadia Mono
 License:        LicenseRef-SilikVolt AND OFL-1.1
@@ -12,6 +12,10 @@ Requires:       gnome-shell-extension-user-theme
 Requires:       gdm
 Requires:       glib2
 Requires:       gtk3
+# the theme makers read the installed stylesheets through GObject introspection (resource-extract)
+Requires:       python3-gobject
+Requires(post): python3-gobject
+Requires(post): gtk3
 # the clock's colon (U+2236) and other signs Cascadia Mono does not carry fall back to DejaVu
 Requires:       dejavu-sans-fonts
 # /etc/dconf/profile/user (user-db:user, system-db:local) is the dconf package's own file on EL9
@@ -29,6 +33,8 @@ install -Dm0644 %{_sourcedir}/00-silikos %{buildroot}%{_sysconfdir}/dconf/db/loc
 # the GTK 3 theme is made on the system from the installed GTK's Adwaita stylesheet (gtk-theme)
 install -d %{buildroot}%{_datadir}/themes/SilikOS/gtk-3.0
 install -Dm0755 %{_sourcedir}/gtk-theme %{buildroot}%{_libexecdir}/silikos/gtk-theme
+install -Dm0755 %{_sourcedir}/resource-extract %{buildroot}%{_libexecdir}/silikos/resource-extract
+install -Dm0644 %{_sourcedir}/silikos-themes.service %{buildroot}%{_prefix}/lib/systemd/system/silikos-themes.service
 install -Dm0644 %{_sourcedir}/gtk-theme.sed %{buildroot}%{_datadir}/silikos/gtk-theme.sed
 install -Dm0644 %{_sourcedir}/silik-gtk3.css %{buildroot}%{_datadir}/silikos/silik-gtk3.css
 printf '[Desktop Entry]\nType=X-GNOME-Metatheme\nName=SilikOS\nComment=One ink on paper\nEncoding=UTF-8\n\n[X-GNOME-Metatheme]\nGtkTheme=SilikOS\n' > %{buildroot}%{_datadir}/themes/SilikOS/index.theme
@@ -53,6 +59,7 @@ dconf update >/dev/null 2>&1 || :
 fc-cache -f %{_datadir}/fonts/silikos >/dev/null 2>&1 || :
 %{_libexecdir}/silikos/shell-theme || :
 %{_libexecdir}/silikos/gtk-theme >/dev/null || :
+systemctl enable silikos-themes.service >/dev/null 2>&1 || :
 gtk-update-icon-cache -q -f %{_datadir}/icons/SilikOS >/dev/null 2>&1 || :
 # the login screen starts X11 sessions (Xorg is part of the EL9 base)
 if [ -f %{_sysconfdir}/gdm/custom.conf ]; then
@@ -72,6 +79,7 @@ fi
 %{_libexecdir}/silikos/gtk-theme >/dev/null || :
 
 %preun
+if [ "$1" = 0 ]; then systemctl disable silikos-themes.service >/dev/null 2>&1 || :; fi
 if [ "$1" = 0 ]; then rm -f %{_datadir}/themes/SilikOS/gnome-shell/gnome-shell.css %{_datadir}/themes/SilikOS/gtk-3.0/gtk.css || :; fi
 
 %postun
@@ -87,6 +95,8 @@ dconf update >/dev/null 2>&1 || :
 %ghost %{_datadir}/themes/SilikOS/gtk-3.0/gtk.css
 %{_libexecdir}/silikos/shell-theme
 %{_libexecdir}/silikos/gtk-theme
+%{_libexecdir}/silikos/resource-extract
+%{_prefix}/lib/systemd/system/silikos-themes.service
 %{_datadir}/silikos/
 %{_datadir}/gnome-shell/extensions/silik-shell@silikvolt.com/
 %license %{_datadir}/licenses/%{name}/CascadiaMono-LICENSE.txt

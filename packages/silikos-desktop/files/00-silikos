@@ -34,6 +34,8 @@ switch-input-source-backward=['<Shift>XF86Keyboard']
 name='SilikOS'
 
 [org/gnome/shell]
+# no "take the tour" dialog of the base's desktop on the first login
+welcome-dialog-last-shown-version='4294967295'
 enabled-extensions=['user-theme@gnome-shell-extensions.gcampax.github.com', 'silik-shell@silikvolt.com']
 favorite-apps=['com.silikvolt.SilikStudio.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Terminal.desktop', 'firefox.desktop', 'org.gnome.gedit.desktop', 'virt-manager.desktop', 'gnome-control-center.desktop']
 
