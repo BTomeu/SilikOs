@@ -130,8 +130,8 @@ if kill -0 $qpid 2> /dev/null; then
     key ret || true; sleep 25; shot windows-program || true
   fi
   key meta_l-l || true; sleep 6                            # Super+L: locked, and the screen goes dark
-  key ctrl || true; sleep 4; shot lock || true             # a modifier key wakes it without asking for the password: the lock screen
-  key ret || true; sleep 4; shot unlock || true            # a key: the password prompt
+  key ctrl || true; sleep 4; shot unlock || true           # a key wakes it: the password prompt (extensions are off there)
+  key esc || true; sleep 4; shot lock || true              # Esc: back to the lock screen and its clock
   python3 - "$work/mon.sock" <<'EOF' || true
 import socket, sys, time
 s = socket.socket(socket.AF_UNIX); s.connect(sys.argv[1]); time.sleep(0.3); s.send(b"quit\n"); time.sleep(1)

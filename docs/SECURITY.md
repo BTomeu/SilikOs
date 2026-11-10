@@ -135,5 +135,8 @@ Not run, and why:
 - **The timer under systemd**: the unit files pass `systemd-analyze verify`; no systemd ran them.
 - **`silik secure apply` by a normal user with a real `sudo`**, and `sudo silik secure status` from a desktop
   session: run as root in a container, with `sudo` replaced by a pass-through.
-- **The screen actually locking** (idle, suspend, lid): only the settings were read and written.
+- **The screen locking by idle, suspend or the lid**: only the settings were read and written. Locking with Super+L
+  was seen on an installed system (the CI's virtual machine, 10/11/2026): the locked screen asks for the password and
+  shows the clock and the system icons only. It had shown the name of the focused program in the top bar, a fault of
+  the shell extension, fixed in `silikos-desktop` 0.10.1.
 - **The Wine sandbox** (bubblewrap): `status` only says whether bubblewrap is there.
