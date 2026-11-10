@@ -15,6 +15,7 @@ primary-color='#131416'
 
 [org/gnome/desktop/interface]
 gtk-theme='SilikOS'
+icon-theme='SilikOS'
 font-name='Cascadia Mono 10'
 monospace-font-name='Cascadia Mono 11'
 enable-hot-corners=false

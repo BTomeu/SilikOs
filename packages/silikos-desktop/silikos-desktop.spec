@@ -1,5 +1,5 @@
 Name:           silikos-desktop
-Version:        0.5.0
+Version:        0.6.0
 Release:        1%{?dist}
 Summary:        The SilikOS desktop: the Silik layout (command line, rail, status bar), GTK and shell themes, Cascadia Mono
 License:        LicenseRef-SilikVolt AND OFL-1.1
@@ -42,6 +42,9 @@ install -Dm0644 %{_sourcedir}/shell-checkbox.svg %{buildroot}%{_datadir}/themes/
 for f in metadata.json extension.js stylesheet.css; do
   install -Dm0644 %{_sourcedir}/shell-ext/$f %{buildroot}%{_datadir}/gnome-shell/extensions/silik-shell@silikvolt.com/$f
 done
+# the icon theme: Adwaita with the Silik folders and file types (tools/gen_icons.py)
+(cd %{_sourcedir}/icons && find . -type f \( -name '*.svg' -o -name index.theme \) | while read -r f; do
+  install -Dm0644 "$f" "%{buildroot}%{_datadir}/icons/SilikOS/$f"; done)
 install -Dm0644 %{_sourcedir}/CascadiaMono.ttf %{buildroot}%{_datadir}/fonts/silikos/CascadiaMono.ttf
 install -Dm0644 %{_sourcedir}/CascadiaMono-LICENSE.txt %{buildroot}%{_datadir}/licenses/%{name}/CascadiaMono-LICENSE.txt
 
@@ -50,6 +53,7 @@ dconf update >/dev/null 2>&1 || :
 fc-cache -f %{_datadir}/fonts/silikos >/dev/null 2>&1 || :
 %{_libexecdir}/silikos/shell-theme || :
 %{_libexecdir}/silikos/gtk-theme >/dev/null || :
+gtk-update-icon-cache -q -f %{_datadir}/icons/SilikOS >/dev/null 2>&1 || :
 # the login screen starts X11 sessions (Xorg is part of the EL9 base)
 if [ -f %{_sysconfdir}/gdm/custom.conf ]; then
   if grep -q '^#\?WaylandEnable=' %{_sysconfdir}/gdm/custom.conf; then
@@ -77,6 +81,8 @@ dconf update >/dev/null 2>&1 || :
 %config(noreplace) %{_sysconfdir}/dconf/db/local.d/00-silikos
 %{_datadir}/fonts/silikos/
 %{_datadir}/themes/SilikOS/
+%{_datadir}/icons/SilikOS/
+%ghost %{_datadir}/icons/SilikOS/icon-theme.cache
 %ghost %{_datadir}/themes/SilikOS/gnome-shell/gnome-shell.css
 %ghost %{_datadir}/themes/SilikOS/gtk-3.0/gtk.css
 %{_libexecdir}/silikos/shell-theme

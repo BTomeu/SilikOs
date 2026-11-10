@@ -11,7 +11,7 @@
  * Nothing here runs a system action: the keys open applications and windows, every action stays in `silik`. */
 'use strict';
 
-const { Clutter, Gio, GLib, Meta, Shell, St } = imports.gi;
+const { Clutter, Gio, GLib, Gtk, Meta, Pango, PangoCairo, Shell, St } = imports.gi;
 const Main = imports.ui.main;
 const AppFavorites = imports.ui.appFavorites;
 const Util = imports.misc.util;
@@ -85,12 +85,65 @@ function category(app) {
     return 'other';
 }
 
-function icon(app, size) {
-    const i = app.create_icon_texture(size);
-    i.add_effect(new Clutter.DesaturateEffect({ factor: 1.0 }));   /* one ink: colour is kept for data */
+/* One family of icons. An application shows its own line (symbolic) icon when it ships one; a terminal, file
+ * manager, text editor, browser or settings program without one takes the generic line icon of its kind; anything
+ * else (a Windows program, an EDA tool) is its initial in an ink frame. All of them are drawn in the text colour of
+ * where they sit, so they follow inverse video. Colour pictures of other styles are not shown. */
+const KINDS = [['TerminalEmulator', 'utilities-terminal-symbolic'], ['FileManager', 'system-file-manager-symbolic'],
+               ['TextEditor', 'accessories-text-editor-symbolic'], ['WebBrowser', 'web-browser-symbolic'],
+               ['Settings', 'preferences-system-symbolic']];
+
+function symbolicName(app) {
+    const theme = Gtk.IconTheme.get_default();
+    const info = app.get_app_info();
+    if (!info) return null;
+    const gi = info.get_icon();
+    if (gi instanceof Gio.ThemedIcon) {
+        for (const n of gi.get_names()) {
+            const sn = n.endsWith('-symbolic') ? n : n + '-symbolic';
+            if (theme.has_icon(sn)) return sn;
+        }
+    }
+    const cs = (info.get_categories() || '').split(';');
+    for (const [c, n] of KINDS) if (cs.includes(c) && theme.has_icon(n)) return n;
+    return null;
+}
+
+function monogram(name, size) {
+    const s = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+    const a = new St.DrawingArea({ width: size * s, height: size * s, style_class: 'silik-mono' });
+    const ch = ((name || '').trim().charAt(0) || '?').toUpperCase();
+    a.connect('repaint', () => {
+        const cr = a.get_context();
+        const [w, h] = a.get_surface_size();
+        Clutter.cairo_set_source_color(cr, a.get_theme_node().get_foreground_color());
+        const lw = Math.max(1, Math.round(w / 16));
+        cr.setLineWidth(lw);
+        cr.rectangle(lw / 2, lw / 2, w - lw, h - lw);
+        cr.stroke();
+        const layout = PangoCairo.create_layout(cr);
+        const fd = Pango.FontDescription.from_string('Cascadia Mono Bold');
+        fd.set_absolute_size(h * 0.62 * Pango.SCALE);
+        layout.set_font_description(fd);
+        layout.set_text(ch, -1);
+        const [ink] = layout.get_pixel_extents();
+        cr.moveTo((w - ink.width) / 2 - ink.x, (h - ink.height) / 2 - ink.y);
+        PangoCairo.show_layout(cr, layout);
+        cr.$dispose();
+    });
+    return a;
+}
+
+function silikIcon(app, size) {
+    let i;
+    const sn = symbolicName(app);
+    if (sn) i = new St.Icon({ icon_name: sn, icon_size: size, style_class: 'silik-app-icon' });
+    else i = monogram(app.get_name(), size);
     i.y_align = Clutter.ActorAlign.CENTER;
     return i;
 }
+
+function icon(app, size) { return silikIcon(app, size); }
 
 class SilikShell {
     enable() {
@@ -118,6 +171,9 @@ class SilikShell {
             Main.sessionMode.hasOverview = false;
             on(Main.layoutManager, 'startup-complete', () => { Main.sessionMode.hasOverview = this._hadOverview; });
         }
+        /* the same icons wherever the shell shows an application (window switcher, windows view, search) */
+        this._origIcon = Shell.App.prototype.create_icon_texture;
+        Shell.App.prototype.create_icon_texture = function (size) { return silikIcon(this, size); };
         /* the rail is the dash; the Super key opens Start (the windows view keeps its key on the rail) */
         this._dash = Main.overview.dash;
         if (this._dash) { this._dash.hide(); this._dash.set_height(0); }
@@ -133,6 +189,7 @@ class SilikShell {
     disable() {
         this._closeStart();
         delete Main.overview.toggle;
+        if (this._origIcon) { Shell.App.prototype.create_icon_texture = this._origIcon; this._origIcon = null; }
         for (const [o, id] of this._sigs) o.disconnect(id);
         this._sigs = [];
         if (this._mon) { this._mon.cancel(); this._mon = null; }

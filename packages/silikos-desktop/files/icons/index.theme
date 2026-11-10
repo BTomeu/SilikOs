@@ -1,0 +1,27 @@
+[Icon Theme]
+Name=SilikOS
+Comment=One ink on paper: folders and file types; everything else is Adwaita's
+Inherits=Adwaita,hicolor
+Example=folder
+Directories=scalable/places,scalable/mimetypes,scalable/status
+
+[scalable/places]
+Context=Places
+Size=64
+MinSize=8
+MaxSize=512
+Type=Scalable
+
+[scalable/mimetypes]
+Context=MimeTypes
+Size=64
+MinSize=8
+MaxSize=512
+Type=Scalable
+
+[scalable/status]
+Context=Status
+Size=64
+MinSize=8
+MaxSize=512
+Type=Scalable

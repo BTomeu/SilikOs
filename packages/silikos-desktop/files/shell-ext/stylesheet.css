@@ -24,7 +24,7 @@
 .silik-key.silik-on .silik-key-edge { background-color: #f7f6f3; }
 .silik-key-n { width: 8px; padding-right: 7px; color: #6b6d72; }
 .silik-key.silik-on .silik-key-n { color: #b9b8b3; }
-.silik-key-t { padding-left: 7px; }
+.silik-key-t { padding-left: 8px; }
 .silik-key-plain { padding-left: 0; }
 .silik-win { height: 22px; padding: 0 8px 0 39px; border-radius: 0; color: #6b6d72; font-size: 11px; }
 .silik-win:hover, .silik-win:focus { background-color: #e6e5e0; color: #1a1b1e; }
