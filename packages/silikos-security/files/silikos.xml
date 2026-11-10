@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SilikOS: the default zone of a personal engineering workstation (package silikos-security).
+     Incoming: dropped without an answer, except what follows. Outgoing: free. Replies to connections this machine
+     opened are accepted by firewalld before any zone is looked at, and so is everything on the loopback interface
+     (licence daemons, the EDA boxes and the Windows machine's RDP port on localhost need no opening here).
+     firewalld does not add its general "accept ICMP" rule to a zone whose target is DROP (firewalld 1.3.4,
+     core/fw_policy.py, _icmp_block_inversion), so what IPv6 needs to find its neighbours and its router is named:
+     without these an IPv6 network stops working. Echo requests (ping) are not answered.
+     To open something, see docs/SECURITY.md ("Opening a port"): firewall-cmd then writes
+     /etc/firewalld/zones/silikos.xml, which stands in for this file from then on. -->
+<zone target="DROP">
+  <short>SilikOS</short>
+  <description>Personal workstation: unsolicited incoming packets are dropped; outgoing connections and their replies are allowed. Open: DHCPv6 client, IPv6 neighbour discovery.</description>
+  <service name="dhcpv6-client"/>
+  <rule family="ipv6">
+    <icmp-type name="neighbour-solicitation"/>
+    <accept/>
+  </rule>
+  <rule family="ipv6">
+    <icmp-type name="neighbour-advertisement"/>
+    <accept/>
+  </rule>
+  <rule family="ipv6">
+    <icmp-type name="router-advertisement"/>
+    <accept/>
+  </rule>
+  <rule family="ipv6">
+    <icmp-type name="mld-listener-query"/>
+    <accept/>
+  </rule>
+</zone>

@@ -1,0 +1,15 @@
+# SilikOS security defaults of the desktop (dconf system database "local"; a user's own settings win: these are
+# defaults, not locks). A separate file from silikos-desktop's 00-silikos.
+
+# The screen goes blank after 5 minutes without input and is locked at once. These three are GNOME's own defaults
+# on EL 9.8 (gsettings-desktop-schemas 40.0), written down so that the system states them.
+[org/gnome/desktop/session]
+idle-delay=uint32 300
+
+[org/gnome/desktop/screensaver]
+lock-enabled=true
+lock-delay=uint32 0
+
+# A USB stick or a disc that is plugged in never starts a program by itself (GNOME's default asks; this never does).
+[org/gnome/desktop/media-handling]
+autorun-never=true

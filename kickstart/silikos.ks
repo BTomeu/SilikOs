@@ -18,7 +18,14 @@ network --bootproto=dhcp --device=link --activate --onboot=yes
 graphical
 xconfig --startxonboot
 firstboot --enable
-services --enabled=NetworkManager,gdm
+# sshd is in the base and on by default: a personal workstation does not need it (to have it: `sudo systemctl
+# enable --now sshd`, then `silik secure apply --keep-ssh`)
+services --enabled=NetworkManager,gdm --disabled=sshd
+# Security, stated (docs/SECURITY.md). SELinux stays as the base has it. The firewall is on; the installer opens ssh
+# in the default zone unless told not to. Disk encryption is not set here: the disk and "Encrypt my data" are chosen
+# in the installer's Installation Destination screen, like everything about the disk.
+selinux --enforcing
+firewall --enabled --remove-service=ssh
 # glibc 2.12 (EL6 userlands of `silik eda`) calls the vsyscall page: keep it callable whatever the kernel's default
 bootloader --append="vsyscall=xonly"
 
@@ -31,6 +38,7 @@ silik-tools
 silik-command
 silik-eda-compat
 silik-win
+silikos-security
 %end
 
 %post --log=/root/silikos-post.log
@@ -43,4 +51,7 @@ else
   echo 'GRUB_DISTRIBUTOR="SilikOS"' >> /etc/default/grub
 fi
 dconf update || :
+# the firewall's default zone is the SilikOS one (package silikos-security): incoming dropped, outgoing free.
+# The offline command also leaves a copy of the zone in /etc, which would hide the package's file on updates.
+firewall-offline-cmd --set-default-zone=silikos && rm -f /etc/firewalld/zones/silikos.xml || :
 %end

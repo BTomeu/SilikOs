@@ -9,6 +9,7 @@
 #   silik hw    probe | nvidia install | nvidia status
 #   silik identity show | silikos | base
 #   silik update
+#   silik secure status [--json] [--offline] | apply [--keep-ssh]
 # Global: --dry-run prints the commands and runs nothing; -q hides the `$ ...` lines.
 # Python 3.9 (the base system's), standard library only. Every external command is printed as `$ ...` before it runs.
 import argparse
@@ -485,6 +486,678 @@ def cmd_update(ctx, a):
     return 0
 
 
+# ------------------------------------------------------------------ secure
+# `silik secure status` reads the system and judges it; `silik secure apply` sets the SilikOS defaults (the files are
+# the package silikos-security's; docs/SECURITY.md says why each one). A judgement is ok / warn / bad / unknown,
+# drawn as in SilikStudio: shape and word. A check that cannot see its subject (a tool or a file is absent, as inside
+# a container) says unknown, never ok. Three layers: sec_probe() reads, sec_checks() judges what was read,
+# sec_plan() lists the commands that tighten it; the last two run nothing, so the tests feed them made-up systems.
+import glob                                   # used by this section only
+import xml.etree.ElementTree as ElementTree   # (kept here so that the section is one block)
+
+SEC_MARK = {"ok": "●", "warn": "◆", "bad": "▼", "unknown": "?"}
+SEC_ZONE = "silikos"                          # /usr/lib/firewalld/zones/silikos.xml
+SEC_ZONE_OPEN = ("dhcpv6-client",)            # what that zone opens
+SEC_TIMER = "silikos-security-update.timer"
+SEC_SYSCTL_FILE = "/usr/lib/sysctl.d/60-silikos-security.conf"
+# (key, value, direction, who sets it). "min": a higher number is stricter; "max": a lower one is. The "silikos" rows
+# are the lines of SEC_SYSCTL_FILE (a test compares them); the "base" rows are what EL 9.8 sets itself.
+SEC_SYSCTL = [
+    ("kernel.dmesg_restrict", 1, "min", "silikos"),
+    ("kernel.yama.ptrace_scope", 1, "min", "silikos"),
+    ("net.ipv4.conf.default.accept_redirects", 0, "max", "silikos"),
+    ("net.ipv4.conf.*.accept_redirects", 0, "max", "silikos"),
+    ("net.ipv6.conf.default.accept_redirects", 0, "max", "silikos"),
+    ("net.ipv6.conf.*.accept_redirects", 0, "max", "silikos"),
+    ("net.ipv4.conf.default.send_redirects", 0, "max", "silikos"),
+    ("net.ipv4.conf.*.send_redirects", 0, "max", "silikos"),
+    ("kernel.kptr_restrict", 1, "min", "base"),
+    ("kernel.randomize_va_space", 2, "min", "base"),
+    ("fs.protected_hardlinks", 1, "min", "base"),
+    ("fs.protected_symlinks", 1, "min", "base"),
+]
+SEC_IDLE = 300        # s without input before the screen blanks: the default of 10-silikos-security (GNOME's own)
+SEC_IDLE_MAX = 900    # s, blank + lock later than this is a warning [A: the CIS RHEL 9 benchmark's figure, from memory]
+SEC_GDM_CONF = "/etc/gdm/custom.conf"
+SEC_SELINUX_CONF = "/etc/selinux/config"
+
+
+def sec_cmd(argv, timeout=20):
+    """a read-only command, not echoed: (exit code, stdout); the code is None when the command is absent, may not
+    be run or does not answer in time"""
+    env = dict(os.environ)
+    env["LC_ALL"] = "C"
+    try:
+        p = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
+                           universal_newlines=True, timeout=timeout, env=env)
+        return p.returncode, p.stdout.strip()
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None, ""
+
+
+def sec_container():
+    if os.path.exists("/run/.containerenv") or os.path.exists("/.dockerenv"):
+        return True
+    rc, out = sec_cmd(["systemd-detect-virt", "--container"])
+    return rc == 0 and out not in ("", "none")
+
+
+def sec_unit(unit):
+    """enabled / disabled / masked / static ... as systemctl says; 'not-found' when there is no such unit file;
+    None when it cannot be told"""
+    rc, out = sec_cmd(["systemctl", "is-enabled", unit])
+    if rc is None:
+        return None
+    if out:
+        return out.splitlines()[0].strip()
+    dirs = ("/etc/systemd/system", "/run/systemd/system", "/usr/lib/systemd/system", "/lib/systemd/system")
+    return None if any(os.path.exists(os.path.join(d, unit)) for d in dirs) else "not-found"
+
+
+def sec_active(unit):
+    """True / False as systemd says; None when systemd does not answer (a container, a chroot)"""
+    rc, out = sec_cmd(["systemctl", "is-active", unit])
+    if out in ("active", "activating", "reloading"):
+        return True
+    if out in ("inactive", "failed", "deactivating"):
+        return False
+    return None
+
+
+def sec_selinux(container):
+    enf = read("/sys/fs/selinux/enforce").strip()
+    mode = {"1": "enforcing", "0": "permissive"}.get(enf)
+    conf = None
+    for l in read(SEC_SELINUX_CONF).splitlines():
+        if l.strip().startswith("SELINUX="):
+            conf = l.split("=", 1)[1].strip().lower()
+    if mode is None and conf is not None and not container:
+        mode = "disabled"          # an SELinux system whose kernel runs without it
+    return {"mode": mode, "config": conf}
+
+
+def sec_zone_parse(path):
+    """a firewalld zone file: its target, what it opens (services, ports, accepting rules) and the ICMP types it
+    accepts; None when it cannot be read"""
+    try:
+        root = ElementTree.parse(path).getroot()
+    except (ElementTree.ParseError, OSError):
+        return None
+    opened = [s.get("name", "?") for s in root.findall("service")]
+    opened += ["%s/%s" % (p.get("port", "?"), p.get("protocol", "?")) for p in root.findall("port")]
+    opened += ["protocol " + p.get("value", "?") for p in root.findall("protocol")]
+    opened += ["forward-port %s/%s" % (p.get("port", "?"), p.get("protocol", "?")) for p in root.findall("forward-port")]
+    icmp = []
+    for r in root.findall("rule"):
+        if r.find("accept") is None:
+            continue
+        it = r.find("icmp-type")
+        if it is not None:
+            icmp.append(it.get("name", "?"))
+            continue
+        el = [e for e in r if e.tag in ("service", "port", "protocol", "forward-port", "source-port", "masquerade")]
+        opened.append("rule:" + (el[0].get("name") or el[0].get("port") or el[0].get("value") or el[0].tag if el else "accept"))
+    return {"target": root.get("target") or "default", "open": opened, "icmp": icmp}
+
+
+def sec_zone_path(zone):
+    for d in ("/etc/firewalld/zones", "/usr/lib/firewalld/zones"):
+        p = os.path.join(d, zone + ".xml")
+        if os.path.isfile(p):
+            return p
+    return ""
+
+
+def sec_fw_list(out):
+    """the output of `firewall-cmd --list-all`: {zone, target, open, icmp}; None when it is not that"""
+    lines = out.splitlines()
+    if not lines or not lines[0].strip() or lines[0].startswith(" "):
+        return None
+    f, rules, key = {}, [], ""
+    for l in lines[1:]:
+        if l.startswith("\t") and key == "rich rules":
+            rules.append(l.strip())
+        elif ":" in l:
+            key, _, v = l.strip().partition(":")
+            f[key] = v.strip()
+    if "services" not in f or "ports" not in f:
+        return None
+    acc = [r for r in rules if r.endswith("accept")]
+    opened = f["services"].split() + f["ports"].split() + ["protocol " + x for x in f.get("protocols", "").split()]
+    opened += ["forward-port " + x for x in f.get("forward-ports", "").split()] + ["rule:accept" for r in acc if "icmp-type" not in r]
+    return {"zone": lines[0].split()[0], "target": f.get("target") or None, "open": opened,
+            "icmp": [r.split('icmp-type name="', 1)[1].split('"')[0] for r in acc if 'icmp-type name="' in r]}
+
+
+def sec_firewall():
+    """firewalld as it runs, else as it is configured. Anyone may ask a running firewalld for its default zone;
+    what a zone opens is root's to read (polkit asks for a password, /etc/firewalld is closed): for another user
+    "open" stays None and "packaged" holds what the zone's file in /usr/lib says, which root may have changed."""
+    fw = {"installed": shutil.which("firewall-cmd") is not None, "active": sec_active("firewalld.service"),
+          "unit": sec_unit("firewalld.service"), "zone": None, "target": None, "open": None, "icmp": [],
+          "packaged": None, "zones": None, "also_active": [], "zone_file": os.path.isfile("/usr/lib/firewalld/zones/%s.xml" % SEC_ZONE)}
+    root = os.geteuid() == 0
+    if fw["unit"] not in (None, "not-found"):
+        fw["installed"] = True
+    if fw["active"] is None and root and sec_cmd(["firewall-cmd", "--state"]) == (0, "running"):
+        fw["active"] = True    # systemd does not answer, the firewall itself does
+    if fw["active"]:           # ask the running firewall
+        rc, z = sec_cmd(["firewall-cmd", "--get-default-zone"])
+        if rc == 0 and z:
+            fw["zone"] = z
+        rc, zs = sec_cmd(["firewall-cmd", "--get-zones"])
+        if rc == 0 and zs:
+            fw["zones"] = zs.split()
+        rc, az = sec_cmd(["firewall-cmd", "--get-active-zones"])
+        if rc == 0:
+            fw["also_active"] = [l.strip() for l in az.splitlines() if l and not l.startswith(" ") and l.strip() != fw["zone"]]
+        if root:
+            rc, out = sec_cmd(["firewall-cmd", "--list-all"])
+            fw.update((sec_fw_list(out) if rc == 0 else None) or {})
+    if fw["zone"] is None:     # the permanent configuration (readable by root)
+        for l in read("/etc/firewalld/firewalld.conf").splitlines():
+            if l.startswith("DefaultZone="):
+                fw["zone"] = l.split("=", 1)[1].strip() or None
+    if fw["zone"] and fw["open"] is None:
+        if os.access("/etc/firewalld/zones", os.R_OK):
+            z = sec_zone_parse(sec_zone_path(fw["zone"])) if sec_zone_path(fw["zone"]) else None
+            if z:
+                fw["target"], fw["open"], fw["icmp"] = z["target"], z["open"], z["icmp"]
+        else:
+            fw["packaged"] = sec_zone_parse("/usr/lib/firewalld/zones/%s.xml" % fw["zone"])
+    return fw
+
+
+def sec_updates_auto():
+    au = {"dnf_applies": None}
+    for k, unit in (("silikos", SEC_TIMER), ("dnf_install", "dnf-automatic-install.timer"), ("dnf", "dnf-automatic.timer")):
+        au[k], au[k + "_active"] = sec_unit(unit), sec_active(unit)
+    sect = ""
+    for l in read("/etc/dnf/automatic.conf").splitlines():
+        l = l.strip()
+        if l.startswith("["):
+            sect = l
+        elif sect == "[commands]" and l.replace(" ", "").startswith("apply_updates="):
+            au["dnf_applies"] = l.split("=", 1)[1].strip().lower() in ("yes", "true", "1", "on")
+    return au
+
+
+def sec_pending(offline=False):
+    """the security advisories that name an installed package and are not installed; None when dnf does not answer"""
+    rc, out = sec_cmd(["dnf", "-q"] + (["-C"] if offline else []) + ["updateinfo", "list", "--security"], timeout=180)
+    if rc != 0:
+        return None
+    adv, pkgs = {}, 0
+    for l in out.splitlines():
+        p = l.split()
+        if len(p) >= 3 and "Sec" in p[1]:
+            pkgs += 1
+            adv[p[0]] = p[1].split("/")[0] if "/" in p[1] else "Unknown"
+    order = ["Critical", "Important", "Moderate", "Low", "Unknown"]
+    worst = min(adv.values(), key=lambda s: order.index(s) if s in order else len(order)) if adv else ""
+    return {"advisories": len(adv), "packages": pkgs, "worst": worst}
+
+
+def sec_disk():
+    """for / and /home: the device and whether a LUKS (dm-crypt) layer is under it; None when it cannot be told"""
+    out = {}
+    for mp in ("/", "/home"):
+        rc, src = sec_cmd(["findmnt", "-n", "-o", "SOURCE", "-T", mp])
+        src = src.split("[")[0].strip() if rc == 0 else ""
+        enc = None
+        if src.startswith("/dev/"):
+            rc, types = sec_cmd(["lsblk", "-s", "-n", "-l", "-o", "TYPE", src])
+            if rc == 0 and types:
+                enc = "crypt" in types.split()
+        out[mp] = {"source": src, "encrypted": enc}
+    return out
+
+
+def sec_secureboot(container):
+    """'enabled' / 'disabled' / 'bios' (not started through UEFI) / None"""
+    for p in glob.glob("/sys/firmware/efi/efivars/SecureBoot-*"):
+        try:
+            with open(p, "rb") as f:
+                b = f.read()
+        except OSError:
+            continue
+        if len(b) >= 5:            # 4 bytes of attributes, then the value
+            return "enabled" if b[4] == 1 else "disabled"
+    rc, out = sec_cmd(["mokutil", "--sb-state"])
+    if rc == 0 and "SecureBoot enabled" in out:
+        return "enabled"
+    if rc == 0 and "SecureBoot disabled" in out:
+        return "disabled"
+    if not container and os.path.isdir("/sys/firmware") and not os.path.isdir("/sys/firmware/efi"):
+        return "bios"
+    return None
+
+
+def sec_lock(user=""):
+    """the screen lock settings of this user; of `user` (the one behind sudo) when given"""
+    def gs(schema, key):
+        get = ["gsettings", "get", schema, key]
+        rc, out = sec_cmd(["runuser", "-l", user, "-c", " ".join(get)] if user else get)
+        return out.split()[-1] if rc == 0 and out else None
+    en, idle, delay = gs("org.gnome.desktop.screensaver", "lock-enabled"), gs("org.gnome.desktop.session", "idle-delay"), gs("org.gnome.desktop.screensaver", "lock-delay")
+    return {"enabled": {"true": True, "false": False}.get(en), "idle": int(idle) if idle and idle.isdigit() else None,
+            "delay": int(delay) if delay and delay.isdigit() else None}
+
+
+def sec_lock_fix(lk):
+    """the commands (a user's own, no sudo) that bring a readable screen lock setting to: on, blank + lock within
+    SEC_IDLE_MAX seconds; each one only shortens"""
+    gs, cmds, idle = ["gsettings", "set"], [], lk["idle"]
+    if not lk["enabled"]:
+        cmds.append(gs + ["org.gnome.desktop.screensaver", "lock-enabled", "true"])
+    if idle == 0 or idle > SEC_IDLE_MAX:
+        cmds.append(gs + ["org.gnome.desktop.session", "idle-delay", str(SEC_IDLE)])
+        idle = SEC_IDLE
+    if idle + lk["delay"] > SEC_IDLE_MAX:
+        cmds.append(gs + ["org.gnome.desktop.screensaver", "lock-delay", "0"])
+    return cmds
+
+
+def sec_autologin():
+    """True when the login screen opens a session by itself; None without GDM's configuration file"""
+    txt = read(SEC_GDM_CONF, None)
+    if txt is None:
+        return None
+    for l in txt.splitlines():
+        k, _, v = l.partition("=")
+        if k.strip() in ("AutomaticLoginEnable", "TimedLoginEnable") and v.strip().lower() in ("true", "1", "yes"):
+            return True
+    return False
+
+
+def sec_sysctl():
+    """[(name, current value or None, wanted, direction, key of SEC_SYSCTL)] as the running kernel has it"""
+    res, seen = [], set()
+    for key, want, how, _ in SEC_SYSCTL:
+        pat = "/proc/sys/" + key.replace(".", "/")
+        paths = sorted(glob.glob(pat)) if "*" in key else [pat]
+        if not paths:
+            res.append((key, None, want, how, key))
+        for p in paths:
+            parts = p[len("/proc/sys/"):].split("/")
+            name = "/".join(parts) if any("." in x for x in parts) else ".".join(parts)   # eth0.100: sysctl's a/b form
+            if name in seen:
+                continue
+            seen.add(name)
+            txt = read(p).strip()
+            res.append((name, int(txt) if txt.isdigit() else None, want, how, key))
+    return res
+
+
+def sec_weaker(cur, want, how):
+    return cur is not None and (cur < want if how == "min" else cur > want)
+
+
+def sec_probe(pending=True, offline=False):
+    cont = sec_container()
+    bw = shutil.which("bwrap")
+    su = os.environ.get("SUDO_USER", "") if os.geteuid() == 0 else ""
+    su = su if su != "root" and valid_name(su) else ""
+    ns = read("/proc/sys/user/max_user_namespaces").strip()
+    return {
+        "container": cont, "uid": os.geteuid(), "el": os.path.exists("/etc/redhat-release"),
+        "selinux": sec_selinux(cont), "firewall": sec_firewall(),
+        "sshd": {"unit": sec_unit("sshd.service"), "active": sec_active("sshd.service")},
+        "auto": sec_updates_auto(), "pending": sec_pending(offline) if pending else None, "disk": sec_disk(),
+        "secureboot": sec_secureboot(cont), "lock": sec_lock(su), "lock_user": su, "autologin": sec_autologin(), "sysctl": sec_sysctl(),
+        "sysctl_file": os.path.isfile(SEC_SYSCTL_FILE), "vsyscall": kernel_vsyscall(),
+        "bwrap": {"path": bw or "", "version": (sec_cmd(["bwrap", "--version"])[1].split() or [""])[-1] if bw else "",
+                  "userns": int(ns) if ns.isdigit() else None},
+    }
+
+
+def sec_checks(st):
+    """the audit: one row per check, {id, name, state, value, fix}; fix is the list of commands that make it ok"""
+    rows = []
+
+    def row(i, name, state, value, fix=()):
+        rows.append({"id": i, "name": name, "state": state, "value": value, "fix": list(fix) if state != "ok" else []})
+        # (on an unknown row, "fix" is the command that lets it be seen)
+
+    here = " (inside a container)" if st["container"] else ""
+    apply_ = "silik secure apply"
+
+    se = st["selinux"]
+    sed = "sudo sed -i 's/^SELINUX=.*/SELINUX=enforcing/' " + SEC_SELINUX_CONF
+    if se["mode"] is None:
+        row("selinux", "SELinux", "unknown", "not visible: no /sys/fs/selinux" + here)
+    elif se["mode"] == "enforcing" and se["config"] == "enforcing":
+        row("selinux", "SELinux", "ok", "enforcing")
+    elif se["mode"] == "enforcing":
+        row("selinux", "SELinux", "warn", "enforcing now; at the next boot: %s" % (se["config"] or "not configured"), [sed])
+    elif se["mode"] == "permissive":
+        row("selinux", "SELinux", "warn", "permissive: violations are logged, nothing is stopped",
+            ["sudo setenforce 1"] + ([sed] if se["config"] != "enforcing" else []))
+    else:
+        row("selinux", "SELinux", "bad", "disabled",
+            ["sudo sed -i 's/^SELINUX=.*/SELINUX=permissive/' %s && sudo fixfiles -F onboot && sudo reboot" % SEC_SELINUX_CONF,
+             "then, when `sudo ausearch -m avc -ts boot` shows nothing that matters: " + apply_])
+
+    fw = st["firewall"]
+    boot = {"enabled": "started at boot", "disabled": "not started at boot", "masked": "masked"}.get(fw["unit"], "boot state unknown")
+    if fw["active"] is True:
+        row("firewall", "firewall", "ok" if fw["unit"] == "enabled" else "warn", "firewalld running, " + boot, [apply_])
+    elif fw["active"] is False:
+        row("firewall", "firewall", "bad", "firewalld is not running (%s)" % boot, [apply_])
+    elif not fw["installed"] and st["el"] and not st["container"]:
+        row("firewall", "firewall", "bad", "firewalld is not installed", ["sudo dnf -y install firewalld", apply_])
+    else:
+        row("firewall", "firewall", "unknown", ("firewalld %s; whether it runs is not visible" % boot if fw["installed"] else "firewalld is not installed") + here)
+
+    if fw["zone"] is None:
+        row("incoming", "incoming", "unknown", "the default zone is not readable" + here, ["sudo silik secure status"] if st["uid"] else [])
+    elif fw["open"] is None:
+        pk = fw["packaged"]
+        row("incoming", "incoming", "bad" if fw["active"] is False else "unknown",
+            "%szone %s; what it opens is root's to read%s" % ("not filtered; configured: " if fw["active"] is False else "", fw["zone"],
+                                                            " (its file as packaged: %s)" % (", ".join(pk["open"]) or "nothing open") if pk else ""),
+            [apply_] if fw["active"] is False else ["sudo silik secure status"])
+    else:
+        extra = [o for o in fw["open"] if o not in SEC_ZONE_OPEN]
+        val = "zone %s (target %s): %s" % (fw["zone"], fw["target"] or "?", ", ".join(fw["open"]) or "nothing open")
+        if fw["icmp"]:
+            val += "; ICMP: " + ", ".join(fw["icmp"])
+        if fw["also_active"]:
+            val += "; other zones in use: " + ", ".join(fw["also_active"])
+        if fw["zone"] == SEC_ZONE:
+            fix = ["sudo firewall-cmd --permanent --zone=%s --remove-%s=%s" % (SEC_ZONE, "port" if "/" in o else "service", o) for o in extra if not o.startswith(("rule:", "protocol ", "forward-port "))]
+            fix = fix + ["sudo firewall-cmd --reload"] if fix else ["sudo firewall-cmd --zone=%s --list-all" % SEC_ZONE]
+        else:
+            fix = [apply_]
+        if fw["active"] is False:
+            row("incoming", "incoming", "bad", "not filtered; configured: " + val, [apply_])
+        elif fw["target"] == "ACCEPT":
+            row("incoming", "incoming", "bad", val + " (everything is accepted)", fix)
+        elif extra:
+            row("incoming", "incoming", "warn", val, fix)
+        elif fw["active"] is None or fw["target"] is None:
+            row("incoming", "incoming", "unknown", val + " (as configured; not seen running)")
+        else:
+            row("incoming", "incoming", "ok", val)
+
+    sh = st["sshd"]
+    if sh["unit"] == "not-found":
+        row("sshd", "ssh server", "ok", "not installed")
+    elif sh["active"] is True or sh["unit"] in ("enabled", "enabled-runtime"):
+        runs = {True: "running", False: "not running", None: "running state unknown"}[sh["active"]]
+        row("sshd", "ssh server", "warn", "sshd %s, %s" % ("started at boot" if sh["unit"] in ("enabled", "enabled-runtime") else "not started at boot", runs),
+            ["sudo systemctl disable --now sshd", "(to keep it on purpose: silik secure apply --keep-ssh)"])
+    elif sh["active"] is False and sh["unit"] is not None:
+        row("sshd", "ssh server", "ok", "sshd off (%s, not running)" % sh["unit"])
+    else:
+        row("sshd", "ssh server", "unknown", "sshd %s; whether it runs is not visible%s" % (sh["unit"] or "state unknown", here))
+
+    au = st["auto"]
+    start = ["sudo systemctl enable --now " + SEC_TIMER]
+    on = [(k, what, unit) for k, what, unit in (("silikos", "security advisories, daily", SEC_TIMER),
+                                               ("dnf_install", "every update, daily", "dnf-automatic-install.timer"),
+                                               ("dnf", "what /etc/dnf/automatic.conf says: it installs", "dnf-automatic.timer"))
+          if au[k] == "enabled" and (k != "dnf" or au["dnf_applies"])]
+    if on:
+        k, what, unit = on[0]
+        if au[k + "_active"] is True:
+            row("updates-auto", "automatic updates", "ok", "%s (%s)" % (what, unit))
+        elif au[k + "_active"] is False:
+            row("updates-auto", "automatic updates", "warn", "%s (%s): on from the next boot, not started now" % (what, unit), ["sudo systemctl start " + unit])
+        else:
+            row("updates-auto", "automatic updates", "unknown", "%s (%s) is on at boot; whether the timer runs is not visible%s" % (what, unit, here))
+    elif au["silikos"] is None and au["dnf_install"] is None and au["dnf"] is None:
+        row("updates-auto", "automatic updates", "unknown", "systemd's units are not readable" + here)
+    elif au["silikos"] == "not-found":
+        row("updates-auto", "automatic updates", "warn", "off (the package silikos-security is not installed)",
+            ["sudo dnf -y install silikos-security", apply_])
+    else:
+        row("updates-auto", "automatic updates", "warn", "off (%s is %s)" % (SEC_TIMER, au["silikos"] or "in an unknown state"), start)
+
+    pe = st["pending"]
+    if pe is None:
+        row("updates-pending", "pending updates", "unknown", "dnf gives no list of advisories")
+    elif pe["advisories"] == 0:
+        row("updates-pending", "pending updates", "ok", "no security advisory waits")
+    else:
+        row("updates-pending", "pending updates", "bad" if pe["worst"] in ("Critical", "Important") else "warn",
+            "%d security advisor%s (%d packages), the worst: %s" % (pe["advisories"], "y" if pe["advisories"] == 1 else "ies", pe["packages"], pe["worst"]),
+            ["sudo dnf -y upgrade --security"])
+
+    dk = st["disk"]
+    r, h = dk["/"], dk["/home"]
+    luks = ["no command changes this: it is chosen in the installer (Installation Destination > Encrypt my data); docs/SECURITY.md"]
+    if r["encrypted"] is None or h["encrypted"] is None:
+        row("disk", "disk encryption", "unknown", "/ is on %s: not a block device seen from here%s" % (r["source"] or "an unknown device", here))
+    elif r["encrypted"] and h["encrypted"]:
+        row("disk", "disk encryption", "ok", "/ and /home are on LUKS (%s)" % (r["source"] if r["source"] == h["source"] else r["source"] + ", " + h["source"]))
+    elif h["encrypted"]:
+        row("disk", "disk encryption", "warn", "/home is on LUKS (%s); / (%s) is not" % (h["source"], r["source"]), luks)
+    else:
+        row("disk", "disk encryption", "bad", "%s (%s) is not encrypted: whoever holds the machine reads the disk" % ("/home" if r["source"] != h["source"] else "/ with /home", h["source"]), luks)
+
+    sb = st["secureboot"]
+    mok = ["turned on in the firmware's setup; with the NVIDIA driver first: sudo mokutil --import /var/lib/dkms/mok.pub (docs/SECURITY.md)"]
+    if sb == "enabled":
+        row("secureboot", "Secure Boot", "ok", "enabled")
+    elif sb == "disabled":
+        row("secureboot", "Secure Boot", "warn", "disabled: the firmware starts any boot loader", mok)
+    elif sb == "bios":
+        row("secureboot", "Secure Boot", "warn", "not possible: this system was not started through UEFI", ["an installation started in UEFI mode"])
+    else:
+        row("secureboot", "Secure Boot", "unknown", "the firmware's variables are not visible" + here)
+
+    lk = st["lock"]
+    who = " (user %s)" % st["lock_user"] if st["lock_user"] else ""
+    if st["uid"] == 0 and not st["lock_user"]:
+        row("screenlock", "screen lock", "unknown", "a user's setting: run `silik secure status` as the desktop's user, or with sudo from their session")
+    elif lk["enabled"] is None or lk["idle"] is None or lk["delay"] is None:
+        row("screenlock", "screen lock", "unknown", "the desktop's settings are not readable (gsettings)")
+    elif not lk["enabled"] or lk["idle"] == 0:
+        row("screenlock", "screen lock", "bad", "the screen never locks by itself (%s)%s" % ("the lock is off" if not lk["enabled"] else "it never goes blank", who),
+            [" ".join(c) for c in sec_lock_fix(lk)])
+    elif lk["idle"] + lk["delay"] > SEC_IDLE_MAX:
+        row("screenlock", "screen lock", "warn", "locks after %d s without input (more than %d s)%s" % (lk["idle"] + lk["delay"], SEC_IDLE_MAX, who),
+            [" ".join(c) for c in sec_lock_fix(lk)])
+    else:
+        row("screenlock", "screen lock", "ok", "locks after %d s without input%s" % (lk["idle"] + lk["delay"], who))
+
+    al = st["autologin"]
+    if al is None:
+        row("autologin", "login", "unknown", "no %s" % SEC_GDM_CONF)
+    elif al:
+        row("autologin", "login", "bad", "the login screen opens a session without a password",
+            ["sudo sed -i -E 's/^(AutomaticLoginEnable|TimedLoginEnable) *=.*/\\1=false/' " + SEC_GDM_CONF])
+    else:
+        row("autologin", "login", "ok", "a password is asked (no automatic login)")
+
+    sy = st["sysctl"]
+    weak, blind = [], []       # a key with * is said once, with the number of interfaces
+    for n, c, w, how, key in sy:
+        if sec_weaker(c, w, how):
+            txt = "%s=%d (SilikOS: %d)" % (n, c, w) if "*" not in key else "%s=%d on %d interfaces (SilikOS: %d)" % (
+                key, c, sum(1 for x in sy if x[4] == key and sec_weaker(x[1], x[2], x[3])), w)
+            weak += [txt] if txt not in weak else []
+        elif c is None and key not in blind:
+            blind.append(key)
+    nweak, nblind = sum(1 for x in sy if sec_weaker(x[1], x[2], x[3])), sum(1 for x in sy if x[1] is None)
+    if not sy or nblind == len(sy):
+        row("sysctl", "kernel settings", "unknown", "/proc/sys is not readable")
+    elif weak:
+        row("sysctl", "kernel settings", "warn", "%d of %d weaker than the SilikOS values: %s" % (nweak, len(sy), ", ".join(weak)),
+            [apply_] if st["sysctl_file"] else ["sudo dnf -y install silikos-security", apply_])
+    elif blind:
+        row("sysctl", "kernel settings", "unknown", "%d of %d as SilikOS sets them or stricter; not in this kernel: %s" % (len(sy) - nblind, len(sy), ", ".join(blind)))
+    else:
+        row("sysctl", "kernel settings", "ok", "%d of %d as SilikOS sets them or stricter" % (len(sy), len(sy)))
+
+    vs = st["vsyscall"]
+    if vs == "none":
+        row("vsyscall", "vsyscall page", "ok", "none (an EL6 box does not run on this kernel: silik eda kernel-arg)")
+    elif vs == "xonly":   # a trade-off, said as one: the page stays for glibc 2.12, at a fixed address, execute-only
+        row("vsyscall", "vsyscall page", "ok", "xonly: a trade-off. The page stays, execute-only, for EL6 boxes; `none` is stricter and stops them")
+    elif vs == "emulate":
+        row("vsyscall", "vsyscall page", "warn", "emulate: the page is readable at a fixed address (wanted only by a program that reads it)",
+            ["sudo grubby --update-kernel=ALL --args=vsyscall=xonly && sudo reboot"])
+    else:
+        row("vsyscall", "vsyscall page", "unknown", "the kernel's mode is not readable")
+
+    bw = st["bwrap"]
+    if not bw["path"]:
+        row("sandbox", "sandbox", "warn", "bubblewrap is not installed: Windows programs cannot be confined", ["sudo dnf -y install bubblewrap"])
+    elif bw["userns"] is None:
+        row("sandbox", "sandbox", "unknown", "bubblewrap %s; user namespaces: not readable" % bw["version"])
+    elif bw["userns"] == 0:
+        row("sandbox", "sandbox", "warn", "bubblewrap %s, but user namespaces are off (user.max_user_namespaces = 0)" % bw["version"],
+            ["grep -rs max_user_namespaces /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d   # the file that turns them off"])
+    else:
+        row("sandbox", "sandbox", "ok", "bubblewrap %s, user namespaces on" % bw["version"])
+    return rows
+
+
+def sec_plan(st, keep_ssh=False, dry=False):
+    """(commands, notes): what `silik secure apply` runs on the system `st`. A command is listed only when it can
+    only tighten (turning a protection on) or when the value read is known to be weaker than the SilikOS default; a
+    setting that is stricter, or that cannot be read, is left alone and said in the notes. No disk commands.
+    `dry`: a dry run reads nothing as root, so for a zone it could not read it lists what a real run would do."""
+    cmds, notes = [], []
+    fwc = ["sudo", "firewall-cmd"]
+
+    se = st["selinux"]
+    if se["mode"] == "permissive":
+        cmds.append(["sudo", "setenforce", "1"])
+    if se["mode"] in ("enforcing", "permissive") and se["config"] not in ("enforcing", None):
+        cmds.append(["sudo", "sed", "-i", "s/^SELINUX=.*/SELINUX=enforcing/", SEC_SELINUX_CONF])
+    elif se["mode"] == "disabled":
+        notes.append("SELinux is disabled: not changed here (files need their labels first; `silik secure status` gives the steps)")
+    elif se["mode"] is None:
+        notes.append("SELinux: not visible from here, nothing changed")
+
+    fw = st["firewall"]
+    if not fw["installed"]:
+        notes.append("firewalld is not installed: sudo dnf -y install silikos-security")
+    else:
+        if fw["active"] is not True or fw["unit"] != "enabled":
+            cmds.append(["sudo", "systemctl", "enable", "--now", "firewalld"])
+        reload_ = False
+        if not fw["zone_file"]:
+            notes.append("the zone %s is not installed (package silikos-security): the default zone stays %s" % (SEC_ZONE, fw["zone"] or "as it is"))
+        elif fw["zone"] is None:
+            notes.append("the firewall's default zone is not readable%s" % (
+                ": once firewalld runs, apply reads it (sudo firewall-cmd --list-all) and makes %s the default unless the zone opens nothing more" % SEC_ZONE
+                if dry else ": not changed"))
+        elif fw["zone"] == SEC_ZONE:
+            if keep_ssh and (fw["open"] is None or "ssh" not in fw["open"]):
+                cmds.append(fwc + ["--permanent", "--zone=" + SEC_ZONE, "--add-service=ssh"])
+                reload_ = True
+            elif not keep_ssh and fw["open"] is None:
+                notes.append("the zone %s: whether ssh is open in it was not read%s" % (SEC_ZONE, " (a dry run asks nothing as root); a real run closes it if it is" if dry else ": not changed"))
+            elif not keep_ssh and "ssh" in fw["open"]:
+                cmds.append(fwc + ["--permanent", "--zone=" + SEC_ZONE, "--remove-service=ssh"])
+                reload_ = True
+            if reload_:
+                cmds.append(fwc + ["--reload"])
+        elif fw["open"] is None and not dry:
+            notes.append("what the default zone %s opens could not be read: not changed" % fw["zone"])
+        elif fw["open"] is not None and fw["target"] != "ACCEPT" and not set(fw["open"]) - set(SEC_ZONE_OPEN):
+            notes.append("the default zone %s opens nothing more than %s: kept" % (fw["zone"], SEC_ZONE))
+        else:
+            if fw["open"] is None:
+                notes.append("the firewall-cmd lines above run only if the zone %s, read with sudo in a real run, opens more than %s" % (fw["zone"], SEC_ZONE))
+            if keep_ssh:      # ssh is opened in the new zone before the switch, so a session in use is not cut
+                cmds.append(fwc + ["--permanent", "--zone=" + SEC_ZONE, "--add-service=ssh"])
+                reload_ = True
+            if reload_ or (fw["zones"] is not None and SEC_ZONE not in fw["zones"]):
+                cmds.append(fwc + ["--reload"])      # the running firewall learns the zone file (and ssh in it)
+            cmds.append(fwc + ["--set-default-zone=" + SEC_ZONE])
+
+    sh = st["sshd"]
+    if keep_ssh:
+        notes.append("sshd is left as it is (--keep-ssh)")
+    elif sh["unit"] != "not-found" and not (sh["unit"] in ("disabled", "masked") and sh["active"] is False):
+        cmds.append(["sudo", "systemctl", "disable", "--now", "sshd"])
+
+    au = st["auto"]
+    if au["dnf_install"] == "enabled":
+        notes.append("dnf-automatic-install.timer already installs every update: kept")
+    elif au["silikos"] == "not-found":
+        notes.append("automatic security updates: the package silikos-security is not installed")
+    elif au["silikos"] != "enabled" or au["silikos_active"] is not True:
+        cmds.append(["sudo", "systemctl", "enable", "--now", SEC_TIMER])     # only turns a protection on
+
+    weak = ["%s=%d" % (x[0], x[2]) for x in st["sysctl"] if sec_weaker(x[1], x[2], x[3])]
+    if weak:
+        cmds.append(["sudo", "sysctl", "-w"] + weak)
+        if not st["sysctl_file"]:
+            notes.append("kernel settings: set until the next boot only (%s is not installed)" % SEC_SYSCTL_FILE)
+
+    if st["autologin"]:
+        cmds.append(["sudo", "sed", "-i", "-E", "s/^(AutomaticLoginEnable|TimedLoginEnable) *=.*/\\1=false/", SEC_GDM_CONF])
+
+    lk = st["lock"]
+    if st["uid"] == 0:
+        notes.append("screen lock: a user's setting; run `silik secure apply` as that user, not as root")
+    elif None in (lk["enabled"], lk["idle"], lk["delay"]):
+        notes.append("screen lock: the desktop's settings are not readable from here, nothing changed")
+    else:
+        cmds += sec_lock_fix(lk)
+
+    notes.append("not changed by apply, the owner's choice (docs/SECURITY.md): disk encryption, Secure Boot, the vsyscall page; updates that wait: silik update")
+    return cmds, notes
+
+
+def secure_status(ctx, a):
+    rows = sec_checks(sec_probe(pending=True, offline=a.offline))
+    count = {k: sum(1 for r in rows if r["state"] == k) for k in ("ok", "warn", "bad", "unknown")}
+    if a.json:
+        print(json.dumps({"checks": rows, "summary": count}, indent=1))
+        return 1 if count["bad"] else 0
+    lines = []
+    for r in rows:
+        lines.append("%s %-8s %-18s %s" % (SEC_MARK[r["state"]], r["state"], r["name"], r["value"]))
+        lines += ["%-29s %s: %s" % ("", "see" if r["state"] == "unknown" else "fix", f) for f in r["fix"]]
+    lines.append("%d ok, %d warn, %d bad, %d unknown" % (count["ok"], count["warn"], count["bad"], count["unknown"]))
+    text = "\n".join(lines)
+    try:
+        print(text)
+    except UnicodeEncodeError:      # a terminal without the shapes: the words say the same
+        print(text.encode("ascii", "replace").decode("ascii"))
+    return 1 if count["bad"] else 0
+
+
+def secure_apply(ctx, a):
+    if os.environ.get("SSH_CONNECTION") and not a.keep_ssh:
+        msg = "this is an ssh session, and `silik secure apply` turns sshd off: use --keep-ssh, or run it at the machine"
+        if not ctx.dry:
+            die(msg, 2)
+        print("silik: " + msg, file=sys.stderr)
+    done, failed, notes = [], [], []
+    for again in (False, True):     # a second look: a firewall that was just started can now say its default zone
+        st = sec_probe(pending=False)
+        fw = st["firewall"]
+        if fw["installed"] and fw["active"] is True and fw["open"] is None:
+            # what the default zone opens is root's to read: asked with a printed command (not in a dry run)
+            rc, out = ctx.run(["sudo", "firewall-cmd", "--list-all"], check=False, capture=True)
+            fw.update((sec_fw_list(out) if rc == 0 else None) or {})
+        cmds, notes = sec_plan(st, a.keep_ssh, ctx.dry)
+        cmds = [c for c in cmds if c not in done]
+        for argv in cmds:
+            rc, _ = ctx.run(argv, check=False)
+            if rc != 0:
+                failed.append(" ".join(shlex.quote(x) for x in argv))
+        done += cmds
+        if ctx.dry or not cmds:
+            break
+    for n in notes:
+        print(n)
+    for f in failed:
+        print("silik: failed: " + f, file=sys.stderr)
+    if not done:
+        print("nothing to change: what apply sets is already at the SilikOS defaults or stricter")
+    print("`silik secure status` reads the result")
+    return 1 if failed else 0
+
+
 # ------------------------------------------------------------------ command line
 def parser():
     p = argparse.ArgumentParser(prog="silik", description="SilikOS system command")
@@ -526,6 +1199,15 @@ def parser():
     h = s.add_parser("hw", help="hardware: probe, NVIDIA driver").add_subparsers(dest="cmd")
     x = h.add_parser("probe"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=hw_probe)
     x = h.add_parser("nvidia"); x.add_argument("action", choices=["install", "status"]); x.set_defaults(fn=hw_nvidia)
+
+    c = s.add_parser("secure", help="security: an audit of this system, and the SilikOS defaults").add_subparsers(dest="cmd")
+    x = c.add_parser("status", help="read-only audit: ok / warn / bad / unknown, and the command that fixes each")
+    x.add_argument("--json", action="store_true")
+    x.add_argument("--offline", action="store_true", help="pending updates from dnf's cache only: the repositories are not asked")
+    x.set_defaults(fn=secure_status)
+    x = c.add_parser("apply", help="set the SilikOS defaults; never loosens what is stricter, never touches a disk")
+    x.add_argument("--keep-ssh", action="store_true", help="leave sshd as it is and keep its port open in the firewall zone")
+    x.set_defaults(fn=secure_apply)
     return p
 
 
