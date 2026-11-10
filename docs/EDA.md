@@ -64,9 +64,14 @@ the supported systems; check them for the release in use].
 | KLayout | layout viewer and editor (GDS, OASIS), DRC and LVS scripts | built here |
 | Netgen | layout against schematic (LVS) | built here |
 | Yosys | Verilog synthesis (with ABC) | built here |
+| NVC | VHDL simulation | built here |
+| Qucs-S | schematic and simulation in one window, with ngspice | built here (its Qt 6 comes from EPEL 9) |
 | Icarus Verilog, Verilator, GTKWave | Verilog simulation, lint, waveforms | EPEL 9 |
 
-The first six are not in EL 9's repositories or in EPEL 9. SilikOS builds each from its authors' unmodified source
+The first eight are not in EL 9's repositories or in EPEL 9. (GHDL, the other VHDL simulator, cannot be built on EL
+9.8 today: it is written in Ada, and the only Ada compiler, EPEL's `gcc-gnat`, is not installable beside the base's
+GCC: seen 10/11/2026, `gcc-11.5.0-14.el9.alma.1` obsoletes it. KiCad is not built either: its 3D library,
+OpenCascade, is in neither repository.) SilikOS builds each from its authors' unmodified source
 at the version written in `eda/versions` (`tools/build_eda.sh NAME` on EL 9, `eda/NAME.spec`), tries it in a clean
 EL 9 (`eda/trial.sh`: each must do a small real job) and keeps the package in the release `eda-tools` (workflow "EDA
 tools"). `tools/build_iso.sh` puts whatever packages are in `build/extra/` into the ISO. The package
@@ -81,6 +86,7 @@ silik eda try [JOB]             they do small real jobs together, each command p
                                   layout   Magic draws a transistor and extracts it; Netgen compares it with its schematic
                                   gds      Magic writes the layout as GDS; KLayout reads it
                                   digital  Icarus Verilog simulates a counter
+                                  vhdl     NVC simulates a counter written in VHDL
                                   lint     Verilator checks it
                                   synth    Yosys synthesises it to gates and flip-flops
 silik eda bench                 times ngspice on this machine with 1, 2 and all its cores (a circuit made on the spot)

@@ -6,6 +6,7 @@ name=$1; shift
 again() { for i in 1 2 3; do "$@" && return 0; dnf clean metadata -q; sleep 60; done; return 1; }
 again dnf -y -q install dnf-plugins-core
 dnf config-manager --set-enabled crb
+case "$name" in qucs-s) again dnf -y -q install epel-release ;; esac      # (its Qt 6 is in EPEL 9)
 again dnf -y -q install "$@"
 cd "$(mktemp -d)"
 export QT_QPA_PLATFORM=offscreen HOME=$PWD
@@ -43,5 +44,16 @@ case "$name" in
     yosys -p 'read_verilog c.v; synth -top counter; abc -g AND,NAND,OR,NOR,XOR,XNOR; stat' > out.txt 2>&1 || { tail -30 out.txt; exit 1; }
     grep -E 'DFF' out.txt | grep -Eq '(^|[^0-9])4([^0-9]|$)' || { tail -40 out.txt; exit 1; }
     echo "TRIAL-OK $(yosys -V | cut -c1-60) : a 4-bit counter synthesised, $(grep -E 'DFF' out.txt | tail -1 | tr -s ' ')" ;;
+  nvc)       # a counter in VHDL: analysed, elaborated and run; it must count ten clock edges
+    printf 'entity t is end entity;\narchitecture sim of t is\n  signal clk : bit := '"'"'0'"'"';\n  signal n : natural := 0;\nbegin\n  clk <= not clk after 5 ns;\n  process (clk) begin if clk'"'"'event and clk = '"'"'1'"'"' then n <= n + 1; end if; end process;\n  process begin wait for 101 ns; assert n = 10 report "FAIL" severity failure; report "PASS count=" & natural'"'"'image(n); wait; end process;\nend architecture;\n' > t.vhd
+    nvc -a t.vhd -e t -r --stop-time=200ns > out.txt 2>&1 || { cat out.txt; exit 1; }
+    grep -q 'PASS count=10' out.txt || { cat out.txt; exit 1; }
+    echo "TRIAL-OK $(nvc --version | head -1) : a VHDL counter analysed, elaborated and run, ten clock edges counted" ;;
+  qucs-s)    # one of its own example schematics turned into a SPICE netlist, without a screen
+    sch=$(find /usr/share/qucs-s -name '*.sch' | grep -i '/ngspice/' | sort | head -1)
+    [ -n "$sch" ] || { echo "no example schematic under /usr/share/qucs-s"; find /usr/share/qucs-s -maxdepth 2 | head -20; exit 1; }
+    QT_QPA_PLATFORM=offscreen qucs-s -n --ngspice -i "$sch" -o out.cir > out.txt 2>&1 || { tail -20 out.txt; exit 1; }
+    [ -s out.cir ] && grep -qiE '^\.(tran|ac|dc|op|control|end)' out.cir || { tail -20 out.txt; head -30 out.cir; exit 1; }
+    echo "TRIAL-OK qucs-s $(rpm -q --qf '%{VERSION}' qucs-s) : its example $(basename "$sch") turned into a SPICE netlist of $(wc -l < out.cir) lines" ;;
   *) echo "no trial for $name" >&2; exit 2 ;;
 esac

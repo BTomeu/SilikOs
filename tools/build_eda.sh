@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build_eda.sh NAME: one of the open EDA tools of eda/versions (klayout, magic, xschem, ngspice, netgen, yosys) as an RPM in
+# build_eda.sh NAME: one of the open EDA tools of eda/versions (klayout, magic, xschem, ngspice, netgen, yosys, nvc, qucs-s) as an RPM in
 # build/extra/, built from upstream's source at the tag written there (eda/NAME.spec). None of them is in EL 9's
 # repositories or in EPEL 9. Run ON EL 9 (or in an `almalinux:9` container) as root or with sudo: it installs the
 # build dependencies with dnf (CRB enabled). Nothing of the sources is kept in this repository.
@@ -7,19 +7,22 @@
 # tools/build_iso.sh puts every build/extra/*.rpm into the ISO: with these there, the installed system has the tools.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
-name=${1:?usage: tools/build_eda.sh klayout|magic|xschem|ngspice|netgen|yosys}
+name=${1:?usage: tools/build_eda.sh klayout|magic|xschem|ngspice|netgen|yosys|nvc|qucs-s}
 line=$(grep -E "^$name[[:space:]]" "$root/eda/versions") || { echo "error: $name is not in eda/versions" >&2; exit 2; }
 url=$(echo "$line" | awk '{print $2}'); tag=${SILIK_EDA_TAG:-$(echo "$line" | awk '{print $3}')}
 grep -q 'platform:el9' /etc/os-release || { echo "error: this builds on EL 9 only (binary compatibility with the base)" >&2; exit 2; }
 sudo=""; [ "$(id -u)" = 0 ] || sudo=sudo
 $sudo dnf -y -q install dnf-plugins-core rpm-build git tar gzip findutils
 $sudo dnf config-manager --set-enabled crb
+# a recipe that says "# needs: epel" builds with what EPEL 9 has (its package then needs EPEL on the system too)
+if grep -q '^# needs: epel' "$root/eda/$name.spec"; then $sudo dnf -y -q install epel-release; fi
 case "$tag" in latest:*)   # the newest release tag PREFIX<number> upstream has now
   pre=${tag#latest:}
   tag=$(git ls-remote --tags "$url" "refs/tags/$pre*" | sed 's#.*refs/tags/##' | grep -E "^$pre[0-9][0-9.]*$" | sort -V | tail -1)
   [ -n "$tag" ] || { echo "error: no tag $pre<number> at $url" >&2; exit 1; } ;;
 esac
 ver=${tag#v}; ver=${ver#ngspice-}
+case "$ver" in r[0-9]*) ver=${ver#r} ;; esac          # (NVC's tags are r1.23.1)
 top=$root/build/eda-rpm/$name
 rm -rf "$top"; mkdir -p "$top/SOURCES" "$top/src" "$root/build/extra"
 archive=$(echo "$line" | awk '{print $4}')

@@ -88,11 +88,11 @@ class Tools(Case):
         d = json.loads(o)
         self.assertEqual(rc, 0)
         self.assertEqual([t["tool"] for t in d["tools"]],
-                         ["xschem", "ngspice", "magic", "klayout", "netgen", "yosys", "iverilog", "verilator", "gtkwave"])
+                         ["xschem", "ngspice", "qucs-s", "magic", "klayout", "netgen", "yosys", "nvc", "iverilog", "verilator", "gtkwave"])
         self.assertTrue(all(t["path"] is None for t in d["tools"]))
         self.assertIsNone(d["ngspice_threads"])
         rc, o = run("eda", "tools")
-        self.assertIn("missing: sudo dnf install xschem ngspice magic klayout netgen yosys iverilog verilator gtkwave", o)
+        self.assertIn("missing: sudo dnf install xschem ngspice qucs-s magic klayout netgen yosys nvc iverilog verilator gtkwave", o)
 
     def test_one_found_is_said(self):
         self.tool("ngspice", "exit 0")
@@ -166,7 +166,7 @@ class Try(Case):
         for name, needs, cmds, checks in silik.eda_try_jobs():
             for argv, out in cmds:
                 for word in " ".join(argv).replace("gds=", " ").split():
-                    if re.search(r"\.(cir|tcl|spice|py|v|vvp|gds|out)$", word) and word not in made:
+                    if re.search(r"\.(cir|tcl|spice|py|v|vhd|vvp|gds|out)$", word) and word not in made:
                         self.assertTrue(os.path.isfile(os.path.join(FILES, word)), "%s: %s is not in packages/silik-eda-open/files" % (name, word))
         spec = text(os.path.join(ROOT, "packages/silik-eda-open/silik-eda-open.spec"))
         for f in os.listdir(FILES):
@@ -178,7 +178,8 @@ class Try(Case):
         for line in ("$ ngspice -b inverter.cir > inverter.out", "$ magic -dnull -noconsole -T scmos nfet1.tcl > magic.out",
                      "$ netgen -batch lvs 'nfet1.spice nfet1' 'nfet1_ref.spice nfet1' nosetup lvs.out > netgen.out",
                      "$ klayout -zz -r gds_read.py -rd gds=nfet1.gds > klayout.out", "$ iverilog -o counter.vvp counter_tb.v counter.v > iverilog.out",
-                     "$ vvp counter.vvp > vvp.out", "$ verilator --lint-only -Wall counter.v > verilator.out"):
+                     "$ vvp counter.vvp > vvp.out", "$ verilator --lint-only -Wall counter.v > verilator.out",
+                     "$ nvc -a counter_tb.vhd -e counter_tb -r --stop-time=200ns > nvc.out"):
             self.assertIn(line, o)
 
     def test_a_job_that_passes_one_that_fails_and_one_without_its_tool(self):
@@ -190,7 +191,7 @@ class Try(Case):
         self.assertRegex(o, r"(?m)^● sim +the inverter's output is high")
         self.assertRegex(o, r"(?m)^▼ digital +not seen: the counter counts ten clock edges")
         self.assertRegex(o, r"(?m)^\? layout +not run: magic, netgen are not on the system")
-        self.assertRegex(o, r"(?m)^1 ok, 1 failed, 4 not run; the files: ")
+        self.assertRegex(o, r"(?m)^1 ok, 1 failed, 5 not run; the files: ")
 
     def test_one_job_by_name(self):
         self.tool("ngspice", "echo 'v(out) = 3.300000e+00'; echo 'v(out) = 2.640000e-08'")

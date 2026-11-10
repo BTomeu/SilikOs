@@ -126,7 +126,7 @@ else
   say win.wine info "no Wine on the system (the ISO carries it when build/extra has silik-wine)"
 fi
 # the open EDA tools (on the ISO when the workflow EDA tools has made them)
-for t in klayout magic xschem ngspice netgen yosys; do
+for t in klayout magic xschem ngspice netgen yosys nvc qucs-s; do
   if v=$(rpm -q $t 2> /dev/null); then say eda.$t ok "$v"; else say eda.$t info "not on the ISO"; fi
 done
 if command -v ngspice > /dev/null; then
@@ -153,7 +153,7 @@ done
 o=$(runuser -u tester -- sh -c 'cd /tmp && silik -q eda try' 2>&1); rc=$?
 if [ $rc = 0 ]; then say eda.try ok "$(echo "$o" | tail -1 | sed 's/; the files.*//')"; else say eda.try FAIL "exit $rc: $(echo "$o" | tail -1 | sed 's/; the files.*//')"; fi
 echo "$o" | grep -v '^[0-9]* ok' | head -8 | while read -r line; do say eda.try-job info "$line"; done
-say eda.tools info "$(runuser -u tester -- silik eda tools 2>&1 | grep -c '^●') of 9 open tools on the system"
+say eda.tools info "$(runuser -u tester -- silik eda tools 2>&1 | grep -c '^●') of 11 open tools on the system"
 # the names and classes of the Tk tools' windows (what a desktop entry must say for the rail to know the program)
 if insession xwininfo -root > /dev/null 2>&1; then
   for t in xschem magic; do

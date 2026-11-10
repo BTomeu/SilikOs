@@ -341,8 +341,8 @@ def eda_kernel_arg(ctx, a):
 
 
 # ------------------------------------------------------------------ open EDA tools
-# KLayout, Magic, Xschem, ngspice, Netgen and Yosys (built for EL 9 from their authors' sources: eda/) and Icarus
-# Verilog, Verilator and GTKWave (EPEL 9), brought by the package silik-eda-open. `silik eda tools` says which are
+# KLayout, Magic, Xschem, ngspice, Netgen, Yosys, NVC and Qucs-S (built for EL 9 from their authors' sources: eda/)
+# and Icarus Verilog, Verilator and GTKWave (EPEL 9), brought by the package silik-eda-open. `silik eda tools` says which are
 # on the system, `silik eda try` makes them do three small real jobs together (the files of
 # /usr/share/silikos/eda/try), `silik eda bench` times the simulator on this machine and `silik eda tune` sets what
 # the measurement shows to matter (the threads ngspice evaluates transistor models on: its default is 2).
@@ -352,10 +352,12 @@ import tempfile
 OPEN_TOOLS = (   # command, package, what it is for
     ("xschem", "xschem", "schematic capture"),
     ("ngspice", "ngspice", "circuit simulation (SPICE, XSPICE)"),
+    ("qucs-s", "qucs-s", "schematic and simulation in one window (with ngspice)"),
     ("magic", "magic", "layout, design rules, extraction"),
     ("klayout", "klayout", "layout viewer and editor (GDS, OASIS), DRC and LVS scripts"),
     ("netgen", "netgen", "layout against schematic (LVS)"),
     ("yosys", "yosys", "Verilog synthesis"),
+    ("nvc", "nvc", "VHDL simulation"),
     ("iverilog", "iverilog", "Verilog simulation (Icarus Verilog)"),
     ("verilator", "verilator", "Verilog simulation in C++, lint"),
     ("gtkwave", "gtkwave", "waveform viewer"),
@@ -426,6 +428,8 @@ def eda_try_jobs():
         ("digital", ("iverilog", "vvp"), [(["iverilog", "-o", "counter.vvp", "counter_tb.v", "counter.v"], "iverilog.out"),
                                           (["vvp", "counter.vvp"], "vvp.out")],
          [("vvp.out", r"PASS count=10", "the counter counts ten clock edges in simulation")]),
+        ("vhdl", ("nvc",), [(["nvc", "-a", "counter_tb.vhd", "-e", "counter_tb", "-r", "--stop-time=200ns"], "nvc.out")],
+         [("nvc.out", r"PASS count=10", "the VHDL counter counts ten clock edges in simulation")]),
         ("lint", ("verilator",), [(["verilator", "--lint-only", "-Wall", "counter.v"], "verilator.out")],
          [("verilator.out", r"\A(?![\s\S]*%(Error|Warning))", "Verilator finds nothing to complain about in the counter")]),
         ("synth", ("yosys",), [(["yosys", "-q", "-p", "read_verilog counter.v; synth -top counter; tee -o synth.txt stat"], "yosys.out")],
@@ -2226,7 +2230,7 @@ def parser():
     x = e.add_parser("check"); x.set_defaults(fn=eda_check)
     x = e.add_parser("kernel-arg"); x.set_defaults(fn=eda_kernel_arg)
     x = e.add_parser("tools", help="the open EDA tools on this system"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=eda_tools)
-    x = e.add_parser("try", help="the open tools do small real jobs together: sim, layout, gds, digital, lint, synth")
+    x = e.add_parser("try", help="the open tools do small real jobs together: sim, layout, gds, digital, vhdl, lint, synth")
     x.add_argument("job", nargs="?", default="all"); x.set_defaults(fn=eda_try)
     x = e.add_parser("bench", help="times ngspice on this machine with 1, 2 and all its cores")
     x.add_argument("--rings", type=int, default=40); x.add_argument("--stages", type=int, default=51)
