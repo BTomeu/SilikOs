@@ -144,6 +144,16 @@ fi
 if command -v xschem > /dev/null; then
   has eda.xschem-run "$(runuser -u tester -- xschem --version 2>&1 | head -1)" "XSCHEM"
 fi
+# the names and classes of the Tk tools' windows (what a desktop entry must say for the rail to know the program)
+if insession xwininfo -root > /dev/null 2>&1; then
+  for t in xschem magic; do
+    command -v $t > /dev/null || continue
+    asuser systemd-run --quiet --user --collect --unit=ci-$t -p WorkingDirectory=/home/tester -E DISPLAY=:0 $t > /dev/null 2>&1
+    sleep 12
+    say eda.$t-windows info "$(insession xwininfo -root -tree | grep -iE 'xschem|magic|tkcon|layout' | sed -E 's/^ *0x[0-9a-f]+ //; s/ +[0-9]+x[0-9]+.*//' | sort -u | head -6 | tr '\n' ';')"
+    asuser systemctl --user stop ci-$t > /dev/null 2>&1
+  done
+fi
 say system.failed-units info "$(systemctl --failed --no-legend | awk '{print $2}' | tr '\n' ' ')"
 say system.packages info "$(rpm -qa | wc -l) packages, $(df -h / | awk 'NR==2 {print $3}') used"
 printf '\r\nSILIKOS-CI|DONE\r\n' > $out
