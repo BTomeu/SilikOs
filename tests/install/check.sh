@@ -68,8 +68,16 @@ if command -v wine > /dev/null; then
     r=$(cat /home/tester/Windows/silikos-ci.txt 2> /dev/null)
     is win.open.ran "exit $rc: $r" "exit 0: ran secret=hidden"
     has win.open.sandboxed "$o" "bwrap"
-    say win.open.commands info "$(echo "$o" | grep '^\$' | head -3)"
-    say win.selinux-denials info "$(ausearch -m AVC -ts boot 2> /dev/null | grep -c 'denied')"
+    # what it printed, line by line (the commands start with $), for a run that failed
+    if [ "$rc" != 0 ] || [ -z "$r" ]; then
+      echo "$o" | tail -14 | while read -r line; do say win.open.output info "$line"; done
+      # the same program without the sandbox tells Wine's part from the sandbox's
+      rm -f /home/tester/Windows/silikos-ci.txt
+      o2=$(cd /home/tester && asuser timeout 300 silik win open --no-sandbox /home/tester/Downloads/hello.exe); rc2=$?
+      say win.open.without-sandbox info "exit $rc2: $(cat /home/tester/Windows/silikos-ci.txt 2> /dev/null) / $(echo "$o2" | tail -3 | tr '\n' ' ')"
+    fi
+    say win.user-namespaces info "max_user_namespaces $(cat /proc/sys/user/max_user_namespaces 2> /dev/null)"
+    ausearch -m AVC -ts boot 2> /dev/null | grep denied | sed -E 's/.*denied +(\{[^}]*\}).*comm="([^"]*)".*scontext=([^ ]*) tcontext=([^ ]*) tclass=([^ ]*).*/\1 comm=\2 \3 -> \4 \5/' | sort | uniq -c | head -6 | while read -r line; do say win.selinux-denial info "$line"; done
   else
     say win.open info "no test program on the test disk"
   fi
