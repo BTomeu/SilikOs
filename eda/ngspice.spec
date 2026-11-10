@@ -18,7 +18,8 @@ Upstream's source, unmodified, built on EL 9 by SilikVolt (eda/ngspice.spec).
 %setup -q -n ngspice-%{version}
 
 %build
-./autogen.sh
+# the release archive carries its configure script; a git checkout would need autoconf 2.70 (EL 9 has 2.69)
+[ -x configure ] || ./autogen.sh
 mkdir -p release && cd release
 ../configure --prefix=%{_prefix} --libdir=%{_libdir} --mandir=%{_mandir} --with-x --enable-xspice --enable-cider \
   --enable-openmp --with-readline=yes --disable-debug CFLAGS="-O2" CXXFLAGS="-O2"

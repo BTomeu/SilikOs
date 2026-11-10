@@ -22,10 +22,16 @@ esac
 ver=${tag#v}; ver=${ver#ngspice-}
 top=$root/build/eda-rpm/$name
 rm -rf "$top"; mkdir -p "$top/SOURCES" "$top/src" "$root/build/extra"
-git clone -q --depth 1 -b "$tag" "$url" "$top/src/$name-$ver"
-echo "source: $url at $tag ($(git -C "$top/src/$name-$ver" rev-parse HEAD))"
-rm -rf "$top/src/$name-$ver/.git"
-tar -C "$top/src" -czf "$top/SOURCES/$name-$ver.tar.gz" "$name-$ver"
+archive=$(echo "$line" | awk '{print $4}')
+if [ -n "$archive" ]; then   # upstream's release archive of that version
+  curl -fL --retry 3 -o "$top/SOURCES/$name-$ver.tar.gz" "${archive//\{ver\}/$ver}"
+  echo "source: ${archive//\{ver\}/$ver}  sha256 $(sha256sum "$top/SOURCES/$name-$ver.tar.gz" | cut -d' ' -f1)"
+else
+  git clone -q --depth 1 -b "$tag" "$url" "$top/src/$name-$ver"
+  echo "source: $url at $tag ($(git -C "$top/src/$name-$ver" rev-parse HEAD))"
+  rm -rf "$top/src/$name-$ver/.git"
+  tar -C "$top/src" -czf "$top/SOURCES/$name-$ver.tar.gz" "$name-$ver"
+fi
 rm -rf "$top/src"
 defs=(--define "upver $ver" --define "_specdir_eda $root/eda")
 $sudo dnf -y -q builddep "${defs[@]}" "$root/eda/$name.spec"

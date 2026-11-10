@@ -1,8 +1,8 @@
 %include %{_specdir_eda}/common.inc
 # after upstream's own recipe (scripts/rpm-data/klayout.spec, target rockylinux9): build.sh with the libraries in
 # %%{_libdir}/klayout. Without the libgit2 integration (EPEL's library would have to be copied in).
-%global __provides_exclude_from ^%{_libdir}/klayout/.*$
-%global __requires_exclude ^libklayout_.*$
+# (its private libraries under %%{_libdir}/klayout are "provided" by the package itself: the program and the plugins
+# require them by name, and hiding them left the package uninstallable)
 Name:           klayout
 Version:        %{upver}
 Release:        1.silik%{?dist}
