@@ -136,7 +136,7 @@ grep -q '^FAIL' "$out/report.txt" && fail=1
 n_ok=$(grep -c '^ok' "$out/report.txt" || true); n_fail=$(grep -c '^FAIL' "$out/report.txt" || true)
 echo "$n_ok ok, $n_fail failed"
 if [ -n "${GITHUB_ACTIONS:-}" ]; then   # a run shows at most ten annotations of a kind: the failures, and one line for the rest
-  grep '^FAIL' "$out/report.txt" | head -9 | while read -r _ name detail; do echo "::error title=SilikOS check $name::$detail"; done
+  { grep '^FAIL' "$out/report.txt" || true; } | head -9 | while read -r _ name detail; do echo "::error title=SilikOS check $name::$detail"; done
   echo "::notice title=SilikOS installed and booted::$n_ok checks ok, $n_fail failed, disk after installation $used (report.txt and the pictures: branch ci-results)"
 fi
 exit $fail

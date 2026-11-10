@@ -59,12 +59,15 @@ Docker Hub, repo.almalinux.org, dl.fedoraproject.org and vault.centos.org).
 | The installed desktop on its screen | the same run, the virtual machine's screen saved (`docs/img/installed.png`; the last run's pictures: branch `ci-results`) | the Silik layout in a real session: title bar with the mark and the command line, the rail (Files, Terminal, Firefox, Text Editor, Virtual Machine Manager with its framed initial, Settings), workspaces, status bar, the wafer background; **Super+Space opens the COMMAND bar** (through gnome-settings-daemon) with the `sys/secure` entries |
 | `silik secure status` on an installed system | the same run | 9 ok, 1 warn, 2 bad, 1 unknown: bad = the disk is not encrypted (the test does not encrypt) and the test's own automatic login; warn = Secure Boot not possible (the test machine starts through BIOS); unknown = the screen lock, asked as root |
 
-Found by the first complete installation and fixed (the next run is the test of the fixes): **no shell theme was made, and the
-GTK theme was the fallback**: the theme makers called `gresource`, which belongs to `glib2-devel` on EL 9 and is not on an
-installed system (the test container had it); they now read the stylesheets through python3-gobject
-(`resource-extract`), a boot-time unit makes a missing theme, and the installed-system checks look at both. The base's
-"Welcome, take the tour" dialog opened on the first login: turned off. The first check line was lost among the boot
-messages on the serial port: each line now starts on its own.
+Found by the first complete installation and fixed, **and seen fixed in the second** (run 42840361656, commit 5f1d4f6:
+38 checks ok, none failed): no shell theme had been made and the GTK theme was the fallback, because the theme makers
+called `gresource`, which belongs to `glib2-devel` on EL 9 and is not on an installed system (the test container had
+it). They now read the stylesheets through python3-gobject (`resource-extract`), a boot-time unit makes a missing
+theme, and the installed system checks that both were made from the real stylesheets, without an import and without
+the accent blue. The base's "Welcome, take the tour" dialog opened on the first login: turned off. In the second run
+the pictures show the desktop with the shell theme, **Start opened by the Super key** with the full application set and
+its categories (`docs/img/installed-start.png`), and the COMMAND bar after Super+Space. That run was still marked
+failed by a mistake of the test script after a clean report (fixed).
 
 Found by booting the ISO and fixed: the installer did not bring the network up by itself, so the package sources
 failed until it was turned on by hand (the kickstart now activates a wired connection).
@@ -76,8 +79,7 @@ Two bugs were found by running `silik eda` for real and fixed: the vault reposit
 
 | What | Why | Who can |
 |---|---|---|
-| The installation test's own later parts: Start after the Super key on the installed system (the picture was taken behind the base's welcome dialog, now off), a Windows program in the installed system (no Wine on the ISO yet), the fixes above | the first run was before them | the next runs of the workflow CI (branch `ci-results`) |
-| `silik-wine` (Wine 11.0 built on EL 9) | not built: about an hour and several GB, and dl.winehq.org is not reachable from this machine | GitHub Actions, workflow Wine (started by hand); its package then goes into the CI's ISO and the installation test runs a Windows program through `silik win open` in its sandbox on the real kernel with SELinux |
+| A Windows program in the installed system (the sandbox on EL 9's kernel with SELinux) | no Wine on the ISO yet: `silik-wine` built on GitHub in 30 minutes, its trial of two Windows programs failed for a reason not yet read (the trial now reports it) | the next runs of the workflows Wine and CI |
 | BIOS (non-UEFI) boot of the ISO | not tried | a VM |
 | The boot splash (plymouth theme `silikos`) on a screen, the About logo, the login logo, the firmware's boot entry name | set and listed, not seen: no real boot here | after the first installation |
 | Places that still name the base | by design: the package source URL in the installer, repository names in `dnf`, `/etc/redhat-release`, `ID=` | — |
