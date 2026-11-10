@@ -1,4 +1,4 @@
-# SilikOS — what has been run (09/11/2026)
+# SilikOS — what has been run (09-10/11/2026)
 
 Build machine: a cloud container (Ubuntu 24.04, kernel 6.18, 4 cores, no KVM, Docker; network through a proxy to
 Docker Hub, repo.almalinux.org, dl.fedoraproject.org and vault.centos.org).
@@ -12,7 +12,7 @@ Docker Hub, repo.almalinux.org, dl.fedoraproject.org and vault.centos.org).
 | The whole install resolves | `dnf install --assumeno build/repo/*.rpm` there | 752 packages, 1.2 GB, no conflict |
 | `silik`, the COMMAND bar and the branding install with their real dependencies | `dnf install` there (gtk3 3.24.31, python3-gobject 3.40.1, Python 3.9.25) | installed; `silik status`, `--dry-run` actions and `silik-command --list` run |
 | The COMMAND bar draws on EL9's GTK | Xvfb in that container, Catalan, Cascadia Mono | window, list, twin line, key footer as designed (also on Ubuntu's GTK, light / dark, EN / CA) |
-| Unit tests | `python3 -m unittest discover -s tests` on Python 3.12 and 3.9 | 24 / 24 |
+| Unit tests | `python3 -m unittest discover -s tests` on Python 3.12 and 3.9 | 26 / 26 |
 | Python 3.9 syntax | `vermin -t=3.9-` on `silik` and `silik-command` | no newer feature |
 | The kickstart parses | `ksvalidator -v RHEL9` (pykickstart) | valid |
 | An EL6 userland runs on a current kernel | `centos:6` container: glibc 2.12, python 2.6, yum, kernel vsyscall page execute-only (`xonly`) | runs |
@@ -21,6 +21,8 @@ Docker Hub, repo.almalinux.org, dl.fedoraproject.org and vault.centos.org).
 | The installer ISO builds | `tools/build_iso.sh`: AlmaLinux 9.8 boot ISO + kickstart + repository, 1.5 GB, 1 min | `inst.ks=` in the ISO's and the EFI image's `grub.cfg`; entries read "Install SilikOS 0.1" |
 | The ISO boots under UEFI | QEMU (TCG) + OVMF: GRUB menu, default entry, kernel 5.14.0-687.5.3.el9_8 starts | boots (QEMU's default CPU model lacks x86-64-v2, which EL9 needs: use `-cpu max`; real CPUs since 2009 have it) |
 | The installer takes the kickstart and finds the package sources | the ISO's kernel + installer in QEMU (TCG, `-cpu max`), graphical, screenshots | summary screen: network connected by itself, Installation Source = repo.almalinux.org, Software Selection = Workstation (the six SilikOS packages from the ISO's repository and EPEL resolve); disk, user and time zone left to the person, as designed |
+| The installer says SilikOS | the rebuilt ISO (label `SilikOS-9-8-x86_64`, `images/product.img`) in QEMU: UEFI menu, welcome and summary screens, screenshots | "Install SilikOS 9.8", "WELCOME TO SILIKOS 9.8", "SILIKOS 9.8 INSTALLATION", the SilikOS sidebar and logo; network, source and Workstation selection still resolve with the SilikOS product configuration |
+| The installed system's names | `silikos-branding` 0.2.0 on AlmaLinux 9.8 (container, `dnf install`) | `PRETTY_NAME="SilikOS 9.8"`, boot entries "SilikOS (kernel) 9.8", `ID` / `VERSION_ID` / `/etc/redhat-release` untouched, `dnf` works; a reinstall of the base's release package re-applies the names (trigger); `identity base` / `silikos` switch; removal restores the base's file and boot splash theme |
 
 Found by booting the ISO and fixed: the installer did not bring the network up by itself, so the package sources
 failed until it was turned on by hand (the kickstart now activates a wired connection).
@@ -34,7 +36,8 @@ Two bugs were found by running `silik eda` for real and fixed: the vault reposit
 |---|---|---|
 | A complete installation from the ISO (752 packages) and the first boot of the installed system | no KVM here: emulated it would take many hours | any PC with virtualisation, or the Ryzen machine itself |
 | BIOS (non-UEFI) boot of the ISO | not tried | a VM |
-| The installer's own screens say "AlmaLinux 9.8" | they come from the base's installer image, not changed in 0.1 | a later `product.img` |
+| The boot splash (plymouth theme `silikos`) on a screen, the About logo, the login logo, the firmware's boot entry name | set and listed, not seen: no real boot here | after the first installation |
+| Places that still name the base | by design: the package source URL in the installer, repository names in `dnf`, `/etc/redhat-release`, `ID=` | — |
 | The desktop defaults in a real GNOME session (dconf, Super+Space, X11 default, login logo) | no GNOME session here | after the first installation |
 | `silik eda create` with podman itself (`--userns keep-id`, the home folder and X authority mounts), `import-vm` (libguestfs) | Docker stood in for podman here; no libguestfs | the Ryzen machine |
 | Cadence / Synopsys tools | no installers or licences | the owner |
