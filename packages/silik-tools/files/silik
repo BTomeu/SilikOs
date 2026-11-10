@@ -340,50 +340,576 @@ def eda_kernel_arg(ctx, a):
 
 
 # ------------------------------------------------------------------ win
+# Windows programs run by Wine: one prefix per program, or the prefix "default" for whatever is double-clicked
+# (`silik win open`). Under bubblewrap when it is installed: the programs of a prefix see the system read-only, their
+# prefix, the shared folder (drive W:), the folders shown read-only, and nothing else of the home folder.
+# A prefix has ONE sandbox while its programs run: bwrap starts it with the prefix's wineserver as its first program,
+# and every program enters it with nsenter. They cannot have a sandbox each: the programs of a prefix must talk to one
+# wineserver, the wineserver numbers them by process id (one process namespace) and it is the wineserver that opens
+# their files (one view of the files). So what a sandbox shows is fixed when it starts. docs/WINDOWS.md.
+import fcntl   # the modules below are used by this section only
+import stat
+
+WIN_DEFAULT = "default"                               # the prefix of `silik win open` when none is named
+WIN_EXT = (".exe", ".msi", ".bat", ".cmd", ".lnk")    # what `silik win open` takes
+WIN_ICON = "org.silikvolt.Win"
+# what a sandboxed program keeps of the environment (plus LC_*); nothing else crosses: no session bus, no tokens
+WIN_ENV = ("DISPLAY", "LANG", "LANGUAGE", "TZ", "TERM", "PULSE_SERVER", "DESKTOP_STARTUP_ID", "DRI_PRIME",
+           "__NV_PRIME_RENDER_OFFLOAD", "__GLX_VENDOR_LIBRARY_NAME", "__VK_LAYER_NV_optimus")
+# Wine's own switches, passed on the `env` part of the line when they are set
+WINE_ENV = ("WINEDLLOVERRIDES", "WINEESYNC", "WINEFSYNC", "WINE_LARGE_ADDRESS_AWARE")
+
+
 def prefix_dir(n):
     if not valid_name(n):
         die("prefix name '%s': letters, digits, - _ . (max 40)" % n, 2)
     return os.path.join(WINE_ROOT, n)
 
 
-def wine_env(d, arch="win64"):
-    e = dict(os.environ)
-    e.update({"WINEPREFIX": d, "WINEARCH": arch, "WINEDEBUG": e.get("WINEDEBUG", "-all")})
-    return e
+def win_shared():
+    """the one folder of the home that Windows programs see and write: drive W:"""
+    return os.environ.get("SILIK_WIN_SHARED") or os.path.join(os.path.expanduser("~"), "Windows")
+
+
+def win_runtime(name):
+    """where the state of a prefix's running sandbox is: its /tmp, its runtime folder (Wine's server socket is in
+    one of the two), and what `silik` notes about it"""
+    base = os.environ.get("XDG_RUNTIME_DIR")
+    if not base or not os.path.isdir(base):
+        base = "/tmp/silik-%d" % os.getuid()
+    return os.path.join(base, "silik-win", name)
+
+
+def data_home():
+    return os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+
+
+def bwrap_bin():
+    return os.environ.get("SILIK_BWRAP") or shutil.which("bwrap")
+
+
+def win_boxed(a):
+    return bool(bwrap_bin()) and not getattr(a, "no_sandbox", False)
+
+
+def _under(p, top):
+    return p == top or p.startswith(top.rstrip("/") + "/")
+
+
+def wine_argv(d, cmd, arch=None):
+    """a Wine command of the prefix as it is typed: env WINEDEBUG=... WINEPREFIX=... wine ..."""
+    e = ["WINEDEBUG=" + os.environ.get("WINEDEBUG", "-all")]
+    e += [k + "=" + os.environ[k] for k in WINE_ENV if os.environ.get(k) is not None]
+    if arch:
+        e.append("WINEARCH=" + arch)
+    return ["env"] + e + ["WINEPREFIX=" + d] + list(cmd)
+
+
+def win_die(ctx, msg, rc=1):
+    """an error at the start of a Windows program; also a desktop notification when no terminal shows it (a
+    double-click has none)"""
+    if not sys.stderr.isatty() and os.environ.get("DISPLAY") and shutil.which("notify-send"):
+        ctx.run(["notify-send", "--app-name=SilikOS", "--icon=" + WIN_ICON, "SilikOS", msg], check=False)
+    die(msg, rc)
+
+
+def win_echo(ctx, argv, redirect=""):
+    """prints a command that runs with a redirected descriptor (the line a shell would take)"""
+    if not ctx.quiet:
+        print("$ " + " ".join(shlex.quote(a) for a in argv) + (" " + redirect if redirect else ""), flush=True)
+
+
+def win_short(argv):
+    """a sandboxed command for the status bar: the long front of the line as "...", then WINEPREFIX=... wine ..."""
+    cut = [i for i, x in enumerate(argv) if x.startswith("WINEDEBUG=")]
+    return [os.path.basename(argv[2]), "..."] + argv[cut[0]:] if cut and argv[:2] == ["env", "-i"] else argv
+
+
+def win_narrow(folder):
+    """True when a folder can be shown as a whole: not the home or what holds it, not a hidden folder of the home,
+    not a place the sandbox mounts itself"""
+    home = os.path.expanduser("~")
+    taken = [home, WINE_ROOT, win_shared(), "/tmp", "/run", "/dev", "/proc", "/sys", "/usr", "/etc", "/home", "/var", "/opt"]
+    hidden = _under(folder, home) and any(p.startswith(".") for p in folder[len(home):].split("/"))
+    return not hidden and not any(_under(t, folder) for t in taken)
+
+
+def win_always():
+    """the folders every sandbox shows read-only: $SILIK_WIN_SHOW (a colon list), by default the Downloads folder"""
+    v = os.environ.get("SILIK_WIN_SHOW")
+    if v is None:
+        home = os.path.expanduser("~")
+        v = os.path.join(home, "Downloads")
+        cfg = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.join(home, ".config"), "user-dirs.dirs")
+        for l in read(cfg).splitlines():
+            if l.startswith("XDG_DOWNLOAD_DIR="):
+                v = l.split("=", 1)[1].strip().strip('"').replace("$HOME", home)
+    return [p for p in (os.path.normpath(x) for x in v.split(":") if x) if os.path.isdir(p) and win_narrow(p)]
+
+
+def win_show(f, d):
+    """what the sandbox must show, read-only, for file f to open: nothing when it is seen already (the prefix, the
+    shared folder, the system, a folder always shown), else its folder, or f alone when the folder is too much"""
+    if any(_under(f, t) for t in [win_shared(), d, "/usr", "/etc"] + win_always()):
+        return []
+    return [os.path.dirname(f)] if win_narrow(os.path.dirname(f)) else [f]
+
+
+def win_env(d, display=True):
+    """the environment of a sandboxed command, whole: nothing else crosses (no session bus address, no tokens)"""
+    home = os.path.expanduser("~")
+    path = [p for p in (os.environ.get("PATH") or "").split(":") if p and any(_under(p, t) for t in ("/usr", "/bin", "/sbin"))]
+    wine = shutil.which("wine") or ""
+    if os.path.realpath(wine).startswith("/opt/"):
+        path.insert(0, os.path.dirname(wine))
+    e = {"HOME": os.path.join(d, "home"), "PATH": ":".join(path or ["/usr/bin", "/bin"]),
+         "XDG_RUNTIME_DIR": os.environ.get("XDG_RUNTIME_DIR") or "/run/user/%d" % os.getuid()}
+    e["USER"] = e["LOGNAME"] = os.environ.get("USER") or os.environ.get("LOGNAME") or "user"
+    if display:
+        for k, v in os.environ.items():
+            if k in WIN_ENV or k.startswith("LC_"):
+                e[k] = v
+        xa = os.environ.get("XAUTHORITY") or os.path.join(home, ".Xauthority")
+        if os.path.isfile(xa):
+            e["XAUTHORITY"] = xa
+    return ["%s=%s" % (k, e[k]) for k in sorted(e)]
+
+
+def win_sandbox(name, d, show=(), net=True, info_fd=None):
+    """the bwrap command line of a prefix's sandbox, up to "--": new user, process, IPC and host-name namespaces
+    (and network, without `net`); the system read-only, the prefix and the shared folder read-write, `show`
+    read-only, the display, sound and GPU; nothing else of the home folder"""
+    home, rt, shared = os.path.expanduser("~"), win_runtime(name), win_shared()
+    xrd_host = os.environ.get("XDG_RUNTIME_DIR") or ""
+    xrd = xrd_host or "/run/user/%d" % os.getuid()
+    # env -i: the first process of the sandbox is bwrap itself, and it must not carry this command's environment
+    a = ["env", "-i", bwrap_bin() or "bwrap", "--unshare-user", "--unshare-pid", "--unshare-ipc", "--unshare-uts", "--unshare-cgroup-try"]
+    a += ([] if net else ["--unshare-net"]) + ["--new-session", "--cap-drop", "ALL"]
+    if info_fd is not None:
+        a += ["--info-fd", str(info_fd)]
+
+    def ro(p):
+        a.extend(["--ro-bind", p, p])
+
+    # the system, read-only
+    ro("/usr")
+    for p in ("/bin", "/sbin", "/lib", "/lib32", "/lib64", "/libx32"):
+        if os.path.islink(p):
+            a.extend(["--symlink", os.readlink(p), p])
+        elif os.path.isdir(p):
+            ro(p)
+    ro("/etc")
+    wine = os.path.realpath(shutil.which("wine") or "")
+    if wine.startswith("/opt/"):                # a Wine installed under /opt/NAME: that folder only
+        ro("/".join(wine.split("/")[:3]))
+    a += ["--proc", "/proc", "--tmpfs", "/dev"]
+    for n in ("null", "zero", "full", "random", "urandom"):
+        a += ["--dev-bind", "/dev/" + n, "/dev/" + n]
+    a += ["--tmpfs", "/dev/shm", "--symlink", "/proc/self/fd", "/dev/fd"]
+    # /tmp and the runtime folder of this sandbox (Wine's server socket is in one of them)
+    a += ["--bind", os.path.join(rt, "tmp"), "/tmp", "--bind", os.path.join(rt, "run"), xrd]
+    resolv = os.path.realpath("/etc/resolv.conf")
+    if net and resolv.startswith("/run/") and os.path.exists(resolv):   # a link into /run (systemd-resolved)
+        ro(resolv)
+    # GPU
+    if os.path.isdir("/dev/dri"):
+        a += ["--dev-bind", "/dev/dri", "/dev/dri"]
+    try:
+        for n in sorted(os.listdir("/dev")):
+            if n.startswith("nvidia"):
+                a += ["--dev-bind", "/dev/" + n, "/dev/" + n]
+    except OSError:
+        pass
+    for p in ("/sys/dev", "/sys/devices", "/sys/class", "/sys/bus"):
+        if os.path.isdir(p):
+            ro(p)
+    # the X11 display and its key
+    disp = os.environ.get("DISPLAY") or ""
+    sock = "/tmp/.X11-unix/X" + disp[1:].split(".")[0] if disp.startswith(":") else ""
+    if sock and os.path.exists(sock):
+        ro(sock)
+    xa = os.environ.get("XAUTHORITY") or os.path.join(home, ".Xauthority")
+    if os.path.isfile(xa):
+        ro(xa)
+    # sound: the PulseAudio and PipeWire sockets
+    for s in ("pulse/native", "pipewire-0"):
+        if xrd_host and os.path.exists(os.path.join(xrd_host, s)):
+            ro(os.path.join(xrd_host, s))
+    # the prefix and the shared folder, read-write; the folders shown, read-only
+    a += ["--bind", d, d, "--bind", shared, shared]
+    for p in show:
+        ro(p)
+    return a + ["--remount-ro", "/", "--chdir", d, "--"]
+
+
+def win_runtime_make(rt):
+    """the prefix's runtime folders, this user's only (under /tmp another user could have made them first)"""
+    tops = [rt, os.path.dirname(rt)]
+    if not _under(rt, os.environ.get("XDG_RUNTIME_DIR") or "\0"):
+        tops.append(os.path.dirname(tops[-1]))
+    for p in tops[::-1]:
+        try:
+            os.mkdir(p, 0o700)
+        except FileExistsError:
+            pass
+        st = os.lstat(p)
+        if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid():
+            die("%s is not a folder of this user: not using it" % p)
+
+
+def win_session_info(name):
+    """the running sandbox of the prefix: {"pid": its first process as this system numbers it, "ns": its process
+    namespace, "show": the folders it shows read-only, "net": True with network}; {} when none runs"""
+    try:
+        s = json.loads(read(os.path.join(win_runtime(name), "session")) or "{}")
+        pid = s["pid"]
+        if os.readlink("/proc/%d/ns/pid" % pid) != s["ns"] or not os.readlink("/proc/%d/ns/mnt" % pid):
+            return {}
+        kids = read("/proc/%d/task/%d/children" % (pid, pid), None)
+        if kids is None:        # this kernel does not list children: the first process is enough
+            return s
+        # its wineserver must be alive too: the sandbox ends with it
+        live = [k for k in kids.split() if read("/proc/%s/comm" % k).startswith("wineserver")
+                and read("/proc/%s/stat" % k).rpartition(")")[2].split()[:1] not in ([], ["Z"])]
+        return s if live else {}
+    except (ValueError, KeyError, TypeError, OSError):
+        return {}
+
+
+def win_server_socket(rt):
+    """the socket of the sandbox's wineserver (its place differs between Wine builds), '' when there is none"""
+    for top in ("tmp", "run"):
+        for dp, _dn, fn in os.walk(os.path.join(rt, top)):
+            if "socket" in fn and os.path.basename(dp).startswith("server-"):
+                return os.path.join(dp, "socket")
+    return ""
+
+
+def win_session(ctx, name, d, show=(), net=True):
+    """the prefix's running sandbox, started when there is none: bwrap with the prefix's wineserver as its first
+    program. Every program of the prefix then enters it (win_enter): they must share the wineserver, and the
+    wineserver is what opens their files, so they share its view. Returns win_session_info's dictionary."""
+    s = win_session_info(name)
+    if s:
+        return s
+    rt = win_runtime(name)
+    show = sorted(set(win_always()) | set(show))
+    show = [p for p in show if not any(p != q and _under(p, q) for q in show)]
+    tail = ["env"] + win_env(d) + wine_argv(d, ["wineserver", "--foreground"])[1:]
+    info = os.path.join(rt, "session.json")
+    if ctx.dry:
+        win_echo(ctx, win_sandbox(name, d, show, net, info_fd=3) + tail, "3>%s &" % shlex.quote(info))
+        return {"pid": 0, "ns": "", "show": show, "net": net}
+    win_runtime_make(rt)
+    with open(os.path.join(rt, "lock"), "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        s = win_session_info(name)
+        if s:
+            return s
+        for sub in ("tmp", "run"):                # the sandbox's /tmp and runtime folder start empty
+            shutil.rmtree(os.path.join(rt, sub), ignore_errors=True)
+            os.mkdir(os.path.join(rt, sub), 0o700)
+        fd = os.open(info, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        argv = win_sandbox(name, d, show, net, info_fd=fd) + tail
+        win_echo(ctx, argv, "%d>%s &" % (fd, shlex.quote(info)))
+        ctx.note(win_short(argv))
+        logf = os.path.join(rt, "session.log")
+        with open(logf, "wb") as log:
+            p = subprocess.Popen(argv, pass_fds=(fd,), stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
+        os.close(fd)
+        t0, pid = time.time(), 0
+        while not (pid and win_server_socket(rt)):
+            if p.poll() is not None or time.time() - t0 > 30:
+                die("the sandbox of prefix %s did not start: %s" % (name, " ".join(read(logf).split()[-40:]) or "no message"))
+            time.sleep(0.05)
+            try:
+                pid = int(json.loads(read(info) or "{}").get("child-pid", 0))
+            except ValueError:
+                pid = 0
+        s = {"pid": pid, "ns": os.readlink("/proc/%d/ns/pid" % pid), "show": show, "net": net}
+        with open(os.path.join(rt, "session"), "w") as f:
+            json.dump(s, f)
+        return s
+
+
+def win_enter(ctx, d, s, cmd, cwd=None, display=True):
+    """runs a Wine command inside the prefix's running sandbox `s`: nsenter into its namespaces, then no new
+    privileges, death with this command, a session of its own (no hold on the terminal) and a clean environment"""
+    pid = s.get("pid")
+    kinds = (("user", "-U"), ("mnt", "-m"), ("pid", "-p"), ("ipc", "-i"), ("uts", "-u"), ("net", "-n"), ("cgroup", "-C"))
+    try:
+        flags = [f for k, f in kinds if os.readlink("/proc/%d/ns/%s" % (pid, k)) != os.readlink("/proc/self/ns/" + k)] if pid else \
+                ["-U", "-m", "-p", "-i", "-u"] + ([] if s.get("net", True) else ["-n"])
+    except OSError as e:
+        print("silik: %s" % e, file=sys.stderr)
+        return 126
+    cwd = cwd or os.getcwd()
+    seen = [d, win_shared(), "/usr", "/etc"] + [p for p in s.get("show", ()) if os.path.isdir(p)]
+    cwd = cwd if any(_under(cwd, t) for t in seen) else os.path.join(d, "home")
+    # env -i first: what enters the sandbox carries none of this command's environment, not even for a moment
+    argv = ["env", "-i", "nsenter", "--preserve-credentials", "-t", str(pid or "PID")] + flags + \
+           ["--", "setpriv", "--no-new-privs", "--pdeathsig", "KILL", "setsid", "--wait", "env", "-C", cwd] + \
+           win_env(d, display) + cmd[1:]
+    ctx.echo(argv)
+    if ctx.dry:
+        return 0
+    ctx.note(win_short(argv))
+    try:
+        rc = subprocess.run(argv, check=False).returncode
+    except OSError as e:
+        print("silik: %s" % e, file=sys.stderr)
+        return 126
+    return rc if rc >= 0 else 128 - rc
+
+
+def win_outside(d):
+    """True when a wineserver started outside the sandbox serves the prefix (upstream Wine's socket place)"""
+    import socket
+    try:
+        st = os.stat(d)
+        s = socket.socket(socket.AF_UNIX)
+        try:
+            s.connect("/tmp/.wine-%d/server-%x-%x/socket" % (os.getuid(), st.st_dev, st.st_ino))
+            return True
+        finally:
+            s.close()
+    except OSError:
+        return False
+
+
+def win_exec(ctx, name, d, cmd, a=None, show=(), cwd=None, arch=None):
+    """runs a Wine command of prefix `name` (in its sandbox when bwrap is there) and returns its exit code"""
+    tail = wine_argv(d, cmd, arch)
+    if not win_boxed(a):
+        if not getattr(ctx, "win_said", False):       # once per command, however many Wine commands it takes
+            ctx.win_said = True
+            if bwrap_bin():
+                print("silik: NO SANDBOX (--no-sandbox): this Windows program reads and writes EVERYTHING this user can, the whole home folder included", file=sys.stderr)
+            else:
+                print("silik: bwrap (bubblewrap) is not installed: Windows programs run without the sandbox", file=sys.stderr)
+        if win_session_info(name) and not ctx.dry:
+            win_die(ctx, "prefix %s is running in the sandbox: close its programs (`silik win stop %s`) before running it without" % (name, name))
+        if cwd and os.path.isdir(cwd) and cwd != os.getcwd():
+            ctx.echo(["cd", cwd])
+            if not ctx.dry:
+                os.chdir(cwd)
+        rc, _ = ctx.run(tail, check=False)
+        return rc
+    net = not getattr(a, "no_net", False)
+    rc = 0
+
+    def fits(s):
+        return s["net"] == net and all(any(_under(p, q) for q in s["show"]) for p in show)
+
+    for again in (False, True):
+        s = win_session_info(name)
+        if s and not fits(s) and not ctx.dry:
+            # a running sandbox cannot be given another folder or another network: it ends by itself 3 s after
+            # its last program (the wineserver's own delay), so wait that long before giving up
+            t0 = time.time()
+            while win_session_info(name) and time.time() - t0 < 5:
+                time.sleep(0.1)
+            s = win_session_info(name)
+            if s and not fits(s):
+                what = "%s network" % ("with" if s["net"] else "without") if s["net"] != net else \
+                       "not showing " + " ".join(p for p in show if not any(_under(p, q) for q in s["show"]))
+                win_die(ctx, "the programs of prefix %s are running in a sandbox %s, and a running sandbox is not changed: close them "
+                        "(or `silik win stop %s`) and run this again, or put the file in %s" % (name, what, name, win_shared()), 75)
+        if not s and not ctx.dry and win_outside(d):
+            win_die(ctx, "prefix %s is in use by a Wine started outside the sandbox: close its programs (`silik win stop %s`) first" % (name, name))
+        s = s or win_session(ctx, name, d, show, net)
+        t0 = time.time()
+        rc = win_enter(ctx, d, s, tail, cwd)
+        # the sandbox can end while this program was entering it (the same 3 s): the program then failed or was
+        # killed at once, and is started again in a new one
+        if ctx.dry or again or rc not in (1, 126, 137) or time.time() - t0 > 5:
+            break
+        while win_session_info(name) and time.time() - t0 < 1.5:
+            time.sleep(0.1)
+        if win_session_info(name):
+            break
+        print("silik: the sandbox of prefix %s ended while the program started: starting again" % name, file=sys.stderr)
+    return rc
+
+
+def win_prepare(ctx, name, a=None, create=False, arch="win64"):
+    """before a program runs: the prefix (made on first use when `create`), its home, the shared folder, drive W:"""
+    d, shared = prefix_dir(name), win_shared()
+    new = not os.path.isdir(d)
+    if not ctx.dry and not shutil.which("wine"):
+        win_die(ctx, "Wine is not installed (the package `wine`): Windows programs cannot run here yet", 127)
+    if new and not create:
+        if ctx.dry:
+            return d
+        die("no prefix %s; `silik win create %s`" % (name, name))
+    dev = os.path.join(d, "dosdevices")
+    if os.path.islink(dev) or os.path.islink(os.path.join(d, "home")):
+        die("%s: dosdevices or home is a link: not using this prefix" % d)
+    # a new prefix gets the folders Wine's first program would make, before its wineserver starts
+    mk = [p for p in ([os.path.join(d, "home"), shared] + ([dev, os.path.join(d, "drive_c")] if new else [])) if not os.path.isdir(p)]
+    if mk:
+        ctx.run(["mkdir", "-p"] + mk)
+    if new:
+        ctx.run(["ln", "-s", "../drive_c", os.path.join(dev, "c:")])
+        ctx.run(["ln", "-s", "/", os.path.join(dev, "z:")])
+    link = os.path.join(dev, "w:")
+    if new or (os.path.isdir(dev) and not (os.path.islink(link) and os.readlink(link) == shared)):
+        ctx.run(["ln", "-sfn", shared, link])
+    if new:
+        if not ctx.dry:
+            print("silik: first use of the Wine prefix %s: setting it up" % name, file=sys.stderr)
+        if win_exec(ctx, name, d, ["wineboot", "--init"], a, arch=arch) != 0:
+            die("wineboot could not set up the prefix %s" % name)
+    return d
+
+
+def win_path(f, d, shared):
+    """file f as a Windows path of the prefix: W: is the shared folder, C: the prefix's drive, Z: the root"""
+    c = os.path.join(d, "drive_c")
+    for top, drive in ((shared, "W:"), (c, "C:")):
+        if _under(f, top):
+            return drive + "\\" + f[len(top):].strip("/").replace("/", "\\")
+    return "Z:" + f.replace("/", "\\")
+
+
+def win_unix(d, wp):
+    """the file behind a Windows path of the prefix (names compared without case); None when it is not there"""
+    if len(wp) < 3 or wp[1] != ":" or wp[2] not in "\\/":
+        return None
+    p = os.path.join(d, "dosdevices", wp[0].lower() + ":")
+    for part in [x for x in wp[3:].replace("/", "\\").split("\\") if x]:
+        if not os.path.lexists(os.path.join(p, part)):
+            try:
+                part = [n for n in os.listdir(p) if n.lower() == part.lower()][0]
+            except (OSError, IndexError):
+                return None
+        p = os.path.join(p, part)
+    return p if os.path.exists(p) else None
+
+
+def win_settle(name, limit=10.0):
+    """waits (at most `limit` seconds) for Wine's winemenubuilder: it writes the menu entries of what was installed
+    after the installer has gone"""
+    ns = win_session_info(name).get("ns", "")
+    t0 = time.time()
+    while time.time() - t0 < limit:
+        busy = False
+        for pid in os.listdir("/proc"):
+            if pid.isdigit() and "winemenubuilder" in read("/proc/%s/cmdline" % pid):
+                try:
+                    busy = busy or not ns or os.readlink("/proc/%s/ns/pid" % pid) == ns
+                except OSError:
+                    pass
+        if not busy:
+            return
+        time.sleep(0.2)
+
+
+def win_after(ctx, name):
+    """what follows every program: the applications list is brought up to date"""
+    if not ctx.dry:
+        win_settle(name)
+        win_sync_all(ctx)
 
 
 def win_create(ctx, a):
     d = prefix_dir(a.prefix)
     if os.path.isdir(d):
         die("prefix %s exists" % a.prefix)
-    if not ctx.dry:
-        os.makedirs(WINE_ROOT, exist_ok=True)
-    ctx.echo(["env", "WINEPREFIX=" + d, "WINEARCH=" + a.arch, "wineboot", "--init"])
-    if not ctx.dry:
-        subprocess.run(["wineboot", "--init"], env=wine_env(d, a.arch), check=False)
+    win_prepare(ctx, a.prefix, a, create=True, arch=a.arch)
     return 0
 
 
 def win_run(ctx, a):
     d = prefix_dir(a.prefix)
-    if not os.path.isdir(d) and not ctx.dry:
-        die("no prefix %s; `silik win create %s`" % (a.prefix, a.prefix))
     if not a.cmd:
-        die("silik win run PREFIX -- PROGRAM.exe [ARGS]", 2)
-    ctx.echo(["env", "WINEPREFIX=" + d, "wine"] + a.cmd)
-    if ctx.dry:
-        return 0
-    return subprocess.run(["wine"] + a.cmd, env=wine_env(d), check=False).returncode
+        die("silik win run [--no-net] [--no-sandbox] PREFIX -- PROGRAM.exe [ARGS]", 2)
+    win_prepare(ctx, a.prefix, a)
+    cmd, show = list(a.cmd), []
+    if os.path.isabs(cmd[0]) and os.path.isfile(cmd[0]):      # a file of this system: what `open` does for it
+        cmd[0] = os.path.realpath(cmd[0])
+        show = win_show(cmd[0], d)
+    rc = win_exec(ctx, a.prefix, d, ["wine"] + cmd, a, show=show)
+    win_after(ctx, a.prefix)
+    return rc
+
+
+def win_tty():
+    """True when the command was typed in a terminal (any of its three streams is one), or has no display to open
+    a console window on; False for a double-click"""
+    return any(f is not None and f.isatty() for f in (sys.stdin, sys.stdout, sys.stderr)) or not os.environ.get("DISPLAY")
+
+
+def win_cui(f):
+    """True when the .exe is a console program (the Subsystem field of its PE header is 3)"""
+    try:
+        with open(f, "rb") as fh:
+            head = fh.read(4096)
+        pe = int.from_bytes(head[0x3c:0x40], "little")
+        return head[:2] == b"MZ" and head[pe:pe + 4] == b"PE\0\0" and int.from_bytes(head[pe + 92:pe + 94], "little") == 3
+    except OSError:
+        return False
+
+
+def win_open(ctx, a):
+    """what a double-click on a Windows file runs. Installers and portable programs are not told apart: both run in
+    the prefix (the one named, or "default", made on first use); an installer installs into it. Without a terminal
+    (a double-click) a console program or a batch file gets Wine's console window, as it gets one on Windows."""
+    f = os.path.realpath(a.file)
+    ext = os.path.splitext(f)[1].lower()
+    if ext not in WIN_EXT:
+        win_die(ctx, "%s: not a Windows program (%s)" % (a.file, " ".join(WIN_EXT)), 2)
+    if not os.path.isfile(f) and not ctx.dry:
+        win_die(ctx, "no such file: " + a.file)
+    name = a.prefix or WIN_DEFAULT
+    d, shared = win_prepare(ctx, name, a, create=True), win_shared()
+    show = win_show(f, d) if win_boxed(a) else []
+    if show:
+        print("silik: %s is shown to the program, read-only (the file is outside %s)" % (show[0], shared), file=sys.stderr)
+    if ext == ".exe":
+        cmd = [f]
+    elif ext == ".msi":
+        cmd = ["msiexec", "/i", win_path(f, d, shared)]
+    elif ext in (".bat", ".cmd"):
+        cmd = ["cmd", "/c", win_path(f, d, shared)]
+    else:                                   # .lnk: Wine's start follows the shortcut (and does not wait for its program)
+        cmd = ["start", win_path(f, d, shared)]
+    window = not win_tty() and (ext in (".bat", ".cmd") or (ext == ".exe" and win_cui(f)))
+    cmd = ["wine"] + (["wineconsole"] if window else []) + cmd
+    rc = win_exec(ctx, name, d, cmd + list(a.cmd or []), a, show=show, cwd=os.path.dirname(f))
+    win_after(ctx, name)
+    return rc
 
 
 def win_install(ctx, a):
-    a.cmd = [a.setup] + (a.args or [])
-    return win_run(ctx, a)
+    a.file, a.cmd = a.setup, a.args or []
+    return win_open(ctx, a)
+
+
+def win_stop(ctx, a):
+    """ends every program of the prefix (wineserver -k), in the sandbox when that is where they run"""
+    d = prefix_dir(a.prefix)
+    if not os.path.isdir(d) and not ctx.dry:
+        die("no prefix %s" % a.prefix)
+    s = win_session_info(a.prefix)
+    tail = wine_argv(d, ["wineserver", "-k"])
+    if s:
+        win_enter(ctx, d, s, tail, display=False)
+        t0 = time.time()
+        while not ctx.dry and win_session_info(a.prefix) and time.time() - t0 < 10:
+            time.sleep(0.1)
+    else:
+        ctx.run(tail, check=False)
+    return 0
 
 
 def win_rm(ctx, a):
     d = prefix_dir(a.prefix)
-    ctx.run(["rm", "-rf", "--", d])
+    if win_session_info(a.prefix) or (not ctx.dry and win_outside(d)):      # its programs end first
+        win_stop(ctx, a)
+    ctx.run(["rm", "-rf", "--", d, win_runtime(a.prefix)])
+    if not ctx.dry:
+        win_sync_all(ctx)
     return 0
 
 
@@ -395,7 +921,275 @@ def win_list(ctx, a):
         for p in ps:
             print(p)
         if not ps:
-            print("no Wine prefixes; `silik win create NAME` makes one")
+            print("no Wine prefixes; `silik win open FILE.exe` makes the prefix \"%s\", `silik win create NAME` another" % WIN_DEFAULT)
+    return 0
+
+
+# -- installed Windows programs as applications of the desktop
+def desktop_read(path):
+    """the [Desktop Entry] group of a desktop file: key -> value as written"""
+    e, on = {}, False
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            for l in f:
+                l = l.strip()
+                if l.startswith("["):
+                    on = l == "[Desktop Entry]"
+                elif on and "=" in l and not l.startswith("#"):
+                    k, v = l.split("=", 1)
+                    e[k.strip()] = v.strip()
+    except OSError:
+        pass
+    return e
+
+
+def exec_args(line):
+    """the arguments of an Exec= value (the string escapes, then the quoting rules), without its field codes"""
+    s, i, out = line, 0, []
+    while i < len(s):                       # string escapes: \s \n \t \r \\
+        if s[i] == "\\" and i + 1 < len(s):
+            out.append({"s": " ", "n": "\n", "t": "\t", "r": "\r", "\\": "\\"}.get(s[i + 1], "\\" + s[i + 1]))
+            i += 1
+        else:
+            out.append(s[i])
+        i += 1
+    s, i, args, cur, quoted, some = "".join(out), 0, [], [], False, False
+    while i < len(s):
+        c = s[i]
+        if quoted:
+            if c == "\\" and i + 1 < len(s) and s[i + 1] in '"`$\\':
+                cur.append(s[i + 1])
+                i += 1
+            elif c == '"':
+                quoted = False
+            else:
+                cur.append(c)
+        elif c == '"':
+            quoted = some = True
+        elif c == "\\" and i + 1 < len(s):      # Wine writes "\ " for a space outside quotes
+            cur.append(s[i + 1])
+            some = True
+            i += 1
+        elif c in " \t\n":
+            if cur or some:
+                args.append("".join(cur))
+            cur, some = [], False
+        else:
+            cur.append(c)
+        i += 1
+    if cur or some:
+        args.append("".join(cur))
+    return [p.replace("%%", "%") for p in args if not (len(p) == 2 and p[0] == "%" and p[1] != "%")]
+
+
+def exec_line(argv):
+    """an Exec= value for these arguments (Desktop Entry Specification: quoting, then the string escapes)"""
+    out = []
+    for a in argv:
+        if a and all(c.isalnum() or c in "-_./:=@,+" for c in a):
+            out.append(a)
+        else:
+            out.append('"' + "".join("\\" + c if c in '"`$\\' else c for c in a) + '"')
+    return " ".join(out).replace("%", "%%").replace("\\", "\\\\")
+
+
+def win_slug(s):
+    out = "".join(c.lower() if c.isalnum() else "-" for c in s)
+    while "--" in out:
+        out = out.replace("--", "-")
+    return out.strip("-") or "program"
+
+
+def win_apps_dir():
+    return os.path.join(data_home(), "applications", "silik-win")
+
+
+def win_icons(top, name):
+    """the files of icon `name` in the hicolor theme under data folder `top`: [(size folder, file name)]"""
+    out, hi = [], os.path.join(top, "icons", "hicolor")
+    try:
+        sizes = sorted(os.listdir(hi))
+    except OSError:
+        return out
+    for sz in sizes:
+        apps = os.path.join(hi, sz, "apps")
+        try:
+            # plain files in plain folders only: these come from inside a prefix, and are copied out of it
+            if not os.path.islink(os.path.join(hi, sz)) and not os.path.islink(apps):
+                out += [(sz, fn) for fn in sorted(os.listdir(apps))
+                        if os.path.splitext(fn)[0] == name and stat.S_ISREG(os.lstat(os.path.join(apps, fn)).st_mode)]
+        except OSError:
+            pass
+    return out
+
+
+def win_adopt(dry):
+    """entries Wine wrote straight into the user's applications (a program run without the sandbox, or Wine used by
+    hand on one of our prefixes) move to their prefix's own menu; those of a removed prefix go"""
+    real = os.path.join(data_home(), "applications", "wine")
+    for dp, _dn, fns in os.walk(real, topdown=False):
+        for fn in sorted(fns):
+            src = os.path.join(dp, fn)
+            e = desktop_read(src)
+            pfx = [x[11:] for x in exec_args(e.get("Exec", "")) if x.startswith("WINEPREFIX=")]
+            if not fn.endswith(".desktop") or not pfx or not _under(pfx[0], WINE_ROOT) or pfx[0] == WINE_ROOT:
+                continue
+            name = pfx[0][len(WINE_ROOT):].strip("/").split("/")[0]
+            keep = os.path.isdir(os.path.join(WINE_ROOT, name))
+            mine = os.path.join(WINE_ROOT, name, "home", ".local", "share")
+            if dry:
+                continue
+            for sz, icon in win_icons(data_home(), e.get("Icon", "\0")):
+                isrc = os.path.join(data_home(), "icons", "hicolor", sz, "apps", icon)
+                if keep:
+                    os.makedirs(os.path.join(mine, "icons", "hicolor", sz, "apps"), exist_ok=True)
+                    shutil.move(isrc, os.path.join(mine, "icons", "hicolor", sz, "apps", icon))
+                else:
+                    os.unlink(isrc)
+            if keep:
+                dst = os.path.join(mine, "applications", "wine", os.path.relpath(src, real))
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                shutil.move(src, dst)
+            else:
+                os.unlink(src)
+        if not dry:
+            try:
+                os.rmdir(dp)        # only when it is empty now
+            except OSError:
+                pass
+
+
+def win_menu(name):
+    """the start-menu entries Wine's winemenubuilder wrote for prefix `name` -> [(slug, entry, icon files)]"""
+    d = prefix_dir(name)
+    top = os.path.join(d, "home", ".local", "share")
+    out, used = [], set()
+    for dp, dn, fns in os.walk(os.path.join(top, "applications", "wine")):
+        dn.sort()
+        for fn in sorted(fns):
+            e = desktop_read(os.path.join(dp, fn))
+            argv = exec_args(e.get("Exec", ""))
+            w = [i for i, x in enumerate(argv) if os.path.basename(x) in ("wine", "wine64", "wine-stable")]
+            run = argv[w[0] + 1:] if w else []
+            if not fn.endswith(".desktop") or not run:
+                continue
+            if run[0][1:3] in (":\\", ":/") and win_unix(d, run[0]) is None:      # the shortcut is gone: uninstalled
+                continue
+            slug = base = win_slug(e.get("Name") or fn[:-8])
+            n = 2
+            while slug in used:
+                slug, n = "%s-%d" % (base, n), n + 1
+            used.add(slug)
+            icons = win_icons(top, e.get("Icon", "\0"))
+            new = {"Type": "Application", "Name": e.get("Name") or fn[:-8],
+                   "Exec": exec_line(["silik", "win", "run", name, "--"] + run),
+                   "Icon": "silik-win-%s-%s" % (name, e["Icon"]) if icons else WIN_ICON,
+                   "X-SilikOS-Prefix": name}
+            for k in ("Comment", "Path", "StartupNotify", "StartupWMClass", "Categories"):
+                # a window class that is not a Windows program's would let the entry claim another application's windows
+                if e.get(k) and (k != "StartupWMClass" or e[k].lower().endswith(".exe")):
+                    new[k] = e[k]
+            out.append((slug, new, [(sz, icon, os.path.join(top, "icons", "hicolor", sz, "apps", icon)) for sz, icon in icons]))
+    return out
+
+
+def win_sync_all(ctx, say=False):
+    """the applications list follows the prefixes: an entry per installed Windows program (Wine's own start-menu
+    entries, with `silik win run PREFIX -- ...` as their command), none for what was uninstalled or removed"""
+    dry, apps = ctx.dry, win_apps_dir()
+    win_adopt(dry)
+    want, icons = {}, {}
+    for name in prefixes():
+        for slug, e, ics in win_menu(name):
+            text = "[Desktop Entry]\n" + "".join("%s=%s\n" % (k, e[k]) for k in e)
+            want[os.path.join(apps, name, slug + ".desktop")] = (text, "win/%s  %s  (%s)" % (slug, e["Name"], name))
+            for sz, icon, src in ics:
+                icons[os.path.join(data_home(), "icons", "hicolor", sz, "apps", "silik-win-%s-%s" % (name, icon))] = src
+    have = [os.path.join(dp, fn) for dp, _dn, fns in os.walk(apps) for fn in fns]
+    hi = os.path.join(data_home(), "icons", "hicolor")
+    have_icons = [os.path.join(dp, fn) for dp, _dn, fns in os.walk(hi) for fn in fns if fn.startswith("silik-win-")]
+    changed = 0
+    for path in sorted(want):
+        text, line = want[path]
+        if read(path, None) != text:
+            print("%s %s" % ("+" if path not in have else "~", line))
+            changed += 1
+            if not dry:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(text)
+    for path in sorted(have):
+        if path not in want:
+            print("- win/%s  (%s)" % (os.path.basename(path)[:-8], os.path.basename(os.path.dirname(path))))
+            changed += 1
+            if not dry:
+                os.unlink(path)
+    if not dry:
+        for dst, src in icons.items():
+            try:
+                if not os.path.exists(dst) or os.path.getsize(dst) != os.path.getsize(src) or os.path.getmtime(dst) < os.path.getmtime(src):
+                    os.makedirs(os.path.dirname(dst), exist_ok=True)
+                    shutil.copyfile(src, dst)
+                    changed += 1
+            except OSError:
+                pass
+        for path in have_icons:
+            if path not in icons:
+                os.unlink(path)
+                changed += 1
+        for dp, _dn, _fns in os.walk(apps, topdown=False):
+            try:
+                os.rmdir(dp)        # the folder of a prefix without programs
+            except OSError:
+                pass
+        if changed and os.path.isdir(hi):
+            os.utime(hi)            # icon themes are read again when their folder changes
+    if say and not changed:
+        print("the applications list is up to date: %d Windows program%s" % (len(want), "" if len(want) == 1 else "s"))
+    return changed
+
+
+def win_sync(ctx, a):
+    win_sync_all(ctx, say=True)
+    return 0
+
+
+def win_programs():
+    """the Windows programs in the applications list (what `silik win sync` wrote)"""
+    out, apps = [], win_apps_dir()
+    taken = set(prefixes()) | {"vm"}
+    try:
+        names = sorted(os.listdir(apps))
+    except OSError:
+        names = []
+    for name in names:
+        try:
+            fns = sorted(os.listdir(os.path.join(apps, name)))
+        except OSError:
+            continue
+        for fn in fns:
+            e = desktop_read(os.path.join(apps, name, fn))
+            argv = exec_args(e.get("Exec", ""))
+            if not fn.endswith(".desktop") or "--" not in argv:
+                continue
+            slug = fn[:-8]
+            address = slug if slug not in taken else "%s-%s" % (slug, name)
+            taken.add(address)
+            out.append({"address": "win/" + address, "name": e.get("Name", slug), "prefix": name, "run": argv[argv.index("--") + 1:],
+                        "id": "silik-win-%s-%s" % (name, fn), "wmclass": e.get("StartupWMClass", ""), "icon": e.get("Icon", ""),
+                        "file": os.path.join(apps, name, fn)})
+    return out
+
+
+def win_apps(ctx, a):
+    ps = win_programs()
+    if a.json:
+        print(json.dumps(ps, indent=1))
+    else:
+        for p in ps:
+            print("%-28s %-12s %s" % (p["address"], p["prefix"], p["name"]))
+        if not ps:
+            print("no installed Windows programs; an installer opened with `silik win open SETUP.exe` adds its own")
     return 0
 
 
@@ -1182,11 +1976,20 @@ def parser():
     x = e.add_parser("kernel-arg"); x.set_defaults(fn=eda_kernel_arg)
 
     w = s.add_parser("win", help="Windows programs: Wine prefixes and a Windows virtual machine").add_subparsers(dest="cmd")
+    def box(x):   # the sandbox switches, before the positional arguments
+        x.add_argument("--no-net", action="store_true", help="the program has no network")
+        x.add_argument("--no-sandbox", action="store_true", help="run without the sandbox: the program sees the whole home folder")
+        return x
     x = w.add_parser("list"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=win_list)
-    x = w.add_parser("create"); x.add_argument("prefix"); x.add_argument("--arch", default="win64", choices=["win64", "win32"]); x.set_defaults(fn=win_create)
-    x = w.add_parser("run"); x.add_argument("prefix"); x.add_argument("cmd", nargs=argparse.REMAINDER); x.set_defaults(fn=win_run)
-    x = w.add_parser("install"); x.add_argument("prefix"); x.add_argument("setup"); x.add_argument("args", nargs="*"); x.set_defaults(fn=win_install)
+    x = box(w.add_parser("open", help="what a double-click runs: FILE.exe .msi .bat .cmd .lnk, in the prefix \"default\" or --prefix NAME"))
+    x.add_argument("--prefix"); x.add_argument("file"); x.add_argument("cmd", nargs=argparse.REMAINDER); x.set_defaults(fn=win_open)
+    x = box(w.add_parser("create")); x.add_argument("prefix"); x.add_argument("--arch", default="win64", choices=["win64", "win32"]); x.set_defaults(fn=win_create)
+    x = box(w.add_parser("run")); x.add_argument("prefix"); x.add_argument("cmd", nargs=argparse.REMAINDER); x.set_defaults(fn=win_run)
+    x = box(w.add_parser("install")); x.add_argument("prefix"); x.add_argument("setup"); x.add_argument("args", nargs="*"); x.set_defaults(fn=win_install)
+    x = w.add_parser("stop", help="end every program of the prefix"); x.add_argument("prefix"); x.set_defaults(fn=win_stop)
     x = w.add_parser("rm"); x.add_argument("prefix"); x.set_defaults(fn=win_rm)
+    x = w.add_parser("sync", help="installed Windows programs become applications of the desktop"); x.set_defaults(fn=win_sync)
+    x = w.add_parser("apps", help="the installed Windows programs"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=win_apps)
     v = w.add_parser("vm").add_subparsers(dest="vmcmd")
     x = v.add_parser("create"); x.add_argument("--iso", required=True); x.add_argument("--name", default="windows")
     x.add_argument("--ram", type=int, default=8); x.add_argument("--disk", type=int, default=80); x.add_argument("--cpus", type=int, default=4)

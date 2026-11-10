@@ -23,17 +23,20 @@ TEXT = {
            "none": "nothing matches", "status": "system status", "update": "update the system", "settings": "settings",
            "terminal": "terminal", "files": "files", "lock": "lock the screen", "logout": "log out", "eda_check": "check the EDA setup",
            "hw": "hardware", "enter_box": "shell in the box", "run_in_box": "run in the box", "prefix": "Wine prefix: its C: drive",
-           "run_in_prefix": "run in the prefix", "open": "open", "log": "session log", "winvm": "start the Windows machine"},
+           "run_in_prefix": "run in the prefix", "open": "open", "log": "session log", "winvm": "start the Windows machine",
+           "win_program": "Windows program", "win_open": "run with Wine, in the sandbox"},
     "ca": {"placeholder": "adreça o nom: app/ eda/ win/ sys/ o un camí", "run": "executa", "complete": "completa", "close": "tanca",
            "none": "no hi ha cap coincidència", "status": "estat del sistema", "update": "actualitza el sistema", "settings": "configuració",
            "terminal": "terminal", "files": "fitxers", "lock": "bloqueja la pantalla", "logout": "tanca la sessió", "eda_check": "comprova l'entorn EDA",
            "hw": "maquinari", "enter_box": "shell a la caixa", "run_in_box": "executa a la caixa", "prefix": "prefix de Wine: la seva unitat C:",
-           "run_in_prefix": "executa al prefix", "open": "obre", "log": "registre de la sessió", "winvm": "engega la màquina Windows"},
+           "run_in_prefix": "executa al prefix", "open": "obre", "log": "registre de la sessió", "winvm": "engega la màquina Windows",
+           "win_program": "programa de Windows", "win_open": "executa amb Wine, dins l'entorn aïllat"},
     "es": {"placeholder": "dirección o nombre: app/ eda/ win/ sys/ o una ruta", "run": "ejecuta", "complete": "completa", "close": "cierra",
            "none": "no hay coincidencias", "status": "estado del sistema", "update": "actualiza el sistema", "settings": "configuración",
            "terminal": "terminal", "files": "archivos", "lock": "bloquea la pantalla", "logout": "cierra la sesión", "eda_check": "comprueba el entorno EDA",
            "hw": "hardware", "enter_box": "shell en la caja", "run_in_box": "ejecuta en la caja", "prefix": "prefijo de Wine: su unidad C:",
-           "run_in_prefix": "ejecuta en el prefijo", "open": "abre", "log": "registro de la sesión", "winvm": "arranca la máquina Windows"},
+           "run_in_prefix": "ejecuta en el prefijo", "open": "abre", "log": "registro de la sesión", "winvm": "arranca la máquina Windows",
+           "win_program": "programa de Windows", "win_open": "ejecuta con Wine, en el entorno aislado"},
 }
 
 
@@ -46,9 +49,13 @@ def lang_of(env=None):
     return "en"
 
 
+WIN_FILES = (".exe", ".msi", ".bat", ".cmd", ".lnk")    # what `silik win open` takes
+
+
 class Item:
-    def __init__(self, address, title, argv, terminal=False):
+    def __init__(self, address, title, argv, terminal=False, takes=False):
         self.address, self.title, self.argv, self.terminal = address, title, list(argv), terminal
+        self.takes = takes      # a box or a prefix: `address COMMAND...` runs a command inside it
 
     @property
     def twin(self):
@@ -101,6 +108,8 @@ def app_items(dirs, lang="en"):
                 continue
             if e.get("Type", "Application") != "Application" or e.get("NoDisplay", "false").lower() == "true" or e.get("Hidden", "false").lower() == "true":
                 continue
+            if e.get("X-SilikOS-Prefix"):       # an installed Windows program: listed as win/... (system_items)
+                continue
             argv = exec_argv(e.get("Exec", ""))
             if not argv:
                 continue
@@ -117,7 +126,7 @@ def silik_json(args):
         return []
 
 
-def system_items(t, boxes=(), prefixes=()):
+def system_items(t, boxes=(), prefixes=(), programs=()):
     out = [
         Item("sys/status", t["status"], [SILIK, "status"], True),
         Item("sys/update", t["update"], [SILIK, "update"], True),
@@ -133,9 +142,14 @@ def system_items(t, boxes=(), prefixes=()):
     ]
     for b in boxes:
         n = b["name"] if isinstance(b, dict) else b
-        out.append(Item("eda/" + n, t["enter_box"], [SILIK, "eda", "enter", n], True))
+        out.append(Item("eda/" + n, t["enter_box"], [SILIK, "eda", "enter", n], True, takes=True))
     for p in prefixes:
-        out.append(Item("win/" + p, t["prefix"], ["xdg-open", os.path.join(os.path.expanduser("~/.local/share"), "silikos", "wine", p, "drive_c")]))
+        out.append(Item("win/" + p, t["prefix"], ["xdg-open", os.path.join(os.path.expanduser("~/.local/share"), "silikos", "wine", p, "drive_c")], takes=True))
+    for g in programs:      # the installed Windows programs (`silik win apps --json`): the command their desktop entry runs
+        try:
+            out.append(Item(g["address"], "%s (%s)" % (g["name"], t["win_program"]), [SILIK, "win", "run", g["prefix"], "--"] + list(g["run"])))
+        except (KeyError, TypeError):
+            pass
     return out
 
 
@@ -162,19 +176,24 @@ def match(items, query, t, limit=9):
     if not q:
         return [i for i in items if i.address.startswith("sys/")][:limit]
     head, _, rest = q.partition(" ")
-    if rest and head.startswith("eda/") and head != "eda/check":
+    fixed = set(i.address for i in items if not i.takes)     # eda/check, win/vm, an installed program: no command inside
+    if rest and head.startswith("eda/") and head not in fixed:
         return [Item(head, t["run_in_box"] + ": " + rest, [SILIK, "eda", "run", head[4:], "--"] + shlex.split(rest))]
-    if rest and head.startswith("win/") and head != "win/vm":
+    if rest and head.startswith("win/") and head not in fixed:
         return [Item(head, t["run_in_prefix"] + ": " + rest, [SILIK, "win", "run", head[4:], "--"] + shlex.split(rest))]
     if q[0] in "/~":
+        def opens(shown, full):     # a Windows file opens the way a double-click on it does
+            if full.lower().endswith(WIN_FILES) and os.path.isfile(full):
+                return Item(shown, t["win_open"], [SILIK, "win", "open", full])
+            return Item(shown, t["open"], ["xdg-open", full])
         p = os.path.expanduser(q)
-        out = [Item(q, t["open"], ["xdg-open", p])] if os.path.exists(p) else []
+        out = [opens(q, p)] if os.path.exists(p) else []
         d, base = (p, "") if p.endswith("/") else os.path.split(p)
         try:
             for n in sorted(os.listdir(d or "/")):
                 if n.startswith(base) and not n.startswith(".") and len(out) < limit and os.path.join(d, n) != p:
                     full = os.path.join(d, n)
-                    out.append(Item(full + ("/" if os.path.isdir(full) else ""), t["open"], ["xdg-open", full]))
+                    out.append(opens(full + ("/" if os.path.isdir(full) else ""), full))
         except OSError:
             pass
         return out
@@ -204,7 +223,8 @@ def launch(item):
 
 def all_items(lang):
     t = TEXT[lang]
-    return system_items(t, silik_json(["eda", "list", "--json"]), silik_json(["win", "list", "--json"])) + app_items(desktop_dirs(), lang)
+    return system_items(t, silik_json(["eda", "list", "--json"]), silik_json(["win", "list", "--json"]),
+                        silik_json(["win", "apps", "--json"])) + app_items(desktop_dirs(), lang)
 
 
 # ------------------------------------------------------------------ window
@@ -331,7 +351,7 @@ def run_window(query, theme, lang):
         if k in (Gdk.KEY_Tab, Gdk.KEY_ISO_Left_Tab):
             it = current()
             if it:
-                entry.set_text(it.address + (" " if it.address.startswith(("eda/", "win/")) and it.address not in ("eda/check", "win/vm") else ""))
+                entry.set_text(it.address + (" " if it.takes else ""))
                 entry.set_position(-1)
             return True
         if k in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
