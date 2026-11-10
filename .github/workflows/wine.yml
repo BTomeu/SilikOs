@@ -1,0 +1,63 @@
+# Wine for SilikOS: upstream's source built on EL 9 as the package silik-wine (wine/silik-wine.spec), tried with a
+# 64-bit and a 32-bit Windows program, and kept as the release `wine-<version>`. The CI's ISO takes the package from
+# that release (workflow CI), so the installed system has Wine and the installation test runs a Windows program in it.
+# Started by hand: Actions > Wine > Run workflow. It takes about an hour.
+name: Wine
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Wine release to build
+        default: '11.0'
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    container: almalinux:9
+    timeout-minutes: 300
+    steps:
+      - name: Tools
+        run: dnf -y -q install git tar gzip findutils
+      - uses: actions/checkout@v4
+      - name: Build silik-wine ${{ inputs.version }}
+        run: bash tools/build_wine.sh "${{ inputs.version }}"
+      - name: Install it and run two Windows programs (64-bit and 32-bit)
+        run: |
+          dnf -y -q install build/extra/silik-wine-*.rpm
+          wine --version
+          printf '#include <stdio.h>\nint main(void) { puts("hello from a Windows program"); return 0; }\n' > hello.c
+          x86_64-w64-mingw32-gcc -O2 -o hello64.exe hello.c
+          i686-w64-mingw32-gcc -O2 -o hello32.exe hello.c
+          export WINEDEBUG=-all WINEPREFIX=$PWD/prefix HOME=$PWD/home
+          mkdir -p "$HOME"
+          for p in hello64 hello32; do
+            wine $p.exe | tr -d '\r' | tee $p.txt
+            grep -qx "hello from a Windows program" $p.txt
+            echo "::notice title=Wine ${{ inputs.version }} on EL 9::$p.exe ran"
+          done
+          wineserver -k || true
+          rpm -qi silik-wine | sed -n '1,8p'
+          echo "::notice title=silik-wine::$(ls -la build/extra/silik-wine-*.rpm | awk '{print $5, $9}')"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: silik-wine
+          path: build/extra/silik-wine-*.rpm
+          compression-level: 0
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: silik-wine
+          path: dist
+      - name: Release wine-${{ inputs.version }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="wine-${{ inputs.version }}"
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || gh release create "$tag" --repo "$GITHUB_REPOSITORY" \
+            --title "silik-wine ${{ inputs.version }}" --prerelease \
+            --notes "Wine ${{ inputs.version }} (upstream's source, unmodified, LGPL) built on EL 9 for SilikOS: wine/silik-wine.spec. Not a product of or supported by WineHQ."
+          gh release upload "$tag" --repo "$GITHUB_REPOSITORY" --clobber dist/silik-wine-*.rpm

@@ -1,0 +1,42 @@
+
+# ======================================================================================================================
+# CI ONLY (tests/install/ci.ks.in). NEVER PART OF THE SHIPPED KICKSTART OR OF THE ISO.
+# The shipped kickstart never selects or erases a disk; an unattended test has to. These lines are appended to a copy
+# of kickstart/silikos.ks by tests/install/run.sh and given to the installer from a separate disk image, for a
+# throw-away virtual machine whose only disk is vda. tests/test_install_ci.py holds this separation.
+# ======================================================================================================================
+text
+ignoredisk --only-use=vda
+zerombr
+clearpart --all --initlabel --drives=vda
+autopart --type=plain --nohome
+lang en_US.UTF-8
+keyboard us
+timezone UTC --utc
+rootpw --plaintext silikos-ci
+user --name=tester --password=silikos-ci --plaintext --groups=wheel
+firstboot --disable
+poweroff
+
+%post --log=/root/silikos-ci-post.log
+# the test user's session starts by itself, without the first-run assistant, so that the desktop can be looked at
+sed -i 's/^\[daemon\]/[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin=tester/' /etc/gdm/custom.conf
+install -d -o tester -g tester /home/tester/.config
+echo yes > /home/tester/.config/gnome-initial-setup-done
+chown tester:tester /home/tester/.config/gnome-initial-setup-done
+install -m 0755 /dev/stdin /usr/local/sbin/silikos-ci-check <<'CHECK'
+@CHECK@
+CHECK
+cat > /etc/systemd/system/silikos-ci-check.service <<'UNIT'
+[Unit]
+Description=SilikOS CI: check the installed system and report on the serial port
+After=graphical.target
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/silikos-ci-check
+StandardOutput=journal
+[Install]
+WantedBy=graphical.target
+UNIT
+systemctl enable silikos-ci-check.service
+%end

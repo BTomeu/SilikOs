@@ -9,6 +9,7 @@ an EL9 system. It is a try: `docs/STATUS.md` says what has been run and what has
 |---|---|---|
 | Base | AlmaLinux 9 packages and kernel, from its own repositories | `kickstart/silikos.ks` |
 | Desktop | GNOME Shell on X11 laid out as the Silik interface (command line, text rail, status bar; one ink on paper); the **COMMAND** bar on Super+Space | `packages/silikos-desktop`, `packages/silik-command` |
+| Tested by installing it | every change is built into an ISO, installed unattended in a virtual machine, booted and checked; the last report and pictures of the installed system are on the branch [`ci-results`](../../tree/ci-results) | `.github/workflows/ci.yml`, `tests/install/` |
 | Security | SELinux enforcing (the base's), a firewall zone that drops incoming connections, sshd off, daily security-only updates, screen lock; `silik secure status` audits, `silik secure apply` sets; `docs/SECURITY.md` | `packages/silikos-security` |
 | SilikStudio | the SilikVolt suite as a native application: a window of its own, the first key of the rail, its programs in the PATH. Its package is built from SilikStudio's repository on EL 9 and put in `build/extra/` for the ISO | `tools/build_iso.sh`, `docs/img/silikstudio.png` |
 | `silik` | one command behind every action; prints what it runs; `--dry-run` | `packages/silik-tools` |

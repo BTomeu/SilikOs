@@ -1,5 +1,5 @@
 Name:           silik-win
-Version:        0.3.1
+Version:        0.3.2
 Release:        1%{?dist}
 Summary:        Windows programs on SilikOS: a double-click runs them with Wine in a sandbox; a Windows virtual machine for the rest
 License:        LicenseRef-SilikVolt
@@ -10,7 +10,9 @@ Requires:       bubblewrap
 Requires:       util-linux
 Requires:       coreutils
 Requires:       shared-mime-info
-Recommends:     wine
+# Wine: silik-wine (wine/silik-wine.spec, built by tools/build_wine.sh) when the ISO or a repository carries it;
+# EPEL 9's wine cannot be installed on EL 9.8 (its wine-core needs a Mesa library the base no longer has)
+Recommends:     silik-wine
 Recommends:     libnotify
 Recommends:     qemu-kvm
 Recommends:     libvirt-daemon-kvm

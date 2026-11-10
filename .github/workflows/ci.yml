@@ -1,0 +1,121 @@
+# SilikOS CI: on every change, the unit tests and the packages; then the real thing: the ISO is built and installed,
+# unattended, in a virtual machine (KVM), the installed system boots, checks itself and its screen is saved
+# (tests/install/run.sh). The report and the pictures of the last run on main are kept on the branch `ci-results`.
+# On a tag v*, the ISO and the packages are attached to a release.
+name: CI
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: write
+jobs:
+  packages:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: sudo apt-get update -q && sudo apt-get install -y -q rpm createrepo-c
+      - name: Unit tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Packages
+        run: bash tools/build_rpms.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: silikos-packages
+          path: build/repo/*.rpm
+
+  install:
+    needs: packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 170
+    steps:
+      - uses: actions/checkout@v4
+      - name: KVM for the runner's user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+      - name: Tools and disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          sudo apt-get update -q
+          sudo apt-get install -y -q rpm createrepo-c xorriso mtools cpio qemu-system-x86 qemu-utils imagemagick gcc-mingw-w64-x86-64
+          df -h /
+      - name: Wine for the ISO, when the workflow "Wine" has made it (release wine-*)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p build/extra
+          tag=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 50 --json tagName -q '[.[] | select(.tagName | startswith("wine-"))][0].tagName' || true)
+          if [ -n "$tag" ]; then gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern 'silik-wine-*.rpm' --dir build/extra && ls -la build/extra
+          else echo "::notice title=Wine::no wine-* release yet: the ISO of this run has no Wine (run the workflow Wine once)"; fi
+      - name: Packages and ISO
+        run: |
+          bash tools/build_rpms.sh
+          bash tools/build_iso.sh
+      - name: Install the ISO in a virtual machine, boot the installed system, check it
+        run: bash tests/install/run.sh build/SilikOS-*-netinstall.iso build/install-test
+      - name: The report
+        if: always()
+        run: |
+          {
+            echo '### SilikOS installed and booted'
+            echo '```'
+            cat build/install-test/report.txt 2>/dev/null || echo 'no report: see the installer console (artifact install-test)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: install-test
+          path: |
+            build/install-test/*.log
+            build/install-test/*.txt
+            build/install-test/*.png
+            build/install-test/*.ppm
+            build/install-test/ci.ks
+      - name: Keep the last report and pictures of main on the branch ci-results
+        if: always() && github.ref == 'refs/heads/main'
+        run: |
+          d=$(mktemp -d)
+          cp build/install-test/report.txt build/install-test/*.png "$d/" 2>/dev/null || true
+          tr -d '\r' < build/install-test/install.log 2>/dev/null | tail -120 > "$d/install-console-tail.txt" || true
+          printf '# SilikOS: the last unattended installation on main\n\nCommit %s, run %s.\n\n`report.txt`: what the installed system reported on its first boot. `desktop.png`, `start.png`, `command.png`: its screen (the desktop, Start after the Super key, the COMMAND bar after Super+Space).\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > "$d/README.md"
+          cd "$d"
+          git init -q -b ci-results
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Installation test of $GITHUB_SHA"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-results
+      - uses: actions/upload-artifact@v4
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          name: silikos-iso
+          path: build/SilikOS-*-netinstall.iso
+          compression-level: 0
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: install
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Release with the ISO and the packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -la dist
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "SilikOS $GITHUB_REF_NAME" \
+            --notes "The ISO installs the system from the base's own package sources (network). What has and has not been run: docs/STATUS.md; the installation test of this tag: branch ci-results." \
+            dist/SilikOS-*-netinstall.iso dist/*.rpm
