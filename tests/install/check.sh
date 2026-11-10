@@ -53,6 +53,7 @@ has desktop.shell-theme "$(grep -c '{' /usr/share/themes/SilikOS/gnome-shell/gno
 is desktop.shell-theme-blue "$(grep -ci '3584e4' /usr/share/themes/SilikOS/gnome-shell/gnome-shell.css 2>&1)" 0
 has desktop.user-theme "$(asuser gnome-extensions info user-theme@gnome-shell-extensions.gcampax.github.com)" "ENABLED"
 is desktop.user-theme-name "$(asuser gsettings get org.gnome.shell.extensions.user-theme name)" "'SilikOS'"
+has desktop.shell-stylesheet "$(tr '\0' '\n' < /proc/$(pgrep -u tester -x gnome-shell | head -1)/environ 2> /dev/null | grep '^G_RESOURCE_OVERLAYS=' | cut -c1-90)" "/org/gnome/shell/theme/gnome-shell.css=/usr/share/themes/SilikOS"
 has desktop.super-space "$(asuser gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings)" "silik-command"
 has boot.plymouth "$(plymouth-set-default-theme 2>&1)" silikos
 s=$(silik status 2>&1); say silik.status "$([ $? = 0 ] && echo ok || echo FAIL)" "$(echo "$s" | head -3)"

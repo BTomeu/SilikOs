@@ -1,5 +1,5 @@
 Name:           silikos-desktop
-Version:        0.9.0
+Version:        0.10.0
 Release:        1%{?dist}
 Summary:        The SilikOS desktop: the Silik layout (command line, rail, status bar), GTK and shell themes, Cascadia Mono
 License:        LicenseRef-SilikVolt AND OFL-1.1
@@ -35,6 +35,8 @@ install -d %{buildroot}%{_datadir}/themes/SilikOS/gtk-3.0
 install -Dm0755 %{_sourcedir}/gtk-theme %{buildroot}%{_libexecdir}/silikos/gtk-theme
 install -Dm0755 %{_sourcedir}/resource-extract %{buildroot}%{_libexecdir}/silikos/resource-extract
 install -Dm0644 %{_sourcedir}/silikos-themes.service %{buildroot}%{_prefix}/lib/systemd/system/silikos-themes.service
+# the shell's default stylesheet is ours also on the lock and login screens (environment of every session manager)
+install -Dm0644 %{_sourcedir}/60-silikos-shell.conf %{buildroot}%{_prefix}/lib/environment.d/60-silikos-shell.conf
 install -Dm0644 %{_sourcedir}/gtk-theme.sed %{buildroot}%{_datadir}/silikos/gtk-theme.sed
 install -Dm0644 %{_sourcedir}/silik-gtk3.css %{buildroot}%{_datadir}/silikos/silik-gtk3.css
 printf '[Desktop Entry]\nType=X-GNOME-Metatheme\nName=SilikOS\nComment=One ink on paper\nEncoding=UTF-8\n\n[X-GNOME-Metatheme]\nGtkTheme=SilikOS\n' > %{buildroot}%{_datadir}/themes/SilikOS/index.theme
@@ -97,6 +99,7 @@ dconf update >/dev/null 2>&1 || :
 %{_libexecdir}/silikos/gtk-theme
 %{_libexecdir}/silikos/resource-extract
 %{_prefix}/lib/systemd/system/silikos-themes.service
+%{_prefix}/lib/environment.d/60-silikos-shell.conf
 %{_datadir}/silikos/
 %{_datadir}/gnome-shell/extensions/silik-shell@silikvolt.com/
 %license %{_datadir}/licenses/%{name}/CascadiaMono-LICENSE.txt

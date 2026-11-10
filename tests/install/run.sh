@@ -5,7 +5,7 @@
 #      the ISO itself is the one a person would use, untouched
 #   2. QEMU installs from the ISO onto an empty virtual disk and powers off
 #   3. QEMU boots that disk; the system reports its own checks on the serial port (check.sh), the screen is saved
-#      (the desktop, Start after the Super key, the COMMAND bar after Super+Space)
+#      (the desktop, Start after the Super key, the COMMAND bar after Super+Space, the lock screen and its prompt)
 #   OUT_DIR (default build/install-test): install.log, boot.log, report.txt, *.png;  exit 0 when no check failed
 #   SILIK_CI_APPEND="..."   more installer boot options, e.g. on a build machine behind a proxy:
 #                           "inst.proxy=http://10.0.2.2:PORT inst.noverifyssl" (10.0.2.2 is the host, seen from the VM)
@@ -113,7 +113,9 @@ if kill -0 $qpid 2> /dev/null; then
   key meta_l || true; sleep 4; shot start || true          # the Super key: Start
   key esc || true; sleep 2
   key meta_l-spc || true; sleep 5; shot command || true    # Super+Space: the COMMAND bar
-  key esc || true
+  key esc || true; sleep 2
+  key meta_l-l || true; sleep 6; shot lock || true         # Super+L: the lock screen (extensions are off there)
+  key ret || true; sleep 4; shot unlock || true            # a key: the password prompt
   python3 - "$work/mon.sock" <<'EOF' || true
 import socket, sys, time
 s = socket.socket(socket.AF_UNIX); s.connect(sys.argv[1]); time.sleep(0.3); s.send(b"quit\n"); time.sleep(1)

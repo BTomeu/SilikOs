@@ -22,7 +22,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -401,6 +401,11 @@ def wine_argv(d, cmd, arch=None):
     """a Wine command of the prefix as it is typed: env WINEDEBUG=... WINEPREFIX=... wine ..."""
     e = ["WINEDEBUG=" + os.environ.get("WINEDEBUG", "-all")]
     e += [k + "=" + os.environ[k] for k in WINE_ENV if os.environ.get(k) is not None]
+    if list(cmd)[:1] == ["wineboot"] and os.environ.get("WINEDLLOVERRIDES") is None:
+        # setting a prefix up: Wine would open a dialog offering to download Mono and Gecko and wait for an answer
+        # (seen on the first installed system: the set-up never ended). A prefix starts without them; a program
+        # that needs .NET or an embedded browser gets them with their installers (`silik win install`)
+        e.append("WINEDLLOVERRIDES=mscoree,mshtml=")
     if arch:
         e.append("WINEARCH=" + arch)
     return ["env"] + e + ["WINEPREFIX=" + d] + list(cmd)
