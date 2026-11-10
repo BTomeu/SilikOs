@@ -45,9 +45,8 @@ make %{?_smp_mflags}
 %install
 cd build
 make install DESTDIR=%{buildroot}
-# the Windows-side files without their symbol tables (the host side is stripped by rpm)
-find %{buildroot}%{wine_prefix}/lib/wine/x86_64-windows -type f \( -name '*.dll' -o -name '*.exe' -o -name '*.sys' -o -name '*.drv' \) -exec x86_64-w64-mingw32-strip --strip-unneeded {} + 2>/dev/null || :
-find %{buildroot}%{wine_prefix}/lib/wine/i386-windows -type f \( -name '*.dll' -o -name '*.exe' -o -name '*.sys' -o -name '*.drv' \) -exec i686-w64-mingw32-strip --strip-unneeded {} + 2>/dev/null || :
+# (the Windows-side files are left as Wine's build made them: they are built without debug information, -g0, and
+# a strip of another binutils could damage what marks them as Wine's own)
 rm -rf %{buildroot}%{wine_prefix}/include %{buildroot}%{wine_prefix}/share/man
 mkdir -p %{buildroot}%{_bindir}
 for p in wine wineserver wineboot winecfg wineconsole winepath winefile msiexec regedit regsvr32 notepad winedbg; do

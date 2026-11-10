@@ -1,7 +1,8 @@
 # Wine for SilikOS: upstream's source built on EL 9 as the package silik-wine (wine/silik-wine.spec), tried with a
 # 64-bit and a 32-bit Windows program, and kept as the release `wine-<version>`. The CI's ISO takes the package from
 # that release (workflow CI), so the installed system has Wine and the installation test runs a Windows program in it.
-# Runs when the package's recipe changes, or by hand (Actions > Wine > Run workflow, with a version). About an hour.
+# Runs when the package's recipe changes, or by hand (Actions > Wine > Run workflow, with a version). The build takes
+# about half an hour and is kept (cache) while the recipe does not change, so a change to the trial alone is quick.
 name: Wine
 on:
   push:
@@ -20,40 +21,65 @@ jobs:
     container: almalinux:9
     timeout-minutes: 300
     outputs:
-      version: ${{ steps.build.outputs.version }}
+      version: ${{ steps.ver.outputs.version }}
     steps:
       - name: Tools
-        run: dnf -y -q install git tar gzip findutils
+        run: dnf -y -q install git tar gzip findutils zstd
       - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: build/extra
+          key: silik-wine-${{ inputs.version }}-${{ hashFiles('wine/silik-wine.spec', 'tools/build_wine.sh') }}
       - name: Build silik-wine
-        id: build
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: bash tools/build_wine.sh ${{ inputs.version }}
+      - name: Version
+        id: ver
         run: |
-          bash tools/build_wine.sh ${{ inputs.version }}
+          ls -la build/extra
           echo "version=$(rpm -qp --qf '%{VERSION}' build/extra/silik-wine-*.rpm)" >> "$GITHUB_OUTPUT"
-      - name: Install it and run two Windows programs (64-bit and 32-bit)
-        run: |
-          dnf -y -q install build/extra/silik-wine-*.rpm
-          wine --version
-          printf '#include <stdio.h>\nint main(void) { puts("hello from a Windows program"); return 0; }\n' > hello.c
-          x86_64-w64-mingw32-gcc -O2 -o hello64.exe hello.c
-          i686-w64-mingw32-gcc -O2 -o hello32.exe hello.c
-          export WINEDEBUG=-all WINEPREFIX=$PWD/prefix HOME=$PWD/home
-          mkdir -p "$HOME"
-          for p in hello64 hello32; do
-            wine $p.exe | tr -d '\r' | tee $p.txt
-            grep -qx "hello from a Windows program" $p.txt
-            echo "::notice title=Wine ${{ steps.build.outputs.version }} on EL 9::$p.exe ran"
-          done
-          wineserver -k || true
-          rpm -qi silik-wine | sed -n '1,8p'
-          echo "::notice title=silik-wine::$(ls -la build/extra/silik-wine-*.rpm | awk '{print $5, $9}')"
+          echo "::notice title=silik-wine built::$(ls -la build/extra/silik-wine-*.rpm | awk '{print $5, $9}')"
       - uses: actions/upload-artifact@v4
         with:
           name: silik-wine
           path: build/extra/silik-wine-*.rpm
           compression-level: 0
-  release:
+
+  trial:
     needs: build
+    runs-on: ubuntu-24.04
+    container: almalinux:9
+    timeout-minutes: 30
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: silik-wine
+          path: dist
+      - name: Install it and run two Windows programs (64-bit and 32-bit)
+        shell: bash
+        run: |
+          # each stage reports what it printed when it fails (the annotation of the run)
+          stage() { local name=$1; shift; local out
+            if out=$("$@" 2>&1); then echo "== $name"; echo "$out" | tail -4
+            else echo "$out" | tail -40; echo "::error title=Wine trial, $name::$(echo "$out" | tail -14 | tr '\n' ' ' | cut -c1-900)"; exit 1; fi; }
+          stage "repositories" bash -c 'dnf -y -q install dnf-plugins-core epel-release && dnf config-manager --set-enabled crb'
+          stage "install the package" dnf -y install dist/silik-wine-*.rpm
+          stage "the cross compilers" dnf -y -q install mingw64-gcc mingw32-gcc
+          stage "wine --version" wine --version
+          printf '#include <stdio.h>\nint main(void) { puts("hello from a Windows program"); return 0; }\n' > hello.c
+          stage "compile 64-bit" x86_64-w64-mingw32-gcc -O2 -o hello64.exe hello.c
+          stage "compile 32-bit" i686-w64-mingw32-gcc -O2 -o hello32.exe hello.c
+          export WINEPREFIX=/root/prefix HOME=/root
+          stage "make the prefix (wineboot)" timeout 600 wineboot --init
+          for p in hello64 hello32; do
+            stage "run $p.exe" bash -c "timeout 300 wine $p.exe > $p.out 2> $p.err; rc=\$?; cat $p.out; tail -12 $p.err; tr -d '\\r' < $p.out | grep -qx 'hello from a Windows program' || { echo \"exit \$rc, no greeting\"; exit 1; }"
+            echo "::notice title=Wine on EL 9::$p.exe ran"
+          done
+          wineserver -k || true
+
+  release:
+    needs: [build, trial]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4
