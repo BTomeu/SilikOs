@@ -14,7 +14,8 @@ grep -q 'platform:el9' /etc/os-release || { echo "error: this builds on EL 9 onl
 sudo=""; [ "$(id -u)" = 0 ] || sudo=sudo
 top=$root/build/wine-rpm
 mkdir -p "$top/SOURCES" "$root/build/extra"
-$sudo dnf -y -q install dnf-plugins-core epel-release rpm-build xz curl
+# (curl is in the base as curl-minimal: asking for the package "curl" conflicts with it)
+$sudo dnf -y -q install dnf-plugins-core epel-release rpm-build xz
 $sudo dnf config-manager --set-enabled crb
 $sudo dnf -y -q builddep --define "wine_version $ver" "$root/wine/silik-wine.spec"
 src=$top/SOURCES/wine-$ver.tar.xz
