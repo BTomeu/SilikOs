@@ -67,3 +67,13 @@ StEntry:focus { box-shadow: inset 0 0 0 1px #ecebe7; border-color: #ecebe7; }
 .window-caption { background-color: #1a1b1e; color: #f7f6f3; border-radius: 0; border: 0; }
 .window-close { background-color: #1a1b1e; color: #f7f6f3; border-radius: 0; }
 .page-indicator .page-indicator-icon { background-color: #1a1b1e; }
+/* the user's picture and name (login screen, lock screen): the shell gives their sizes in em of its own 11 pt text;
+   at this stylesheet's 10 pt they came out with a fraction of a pixel, the name's box was rounded a pixel short and
+   the login screen cut the name ("test…") beside a scroll bar. The same sizes in whole pixels */
+.user-icon { icon-size: 64px; }
+.user-icon StIcon { width: 40px; height: 40px; }
+.user-widget.vertical .user-icon { icon-size: 96px; }
+.user-widget.vertical .user-icon StIcon { width: 88px; height: 88px; }
+.login-dialog-user-list { width: 340px; }
+.login-dialog-user-list-item:ltr .user-widget { padding-right: 14px; }
+.login-dialog-user-list-item:rtl .user-widget { padding-left: 14px; }
