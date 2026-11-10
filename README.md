@@ -12,7 +12,7 @@ an EL9 system. It is a try: `docs/STATUS.md` says what has been run and what has
 | Security | SELinux enforcing (the base's), a firewall zone that drops incoming connections, sshd off, daily security-only updates, screen lock; `silik secure status` audits, `silik secure apply` sets; `docs/SECURITY.md` | `packages/silikos-security` |
 | `silik` | one command behind every action; prints what it runs; `--dry-run` | `packages/silik-tools` |
 | EDA | what Cadence / Synopsys tools ask of EL9, and EL6 / EL7 / EL8 boxes (`silik eda`) | `packages/silik-eda-compat`, `docs/EDA.md` |
-| Windows | Wine prefixes; a Windows virtual machine whose programs open as windows here (`silik win`) | `packages/silik-win`, `docs/WINDOWS.md` |
+| Windows | a double-click on an `.exe` runs it in a sandbox that does not see the rest of the home folder (`silik win open`); installed programs are applications of the desktop; a Windows virtual machine for what Wine cannot run. **Wine itself is not installable from EPEL on EL 9.8 today: see `docs/STATUS.md`** | `packages/silik-win`, `docs/WINDOWS.md` |
 | Name and look | os-release display names, boot menu, boot splash, login logo, backgrounds; the installer's screens | `packages/silikos-branding`, `installer/`, `brand/` |
 
 ![The SilikOS desktop](docs/img/desktop.png)

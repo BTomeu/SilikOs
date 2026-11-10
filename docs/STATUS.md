@@ -8,7 +8,7 @@ Docker Hub, repo.almalinux.org, dl.fedoraproject.org and vault.centos.org).
 | What | How | Result |
 |---|---|---|
 | The packages build | `tools/build_rpms.sh` (rpmbuild 4.18, noarch `.el9`) | 7 RPMs + repodata (six until 10/11, then `silikos-security`) |
-| Every dependency name exists | `tools/check_deps.sh` in an `almalinux:9` container with BaseOS, AppStream, CRB, extras, EPEL 9 | all Requires and Recommends found (`winetricks` was not in EPEL 9: dropped) |
+| Every dependency name exists | `tools/check_deps.sh` in an `almalinux:9` container with BaseOS, AppStream, CRB, extras, EPEL 9 | all Requires and Recommends names found (`winetricks` was not in EPEL 9: dropped). **A name that exists is not a package that installs: `wine` does not (below)**; the script now also tries each one (`UNINSTALLABLE`), not yet re-run over the whole list |
 | The whole install resolves | `dnf install --assumeno build/repo/*.rpm` there | 752 packages, 1.2 GB, no conflict reported (the resolver does not see file conflicts: the next row found one) |
 | The desktop packages install for real | `dnf install` / `rpm -U` of `silik-tools`, `silik-command`, `silikos-branding`, `silikos-desktop` in an AlmaLinux 9.8 container with gnome-shell 40.10 | installed, after a fix: `silikos-desktop` shipped `/etc/dconf/profile/user`, which the `dconf` package owns on EL 9 (the transaction was refused; the ISO installation would have stopped there) |
 | `silik`, the COMMAND bar and the branding install with their real dependencies | `dnf install` there (gtk3 3.24.31, python3-gobject 3.40.1, Python 3.9.25) | installed; `silik status`, `--dry-run` actions and `silik-command --list` run |
@@ -40,6 +40,14 @@ Docker Hub, repo.almalinux.org, dl.fedoraproject.org and vault.centos.org).
 | Security-only automatic updates | the timer's service command run by hand in the container (8 updates pending, 2 advisories) | the 6 packages of the advisories upgraded, the others left; `updateinfo list --security` then empty |
 | The kickstart's security lines | `ksvalidator -v RHEL9`; the `firewall-offline-cmd` lines run on a scratch configuration | valid; `DefaultZone=silikos`, ssh out of the public zone, no zone copy left in /etc |
 | Unit tests with the security checks | `python3 -m unittest discover -s tests` on Python 3.13 (host) and 3.9 (container) | 74 / 74 on both |
+| The seven packages install together for real | `dnf install` (weak dependencies off) of `build/repo/*.rpm` in the AlmaLinux 9.8 container with gnome-shell | installed (podman 5.8.2, firewalld 1.3.4, bubblewrap 0.6.3 ...); `silik 0.3.0`; `.exe` opens with `org.silikvolt.Win.desktop` (`gio mime`) |
+| `silik win open` end to end, sandboxed | on the build host (Ubuntu 24.04, kernel 6.18, Wine 9.0, bubblewrap 0.9.0) as an unprivileged user, with our own small test programs; also with EL 9's bwrap 0.6.3 / nsenter / setpriv binaries on that kernel | first use makes the prefix and its sandbox and runs the program; a window draws; `.bat` / `.cmd` / `.lnk` run; exit codes pass through. Inside: `~/.ssh` and `~/Documents` are not there, writes refused in `~/Downloads`, `/usr`, `/etc` and the home, `W:` (`~/Windows`) writable, no capabilities, clean environment; `--no-net` leaves only `lo` |
+| One sandbox per prefix | concurrent runs there | two programs of one prefix run together; a file from a folder the running sandbox does not show is refused (exit 75) and opens once the prefix is idle |
+| An installer becomes an application | own `setup.exe` (a start-menu shortcut) -> `silik win sync` -> `silik win apps`; repeated by hand on the host without the sandbox | `win/silik-test  Silik Test  (default)`; an entry with `Exec=silik win run default -- ...lnk` and `StartupWMClass=siliktest.exe`; uninstalling removes it |
+| A Windows program in the rail and in Start | that generated entry copied into the GNOME session of the container, and a stand-in window with the class Wine gives (`siliktest.exe`, read with `xprop` from the real Wine window on the host) | the window is matched to the entry: "Silik Test" with its framed initial under "open" in the rail, in Start and under "Windows programs" (`docs/img/windows-program.png`). The real Wine window itself was not shown in that session |
+| A double-click in Files | nautilus 40.2 in the container, clicked with xdotool, a logging stand-in for `silik` | `.exe`, `.exe` with the executable bit and `.msi` each ran `silik win open FILE` |
+| The COMMAND bar | `silik-command --list` there | `win/silik-test` with its twin line; a path to an `.exe` becomes `silik win open` |
+| Unit tests, all | `python3 -m unittest discover -s tests` on Python 3.13 (host) and, before the merge of the two branches, 3.9 | 111 / 111 on 3.13 after the merge (74 and 64 on 3.9 on each branch) |
 
 Found by booting the ISO and fixed: the installer did not bring the network up by itself, so the package sources
 failed until it was turned on by hand (the kickstart now activates a wired connection).
@@ -66,7 +74,10 @@ Two bugs were found by running `silik eda` for real and fixed: the vault reposit
 | The SELinux, disk-encryption and Secure Boot rows of `silik secure status` on a system that has them; the update timer firing under systemd; `silik secure apply` with the real `sudo`; the screen actually locking | no SELinux, LUKS disk, UEFI, systemd session or GDM here | after the first installation |
 | The kickstart's `selinux`, `firewall --remove-service=ssh`, `services --disabled=sshd` and `%post` zone line inside the installer | no complete installation yet | with the first installation |
 | Cadence / Synopsys tools | no installers or licences | the owner |
-| Wine, the Windows virtual machine, RDP RemoteApp, Altium | no KVM, no Windows, no licences | the owner |
+| **Wine on EL 9 itself: not installable today** | EPEL 9's `wine-core-8.0-1.el9` needs `mesa-libOSMesa`, which nothing provides on AlmaLinux 9.8 (seen with `dnf install --assumeno wine`; no newer build in EPEL testing). The kickstart's `Recommends: wine` is skipped silently, so an installed SilikOS has no Wine: `silik win open` works only once Wine comes from somewhere | a decision: our own Wine build, or Flatpak |
+| The sandbox on EL 9's kernel 5.14 with SELinux; in a root container bwrap may not make namespaces | only EL 9's userland on kernel 6.18 was run | after the first installation |
+| A real `.msi`, a third-party installer, 32-bit programs, sound, GPU, a notification on screen | not run | with a real Wine |
+| The Windows virtual machine, RDP RemoteApp, Altium | no KVM, no Windows, no licences | the owner |
 | NVIDIA driver (RTX 3050), hybrid graphics, Wi-Fi, suspend | hardware | the owner |
 | The passt port forward of `silik win vm create`, `virt-install` option names | not run | the Ryzen machine |
 | ARM | no ARM machine; see `docs/HARDWARE.md` | later |

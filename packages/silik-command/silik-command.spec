@@ -7,7 +7,7 @@ BuildArch:      noarch
 Requires:       python3
 Requires:       python3-gobject
 Requires:       gtk3
-Requires:       silik-tools >= 0.2.0
+Requires:       silik-tools >= 0.3.0
 Recommends:     gnome-terminal
 Recommends:     xdg-utils
 

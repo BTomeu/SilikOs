@@ -4,7 +4,7 @@ Release:        1%{?dist}
 Summary:        SilikOS security defaults: firewall zone, kernel settings, automatic security updates, screen lock
 License:        LicenseRef-SilikVolt
 BuildArch:      noarch
-Requires:       silik-tools
+Requires:       silik-tools >= 0.3.0
 Requires:       firewalld
 Requires:       dnf-automatic
 Requires:       systemd

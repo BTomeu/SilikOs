@@ -3,7 +3,8 @@
 #   silik status
 #   silik eda   list | create NAME --el 6|7|8 | setup NAME | enter NAME | run NAME -- CMD... | import-vm DISK --name NAME
 #               | rm NAME | check | kernel-arg
-#   silik win   list | create PREFIX | run PREFIX -- PROG.exe [ARGS] | install PREFIX SETUP.exe | rm PREFIX
+#   silik win   open FILE [ARGS] [--prefix P --no-net --no-sandbox] | apps | sync | stop [PREFIX]
+#               | list | create PREFIX | run PREFIX -- PROG.exe [ARGS] | install PREFIX SETUP.exe | rm PREFIX
 #               | vm create --iso WIN.iso [--name N --ram GB --disk GB --cpus N] | vm start [N] | vm stop [N]
 #               | vm app [N] --exe 'C:\path\app.exe' --user U
 #   silik hw    probe | nvidia install | nvidia status
@@ -21,7 +22,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.2.1"
+VERSION = "0.3.0"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
