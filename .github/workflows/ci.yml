@@ -7,6 +7,7 @@ on:
   push:
     branches: [main]
     tags: ['v*']
+    paths-ignore: ['wine/**', 'tools/build_wine.sh', '.github/workflows/wine.yml']   # the workflow Wine's own
   pull_request:
   workflow_dispatch:
 concurrency:
