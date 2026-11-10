@@ -18,8 +18,11 @@ mkdir -p "$top/SOURCES" "$root/build/extra"
 
 # the versions the built Wine asks for (the names of the installers it would download)
 if [ -n "${1:-}" ]; then
+  rpm=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
+  [ -s "$rpm" ] || { echo "error: no package $1" >&2; exit 2; }
   x=$(mktemp -d); trap 'rm -rf "$x"' EXIT
-  (cd "$x" && rpm2cpio "$1" | cpio -idm --quiet './opt/silik-wine/lib/wine/x86_64-windows/appwiz.cpl')
+  (cd "$x" && rpm2cpio "$rpm" | cpio -idm --quiet './opt/silik-wine/lib/wine/x86_64-windows/appwiz.cpl')
+  [ -s "$x/opt/silik-wine/lib/wine/x86_64-windows/appwiz.cpl" ] || { echo "error: no appwiz.cpl in $1" >&2; exit 2; }
   asked=$(strings -el "$x/opt/silik-wine/lib/wine/x86_64-windows/appwiz.cpl" | grep -E '^wine-(mono|gecko)-[0-9.]+-x86(_64)?\.msi$' | sort -u | tr '\n' ' ')
   echo "this Wine asks for: $asked"
   case "$asked" in *"wine-mono-$mono-x86.msi"*) ;; *) echo "error: the spec has Wine Mono $mono" >&2; exit 1 ;; esac
