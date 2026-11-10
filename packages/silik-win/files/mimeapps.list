@@ -1,0 +1,12 @@
+# SilikOS: a double-click on a Windows program runs `silik win open` (Wine, in its sandbox).
+# This file is read before the distribution's lists in /usr/share/applications (where .exe opens the archive
+# manager); a user's own choice in ~/.config/mimeapps.list wins over it. A double-click on a batch file (.bat .cmd)
+# opens the text editor, as it does for a shell script; "Open With" offers the Windows program.
+[Default Applications]
+application/x-bat=org.gnome.gedit.desktop;org.gnome.TextEditor.desktop;
+application/x-ms-dos-executable=org.silikvolt.Win.desktop
+application/x-msdos-program=org.silikvolt.Win.desktop
+application/x-msdownload=org.silikvolt.Win.desktop
+application/vnd.microsoft.portable-executable=org.silikvolt.Win.desktop
+application/x-msi=org.silikvolt.Win.desktop
+application/x-ms-shortcut=org.silikvolt.Win.desktop

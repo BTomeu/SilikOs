@@ -5,13 +5,14 @@ _silik() {
     1) COMPREPLY=($(compgen -W "status update identity eda win hw --dry-run --version" -- "$cur"));;
     2) case $g in
          eda) COMPREPLY=($(compgen -W "list create setup enter run import-vm rm check kernel-arg" -- "$cur"));;
-         win) COMPREPLY=($(compgen -W "list create run install rm vm" -- "$cur"));;
+         win) COMPREPLY=($(compgen -W "list open create run install stop rm sync apps vm" -- "$cur"));;
          hw)  COMPREPLY=($(compgen -W "probe nvidia" -- "$cur"));;
          identity) COMPREPLY=($(compgen -W "show silikos base" -- "$cur"));;
        esac;;
     3) case "$g ${COMP_WORDS[2]}" in
          "eda setup"|"eda enter"|"eda run"|"eda rm") COMPREPLY=($(compgen -W "$(silik -q eda list 2>/dev/null | awk '{print $1}')" -- "$cur"));;
-         "win run"|"win install"|"win rm") COMPREPLY=($(compgen -W "$(silik -q win list 2>/dev/null)" -- "$cur"));;
+         "win run"|"win install"|"win stop"|"win rm") COMPREPLY=($(compgen -W "$(silik -q win list 2>/dev/null) --no-net --no-sandbox" -- "$cur"));;
+         "win open") COMPREPLY=($(compgen -W "--prefix --no-net --no-sandbox" -- "$cur") $(compgen -f -- "$cur"));;
          "win vm") COMPREPLY=($(compgen -W "create start stop app" -- "$cur"));;
          "hw nvidia") COMPREPLY=($(compgen -W "install status" -- "$cur"));;
        esac;;

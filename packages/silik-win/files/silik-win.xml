@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Windows file types that EL 9's shared-mime-info (2.1) does not know: there a .lnk is application/octet-stream and
+     a .bat or .cmd is text/plain. The names are the ones later shared-mime-info releases use. -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-ms-shortcut">
+    <comment>Windows shortcut</comment>
+    <comment xml:lang="ca">drecera de Windows</comment>
+    <comment xml:lang="es">acceso directo de Windows</comment>
+    <magic priority="50">
+      <match type="string" offset="0" value="L\000\000\000\001\024\002\000"/>
+    </magic>
+    <glob pattern="*.lnk"/>
+  </mime-type>
+  <mime-type type="application/x-bat">
+    <comment>Windows batch file</comment>
+    <comment xml:lang="ca">fitxer per lots de Windows</comment>
+    <comment xml:lang="es">archivo por lotes de Windows</comment>
+    <sub-class-of type="text/plain"/>
+    <glob pattern="*.bat"/>
+    <glob pattern="*.cmd"/>
+  </mime-type>
+</mime-info>
