@@ -62,10 +62,13 @@ jobs:
           # each stage reports what it printed when it fails (the annotation of the run)
           stage() { local name=$1; shift; local out
             if out=$("$@" 2>&1); then echo "== $name"; echo "$out" | tail -4
-            else echo "$out" | tail -40; echo "::error title=Wine trial, $name::$(echo "$out" | tail -14 | tr '\n' ' ' | cut -c1-900)"; exit 1; fi; }
-          stage "repositories" bash -c 'dnf -y -q install dnf-plugins-core epel-release && dnf config-manager --set-enabled crb'
-          stage "install the package" dnf -y install dist/silik-wine-*.rpm
-          stage "the cross compilers" dnf -y -q install mingw64-gcc mingw32-gcc
+            else echo "$out" | tail -40; echo "::error title=Wine trial - $name::$(echo "$out" | tail -14 | tr '\n' ' ' | cut -c1-900)"; exit 1; fi; }
+          # a mirror in the middle of a synchronisation answers 404 for a while: three tries, a minute apart
+          again() { for i in 1 2 3; do "$@" && return 0; dnf clean metadata -q; sleep 60; done; return 1; }
+          # only the base's repositories and CRB (for the cross compilers): the package needs nothing of EPEL
+          stage "repositories" again bash -c 'dnf -y -q install dnf-plugins-core && dnf config-manager --set-enabled crb'
+          stage "install the package" again dnf -y install dist/silik-wine-*.rpm
+          stage "the cross compilers" again dnf -y -q install mingw64-gcc mingw32-gcc
           stage "wine --version" wine --version
           printf '#include <stdio.h>\nint main(void) { puts("hello from a Windows program"); return 0; }\n' > hello.c
           stage "compile 64-bit" x86_64-w64-mingw32-gcc -O2 -o hello64.exe hello.c
