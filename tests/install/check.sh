@@ -76,6 +76,14 @@ if command -v wine > /dev/null; then
 else
   say win.wine info "no Wine on the system (the ISO carries it when build/extra has silik-wine)"
 fi
+# the open EDA tools (on the ISO when the workflow EDA tools has made them)
+for t in klayout magic xschem ngspice; do
+  if v=$(rpm -q $t 2> /dev/null); then say eda.$t ok "$v"; else say eda.$t info "not on the ISO"; fi
+done
+if command -v ngspice > /dev/null; then
+  printf 'divider\nv1 in 0 dc 1\nr1 in out 1k\nr2 out 0 1k\n.control\nop\nprint v(out)\n.endc\n.end\n' > /tmp/ci-div.cir
+  has eda.ngspice-run "$(runuser -u tester -- ngspice -b /tmp/ci-div.cir 2>&1 | grep 'v(out)')" "5.000000e-01"
+fi
 say system.failed-units info "$(systemctl --failed --no-legend | awk '{print $2}' | tr '\n' ' ')"
 say system.packages info "$(rpm -qa | wc -l) packages, $(df -h / | awk 'NR==2 {print $3}') used"
 printf '\r\nSILIKOS-CI|DONE\r\n' > $out

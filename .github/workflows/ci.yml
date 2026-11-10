@@ -7,7 +7,7 @@ on:
   push:
     branches: [main]
     tags: ['v*']
-    paths-ignore: ['wine/**', 'tools/build_wine.sh', '.github/workflows/wine.yml']   # the workflow Wine's own
+    paths-ignore: ['wine/**', 'tools/build_wine.sh', '.github/workflows/wine.yml', 'eda/**', 'tools/build_eda.sh', '.github/workflows/eda.yml']   # the other workflows' own
   pull_request:
   workflow_dispatch:
 concurrency:
@@ -49,7 +49,7 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y -q rpm createrepo-c xorriso mtools cpio qemu-system-x86 qemu-utils imagemagick gcc-mingw-w64-x86-64
           df -h /
-      - name: Wine for the ISO, when the workflow "Wine" has made it (release wine-*)
+      - name: Wine and the open EDA tools for the ISO, when their workflows have made them (releases wine-*, eda-tools)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -57,6 +57,9 @@ jobs:
           tag=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 50 --json tagName -q '[.[] | select(.tagName | startswith("wine-"))][0].tagName' || true)
           if [ -n "$tag" ]; then gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern 'silik-wine-*.rpm' --dir build/extra && ls -la build/extra
           else echo "::notice title=Wine::no wine-* release yet: the ISO of this run has no Wine (run the workflow Wine once)"; fi
+          # the open EDA tools (workflow EDA tools, release eda-tools)
+          if gh release download eda-tools --repo "$GITHUB_REPOSITORY" --pattern '*.rpm' --dir build/extra 2> /dev/null; then ls -la build/extra
+          else echo "::notice title=EDA tools::no eda-tools release yet: the ISO of this run has no KLayout, Magic, Xschem or ngspice"; fi
       - name: Packages and ISO
         run: |
           bash tools/build_rpms.sh

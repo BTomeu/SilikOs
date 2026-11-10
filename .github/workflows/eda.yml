@@ -1,0 +1,88 @@
+# The open EDA tools of SilikOS: KLayout, Magic, Xschem and ngspice (with XSPICE) are not in EL 9's repositories or in
+# EPEL 9, so each is built here from upstream's source at the tag of eda/versions (eda/<tool>.spec), tried in a clean
+# EL 9 (eda/trial.sh: it must do a small real job) and kept in the release `eda-tools`. The CI's ISO takes the
+# packages from that release, so the installed system has them (workflow CI).
+# Runs when a recipe changes, or by hand. A build is kept (cache) while its recipe does not change.
+name: EDA tools
+on:
+  push:
+    branches: [main]
+    paths: ['eda/**', 'tools/build_eda.sh', '.github/workflows/eda.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: [klayout, magic, xschem, ngspice]
+    runs-on: ubuntu-24.04
+    container: almalinux:9
+    timeout-minutes: 330
+    steps:
+      - name: Tools
+        run: dnf -y -q install git tar gzip findutils zstd
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: build/extra
+          key: eda-${{ matrix.tool }}-${{ hashFiles('eda/common.inc', format('eda/{0}.spec', matrix.tool), 'eda/versions', 'tools/build_eda.sh') }}
+      - name: Build ${{ matrix.tool }}
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          if ! bash tools/build_eda.sh ${{ matrix.tool }} > build.log 2>&1; then
+            tail -80 build.log
+            echo "::error title=build ${{ matrix.tool }}::$(grep -iE 'error|no such file|not found|cannot|undefined|unpackaged|No match' build.log | tail -10 | tr '\n' ' ' | cut -c1-900)"
+            exit 1
+          fi
+          tail -5 build.log
+      - name: What was built
+        run: echo "::notice title=${{ matrix.tool }} built::$(cd build/extra && ls -la ${{ matrix.tool }}-*.rpm | awk '{print $5, $9}')"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eda-${{ matrix.tool }}
+          path: build/extra/${{ matrix.tool }}-*.rpm
+          compression-level: 0
+
+  trial:
+    needs: build
+    if: ${{ !cancelled() }}
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: [klayout, magic, xschem, ngspice]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: eda-${{ matrix.tool }}
+          path: dist
+      - name: Try ${{ matrix.tool }} in a clean EL 9
+        run: |
+          if out=$(docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD/eda:/eda:ro" almalinux:9 bash -c 'bash /eda/trial.sh ${{ matrix.tool }} /dist/*.rpm' 2>&1); then
+            echo "$out" | tail -5
+            echo "::notice title=${{ matrix.tool }} on EL 9::$(echo "$out" | grep '^TRIAL-OK' | cut -c10-300)"
+          else
+            echo "$out" | tail -60
+            echo "::error title=trial ${{ matrix.tool }}::$(echo "$out" | tail -12 | tr '\n' ' ' | cut -c1-900)"
+            exit 1
+          fi
+      - name: Keep the package in the release eda-tools
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view eda-tools --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || gh release create eda-tools --repo "$GITHUB_REPOSITORY" \
+            --title "Open EDA tools for SilikOS (EL 9)" --prerelease \
+            --notes "KLayout, Magic, Xschem and ngspice built from upstream's unmodified sources on EL 9 (eda/*.spec, eda/versions): none is in EL 9's repositories or EPEL 9. Each keeps its own licence (in the package). Not products of or supported by their authors' projects."
+          for f in dist/*.rpm; do
+            # one package per tool in the release: an older build of the same tool goes
+            gh release view eda-tools --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep "^${{ matrix.tool }}-" | while read -r old; do
+              [ "$old" = "$(basename "$f")" ] || gh release delete-asset eda-tools "$old" --repo "$GITHUB_REPOSITORY" -y
+            done
+            gh release upload eda-tools "$f" --repo "$GITHUB_REPOSITORY" --clobber
+          done
