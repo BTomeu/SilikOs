@@ -10,6 +10,7 @@ an EL9 system. It is a try: `docs/STATUS.md` says what has been run and what has
 | Base | AlmaLinux 9 packages and kernel, from its own repositories | `kickstart/silikos.ks` |
 | Desktop | GNOME Shell on X11 laid out as the Silik interface (command line, text rail, status bar; one ink on paper); the **COMMAND** bar on Super+Space | `packages/silikos-desktop`, `packages/silik-command` |
 | Security | SELinux enforcing (the base's), a firewall zone that drops incoming connections, sshd off, daily security-only updates, screen lock; `silik secure status` audits, `silik secure apply` sets; `docs/SECURITY.md` | `packages/silikos-security` |
+| SilikStudio | the SilikVolt suite as a native application: a window of its own, the first key of the rail, its programs in the PATH. Its package is built from SilikStudio's repository on EL 9 and put in `build/extra/` for the ISO | `tools/build_iso.sh`, `docs/img/silikstudio.png` |
 | `silik` | one command behind every action; prints what it runs; `--dry-run` | `packages/silik-tools` |
 | EDA | what Cadence / Synopsys tools ask of EL9, and EL6 / EL7 / EL8 boxes (`silik eda`) | `packages/silik-eda-compat`, `docs/EDA.md` |
 | Windows | a double-click on an `.exe` runs it in a sandbox that does not see the rest of the home folder (`silik win open`); installed programs are applications of the desktop; a Windows virtual machine for what Wine cannot run. **Wine itself is not installable from EPEL on EL 9.8 today: see `docs/STATUS.md`** | `packages/silik-win`, `docs/WINDOWS.md` |
@@ -18,6 +19,8 @@ an EL9 system. It is a try: `docs/STATUS.md` says what has been run and what has
 ![The SilikOS desktop](docs/img/desktop.png)
 
 ![Start](docs/img/start.png)
+
+![SilikStudio in SilikOS](docs/img/silikstudio.png)
 
 The desktop as run on 10/11/2026 (GNOME Shell 40.10 in an AlmaLinux 9.8 container, software rendering; see
 `docs/STATUS.md` for what has and has not been run). The installer: `docs/img/installer.png`.

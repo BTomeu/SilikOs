@@ -2,7 +2,7 @@
 # build_iso.sh [boot.iso]: the SilikOS network installer = the AlmaLinux 9 boot ISO + kickstart/silikos.ks + the SilikOS
 # package repository (build/repo) + images/product.img (the installer under the SilikOS name and look), relabelled,
 # with inst.ks added to every boot entry (BIOS and UEFI).
-# Needs xorriso, mtools, cpio, curl; network to repo.almalinux.org unless a boot ISO is given.
+# Needs xorriso, mtools, cpio, curl (createrepo_c and rpm when build/extra has packages); network to repo.almalinux.org unless a boot ISO is given.
 # Run on 09/11/2026 (AlmaLinux 9.8 boot ISO): the result boots under UEFI in QEMU; see docs/STATUS.md.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -50,7 +50,21 @@ cp -a "$root/installer/product/." "$prod/"
 sed "s/@VERSION@/$ver/; s/@UUID@/$(date -u +%Y%m%d%H%M).x86_64/" "$root/installer/buildstamp.in" > "$prod/.buildstamp"
 (cd "$prod" && find . -mindepth 1 | sort | cpio --quiet -o -H newc -R 0:0 | gzip -9) > "$work/x/product.img"
 maps+=(-map "$work/x/product.img" /images/product.img)
+# Extra packages (build/extra/*.rpm): products built elsewhere that the installed system should have, e.g. SilikStudio
+# (in its own repository: `bash tools/package_rpm.sh` on EL 9). Each goes into the ISO's repository and its name
+# into the ISO's copy of the kickstart; without them the ISO is the plain system. Never committed here.
+repo=$root/build/repo
+ksfile=$root/kickstart/silikos.ks
+if ls "$root"/build/extra/*.rpm > /dev/null 2>&1; then
+  repo=$work/x/repo; rm -rf "$repo"; mkdir -p "$repo"
+  cp "$root"/build/repo/*.rpm "$root"/build/extra/*.rpm "$repo/"
+  createrepo_c --quiet "$repo"
+  ksfile=$work/x/silikos.ks
+  names=$(for f in "$root"/build/extra/*.rpm; do rpm -qp --qf '%{NAME}\n' "$f"; done)
+  awk -v add="$names" '/^%packages/ { inp = 1 } inp && /^%end/ { print add; inp = 0 } { print }' "$root/kickstart/silikos.ks" > "$ksfile"
+  echo "extra packages in the ISO: $(echo $names)"
+fi
 rm -f "$out"
 xorriso -indev "$src" -outdev "$out" -boot_image any replay -volid "$newlabel" \
-  -map "$root/kickstart/silikos.ks" /silikos.ks -map "$root/build/repo" /silikos "${maps[@]}"
+  -map "$ksfile" /silikos.ks -map "$repo" /silikos "${maps[@]}"
 ls -la "$out"

@@ -15,6 +15,10 @@ Read `docs/PLAN.md` and `docs/STATUS.md` first.
   firewall, kernel setting or sshd (it could cut the connection they are installed over): the kickstart does it for
   a new installation, `silik secure apply` on a running one; `silik secure status` never says ok for what it cannot see.
 - **Never start firewalld / nftables in a host-network test container** (it would cut the build machine's network).
+- **SilikStudio must run great here** (owner, 10/11/2026): it is the first key of the rail, a native window
+  (SilikStudio's `desktop/linux`, RPM by its `tools/package_rpm.sh`, built ON EL 9: the Ubuntu-built package does not
+  start on glibc 2.34). The RPM is a build product of the other repository: `build/extra/`, never committed here.
+  Speed claims are measured or not made.
 - No vendor software, licences, keys or the user's files in the repository.
 - The kickstart never selects or erases a disk.
 - Every action of the desktop goes through `silik` and prints the commands it runs; the COMMAND bar shows the same

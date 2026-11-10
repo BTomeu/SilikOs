@@ -35,7 +35,7 @@ name='SilikOS'
 
 [org/gnome/shell]
 enabled-extensions=['user-theme@gnome-shell-extensions.gcampax.github.com', 'silik-shell@silikvolt.com']
-favorite-apps=['org.gnome.Nautilus.desktop', 'org.gnome.Terminal.desktop', 'firefox.desktop', 'org.gnome.gedit.desktop', 'virt-manager.desktop', 'gnome-control-center.desktop']
+favorite-apps=['com.silikvolt.SilikStudio.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Terminal.desktop', 'firefox.desktop', 'org.gnome.gedit.desktop', 'virt-manager.desktop', 'gnome-control-center.desktop']
 
 [org/gnome/settings-daemon/plugins/media-keys]
 custom-keybindings=['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/silik-command/']

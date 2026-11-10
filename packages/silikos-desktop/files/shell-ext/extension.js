@@ -156,10 +156,16 @@ function markSmall() {
     return a;
 }
 
+let origIcon = null;   /* the shell's own Shell.App.create_icon_texture, kept while the extension is on */
+
 function silikIcon(app, size) {
     let i;
+    const id = app.get_id();
     const sn = symbolicName(app);
-    if (sn) i = new St.Icon({ icon_name: sn, icon_size: size, style_class: 'silik-app-icon' });
+    /* SilikVolt's own applications carry the brand's icon (the mark on its ink tile, one ink): shown as it is */
+    if (origIcon && (id.startsWith('com.silikvolt.') || id.startsWith('org.silikvolt.')) && app.get_app_info() &&
+        app.get_app_info().get_icon()) i = origIcon.call(app, size);
+    else if (sn) i = new St.Icon({ icon_name: sn, icon_size: size, style_class: 'silik-app-icon' });
     else i = monogram(app.get_name(), size);
     i.y_align = Clutter.ActorAlign.CENTER;
     return i;
@@ -194,7 +200,7 @@ class SilikShell {
             on(Main.layoutManager, 'startup-complete', () => { Main.sessionMode.hasOverview = this._hadOverview; });
         }
         /* the same icons wherever the shell shows an application (window switcher, windows view, search) */
-        this._origIcon = Shell.App.prototype.create_icon_texture;
+        this._origIcon = origIcon = Shell.App.prototype.create_icon_texture;
         Shell.App.prototype.create_icon_texture = function (size) { return silikIcon(this, size); };
         /* the rail is the dash; the Super key opens Start (the windows view keeps its key on the rail) */
         this._dash = Main.overview.dash;
@@ -211,7 +217,7 @@ class SilikShell {
     disable() {
         this._closeStart();
         delete Main.overview.toggle;
-        if (this._origIcon) { Shell.App.prototype.create_icon_texture = this._origIcon; this._origIcon = null; }
+        if (this._origIcon) { Shell.App.prototype.create_icon_texture = this._origIcon; this._origIcon = origIcon = null; }
         for (const [o, id] of this._sigs) o.disconnect(id);
         this._sigs = [];
         if (this._mon) { this._mon.cancel(); this._mon = null; }
