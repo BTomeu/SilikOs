@@ -9,10 +9,11 @@ Docker Hub, repo.almalinux.org, dl.fedoraproject.org and vault.centos.org).
 |---|---|---|
 | The six packages build | `tools/build_rpms.sh` (rpmbuild 4.18, noarch `.el9`) | 6 RPMs + repodata |
 | Every dependency name exists | `tools/check_deps.sh` in an `almalinux:9` container with BaseOS, AppStream, CRB, extras, EPEL 9 | all Requires and Recommends found (`winetricks` was not in EPEL 9: dropped) |
-| The whole install resolves | `dnf install --assumeno build/repo/*.rpm` there | 752 packages, 1.2 GB, no conflict |
+| The whole install resolves | `dnf install --assumeno build/repo/*.rpm` there | 752 packages, 1.2 GB, no conflict reported (the resolver does not see file conflicts: the next row found one) |
+| The desktop packages install for real | `dnf install` / `rpm -U` of `silik-tools`, `silik-command`, `silikos-branding`, `silikos-desktop` in an AlmaLinux 9.8 container with gnome-shell 40.10 | installed, after a fix: `silikos-desktop` shipped `/etc/dconf/profile/user`, which the `dconf` package owns on EL 9 (the transaction was refused; the ISO installation would have stopped there) |
 | `silik`, the COMMAND bar and the branding install with their real dependencies | `dnf install` there (gtk3 3.24.31, python3-gobject 3.40.1, Python 3.9.25) | installed; `silik status`, `--dry-run` actions and `silik-command --list` run |
 | The COMMAND bar draws on EL9's GTK | Xvfb in that container, Catalan, Cascadia Mono | window, list, twin line, key footer as designed (also on Ubuntu's GTK, light / dark, EN / CA) |
-| Unit tests | `python3 -m unittest discover -s tests` on Python 3.12 and 3.9 | 26 / 26 |
+| Unit tests | `python3 -m unittest discover -s tests` on Python 3.12 and 3.9 | 27 / 27 on both |
 | Python 3.9 syntax | `vermin -t=3.9-` on `silik` and `silik-command` | no newer feature |
 | The kickstart parses | `ksvalidator -v RHEL9` (pykickstart) | valid |
 | An EL6 userland runs on a current kernel | `centos:6` container: glibc 2.12, python 2.6, yum, kernel vsyscall page execute-only (`xonly`) | runs |
@@ -23,6 +24,10 @@ Docker Hub, repo.almalinux.org, dl.fedoraproject.org and vault.centos.org).
 | The installer takes the kickstart and finds the package sources | the ISO's kernel + installer in QEMU (TCG, `-cpu max`), graphical, screenshots | summary screen: network connected by itself, Installation Source = repo.almalinux.org, Software Selection = Workstation (the six SilikOS packages from the ISO's repository and EPEL resolve); disk, user and time zone left to the person, as designed |
 | The installer says SilikOS | the rebuilt ISO (label `SilikOS-9-8-x86_64`, `images/product.img`) in QEMU: UEFI menu, welcome and summary screens, screenshots | "Install SilikOS 9.8", "WELCOME TO SILIKOS 9.8", "SILIKOS 9.8 INSTALLATION", the SilikOS sidebar and logo; network, source and Workstation selection still resolve with the SilikOS product configuration |
 | The installed system's names | `silikos-branding` 0.2.0 on AlmaLinux 9.8 (container, `dnf install`) | `PRETTY_NAME="SilikOS 9.8"`, boot entries "SilikOS (kernel) 9.8", `ID` / `VERSION_ID` / `/etc/redhat-release` untouched, `dnf` works; a reinstall of the base's release package re-applies the names (trigger); `identity base` / `silikos` switch; removal restores the base's file and boot splash theme |
+| The installer in the Silik look | the ISO with `installer/product` (stylesheet, Cascadia Mono, a fontconfig alias) in QEMU, welcome and summary screens, screenshots | ink sidebar with the mark, every text in Cascadia Mono, inverse-video selection, ink "Continue", no blue |
+| The Silik layout on GNOME Shell | `silikos-desktop` 0.4.0 in an AlmaLinux 9.8 container run with systemd: Xvfb, `gsd-xsettings`, `gnome-shell --x11` 40.10 (software rendering), driven with xdotool, screenshots | the session opens on the desktop; title bar = mark + command line (a click opens the COMMAND bar) + clock + system menu; text rail with the favourites digit first, the focused application in inverse video, a square on running ones, other open applications below, "Applications" at the bottom; status bar with the last command `silik` ran and workspace / base / kernel / host; Super+2 opens the rail's key 2; EN and CA strings; 0 `JS ERROR` in the shell's log |
+| The GTK theme without Adwaita's blue | `/usr/libexec/silikos/gtk-theme` there (GTK 3.24.31): the theme is made from libgtk-3's own stylesheet; `gtk3-widget-factory`, Files, gedit, screenshots | 0 occurrences of the accent colour in the result; checks, radios, switches, scales, progress bars, tabs, focus rings and selection are ink; ink title bars on client-side (Files, gedit) and on window-manager decorated windows (xterm) |
+| The shell theme | `/usr/libexec/silikos/shell-theme` there, user-theme extension, screenshots | ink panel and menus in Cascadia Mono, square menus without the pointer, calendar with today in inverse video, the base's logo gone from the panel |
 
 Found by booting the ISO and fixed: the installer did not bring the network up by itself, so the package sources
 failed until it was turned on by hand (the kickstart now activates a wired connection).
@@ -38,7 +43,10 @@ Two bugs were found by running `silik eda` for real and fixed: the vault reposit
 | BIOS (non-UEFI) boot of the ISO | not tried | a VM |
 | The boot splash (plymouth theme `silikos`) on a screen, the About logo, the login logo, the firmware's boot entry name | set and listed, not seen: no real boot here | after the first installation |
 | Places that still name the base | by design: the package source URL in the installer, repository names in `dnf`, `/etc/redhat-release`, `ID=` | — |
-| The desktop defaults in a real GNOME session (dconf, Super+Space, X11 default, login logo) | no GNOME session here | after the first installation |
+| The desktop in a real login session (GDM, the Super+Space key binding through gnome-settings-daemon, X11 as the default, the login logo, a hardware-accelerated shell, HiDPI scaling of the rail and status bar, several monitors, a full-screen window) | the shell was run by hand in a container, without GDM or a session manager; one 1440x900 screen, scale 1 | after the first installation |
+| The login screen in the Silik look | not done: GDM draws with the shell's built-in stylesheet (a file of the `gnome-shell` package), only its logo is set | — |
+| ES strings of the shell extension on screen; the overview's application grid beyond two icons; GTK 4 / Qt applications (they do not read the GTK 3 theme) | not run | after the first installation |
+| The clock's colon | Cascadia Mono has no U+2236: without another font it drew as a box in the container; with `dejavu-sans-fonts` (now required) it draws | — |
 | `silik eda create` with podman itself (`--userns keep-id`, the home folder and X authority mounts), `import-vm` (libguestfs) | Docker stood in for podman here; no libguestfs | the Ryzen machine |
 | Cadence / Synopsys tools | no installers or licences | the owner |
 | Wine, the Windows virtual machine, RDP RemoteApp, Altium | no KVM, no Windows, no licences | the owner |

@@ -4,7 +4,7 @@ Release:        1%{?dist}
 Summary:        What EDA tools (Cadence, Synopsys) ask of an EL9 system, and the tools for EL6 / EL7 boxes
 License:        LicenseRef-SilikVolt
 BuildArch:      noarch
-Requires:       silik-tools = %{version}
+Requires:       silik-tools >= 0.2.0
 Requires:       podman
 Requires:       tcsh
 Requires:       ksh

@@ -1,0 +1,29 @@
+/* SilikOS shell — the Silik layout (see extension.js). Paper #f7f6f3, ink #1a1b1e; frames are 1 px of ink. */
+
+/* title bar = the command line */
+#panel { height: 34px; }
+.silik-mk { width: 112px; padding: 0 0 0 12px; color: #f7f6f3; }
+.silik-mk-icon { icon-size: 22px; margin-right: 7px; }
+.silik-mk-name { font-weight: 600; font-size: 12px; }
+.silik-cmd { width: 520px; margin: 5px 0; padding: 0 10px; background-color: #2c2e32; color: #f7f6f3; font-size: 13px; border-radius: 0; }
+.silik-cmd:hover, .silik-cmd:focus { background-color: #3a3c41; }
+.silik-cmd-pr { font-weight: 600; padding-right: 8px; }
+.silik-cmd-cur { width: 7px; height: 15px; border: 1px solid #8a8b8f; }
+.silik-cmd-hint { color: #b9b8b3; font-size: 11px; }
+
+/* rail: text keys, digit first */
+.silik-rail { background-color: #f7f6f3; color: #1a1b1e; border-right: 1px solid #1a1b1e; padding: 4px 0; font-size: 12px; }
+.silik-key { height: 24px; padding: 0 8px; border-radius: 0; color: #1a1b1e; }
+.silik-key:hover, .silik-key:focus { background-color: #eeede9; }
+.silik-key.silik-on { background-color: #1a1b1e; color: #f7f6f3; }
+.silik-key-n { width: 7px; padding-right: 7px; color: #6b6d72; }
+.silik-key.silik-on .silik-key-n { color: #b9b8b3; }
+.silik-key-m { font-size: 8px; padding-left: 4px; }
+.silik-hr { height: 1px; margin: 4px 10px; background-color: #dcdad5; }
+
+/* status bar: the one message channel, then "key value" fields */
+.silik-sb { background-color: #f7f6f3; color: #2c2e32; border-top: 1px solid #1a1b1e; font-size: 11px; }
+.silik-f { padding: 0 10px; border-left: 1px solid #dcdad5; spacing: 6px; }
+.silik-msg { border-left-width: 0; }
+.silik-k { color: #6b6d72; }
+.silik-v { color: #1a1b1e; }

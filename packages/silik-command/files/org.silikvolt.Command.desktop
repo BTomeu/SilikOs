@@ -10,3 +10,4 @@ Exec=silik-command
 Icon=org.silikvolt.Command
 Categories=System;Utility;
 StartupNotify=false
+StartupWMClass=Silik-command

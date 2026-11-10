@@ -24,9 +24,12 @@ be used.
 5. **Windows programs: Wine first, a virtual machine when Wine cannot.** `silik win` keeps one Wine prefix per
    program; for programs Wine does not run (Altium is expected to be one), a Windows virtual machine on KVM, with the
    program shown as a window of this desktop over RDP (`silik win vm app`).
-6. **The desktop is GNOME with SilikOS defaults in v0**, plus the COMMAND bar (Super+Space): typed addresses
+6. **The desktop is GNOME Shell laid out as the Silik interface** (owner, 10/11/2026: "it must look like the Silik
+   interface"): the shell extension `silik-shell` gives the three parts of SilikStudio's window (title bar = the
+   command line, a text rail of keys, a status bar with the last command `silik` ran), the GTK and shell themes are
+   one ink on paper, and the COMMAND bar (Super+Space, or a click on the command line) takes typed addresses
    (`app/`, `eda/`, `win/`, `sys/`, paths), each with the command line that does the same from a terminal, and a
-   session log. A shell of our own comes only after v0 is used on a real machine.
+   session log. A shell of our own (no GNOME underneath) comes only after v0 is used on a real machine.
 7. **x86_64 first.** The EDA tools and Altium exist only for x86_64 [A: as far as known on 09/11/2026]. ARM is a
    later experiment (`docs/HARDWARE.md`).
 

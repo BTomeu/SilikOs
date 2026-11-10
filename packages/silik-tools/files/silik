@@ -18,8 +18,9 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -72,11 +73,23 @@ class Ctx:
         if not self.quiet:
             print("$ " + " ".join(shlex.quote(a) for a in argv), flush=True)
 
+    def note(self, argv):
+        """the command about to run, for the desktop's status bar: "HH:MM command" in $XDG_RUNTIME_DIR/silik-last"""
+        d = os.environ.get("XDG_RUNTIME_DIR")
+        if not d or not os.path.isdir(d):
+            return
+        try:
+            with open(os.path.join(d, "silik-last"), "w") as f:
+                f.write(time.strftime("%H:%M") + " " + " ".join(shlex.quote(a) for a in argv) + "\n")
+        except OSError:
+            pass
+
     def run(self, argv, check=True, capture=False, env=None, stdin=None):
         """prints the command, runs it unless --dry-run; returns (rc, stdout)"""
         self.echo(argv)
         if self.dry:
             return 0, ""
+        self.note(argv)
         try:
             p = subprocess.run(argv, check=False, env=env, input=stdin, universal_newlines=True,
                                stdout=subprocess.PIPE if capture else None)

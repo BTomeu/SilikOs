@@ -1,5 +1,5 @@
 Name:           silik-command
-Version:        0.2.0
+Version:        0.2.1
 Release:        1%{?dist}
 Summary:        The SilikOS COMMAND bar: type an address, run it, see its command line
 License:        LicenseRef-SilikVolt
@@ -7,7 +7,7 @@ BuildArch:      noarch
 Requires:       python3
 Requires:       python3-gobject
 Requires:       gtk3
-Requires:       silik-tools = %{version}
+Requires:       silik-tools >= 0.2.0
 Recommends:     gnome-terminal
 Recommends:     xdg-utils
 

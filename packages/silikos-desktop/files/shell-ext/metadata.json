@@ -1,0 +1,7 @@
+{
+  "uuid": "silik-shell@silikvolt.com",
+  "name": "SilikOS shell",
+  "description": "The Silik layout: the title bar is the command line, a text rail of keys, a status bar.",
+  "shell-version": ["40"],
+  "url": "https://github.com/BTomeu/silikos"
+}

@@ -75,6 +75,22 @@ class Silik(unittest.TestCase):
         self.assertIn("$ podman import", o)
         self.assertIn("silik eda create uni --el 6 --image localhost/silik-eda-import/uni", o)
 
+    def test_the_last_command_is_noted_for_the_status_bar(self):
+        with tempfile.TemporaryDirectory() as d:
+            old = os.environ.get("XDG_RUNTIME_DIR")
+            os.environ["XDG_RUNTIME_DIR"] = d
+            try:
+                silik.Ctx(quiet=True).run(["true", "a b"])
+                run("eda", "create", "x", "--el", "7")          # a dry run notes nothing
+            finally:
+                if old is None:
+                    del os.environ["XDG_RUNTIME_DIR"]
+                else:
+                    os.environ["XDG_RUNTIME_DIR"] = old
+            with open(os.path.join(d, "silik-last")) as f:
+                line = f.read()
+        self.assertRegex(line, r"^\d\d:\d\d true 'a b'\n$")
+
     def test_bad_names_are_refused(self):
         for n in ("../x", "a b", "", "-x", "x" * 41):
             with self.assertRaises(SystemExit):

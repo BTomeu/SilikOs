@@ -4,7 +4,7 @@ Release:        1%{?dist}
 Summary:        Windows programs on SilikOS: Wine, and a Windows virtual machine whose programs open as windows here
 License:        LicenseRef-SilikVolt
 BuildArch:      noarch
-Requires:       silik-tools = %{version}
+Requires:       silik-tools >= 0.2.0
 Recommends:     wine
 Recommends:     qemu-kvm
 Recommends:     libvirt-daemon-kvm
