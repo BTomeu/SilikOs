@@ -1,7 +1,10 @@
-# The open EDA tools SilikOS builds for EL 9 (none of them is in the base's repositories or in EPEL 9):
+# The open EDA tools SilikOS builds for EL 9 (none of them is in the base's repositories or in EPEL 9; Icarus Verilog,
+# Verilator and GTKWave are in EPEL 9 and come from there: packages/silik-eda-open):
 #   name     upstream git repository                              tag ("latest:PREFIX" = the newest tag PREFIX<number> at build time)
 #            a fourth field: the release archive to build from instead of the git tree ({ver} = the version)
 klayout  https://github.com/KLayout/klayout                   v0.30.13
 magic    https://github.com/RTimothyEdwards/magic             8.3.696
 xschem   https://github.com/StefanSchippers/xschem            3.4.7
 ngspice  https://git.code.sf.net/p/ngspice/ngspice            latest:ngspice-   https://sourceforge.net/projects/ngspice/files/ng-spice-rework/{ver}/ngspice-{ver}.tar.gz/download
+netgen   https://github.com/RTimothyEdwards/netgen            1.5.328
+yosys    https://github.com/YosysHQ/yosys                     v0.70             https://github.com/YosysHQ/yosys/releases/download/v{ver}/yosys.tar.gz

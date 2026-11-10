@@ -1,4 +1,4 @@
-# The open EDA tools of SilikOS: KLayout, Magic, Xschem and ngspice (with XSPICE) are not in EL 9's repositories or in
+# The open EDA tools of SilikOS: KLayout, Magic, Xschem, ngspice (with XSPICE), Netgen and Yosys are not in EL 9's repositories or in
 # EPEL 9, so each is built here from upstream's source at the tag of eda/versions (eda/<tool>.spec), tried in a clean
 # EL 9 (eda/trial.sh: it must do a small real job) and kept in the release `eda-tools`. The CI's ISO takes the
 # packages from that release, so the installed system has them (workflow CI).
@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        tool: [klayout, magic, xschem, ngspice]
+        tool: [klayout, magic, xschem, ngspice, netgen, yosys]
     runs-on: ubuntu-24.04
     container: almalinux:9
     timeout-minutes: 330
@@ -24,11 +24,15 @@ jobs:
       - name: Tools
         run: dnf -y -q install git tar gzip findutils zstd
       - uses: actions/checkout@v4
+      - name: The tool's own line of eda/versions (another tool's version does not make this one build again)
+        id: line
+        shell: bash
+        run: echo "sum=$(grep -E '^${{ matrix.tool }}[[:space:]]' eda/versions | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v4
         id: cache
         with:
           path: build/extra
-          key: eda-${{ matrix.tool }}-${{ hashFiles('eda/common.inc', format('eda/{0}.spec', matrix.tool), 'eda/versions', 'tools/build_eda.sh') }}
+          key: eda-${{ matrix.tool }}-${{ steps.line.outputs.sum }}-${{ hashFiles('eda/common.inc', format('eda/{0}.spec', matrix.tool), 'tools/build_eda.sh') }}
       - name: Build ${{ matrix.tool }}
         if: steps.cache.outputs.cache-hit != 'true'
         shell: bash
@@ -53,7 +57,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        tool: [klayout, magic, xschem, ngspice]
+        tool: [klayout, magic, xschem, ngspice, netgen, yosys]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -78,7 +82,7 @@ jobs:
         run: |
           gh release view eda-tools --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || gh release create eda-tools --repo "$GITHUB_REPOSITORY" \
             --title "Open EDA tools for SilikOS (EL 9)" --prerelease \
-            --notes "KLayout, Magic, Xschem and ngspice built from upstream's unmodified sources on EL 9 (eda/*.spec, eda/versions): none is in EL 9's repositories or EPEL 9. Each keeps its own licence (in the package). Not products of or supported by their authors' projects."
+            --notes "Open EDA tools (KLayout, Magic, Xschem, ngspice, Netgen, Yosys) built from upstream's unmodified sources on EL 9 (eda/*.spec, eda/versions): none is in EL 9's repositories or EPEL 9. Each keeps its own licence (in the package). Not products of or supported by their authors' projects."
           for f in dist/*.rpm; do
             # one package per tool in the release: an older build of the same tool goes
             gh release view eda-tools --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep "^${{ matrix.tool }}-" | while read -r old; do

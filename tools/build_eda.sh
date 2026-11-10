@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build_eda.sh NAME: one of the open EDA tools of eda/versions (klayout, magic, xschem, ngspice) as an RPM in
+# build_eda.sh NAME: one of the open EDA tools of eda/versions (klayout, magic, xschem, ngspice, netgen, yosys) as an RPM in
 # build/extra/, built from upstream's source at the tag written there (eda/NAME.spec). None of them is in EL 9's
 # repositories or in EPEL 9. Run ON EL 9 (or in an `almalinux:9` container) as root or with sudo: it installs the
 # build dependencies with dnf (CRB enabled). Nothing of the sources is kept in this repository.
@@ -7,7 +7,7 @@
 # tools/build_iso.sh puts every build/extra/*.rpm into the ISO: with these there, the installed system has the tools.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
-name=${1:?usage: tools/build_eda.sh klayout|magic|xschem|ngspice}
+name=${1:?usage: tools/build_eda.sh klayout|magic|xschem|ngspice|netgen|yosys}
 line=$(grep -E "^$name[[:space:]]" "$root/eda/versions") || { echo "error: $name is not in eda/versions" >&2; exit 2; }
 url=$(echo "$line" | awk '{print $2}'); tag=${SILIK_EDA_TAG:-$(echo "$line" | awk '{print $3}')}
 grep -q 'platform:el9' /etc/os-release || { echo "error: this builds on EL 9 only (binary compatibility with the base)" >&2; exit 2; }

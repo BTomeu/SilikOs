@@ -29,5 +29,19 @@ case "$name" in
     klayout -zz -r t.py > out.txt 2>&1 || { cat out.txt; exit 1; }
     grep -q 'read back TRIAL (0,0;1000,2000)' out.txt || { cat out.txt; exit 1; }
     echo "TRIAL-OK $(klayout -zz -v 2>&1 | head -1) : a box written to GDS and read back" ;;
+  netgen)    # an inverter's netlist against the same circuit written another way (must match), and against a wrong one
+    printf '.subckt inv in out vdd gnd\nM1 out in gnd gnd nfet w=4u l=2u\nM2 out in vdd vdd pfet w=8u l=2u\n.ends\n' > a.spice
+    printf '.subckt inv in out vdd gnd\nMP out in vdd vdd pfet w=8u l=2u\nMN out in gnd gnd nfet w=4u l=2u\n.ends\n' > b.spice
+    printf '.subckt inv in out vdd gnd\nMP out in vdd vdd pfet w=8u l=2u\nMN out out gnd gnd nfet w=4u l=2u\n.ends\n' > c.spice
+    netgen -batch lvs "a.spice inv" "b.spice inv" nosetup same.out > same.log 2>&1 || { cat same.log; exit 1; }
+    netgen -batch lvs "a.spice inv" "c.spice inv" nosetup wrong.out > wrong.log 2>&1 || { cat wrong.log; exit 1; }
+    grep -q 'Final result: Circuits match uniquely' same.out || { cat same.out; exit 1; }
+    grep -q 'Final result: Netlists do not match' wrong.out || { cat wrong.out; exit 1; }
+    echo "TRIAL-OK $(grep -m1 -o 'Netgen [0-9.]*' same.log) : two netlists of an inverter match; one with a wrong gate does not" ;;
+  yosys)     # a 4-bit counter synthesised to gates: four flip-flops must come out
+    printf 'module counter(input clk, input rst, output reg [3:0] q);\n  always @(posedge clk) if (rst) q <= 0; else q <= q + 1;\nendmodule\n' > c.v
+    yosys -p 'read_verilog c.v; synth -top counter; abc -g AND,NAND,OR,NOR,XOR,XNOR; stat' > out.txt 2>&1 || { tail -30 out.txt; exit 1; }
+    grep -E 'DFF' out.txt | grep -Eq '(^|[^0-9])4([^0-9]|$)' || { tail -40 out.txt; exit 1; }
+    echo "TRIAL-OK $(yosys -V | cut -c1-60) : a 4-bit counter synthesised, $(grep -E 'DFF' out.txt | tail -1 | tr -s ' ')" ;;
   *) echo "no trial for $name" >&2; exit 2 ;;
 esac
