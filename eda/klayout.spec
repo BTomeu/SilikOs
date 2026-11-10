@@ -13,7 +13,9 @@ Source0:        klayout-%{version}.tar.gz
 ExclusiveArch:  x86_64
 BuildRequires:  gcc-c++ make which qt5-qtbase-devel qt5-qttools-devel qt5-qtmultimedia-devel qt5-qtxmlpatterns-devel
 BuildRequires:  qt5-qtsvg-devel ruby ruby-devel python3-devel zlib-devel libcurl-devel expat-devel
-Requires:       ruby python3
+# rubygems: without it KLayout's Ruby interpreter stops at its start and the program exits (seen in the test
+# container, where weak dependencies were off: `ruby` alone does not bring it)
+Requires:       ruby rubygems python3
 
 %description
 KLayout %{version}: GDS and OASIS viewer and editor, DRC and LVS, Ruby and Python scripting. Upstream's source,

@@ -1,0 +1,15 @@
+a CMOS inverter with the simulator's own level-1 transistors: its output for a low and for a high input
+.model n1 nmos level=1 vto=0.7 kp=120u
+.model p1 pmos level=1 vto=-0.7 kp=40u
+vdd vdd 0 dc 3.3
+vin in 0 dc 0
+mn out in 0 0 n1 w=2u l=1u
+mp out in vdd vdd p1 w=6u l=1u
+.control
+op
+print v(out)
+alter vin dc = 3.3
+op
+print v(out)
+.endc
+.end

@@ -1,0 +1,5 @@
+* the schematic's side of the comparison: one n-channel transistor, 4 um wide and 2 um long
+.global Vdd Gnd
+.subckt nfet1
+M1 d g s Gnd nfet w=4u l=2u ad=20p pd=18u as=20p ps=18u
+.ends

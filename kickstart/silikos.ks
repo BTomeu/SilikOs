@@ -37,6 +37,7 @@ silikos-desktop
 silik-tools
 silik-command
 silik-eda-compat
+silik-eda-open
 silik-win
 silikos-security
 %end

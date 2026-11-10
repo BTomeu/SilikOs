@@ -22,7 +22,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.3.2"
+VERSION = "0.4.0"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -337,6 +337,228 @@ def eda_check(ctx, a):
 def eda_kernel_arg(ctx, a):
     ctx.run(["sudo", "grubby", "--update-kernel=ALL", "--args=vsyscall=emulate"])
     print("reboot to apply; `silik status` then shows vsyscall emulate")
+    return 0
+
+
+# ------------------------------------------------------------------ open EDA tools
+# KLayout, Magic, Xschem, ngspice, Netgen and Yosys (built for EL 9 from their authors' sources: eda/) and Icarus
+# Verilog, Verilator and GTKWave (EPEL 9), brought by the package silik-eda-open. `silik eda tools` says which are
+# on the system, `silik eda try` makes them do three small real jobs together (the files of
+# /usr/share/silikos/eda/try), `silik eda bench` times the simulator on this machine and `silik eda tune` sets what
+# the measurement shows to matter (the threads ngspice evaluates transistor models on: its default is 2).
+import re         # used by this section only
+import tempfile
+
+OPEN_TOOLS = (   # command, package, what it is for
+    ("xschem", "xschem", "schematic capture"),
+    ("ngspice", "ngspice", "circuit simulation (SPICE, XSPICE)"),
+    ("magic", "magic", "layout, design rules, extraction"),
+    ("klayout", "klayout", "layout viewer and editor (GDS, OASIS), DRC and LVS scripts"),
+    ("netgen", "netgen", "layout against schematic (LVS)"),
+    ("yosys", "yosys", "Verilog synthesis"),
+    ("iverilog", "iverilog", "Verilog simulation (Icarus Verilog)"),
+    ("verilator", "verilator", "Verilog simulation in C++, lint"),
+    ("gtkwave", "gtkwave", "waveform viewer"),
+)
+EDA_TRY = os.environ.get("SILIK_EDA_TRY") or "/usr/share/silikos/eda/try"
+SPICEINIT_NOTE = "* silik eda tune: the threads ngspice evaluates transistor models on (its default is 2)"
+
+
+def spiceinit():
+    return os.path.join(os.path.expanduser("~"), ".spiceinit")
+
+
+def cpu_cores():
+    """physical cores (two threads of one core count once), else the processors the system shows"""
+    seen = set()
+    for l in read("/proc/cpuinfo").split("\n\n"):
+        f = dict((k.strip(), v.strip()) for k, _, v in (x.partition(":") for x in l.splitlines()))
+        if "core id" in f:
+            seen.add((f.get("physical id", "0"), f["core id"]))
+    return len(seen) or os.cpu_count() or 1
+
+
+def ngspice_threads():
+    """the number `silik eda tune` wrote in ~/.spiceinit, or None (ngspice's default)"""
+    m = re.search(r"^set num_threads *= *(\d+)", read(spiceinit()), re.M)
+    return int(m.group(1)) if m else None
+
+
+def eda_tools(ctx, a):
+    rows = []
+    for exe, pkg, what in OPEN_TOOLS:
+        path = shutil.which(exe)
+        ver = ctx.query(["rpm", "-q", "--qf", "%{VERSION}", pkg]).strip() if path and shutil.which("rpm") else ""
+        rows.append({"tool": exe, "package": pkg, "for": what, "path": path, "version": ver if ver and " " not in ver else ""})
+    n = ngspice_threads()
+    if a.json:
+        print(json.dumps({"tools": rows, "ngspice_threads": n, "cores": cpu_cores()}, indent=1))
+        return 0
+    lines = ["%s %-10s %-12s %s" % (SEC_MARK["ok" if r["path"] else "unknown"], r["tool"],
+                                    (r["version"] or "found") if r["path"] else "missing", r["for"]) for r in rows]
+    if shutil.which("ngspice"):
+        lines.append("ngspice threads: %s; this machine has %d cores%s" % (
+            n if n else "2 (its default)", cpu_cores(), "" if n else "  (`silik eda tune` sets them; `silik eda bench` measures)"))
+    missing = [r["package"] for r in rows if not r["path"]]
+    if missing:
+        lines.append("missing: sudo dnf install " + " ".join(missing))
+    text = "\n".join(lines)
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        print(text.encode("ascii", "replace").decode("ascii"))
+    return 0
+
+
+def eda_try_jobs():
+    """the jobs of `silik eda try`: name, the tools it needs, its commands, and what its result must show.
+    A command is (argv, the file its output goes to or None); a check is (file, a regular expression, what it means)."""
+    return (
+        ("sim", ("ngspice",), [(["ngspice", "-b", "inverter.cir"], "inverter.out")],
+         [("inverter.out", r"v\(out\) = 3\.\d+e\+00[\s\S]*v\(out\) = \d\.\d+e-\d\d", "the inverter's output is high for a low input and low for a high one")]),
+        ("layout", ("magic", "netgen"), [(["magic", "-dnull", "-noconsole", "-T", "scmos", "nfet1.tcl"], "magic.out"),
+                                         (["netgen", "-batch", "lvs", "nfet1.spice nfet1", "nfet1_ref.spice nfet1", "nosetup", "lvs.out"], "netgen.out")],
+         [("nfet1.spice", r"(?m)^M\d+ d g s \S+ nfet w=4u l=2u", "Magic extracted the transistor it drew"),
+          ("lvs.out", r"Final result: Circuits match uniquely", "Netgen: the layout matches the schematic")]),
+        ("gds", ("magic", "klayout"), [(["magic", "-dnull", "-noconsole", "-T", "scmos", "nfet1_gds.tcl"], "magic_gds.out"),
+                                       (["klayout", "-zz", "-r", "gds_read.py", "-rd", "gds=nfet1.gds"], "klayout.out")],
+         [("klayout.out", r"read nfet1: [1-9]\d* shapes", "KLayout reads the GDS file Magic wrote")]),
+        ("digital", ("iverilog", "vvp"), [(["iverilog", "-o", "counter.vvp", "counter_tb.v", "counter.v"], "iverilog.out"),
+                                          (["vvp", "counter.vvp"], "vvp.out")],
+         [("vvp.out", r"PASS count=10", "the counter counts ten clock edges in simulation")]),
+        ("lint", ("verilator",), [(["verilator", "--lint-only", "-Wall", "counter.v"], "verilator.out")],
+         [("verilator.out", r"\A(?![\s\S]*%(Error|Warning))", "Verilator finds nothing to complain about in the counter")]),
+        ("synth", ("yosys",), [(["yosys", "-q", "-p", "read_verilog counter.v; synth -top counter; tee -o synth.txt stat"], "yosys.out")],
+         [("synth.txt", r"DFF", "Yosys synthesised the counter to gates and flip-flops")]),
+    )
+
+
+def eda_try(ctx, a):
+    jobs = [j for j in eda_try_jobs() if a.job in ("all", j[0])]
+    if not jobs:
+        die("no such job: %s (%s, all)" % (a.job, ", ".join(j[0] for j in eda_try_jobs())), 2)
+    if not os.path.isdir(EDA_TRY):
+        die("the files of the jobs are not here (%s): they come with the package silik-eda-open" % EDA_TRY)
+    work = tempfile.mkdtemp(prefix="silik-eda-try-") if not ctx.dry else "/tmp/silik-eda-try-XXXX"
+    ctx.run(["cp", "-r", EDA_TRY + "/.", work])
+    ctx.echo(["cd", work])
+    if not ctx.dry:
+        os.chdir(work)
+    rows = []
+    for name, needs, cmds, checks in jobs:
+        missing = [t for t in needs if not shutil.which(t)]
+        if missing and not ctx.dry:
+            rows.append(("unknown", name, "not run: %s %s not on the system" % (", ".join(missing), "is" if len(missing) == 1 else "are")))
+            continue
+        failed = None
+        for argv, out in cmds:
+            if not ctx.quiet:
+                print("$ " + " ".join(shlex.quote(x) for x in argv) + (" > " + out if out else ""), flush=True)
+            if ctx.dry:
+                continue
+            ctx.note(argv)
+            with open(out, "w") as f:
+                rc = subprocess.run(argv, stdout=f, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL).returncode
+            if rc != 0 and failed is None:
+                failed = "%s exited %d: %s" % (argv[0], rc, " / ".join(read(out).strip().splitlines()[-2:]))
+        if ctx.dry:
+            continue
+        for path, rx, means in checks:
+            if failed is None and not re.search(rx, read(path)):
+                failed = "not seen: " + means + " (" + os.path.join(work, path) + ")"
+        rows.append(("bad", name, failed) if failed else ("ok", name, "; ".join(c[2] for c in checks)))
+    if ctx.dry:
+        return 0
+    count = {k: sum(1 for r in rows if r[0] == k) for k in ("ok", "bad", "unknown")}
+    text = "\n".join(["%s %-8s %s" % (SEC_MARK[s], n, d) for s, n, d in rows] +
+                     ["%d ok, %d failed, %d not run; the files: %s" % (count["ok"], count["bad"], count["unknown"], work)])
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        print(text.encode("ascii", "replace").decode("ascii"))
+    return 1 if count["bad"] else 0
+
+
+def eda_bench_circuit(rings, stages):
+    """a circuit that keeps the simulator busy with transistor models: `rings` ring oscillators of `stages` CMOS
+    inverters each, with ngspice's own BSIM4 defaults (no vendor models)"""
+    out = ["* silik eda bench: %d ring oscillators of %d inverters (%d transistors, BSIM4 defaults)" % (rings, stages, 2 * rings * stages),
+           ".model n1 nmos level=14 version=4.8.2", ".model p1 pmos level=14 version=4.8.2", "vdd vdd 0 dc 1.2"]
+    for r in range(rings):
+        for i in range(stages):
+            a, b = "r%d_%d" % (r, i), "r%d_%d" % (r, (i + 1) % stages)
+            out += ["mn%d_%d %s %s 0 0 n1 w=0.5u l=0.1u" % (r, i, b, a), "mp%d_%d %s %s vdd vdd p1 w=1u l=0.1u" % (r, i, b, a),
+                    "c%d_%d %s 0 2f" % (r, i, b)]
+        out.append(".ic v(r%d_0)=0" % r)
+    return "\n".join(out + [".tran 5p 4n uic", ".control", "run", "print length(v(r0_0))", ".endc", ".end"]) + "\n"
+
+
+def eda_bench(ctx, a):
+    if not shutil.which("ngspice") and not ctx.dry:
+        die("ngspice is not on the system (package ngspice, with silik-eda-open)")
+    cores = cpu_cores()
+    threads = sorted(set([1, 2, cores] + ([os.cpu_count()] if a.all_threads and os.cpu_count() else [])))
+    work = tempfile.mkdtemp(prefix="silik-eda-bench-") if not ctx.dry else "/tmp/silik-eda-bench-XXXX"
+    ctx.echo(["cd", work])
+    if not ctx.dry:
+        os.chdir(work)
+        with open("rings.cir", "w") as f:
+            f.write(eda_bench_circuit(a.rings, a.stages))
+    print("silik: %d ring oscillators of %d inverters, %d transistors; best of %d run%s each" % (a.rings, a.stages, 2 * a.rings * a.stages, a.runs, "" if a.runs == 1 else "s"))
+    env = dict(os.environ, HOME=work)          # the threads are set in a .spiceinit of this folder, not in the user's
+    times = {}
+    for t in threads:
+        if not ctx.quiet:
+            print("$ printf 'set num_threads=%d\\n' > .spiceinit; ngspice -b rings.cir" % t, flush=True)
+        if ctx.dry:
+            continue
+        with open(".spiceinit", "w") as f:
+            f.write("set num_threads=%d\n" % t)
+        best = None
+        for _ in range(a.runs):
+            t0 = time.time()
+            p = subprocess.run(["ngspice", "-b", "rings.cir"], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                               stdin=subprocess.DEVNULL, universal_newlines=True)
+            dt = time.time() - t0
+            if p.returncode != 0 or "length(v(r0_0))" not in p.stdout:
+                die("ngspice did not finish the circuit: " + " / ".join(p.stdout.strip().splitlines()[-2:]))
+            best = dt if best is None else min(best, dt)
+        times[t] = best
+    if ctx.dry:
+        return 0
+    fastest = min(times, key=lambda k: times[k])
+    for t in threads:
+        print("%2d threads  %7.2f s%s%s" % (t, times[t], "  (ngspice's default)" if t == 2 else "", "  <- fastest" if t == fastest else ""))
+    now = ngspice_threads() or 2
+    if times[fastest] < 0.95 * times.get(now, times[fastest] / 0.9) and fastest != now:
+        print("silik: on this circuit %d threads take %.0f %% of the time of %d (%s): `silik eda tune --threads %d`" % (
+            fastest, 100 * times[fastest] / times[now] if now in times else 0, now, "set now" if ngspice_threads() else "the default", fastest))
+    else:
+        print("silik: the threads set now (%d) are within 5 %% of the fastest: nothing to change" % now)
+    return 0
+
+
+def eda_tune(ctx, a):
+    n = a.threads or cpu_cores()
+    if n < 1 or n > 1024:
+        die("threads: a number from 1", 2)
+    path = spiceinit()
+    kept = [l for l in read(path).splitlines() if l != SPICEINIT_NOTE and not re.match(r"set num_threads *=", l)]
+    new = kept + ([] if a.undo else [SPICEINIT_NOTE, "set num_threads=%d" % n])
+    if not ctx.quiet:
+        if a.undo:
+            print("$ sed -i '/^set num_threads *=/d; /silik eda tune/d' %s" % shlex.quote(path), flush=True)
+        else:
+            print("$ printf '%%s\\n' %s 'set num_threads=%d' >> %s" % (shlex.quote(SPICEINIT_NOTE), n, shlex.quote(path)), flush=True)
+    if ctx.dry:
+        return 0
+    if new:
+        with open(path, "w") as f:
+            f.write("".join(l + "\n" for l in new))
+    elif os.path.exists(path):          # nothing else was in the file: it goes
+        os.remove(path)
+    print("silik: ngspice %s" % ("is back to its default of 2 threads" if a.undo else
+                                 "evaluates transistor models on %d threads from its next start (this machine has %d cores); `silik eda bench` measures it" % (n, cpu_cores())))
     return 0
 
 
@@ -1993,7 +2215,7 @@ def parser():
     x = s.add_parser("identity", help="the names the system shows: silikos | base | show")
     x.add_argument("which", nargs="?", default="show", choices=["show", "silikos", "base"]); x.set_defaults(fn=cmd_identity)
 
-    e = s.add_parser("eda", help="EDA boxes: EL6 / EL7 / EL8 userlands for the tools").add_subparsers(dest="cmd")
+    e = s.add_parser("eda", help="EDA: EL6 / EL7 / EL8 boxes for the vendors' tools, and the open tools").add_subparsers(dest="cmd")
     x = e.add_parser("list"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=eda_list)
     x = e.add_parser("create"); x.add_argument("name"); x.add_argument("--el", default="7"); x.add_argument("--image"); x.set_defaults(fn=eda_create)
     x = e.add_parser("setup"); x.add_argument("name"); x.add_argument("--el"); x.set_defaults(fn=eda_setup)
@@ -2003,6 +2225,15 @@ def parser():
     x = e.add_parser("rm"); x.add_argument("name"); x.set_defaults(fn=eda_rm)
     x = e.add_parser("check"); x.set_defaults(fn=eda_check)
     x = e.add_parser("kernel-arg"); x.set_defaults(fn=eda_kernel_arg)
+    x = e.add_parser("tools", help="the open EDA tools on this system"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=eda_tools)
+    x = e.add_parser("try", help="the open tools do small real jobs together: sim, layout, gds, digital, lint, synth")
+    x.add_argument("job", nargs="?", default="all"); x.set_defaults(fn=eda_try)
+    x = e.add_parser("bench", help="times ngspice on this machine with 1, 2 and all its cores")
+    x.add_argument("--rings", type=int, default=40); x.add_argument("--stages", type=int, default=51)
+    x.add_argument("--runs", type=int, default=3); x.add_argument("--all-threads", action="store_true", help="also every processor thread")
+    x.set_defaults(fn=eda_bench)
+    x = e.add_parser("tune", help="ngspice evaluates transistor models on this machine's cores (its default is 2 threads)")
+    x.add_argument("--threads", type=int); x.add_argument("--undo", action="store_true"); x.set_defaults(fn=eda_tune)
 
     w = s.add_parser("win", help="Windows programs: Wine prefixes and a Windows virtual machine").add_subparsers(dest="cmd")
     def box(x):   # the sandbox switches, before the positional arguments

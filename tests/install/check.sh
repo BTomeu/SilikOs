@@ -22,7 +22,7 @@ has name.pretty "$PRETTY_NAME" "SilikOS"
 is name.id "$ID" almalinux
 has name.redhat-release "$(cat /etc/redhat-release)" "AlmaLinux"
 has name.boot-entries "$(grep -h '^title' /boot/loader/entries/*.conf | head -3)" "SilikOS"
-for p in silik-tools silik-command silikos-branding silikos-desktop silikos-security silik-eda-compat silik-win; do
+for p in silik-tools silik-command silikos-branding silikos-desktop silikos-security silik-eda-compat silik-eda-open silik-win; do
   if v=$(rpm -q $p 2>&1); then say package.$p ok "$v"; else say package.$p FAIL "$v"; fi
 done
 is security.selinux "$(getenforce 2>&1)" Enforcing
@@ -126,7 +126,7 @@ else
   say win.wine info "no Wine on the system (the ISO carries it when build/extra has silik-wine)"
 fi
 # the open EDA tools (on the ISO when the workflow EDA tools has made them)
-for t in klayout magic xschem ngspice; do
+for t in klayout magic xschem ngspice netgen yosys; do
   if v=$(rpm -q $t 2> /dev/null); then say eda.$t ok "$v"; else say eda.$t info "not on the ISO"; fi
 done
 if command -v ngspice > /dev/null; then
@@ -144,6 +144,16 @@ fi
 if command -v xschem > /dev/null; then
   has eda.xschem-run "$(runuser -u tester -- xschem --version 2>&1 | head -1)" "XSCHEM"
 fi
+# the tools of EPEL the package silik-eda-open asks for, and the jobs the open tools do together (`silik eda try`:
+# an inverter simulated, a transistor drawn, extracted and compared with its schematic, its GDS read, a counter
+# simulated, checked and synthesised), as the test user; a job whose tool is not on the ISO is "not run", not a failure
+for t in iverilog verilator gtkwave; do
+  if v=$(rpm -q $t 2> /dev/null); then say eda.$t ok "$v"; else say eda.$t FAIL "not installed (EPEL): $v"; fi
+done
+o=$(runuser -u tester -- sh -c 'cd /tmp && silik -q eda try' 2>&1); rc=$?
+if [ $rc = 0 ]; then say eda.try ok "$(echo "$o" | tail -1 | sed 's/; the files.*//')"; else say eda.try FAIL "exit $rc: $(echo "$o" | tail -1 | sed 's/; the files.*//')"; fi
+echo "$o" | grep -v '^[0-9]* ok' | head -8 | while read -r line; do say eda.try-job info "$line"; done
+say eda.tools info "$(runuser -u tester -- silik eda tools 2>&1 | grep -c '^●') of 9 open tools on the system"
 # the names and classes of the Tk tools' windows (what a desktop entry must say for the rail to know the program)
 if insession xwininfo -root > /dev/null 2>&1; then
   for t in xschem magic; do

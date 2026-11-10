@@ -56,14 +56,56 @@ the supported systems; check them for the release in use].
 
 ## Open tools on the system
 
-KLayout, Magic, Xschem and ngspice (built with the XSPICE code models and CIDER) are not in EL 9's repositories or in
-EPEL 9. SilikOS builds each from its authors' unmodified source at the tag written in `eda/versions`
-(`tools/build_eda.sh NAME` on EL 9, `eda/NAME.spec`), tries it in a clean EL 9 (`eda/trial.sh`: ngspice solves a
-divider and an XSPICE gain block, Magic paints and saves a cell, KLayout writes a GDS file and reads it back) and
-keeps the package in the release `eda-tools` (workflow "EDA tools"). `tools/build_iso.sh` puts whatever packages
-are in `build/extra/` into the ISO, so the installed system has them (each brings a desktop entry; not yet
-seen in Start).
-Each keeps its own licence, installed with the package. `docs/STATUS.md` says which of this has been run.
+| Tool | For | From |
+|---|---|---|
+| Xschem | schematic capture | built here (`eda/xschem.spec`) |
+| ngspice | circuit simulation, with the XSPICE code models and CIDER | built here |
+| Magic | layout, design rules, extraction | built here |
+| KLayout | layout viewer and editor (GDS, OASIS), DRC and LVS scripts | built here |
+| Netgen | layout against schematic (LVS) | built here |
+| Yosys | Verilog synthesis (with ABC) | built here |
+| Icarus Verilog, Verilator, GTKWave | Verilog simulation, lint, waveforms | EPEL 9 |
+
+The first six are not in EL 9's repositories or in EPEL 9. SilikOS builds each from its authors' unmodified source
+at the version written in `eda/versions` (`tools/build_eda.sh NAME` on EL 9, `eda/NAME.spec`), tries it in a clean
+EL 9 (`eda/trial.sh`: each must do a small real job) and keeps the package in the release `eda-tools` (workflow "EDA
+tools"). `tools/build_iso.sh` puts whatever packages are in `build/extra/` into the ISO. The package
+`silik-eda-open` (in the kickstart) asks for all of them, EPEL's included, and carries the files of `silik eda try`.
+Each tool keeps its own licence, installed with its package. No PDK is shipped. `docs/STATUS.md` says which of this
+has been run.
+
+```
+silik eda tools                 which of them are on this system, their versions, the simulator's threads
+silik eda try [JOB]             they do small real jobs together, each command printed:
+                                  sim      ngspice: a CMOS inverter, its output for a low and a high input
+                                  layout   Magic draws a transistor and extracts it; Netgen compares it with its schematic
+                                  gds      Magic writes the layout as GDS; KLayout reads it
+                                  digital  Icarus Verilog simulates a counter
+                                  lint     Verilator checks it
+                                  synth    Yosys synthesises it to gates and flip-flops
+silik eda bench                 times ngspice on this machine with 1, 2 and all its cores (a circuit made on the spot)
+silik eda tune [--threads N]    writes the threads ngspice evaluates transistor models on to ~/.spiceinit (--undo)
+```
+
+### What makes the simulator faster (measured, 10/11/2026)
+
+Measured with our ngspice 47 package in the test container (4 cores of a shared Xeon at 2.1 GHz, best of 3 runs each),
+on two circuits made for the purpose with the simulator's own model defaults:
+
+| Circuit | Setting | Time |
+|---|---|---|
+| 40 ring oscillators of 51 inverters: 4080 BSIM4 transistors, 4 ns | 1 thread | 10.6 - 10.8 s |
+| | 2 threads (ngspice's default) | 6.6 s |
+| | 4 threads | 4.6 - 4.8 s |
+| | 4 threads, KLU solver | 4.9 s (no gain) |
+| An RC ladder of 20000 sections, 200 ns | ngspice's own solver | 7.1 - 7.5 s (threads change nothing) |
+| | KLU solver | 9.1 s (slower) |
+
+So: a circuit of many transistors gains from as many threads as the machine has cores (here 31 % less time than the
+default of two), and `silik eda tune` sets that for the user. The KLU solver is not turned on: it gained nothing on
+the first circuit and lost on the second. Nothing is claimed for other machines: `silik eda bench` measures there.
+Not measured: other compiler flags for ngspice (its sources cannot be downloaded from this build machine), the other
+tools.
 
 To change a version: the tag in `eda/versions`. To add a tool: a line there, `eda/NAME.spec`, a case in
-`eda/trial.sh`, its name in the workflow's two lists.
+`eda/trial.sh`, its name in the workflow's two lists and in `silik-eda-open`.

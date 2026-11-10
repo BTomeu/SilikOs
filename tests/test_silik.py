@@ -155,7 +155,7 @@ class Bar(unittest.TestCase):
         self.assertTrue(all(a.startswith("sys/") for a in self.addresses("")))
 
     def test_prefix(self):
-        self.assertEqual(self.addresses("eda"), ["eda/check", "eda/ic616", "eda/sentaurus"])
+        self.assertEqual(self.addresses("eda"), ["eda/check", "eda/ic616", "eda/sentaurus", "eda/tools", "eda/try"])
         self.assertEqual(self.addresses("fire"), ["app/firefox"])
 
     def test_run_in_box(self):
