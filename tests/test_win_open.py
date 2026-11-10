@@ -26,7 +26,8 @@ silik = load("silik_win_cli", os.path.join(ROOT, "packages/silik-tools/files/sil
 bar = load("silik_win_command", os.path.join(ROOT, "packages/silik-command/files/silik-command"))
 
 KEEP = ("HOME", "XDG_RUNTIME_DIR", "XDG_DATA_HOME", "XDG_CONFIG_HOME", "SILIK_BWRAP", "SILIK_WIN_SHARED", "SILIK_WIN_SHOW",
-        "DISPLAY", "XAUTHORITY", "PATH", "WINEDEBUG", "WINEDLLOVERRIDES", "SECRET_TOKEN", "DBUS_SESSION_BUS_ADDRESS", "USER")
+        "DISPLAY", "XAUTHORITY", "PATH", "WINEDEBUG", "WINEDLLOVERRIDES", "SECRET_TOKEN", "DBUS_SESSION_BUS_ADDRESS", "USER",
+        "SILIK_WINE_SHARE")
 LNK = "C:\\users\\u\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Tool\\My Tool.lnk"
 # an entry as Wine's winemenubuilder writes it (Wine 9.0)
 WINE_ENTRY = ("[Desktop Entry]\nName=My Tool\nExec=env WINEPREFIX=\"%s\" wine-stable C:\\\\\\\\users\\\\\\\\u\\\\\\\\AppData\\\\\\\\Roaming\\\\\\\\"
@@ -49,6 +50,8 @@ class Case(unittest.TestCase):
             os.environ.pop(k, None)
         os.environ.update({"HOME": self.home, "XDG_RUNTIME_DIR": self.rt, "SILIK_BWRAP": "/usr/bin/bwrap", "DISPLAY": ":7",
                            "PATH": self.old["PATH"] or "/usr/bin:/bin", "USER": "u"})
+        self.wshare = os.path.join(self.tmp, "wine-share")     # no Wine Mono or Gecko on this "system" unless a test puts them
+        os.environ["SILIK_WINE_SHARE"] = self.wshare
         self.root0, self.tty0 = silik.WINE_ROOT, silik.win_tty
         silik.win_tty = lambda: True            # as typed in a terminal
         silik.WINE_ROOT = os.path.join(self.home, ".local", "share", "silikos", "wine")
@@ -96,6 +99,8 @@ class Open(Case):
         self.assertTrue(box and all(x.startswith("$ env -i /usr/bin/bwrap --unshare-user --unshare-pid --unshare-ipc") for x in box))
         self.assertTrue(box[0].endswith("WINEPREFIX=%s wineserver --foreground 3>%s/silik-win/default/session.json &" % (d, self.rt)))
         self.assertTrue(any(x.endswith("WINEARCH=win64 WINEPREFIX=%s wineboot --init" % d) for x in l))
+        # no Mono or Gecko on the system: the set-up leaves their libraries out, so that Wine asks nothing
+        self.assertTrue(any(" WINEDLLOVERRIDES=mscoree,mshtml= WINEARCH=win64 " in x and x.endswith("wineboot --init") for x in l))
         self.assertTrue(l[-1].startswith("$ env -i nsenter --preserve-credentials -t PID -U -m -p -i -u -- setpriv --no-new-privs --pdeathsig KILL setsid --wait env -C "))
         self.assertTrue(l[-1].endswith("WINEDEBUG=-all WINEPREFIX=%s wine %s a 'b c'" % (d, exe)))
 
@@ -515,6 +520,39 @@ class Package(unittest.TestCase):
             self.assertIn("%{_sourcedir}/" + n, spec)
         self.assertIn("Requires:       bubblewrap", spec)
 
+
+
+
+class Addons(Case):
+    """Wine Mono and Wine Gecko as files of the system (silik-wine-mono, silik-wine-gecko)"""
+
+    def setup_line(self):
+        rc, o, e = self.run_("win", "open", self.file("Downloads/hello.exe"))
+        self.assertEqual(rc, 0)
+        return [x for x in self.lines(o) if x.endswith("wineboot --init")][0]
+
+    def test_mono_on_the_system(self):
+        os.makedirs(os.path.join(self.wshare, "mono", "wine-mono-10.4.1"))
+        self.assertIn(" WINEDLLOVERRIDES=mshtml= ", self.setup_line())          # only Gecko is missing
+
+    def test_both_on_the_system(self):
+        os.makedirs(os.path.join(self.wshare, "mono", "wine-mono-10.4.1"))
+        os.makedirs(os.path.join(self.wshare, "gecko", "wine-gecko-2.47.4-x86_64"))
+        self.assertNotIn("WINEDLLOVERRIDES", self.setup_line())                 # Wine finds both: nothing left out
+
+    def test_a_program_of_wines_own_folder_needs_nothing_shown(self):
+        # Wine Mono's compiler lives under /opt/silik-wine, which the sandbox shows already
+        old = silik.wine_opt
+        silik.wine_opt = lambda: "/opt/silik-wine"
+        try:
+            self.assertEqual(silik.win_show("/opt/silik-wine/share/wine/mono/wine-mono-10.4.1/lib/mono/4.5/mcs.exe", self.prefix()), [])
+            self.assertNotEqual(silik.win_show("/opt/other/tool.exe", self.prefix()), [])
+        finally:
+            silik.wine_opt = old
+
+    def test_an_empty_folder_is_not_an_addon(self):
+        os.makedirs(os.path.join(self.wshare, "mono"))
+        self.assertIn(" WINEDLLOVERRIDES=mscoree,mshtml= ", self.setup_line())
 
 if __name__ == "__main__":
     unittest.main()

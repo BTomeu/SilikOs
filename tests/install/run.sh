@@ -5,8 +5,8 @@
 #      the ISO itself is the one a person would use, untouched
 #   2. QEMU installs from the ISO onto an empty virtual disk and powers off
 #   3. QEMU boots that disk; the system reports its own checks on the serial port (check.sh), the screen is saved
-#      (the desktop, Start after the Super key, the COMMAND bar after Super+Space, a Windows program opened from it,
-#      the lock screen and its prompt)
+#      (the desktop, Start after the Super key, the COMMAND bar after Super+Space, a Windows program and the open EDA
+#      tools opened from it, the lock screen and its prompt, the session after the password, the login screen)
 #   OUT_DIR (default build/install-test): install.log, boot.log, report.txt, *.png;  exit 0 when no check failed
 #   SILIK_CI_APPEND="..."   more installer boot options, e.g. on a build machine behind a proxy:
 #                           "inst.proxy=http://10.0.2.2:PORT inst.noverifyssl" (10.0.2.2 is the host, seen from the VM)
@@ -129,9 +129,22 @@ if kill -0 $qpid 2> /dev/null; then
     key meta_l-spc || true; sleep 5; typ "/home/tester/Downloads/win.exe" || true; sleep 2
     key ret || true; sleep 25; shot windows-program || true
   fi
+  # the open EDA tools, each started from the COMMAND bar by its address, when the ISO carries them
+  eda() { key meta_l-spc || true; sleep 5; typ "app/$1" || true; sleep 2; key ret || true; sleep "$2"; shot "eda-$1" || true; }
+  if grep -q 'SILIKOS-CI|eda.klayout|ok' "$out/boot.log"; then
+    key alt-f4 || true; sleep 3                            # (the Windows program's window)
+    eda klayout 35; key alt-f4 || true; sleep 3; key alt-f4 || true; sleep 3
+    eda magic 25; key alt-f4 || true; sleep 3; key alt-f4 || true; sleep 3
+    eda xschem 25; key alt-f4 || true; sleep 3
+    eda ngspice 15; typ "quit" || true; key ret || true; sleep 3
+  fi
   key meta_l-l || true; sleep 6                            # Super+L: locked, and the screen goes dark
   key ctrl || true; sleep 4; shot unlock || true           # a key wakes it: the password prompt (extensions are off there)
   key esc || true; sleep 4; shot lock || true              # Esc: back to the lock screen and its clock
+  key ret || true; sleep 3; typ "silikos-ci" || true; key ret || true; sleep 8   # the test user's password (ci.ks.in)
+  shot unlocked || true                                    # the session again: the Silik layout must be back
+  key meta_l-spc || true; sleep 5; typ "sys/logout" || true; sleep 2; key ret || true; sleep 5
+  key ret || true; sleep 20; shot login || true            # (the "Log out" question) then the login screen
   python3 - "$work/mon.sock" <<'EOF' || true
 import socket, sys, time
 s = socket.socket(socket.AF_UNIX); s.connect(sys.argv[1]); time.sleep(0.3); s.send(b"quit\n"); time.sleep(1)

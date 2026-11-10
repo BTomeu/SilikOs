@@ -130,10 +130,14 @@ Consequences to know:
 - EL 9's SELinux policy does not let a user's program run Wine's kind of code (`selinuxuser_execmod` is off):
   `silik-win` carries a rule (`silikos_wine.cil`) that gives Wine's three programs the policy's own Wine domain
   (`wine_t`). The boolean stays off for everything else.
-- **No .NET (Mono) and no HTML engine (Gecko) in a new prefix.** WineHQ's Wine offers to download them with a dialog
-  the first time a prefix is made; behind a double-click that dialog stopped the first program (seen on the installed
-  system and in a container). `silik` sets a prefix up with `WINEDLLOVERRIDES=mscoree,mshtml=`, so nothing is asked
-  and nothing is downloaded. A .NET program does not start until Mono is put in its prefix (not handled yet).
+- **.NET and HTML: Wine Mono and Wine Gecko are packages of the system** (`silik-wine-mono`, `silik-wine-gecko`:
+  upstream's binary archives unpacked under `/opt/silik-wine/share/wine`, `wine/silik-wine-addons.spec`). WineHQ's
+  Wine otherwise offers to download them with a dialog: "Wine Mono Installer" the first time a prefix is made (behind
+  a double-click it stopped the first program: seen on the installed system and in a container), "Wine Gecko
+  Installer" when a program first asks for an HTML document (seen in a container: the program waits behind it). With
+  the packages Wine finds both, asks nothing, downloads nothing and copies nothing into the prefix. On a system
+  without one of them `silik` sets a prefix up with that library left out (`WINEDLLOVERRIDES=mscoree=` / `mshtml=`),
+  so that the set-up never waits; a program that then needs it gets Wine's dialog.
 - Kernel-mode drivers do not exist under Wine [A: Wine's design, none tried here]: anti-cheat and copy-protection
   (DRM) drivers, and the drivers of hardware keys. Programs that insist on them need the virtual machine.
 - USB dongles (licence keys), serial ports, programmers and debug probes: the sandbox passes no USB or serial
@@ -189,4 +193,5 @@ prefix up and runs the program in its sandbox (exit 0); the program writes to `W
 
 Not run: the rail and the applications list of the real shell with a Wine window; sound, a GPU, NVIDIA devices, a
 Wayland session; a real `.msi`; a 32-bit program on the installed system (one ran in the Wine workflow's container);
-a real third-party installer; a .NET program; the virtual machine route, Altium.
+a real third-party installer; a real .NET application (only a program compiled for the test); the virtual machine
+route, Altium.

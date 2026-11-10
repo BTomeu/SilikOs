@@ -102,6 +102,18 @@ if command -v wine > /dev/null; then
         say win.window info "the window list cannot be read here (xwininfo): see the picture windows-program.png"
       fi
     fi
+    # .NET: a program compiled with Wine Mono's own compiler and run, both in the sandbox (the package silik-wine-mono)
+    say win.addons info "$(rpm -q silik-wine-mono silik-wine-gecko 2>&1 | tr '\n' ' ')"
+    mcs=$(ls /opt/silik-wine/share/wine/mono/wine-mono-*/lib/mono/4.5/mcs.exe 2> /dev/null | head -1)
+    if [ -n "$mcs" ]; then
+      printf 'using System;\nusing System.IO;\nclass Hello { static int Main(string[] a) { File.WriteAllText(a[0], "a .NET program ran: " + Environment.Version); return 0; } }\n' > /home/tester/Windows/hello.cs
+      chown tester:tester /home/tester/Windows/hello.cs
+      insession timeout 300 silik -q win run default -- "$mcs" '/out:W:\hello_net.exe' 'W:\hello.cs' > /tmp/ci-net.out 2>&1
+      insession timeout 300 silik -q win run default -- 'W:\hello_net.exe' 'W:\silikos-ci-net.txt' >> /tmp/ci-net.out 2>&1
+      has win.dotnet "$(cat /home/tester/Windows/silikos-ci-net.txt 2> /dev/null; echo; tail -3 /tmp/ci-net.out | tr '\n' ' ')" "a .NET program ran"
+    else
+      say win.dotnet info "no Wine Mono on the ISO (the release wine-* has silik-wine-mono once the workflow Wine has made it)"
+    fi
     # the SELinux domain a Windows program runs in, read by a Windows program (cmd) from the sandbox
     insession timeout 120 silik -q win run default -- cmd /c "type Z:\\proc\\self\\attr\\current > W:\\silikos-ci-domain.txt" > /dev/null 2>&1
     say win.selinux-domain info "$(tr -d '\0' < /home/tester/Windows/silikos-ci-domain.txt 2> /dev/null)"

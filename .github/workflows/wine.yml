@@ -1,13 +1,16 @@
-# Wine for SilikOS: upstream's source built on EL 9 as the package silik-wine (wine/silik-wine.spec), tried with a
-# 64-bit and a 32-bit Windows program, and kept as the release `wine-<version>`. The CI's ISO takes the package from
-# that release (workflow CI), so the installed system has Wine and the installation test runs a Windows program in it.
-# Runs when the package's recipe changes, or by hand (Actions > Wine > Run workflow, with a version). The build takes
-# about half an hour and is kept (cache) while the recipe does not change, so a change to the trial alone is quick.
+# Wine for SilikOS: upstream's source built on EL 9 as the package silik-wine (wine/silik-wine.spec); Wine Mono and Wine
+# Gecko as the packages silik-wine-mono and silik-wine-gecko (wine/silik-wine-addons.spec: .NET programs and HTML
+# without a download or a dialog). Tried together in a clean EL 9 with a screen: a prefix is made, a 64-bit and a
+# 32-bit Windows program run, a .NET program is compiled and run, the HTML engine loads Gecko. Kept as the release
+# `wine-<version>`. The CI's ISO takes the packages from that release (workflow CI), so the installed system has
+# Wine and the installation test runs Windows programs in it.
+# Runs when a recipe changes, or by hand (Actions > Wine > Run workflow, with a version). The build of Wine takes
+# about half an hour and is kept (cache) while its recipe does not change, so a change to the rest is quick.
 name: Wine
 on:
   push:
     branches: [main]
-    paths: ['wine/**', 'tools/build_wine.sh', '.github/workflows/wine.yml']
+    paths: ['wine/**', 'tools/build_wine.sh', 'tools/build_wine_addons.sh', '.github/workflows/wine.yml']
   workflow_dispatch:
     inputs:
       version:
@@ -46,17 +49,59 @@ jobs:
           path: build/extra/silik-wine-*.rpm
           compression-level: 0
 
-  trial:
+  addons:
     needs: build
     runs-on: ubuntu-24.04
     container: almalinux:9
     timeout-minutes: 30
     steps:
+      - name: Tools
+        run: dnf -y -q install git tar gzip xz findutils rpm-build binutils cpio
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: silik-wine
           path: dist
-      - name: Install it and run two Windows programs (64-bit and 32-bit)
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: build/addons
+          key: silik-wine-addons-${{ needs.build.outputs.version }}-${{ hashFiles('wine/silik-wine-addons.spec', 'tools/build_wine_addons.sh') }}
+      - name: Build silik-wine-mono and silik-wine-gecko
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          if ! bash tools/build_wine_addons.sh dist/silik-wine-*.rpm > build.log 2>&1; then
+            tail -40 build.log
+            echo "::error title=Wine add-ons::$(tail -8 build.log | tr '\n' ' ' | cut -c1-900)"
+            exit 1
+          fi
+          grep -E '^(this Wine asks|source:)' build.log
+          mkdir -p build/addons && mv build/extra/silik-wine-mono-*.rpm build/extra/silik-wine-gecko-*.rpm build/addons/
+      - name: What was built
+        run: echo "::notice title=Wine add-ons built::$(cd build/addons && ls -la *.rpm | awk '{print $5, $9}' | tr '\n' ' ')"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: silik-wine-addons
+          path: build/addons/*.rpm
+          compression-level: 0
+
+  trial:
+    needs: [build, addons]
+    runs-on: ubuntu-24.04
+    container: almalinux:9
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: silik-wine
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: silik-wine-addons
+          path: dist
+      - name: Install them; a prefix, two Windows programs (64-bit and 32-bit), a .NET program, the HTML engine
         shell: bash
         run: |
           # each stage reports what it printed when it fails (the annotation of the run)
@@ -67,8 +112,11 @@ jobs:
           again() { for i in 1 2 3; do "$@" && return 0; dnf clean metadata -q; sleep 60; done; return 1; }
           # only the base's repositories and CRB (for the cross compilers): the package needs nothing of EPEL
           stage "repositories" again bash -c 'dnf -y -q install dnf-plugins-core && dnf config-manager --set-enabled crb'
-          stage "install the package" again dnf -y install dist/silik-wine-*.rpm
-          stage "the cross compilers" again dnf -y -q install mingw64-gcc mingw32-gcc
+          stage "install the packages" again dnf -y install dist/silik-wine-*.rpm
+          stage "the cross compilers and a screen" again dnf -y -q install mingw64-gcc mingw32-gcc xorg-x11-server-Xvfb
+          # with a screen, as on a desktop: a Wine that misses Mono opens a dialog here and the set-up never ends
+          Xvfb :9 -screen 0 1024x768x24 > /dev/null 2>&1 &
+          sleep 2; export DISPLAY=:9
           stage "wine --version" wine --version
           printf '#include <stdio.h>\nint main(void) { puts("hello from a Windows program"); return 0; }\n' > hello.c
           stage "compile 64-bit" x86_64-w64-mingw32-gcc -O2 -o hello64.exe hello.c
@@ -79,6 +127,16 @@ jobs:
             stage "run $p.exe" bash -c "timeout 300 wine $p.exe > $p.out 2> $p.err; rc=\$?; cat $p.out; tail -12 $p.err; tr -d '\\r' < $p.out | grep -qx 'hello from a Windows program' || { echo \"exit \$rc, no greeting\"; exit 1; }"
             echo "::notice title=Wine on EL 9::$p.exe ran"
           done
+          # .NET: a program compiled with Wine Mono's own compiler, then run
+          mcs=$(ls /opt/silik-wine/share/wine/mono/wine-mono-*/lib/mono/4.5/mcs.exe | head -1)
+          printf 'using System;\nclass Hello { static int Main() { Console.WriteLine("a .NET program ran: " + Environment.Version); return 0; } }\n' > net.cs
+          stage "compile a .NET program" bash -c "timeout 300 wine '$mcs' /out:net.exe net.cs 2>&1 | tail -5; test -s net.exe"
+          stage "run the .NET program" bash -c "timeout 300 wine net.exe > net.out 2> net.err; cat net.out; tail -5 net.err; grep -q 'a .NET program ran' net.out"
+          echo "::notice title=Wine Mono on EL 9::$(tr -d '\r' < net.out | head -1)"
+          # HTML: a program makes an HTML document; Wine's engine must have loaded Gecko's library for it
+          stage "compile the HTML trial" x86_64-w64-mingw32-gcc -O2 -o html.exe wine/trial_html.c -lole32 -luuid
+          stage "the HTML engine loads Gecko" bash -c "timeout 300 wine html.exe > html.out 2> html.err; rc=\$?; cat html.out; tail -5 html.err; exit \$rc"
+          echo "::notice title=Wine Gecko on EL 9::$(tr -d '\r' < html.out | tail -1)"
           wineserver -k || true
 
   release:
@@ -89,6 +147,10 @@ jobs:
         with:
           name: silik-wine
           path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: silik-wine-addons
+          path: dist
       - name: Release wine-${{ needs.build.outputs.version }}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -98,4 +160,12 @@ jobs:
           gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || gh release create "$tag" --repo "$GITHUB_REPOSITORY" \
             --title "silik-wine $V" --prerelease \
             --notes "Wine $V (upstream's source, unmodified, LGPL) built on EL 9 for SilikOS: wine/silik-wine.spec. Not a product of or supported by WineHQ."
+          # one package of each name in the release: an older build of the same package goes
+          for f in dist/silik-wine-*.rpm; do
+            n=$(basename "$f" | sed -E 's/-[0-9][^-]*-[^-]*$//')
+            gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -E "^$n-[0-9]" | while read -r old; do
+              [ "$old" = "$(basename "$f")" ] || gh release delete-asset "$tag" "$old" --repo "$GITHUB_REPOSITORY" -y
+            done
+          done
           gh release upload "$tag" --repo "$GITHUB_REPOSITORY" --clobber dist/silik-wine-*.rpm
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --notes "Wine $V (upstream's source, unmodified, LGPL) built on EL 9 for SilikOS (wine/silik-wine.spec), with Wine Mono and Wine Gecko (upstream's binary archives, unmodified; their own licences) as packages of their own (wine/silik-wine-addons.spec). Not a product of or supported by WineHQ."

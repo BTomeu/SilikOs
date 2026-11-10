@@ -22,7 +22,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.3.1"
+VERSION = "0.3.2"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -359,6 +359,7 @@ WIN_ENV = ("DISPLAY", "LANG", "LANGUAGE", "TZ", "TERM", "PULSE_SERVER", "DESKTOP
            "__NV_PRIME_RENDER_OFFLOAD", "__GLX_VENDOR_LIBRARY_NAME", "__VK_LAYER_NV_optimus")
 # Wine's own switches, passed on the `env` part of the line when they are set
 WINE_ENV = ("WINEDLLOVERRIDES", "WINEESYNC", "WINEFSYNC", "WINE_LARGE_ADDRESS_AWARE")
+WINE_SHARE = "/opt/silik-wine/share/wine:/usr/share/wine:/opt/wine"     # where Wine looks for Mono and Gecko
 
 
 def prefix_dir(n):
@@ -397,15 +398,31 @@ def _under(p, top):
     return p == top or p.startswith(top.rstrip("/") + "/")
 
 
+def wine_addon(kind):
+    """is Wine Mono ("mono") or Wine Gecko ("gecko") on the system, unpacked where Wine looks for it (a shared
+    install: share/wine/mono/wine-mono-VERSION, share/wine/gecko/wine-gecko-VERSION-ARCH)?"""
+    for top in (os.environ.get("SILIK_WINE_SHARE") or WINE_SHARE).split(":"):
+        d = os.path.join(top, kind)
+        try:
+            if any(n.startswith("wine-%s-" % kind) and os.path.isdir(os.path.join(d, n)) for n in os.listdir(d)):
+                return True
+        except OSError:
+            pass
+    return False
+
+
 def wine_argv(d, cmd, arch=None):
     """a Wine command of the prefix as it is typed: env WINEDEBUG=... WINEPREFIX=... wine ..."""
     e = ["WINEDEBUG=" + os.environ.get("WINEDEBUG", "-all")]
     e += [k + "=" + os.environ[k] for k in WINE_ENV if os.environ.get(k) is not None]
     if list(cmd)[:1] == ["wineboot"] and os.environ.get("WINEDLLOVERRIDES") is None:
-        # setting a prefix up: Wine would open a dialog offering to download Mono and Gecko and wait for an answer
-        # (seen on the first installed system: the set-up never ended). A prefix starts without them; a program
-        # that needs .NET or an embedded browser gets them with their installers (`silik win install`)
-        e.append("WINEDLLOVERRIDES=mscoree,mshtml=")
+        # setting a prefix up: without Wine Mono (.NET) or Wine Gecko (HTML) on the system, Wine opens a dialog
+        # offering to download them and waits for an answer (seen on the first installed system: the set-up never
+        # ended). With the packages silik-wine-mono / silik-wine-gecko Wine finds them and asks nothing; for the
+        # one that is missing, its library is left out of the set-up
+        off = [dll for dll, kind in (("mscoree", "mono"), ("mshtml", "gecko")) if not wine_addon(kind)]
+        if off:
+            e.append("WINEDLLOVERRIDES=" + ",".join(off) + "=")
     if arch:
         e.append("WINEARCH=" + arch)
     return ["env"] + e + ["WINEPREFIX=" + d] + list(cmd)
@@ -453,10 +470,17 @@ def win_always():
     return [p for p in (os.path.normpath(x) for x in v.split(":") if x) if os.path.isdir(p) and win_narrow(p)]
 
 
+def wine_opt():
+    """the folder of a Wine installed under /opt (/opt/silik-wine), which the sandbox shows read-only; else None"""
+    wine = os.path.realpath(shutil.which("wine") or "")
+    return "/".join(wine.split("/")[:3]) if wine.startswith("/opt/") and wine.count("/") > 2 else None
+
+
 def win_show(f, d):
     """what the sandbox must show, read-only, for file f to open: nothing when it is seen already (the prefix, the
-    shared folder, the system, a folder always shown), else its folder, or f alone when the folder is too much"""
-    if any(_under(f, t) for t in [win_shared(), d, "/usr", "/etc"] + win_always()):
+    shared folder, the system, Wine's own folder, a folder always shown), else its folder, or f alone when the
+    folder is too much"""
+    if any(_under(f, t) for t in [win_shared(), d, "/usr", "/etc"] + [p for p in [wine_opt()] if p] + win_always()):
         return []
     return [os.path.dirname(f)] if win_narrow(os.path.dirname(f)) else [f]
 
@@ -505,9 +529,8 @@ def win_sandbox(name, d, show=(), net=True, info_fd=None):
         elif os.path.isdir(p):
             ro(p)
     ro("/etc")
-    wine = os.path.realpath(shutil.which("wine") or "")
-    if wine.startswith("/opt/"):                # a Wine installed under /opt/NAME: that folder only
-        ro("/".join(wine.split("/")[:3]))
+    if wine_opt():                              # a Wine installed under /opt/NAME: that folder only
+        ro(wine_opt())
     a += ["--proc", "/proc", "--tmpfs", "/dev"]
     for n in ("null", "zero", "full", "random", "urandom"):
         a += ["--dev-bind", "/dev/" + n, "/dev/" + n]
