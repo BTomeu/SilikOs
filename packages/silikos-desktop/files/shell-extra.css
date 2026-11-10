@@ -40,3 +40,30 @@ StEntry:focus { box-shadow: inset 0 0 0 1px #ecebe7; border-color: #ecebe7; }
 /* the base's logo beside "Activities" (a file path fixed in the shell): not shown */
 #panel .panel-button .panel-logo-icon { icon-size: 0; padding: 0; margin: 0; width: 0; }
 #panel #panelActivities.panel-button { -natural-hpadding: 12px; }
+/* the windows view (the overview) is the sheet, not a dark curtain: paper, ink frames, inverse video on the choice */
+#overviewGroup { background-color: #e9e8e3; }
+/* (the shell clips a workspace's picture to a fixed corner radius: the frame follows it) */
+.workspace-background { border-radius: 30px; background-color: transparent; box-shadow: 0 0 0 1px #8a8b8f; }
+#panel:overview { background-color: #17181b; }
+.workspace-thumbnails .workspace-thumbnail { border: 1px solid #8a8b8f; border-radius: 0; }
+.search-entry { color: #1a1b1e; background-color: #fcfbf9; border: 1px solid #8a8b8f; border-radius: 0; box-shadow: none; }
+.search-entry:hover, .search-entry:focus { color: #1a1b1e; background-color: #fcfbf9; border-color: #1a1b1e; box-shadow: inset 0 0 0 1px #1a1b1e; }
+.search-entry .search-entry-icon { color: #6b6d72; }
+.search-entry StLabel.hint-text { color: #8a8b8f; }
+.search-statustext { color: #6b6d72; }
+.search-section-content { background-color: #fcfbf9; color: #1a1b1e; border: 1px solid #1a1b1e; border-radius: 0; box-shadow: none; }
+.list-search-result, .search-provider-icon, .grid-search-result .overview-icon, .app-well-app .overview-icon { color: #1a1b1e; border-radius: 0; }
+.list-search-result .list-search-result-title { color: #1a1b1e; }
+.list-search-result .list-search-result-description, .search-provider-icon .list-search-provider-content .list-search-provider-details { color: #6b6d72; }
+.list-search-result:focus, .list-search-result:hover, .list-search-result:selected,
+.search-provider-icon:focus, .search-provider-icon:hover, .search-provider-icon:selected,
+.grid-search-result:focus .overview-icon, .grid-search-result:hover .overview-icon, .grid-search-result:selected .overview-icon,
+.app-well-app:focus .overview-icon, .app-well-app:hover .overview-icon, .app-well-app:selected .overview-icon {
+  background-color: #1a1b1e; color: #f7f6f3; }
+.list-search-result:focus .list-search-result-title, .list-search-result:hover .list-search-result-title,
+.list-search-result:selected .list-search-result-title { color: #f7f6f3; }
+.list-search-result:focus .list-search-result-description, .list-search-result:hover .list-search-result-description,
+.list-search-result:selected .list-search-result-description { color: #b9b8b3; }
+.window-caption { background-color: #1a1b1e; color: #f7f6f3; border-radius: 0; border: 0; }
+.window-close { background-color: #1a1b1e; color: #f7f6f3; border-radius: 0; }
+.page-indicator .page-indicator-icon { background-color: #1a1b1e; }

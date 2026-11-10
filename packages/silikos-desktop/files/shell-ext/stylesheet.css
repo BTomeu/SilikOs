@@ -1,9 +1,12 @@
 /* SilikOS shell — the Silik layout (see extension.js). Paper #f7f6f3, ink #1a1b1e; frames are 1 px of ink. */
 
-/* title bar = the command line */
+/* title bar = the command line; the mark is the Start key */
 #panel { height: 34px; }
-.silik-mk { width: 112px; padding: 0 0 0 12px; color: #f7f6f3; }
-.silik-mk-icon { icon-size: 22px; margin-right: 7px; }
+.silik-mk { width: 140px; padding: 0 0 0 12px; color: #f7f6f3; }
+.silik-mk:hover, .silik-mk:focus { background-color: #2c2e32; }
+.silik-mk.silik-on { background-color: #f7f6f3; color: #1a1b1e; }
+.silik-mk-icon { icon-size: 22px; margin-right: 8px; }
+.silik-mk.silik-on .silik-mk-icon { color: #1a1b1e; }
 .silik-mk-name { font-weight: 600; font-size: 12px; }
 .silik-cmd { width: 520px; margin: 5px 0; padding: 0 10px; background-color: #2c2e32; color: #f7f6f3; font-size: 13px; border-radius: 0; }
 .silik-cmd:hover, .silik-cmd:focus { background-color: #3a3c41; }
@@ -11,15 +14,52 @@
 .silik-cmd-cur { width: 7px; height: 15px; border: 1px solid #8a8b8f; }
 .silik-cmd-hint { color: #b9b8b3; font-size: 11px; }
 
-/* rail: text keys, digit first */
-.silik-rail { background-color: #f7f6f3; color: #1a1b1e; border-right: 1px solid #1a1b1e; padding: 4px 0; font-size: 12px; }
-.silik-key { height: 24px; padding: 0 8px; border-radius: 0; color: #1a1b1e; }
-.silik-key:hover, .silik-key:focus { background-color: #eeede9; }
+/* rail: the task bar. Text keys, digit first; an ink edge on what runs; inverse video on what has the focus */
+.silik-rail { background-color: #f7f6f3; color: #1a1b1e; border-right: 1px solid #1a1b1e; padding: 6px 0 4px 0; font-size: 12px; }
+.silik-key { height: 28px; padding: 0 8px 0 0; border-radius: 0; color: #1a1b1e; }
+.silik-key-edge { width: 3px; height: 16px; margin-right: 5px; }
+.silik-key:hover, .silik-key:focus { background-color: #e6e5e0; }
+.silik-key.silik-run .silik-key-edge { background-color: #1a1b1e; }
 .silik-key.silik-on { background-color: #1a1b1e; color: #f7f6f3; }
-.silik-key-n { width: 7px; padding-right: 7px; color: #6b6d72; }
+.silik-key.silik-on .silik-key-edge { background-color: #f7f6f3; }
+.silik-key-n { width: 8px; padding-right: 7px; color: #6b6d72; }
 .silik-key.silik-on .silik-key-n { color: #b9b8b3; }
-.silik-key-m { font-size: 8px; padding-left: 4px; }
-.silik-hr { height: 1px; margin: 4px 10px; background-color: #dcdad5; }
+.silik-key-t { padding-left: 7px; }
+.silik-key-plain { padding-left: 0; }
+.silik-win { height: 22px; padding: 0 8px 0 39px; border-radius: 0; color: #6b6d72; font-size: 11px; }
+.silik-win:hover, .silik-win:focus { background-color: #e6e5e0; color: #1a1b1e; }
+.silik-win.silik-on { color: #1a1b1e; font-weight: 600; }
+.silik-rail-h { color: #6b6d72; font-size: 10px; padding: 10px 8px 3px 8px; margin: 6px 0 0 0; border-top: 1px solid #dcdad5; }
+.silik-ws { padding: 6px 8px; spacing: 4px; border-top: 1px solid #dcdad5; }
+.silik-ws-cell { width: 26px; height: 20px; border: 1px solid #8a8b8f; border-radius: 0; color: #1a1b1e; font-size: 11px; }
+.silik-ws-cell:hover { border-color: #1a1b1e; background-color: #e6e5e0; }
+.silik-ws-cell.silik-on { background-color: #1a1b1e; border-color: #1a1b1e; color: #f7f6f3; }
+
+/* Start: a pane hanging from the mark, ruled like a SilikStudio pane */
+.silik-start { background-color: #f7f6f3; color: #1a1b1e; border: 1px solid #1a1b1e; border-top-width: 0; font-size: 12px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18); }
+.silik-start-head { height: 38px; padding: 0 12px; border-bottom: 1px solid #1a1b1e; background-color: #fcfbf9; }
+.silik-start-pr { font-weight: 600; font-size: 13px; padding-right: 8px; }
+.silik-start-entry { border: 0; border-radius: 0; background-color: transparent; color: #1a1b1e; caret-color: #1a1b1e;
+  selection-background-color: #1a1b1e; selected-color: #f7f6f3; font-size: 13px; padding: 0; box-shadow: none; }
+.silik-start-entry:focus { box-shadow: none; border: 0; }
+.silik-start-entry StLabel.hint-text { color: #8a8b8f; }
+.silik-start-cats { width: 190px; padding: 6px 0; border-right: 1px solid #dcdad5; background-color: #f1f0ec; }
+.silik-start-cat { height: 24px; padding: 0 12px; border-radius: 0; color: #1a1b1e; }
+.silik-start-cat:hover { background-color: #e6e5e0; }
+.silik-start-cat.silik-on { background-color: #1a1b1e; color: #f7f6f3; }
+.silik-start-scroll { padding: 6px 0; }
+.silik-start-row { height: 24px; padding: 0 12px; border-radius: 0; color: #1a1b1e; }
+.silik-start-row:hover { background-color: #e6e5e0; }
+.silik-start-row.silik-on { background-color: #1a1b1e; color: #f7f6f3; }
+.silik-start-name { width: 170px; padding-left: 8px; }
+.silik-start-desc { color: #6b6d72; padding-left: 10px; font-size: 11px; }
+.silik-start-row.silik-on .silik-start-desc { color: #b9b8b3; }
+.silik-start-none { color: #6b6d72; padding: 8px 12px; }
+.silik-start-foot { height: 24px; padding: 0 12px; border-top: 1px solid #dcdad5; background-color: #eeede9; font-size: 11px;
+  color: #6b6d72; spacing: 16px; }
+.silik-start-kv { spacing: 6px; }
+.silik-start-k { color: #1a1b1e; font-weight: 600; }
 
 /* status bar: the one message channel, then "key value" fields */
 .silik-sb { background-color: #f7f6f3; color: #2c2e32; border-top: 1px solid #1a1b1e; font-size: 11px; }

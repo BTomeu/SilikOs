@@ -16,6 +16,8 @@ an EL9 system. It is a try: `docs/STATUS.md` says what has been run and what has
 
 ![The SilikOS desktop](docs/img/desktop.png)
 
+![Start](docs/img/start.png)
+
 The desktop as run on 10/11/2026 (GNOME Shell 40.10 in an AlmaLinux 9.8 container, software rendering; see
 `docs/STATUS.md` for what has and has not been run). The installer: `docs/img/installer.png`.
 

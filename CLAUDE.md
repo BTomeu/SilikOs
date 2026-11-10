@@ -18,7 +18,8 @@ Read `docs/PLAN.md` and `docs/STATUS.md` first.
 - UI: one ink on paper (softer than SilikStudio: off-white paper, small radii), Cascadia Mono, EN + CA + ES strings.
 - **It must look like the Silik interface** (owner, 10/11/2026), not like a themed GNOME: the three parts of
   SilikStudio's window are the desktop's: title bar = the command line, a text rail of keys (digit first, inverse
-  video on the focused one), a status bar (the one message channel, then "key value" fields). They are the shell
+  video on the focused one; it is the task bar), a status bar (the one message channel, then "key value" fields),
+  and Start, a pane hanging from the mark (the Super key). They are the shell
   extension `silik-shell` (`packages/silikos-desktop/files/shell-ext`); the GTK and shell themes are made on the
   system from the installed stylesheets (`gtk-theme`, `shell-theme`), never by shipping modified copies.
 - Tools are Python 3.9 standard library (the base's Python) and bash; the COMMAND bar is GTK 3 through python3-gobject;
