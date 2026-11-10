@@ -9,6 +9,9 @@ is() { if [ "$2" = "$3" ]; then say "$1" ok "$2"; else say "$1" FAIL "saw '$2', 
 has() { case "$2" in *"$3"*) say "$1" ok "$3";; *) say "$1" FAIL "no '$3' in: $2";; esac; }
 uid=$(id -u tester)
 asuser() { runuser -u tester -- env XDG_RUNTIME_DIR=/run/user/$uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus DISPLAY=:0 "$@" 2>&1; }
+# the same, but started by the user's own session manager: the SELinux context of a logged-in user (unconfined_t),
+# not this service's (unconfined_service_t, which may not do what Wine needs: execmod on its libraries)
+insession() { systemd-run --quiet --user --machine=tester@ --wait --pipe --collect -p WorkingDirectory=/home/tester -E DISPLAY=:0 "$@" 2>&1; }
 
 # the session needs a moment after graphical.target
 for i in $(seq 1 60); do pgrep -u tester -x gnome-shell > /dev/null && break; sleep 3; done
@@ -64,7 +67,8 @@ if command -v wine > /dev/null; then
     runuser -u tester -- mkdir -p /home/tester/Downloads /home/tester/.ssh
     runuser -u tester -- sh -c 'echo "a secret key (test)" > /home/tester/.ssh/id_test'
     install -o tester -g tester -m 0644 /mnt/silikci/hello.exe /home/tester/Downloads/hello.exe
-    o=$(cd /home/tester && asuser timeout 300 silik win open /home/tester/Downloads/hello.exe); rc=$?
+    say win.selinux-context info "$(insession id -Z) ; selinuxuser_execmod $(getsebool selinuxuser_execmod 2>&1 | awk '{print $NF}')"
+    o=$(insession timeout 300 silik win open /home/tester/Downloads/hello.exe); rc=$?
     r=$(cat /home/tester/Windows/silikos-ci.txt 2> /dev/null)
     is win.open.ran "exit $rc: $r" "exit 0: ran secret=hidden"
     has win.open.sandboxed "$o" "bwrap"
@@ -73,7 +77,8 @@ if command -v wine > /dev/null; then
       echo "$o" | tail -14 | while read -r line; do say win.open.output info "$line"; done
       # the same program without the sandbox tells Wine's part from the sandbox's
       rm -f /home/tester/Windows/silikos-ci.txt
-      o2=$(cd /home/tester && asuser timeout 300 silik win open --no-sandbox /home/tester/Downloads/hello.exe); rc2=$?
+      insession silik win stop default > /dev/null
+      o2=$(insession timeout 300 silik win open --no-sandbox /home/tester/Downloads/hello.exe); rc2=$?
       say win.open.without-sandbox info "exit $rc2: $(cat /home/tester/Windows/silikos-ci.txt 2> /dev/null) / $(echo "$o2" | tail -3 | tr '\n' ' ')"
     fi
     say win.user-namespaces info "max_user_namespaces $(cat /proc/sys/user/max_user_namespaces 2> /dev/null)"
