@@ -41,9 +41,12 @@ if pgrep -u tester -x gnome-shell > /dev/null; then say desktop.shell ok "gnome-
 sid=$(loginctl list-sessions --no-legend | awk '$3 == "tester" { print $1; exit }')
 is desktop.session-type "$(loginctl show-session "$sid" -p Type --value 2>&1)" x11
 has desktop.extension "$(asuser gnome-extensions info silik-shell@silikvolt.com)" "ENABLED"
-is desktop.shell-js-errors "$(journalctl -b --no-pager 2>/dev/null | grep -c 'JS ERROR')" 0
-# what they say, for a run that has some (the message and the first lines of its stack)
-journalctl -b --no-pager -o cat 2> /dev/null | grep -A5 'JS ERROR' | grep -v '^--$' | head -24 | while read -r line; do say desktop.shell-js-error info "$line"; done
+# the shell's JS errors: those with the SilikOS extension in their message or stack must be none; the shell's own
+# (the base's code: e.g. its input-method manager at the start of a session) are reported, not counted
+js=$(journalctl -b --no-pager -o cat 2> /dev/null | grep -A12 'JS ERROR')
+is desktop.shell-js-errors "$(echo "$js" | awk '/JS ERROR/ { n += hit; hit = 0; seen = 1 } seen && /silik-shell@/ { hit = 1 } END { print n + hit }')" 0
+say desktop.shell-js-other info "$(echo "$js" | grep -c 'JS ERROR') JS ERROR lines in all; the first: $(echo "$js" | grep -m1 'JS ERROR' | cut -c1-160)"
+echo "$js" | awk '/JS ERROR/ { b = $0; hit = 0; next } /silik-shell@/ && !hit { hit = 1; print b; print $0 }' | head -8 | while read -r line; do say desktop.shell-js-error info "$line"; done
 is desktop.gtk-theme "$(asuser gsettings get org.gnome.desktop.interface gtk-theme)" "'SilikOS'"
 is desktop.icon-theme "$(asuser gsettings get org.gnome.desktop.interface icon-theme)" "'SilikOS'"
 # the themes are made on the system from the installed stylesheets: made, from the real stylesheet (no import of

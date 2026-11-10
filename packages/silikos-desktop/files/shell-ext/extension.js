@@ -230,7 +230,12 @@ class SilikShell {
             Main.panel._rightBox.remove_child(dm.container);
             Main.panel._centerBox.add_child(dm.container);
         }
-        for (const a of this._moved) a.show();
+        /* the shell's own keys come back only where the session's mode has them: on the lock screen (where the shell
+           turns extensions off) it has just hidden them, and showing them there put "Activities" and the name of the
+           focused program on a locked screen */
+        const p = Main.sessionMode.panel || {};
+        const has = [].concat(p.left || [], p.center || [], p.right || []);
+        for (const [k, c] of this._moved) if (has.includes(k)) c.show();
         this._moved = [];
     }
 
@@ -238,7 +243,10 @@ class SilikShell {
     _title() {
         for (const k of ['activities', 'appMenu']) {
             const b = Main.panel.statusArea[k];
-            if (b && b.container.visible) { b.container.hide(); this._moved.push(b.container); }
+            if (!b) continue;
+            b.container.hide();
+            this._moved.push([k, b.container]);
+            this._sigs.push([b.container, b.container.connect('show', c => c.hide())]);   /* the panel shows it again when the session's mode changes */
         }
         this._mk = new St.Button({ style_class: 'silik-mk', reactive: true, track_hover: true, can_focus: true, y_expand: true });
         const mb = new St.BoxLayout({ y_align: Clutter.ActorAlign.CENTER });
