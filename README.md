@@ -23,6 +23,8 @@ an EL9 system. It is a try: `docs/STATUS.md` says what has been run and what has
 
 ![A Windows program opened from the COMMAND bar, on the installed system](docs/img/installed-windows-program.png)
 
+![KLayout on the installed system](docs/img/installed-klayout.png)
+
 The system as installed by the CI in a virtual machine on 10/11/2026 (a real session; the pictures of the last run: branch `ci-results`).
 
 ![The SilikOS desktop](docs/img/desktop.png)

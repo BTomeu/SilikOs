@@ -143,9 +143,10 @@ if kill -0 $qpid 2> /dev/null; then
   key esc || true; sleep 4; shot lock || true              # Esc: back to the lock screen and its clock
   key ret || true; sleep 3; typ "silikos-ci" || true; key ret || true; sleep 8   # the test user's password (ci.ks.in)
   shot unlocked || true                                    # the session again: the Silik layout must be back
-  key meta_l-spc || true; sleep 5; typ "sys/logout" || true; sleep 2; shot logout-typed || true
-  key ret || true; sleep 5; shot logout-asked || true      # the shell asks, and logs out by itself after a minute
-  sleep 70; shot login || true                             # the login screen
+  key meta_l-spc || true; sleep 5; typ "sys/logout" || true; sleep 2
+  key ret || true; sleep 5; shot logout || true            # the shell asks, and logs out by itself after a minute
+  sleep 95; shot login || true                             # the login screen, well after its start
+  key ret || true; sleep 6; shot login-prompt || true      # Enter on the user: the password prompt of the login screen
   python3 - "$work/mon.sock" <<'EOF' || true
 import socket, sys, time
 s = socket.socket(socket.AF_UNIX); s.connect(sys.argv[1]); time.sleep(0.3); s.send(b"quit\n"); time.sleep(1)

@@ -173,6 +173,54 @@ function silikIcon(app, size) {
 
 function icon(app, size) { return silikIcon(app, size); }
 
+/* A window the shell could not give to an installed program (it shows it under the window's title: "layout1") is
+ * listed under the program that owns it when its command line names one: a word of the first arguments (a path's
+ * folders and its file name without the extension) that is the command of an installed application. So Magic,
+ * started as "wish /usr/lib/magic/tcl/tkcon.tcl ...", and Xschem, whose windows have Tk's class, are "Magic" and
+ * "Xschem" in the rail, with their icon. Not for Windows programs: their process number is the sandbox's own. */
+const INTERPRETERS = ['sh', 'bash', 'env', 'python', 'python3', 'perl', 'wish', 'tclsh', 'java', 'gjs', 'node', 'bin', 'usr', 'lib',
+                      'lib64', 'share', 'opt', 'local', 'tcl', 'home', 'tmp', 'var', 'etc'];
+let programs = null;   /* command -> Shell.App, made when first asked for and again when the installed set changes */
+
+function programOf(app) {
+    try {
+        if (!app.is_window_backed()) return null;
+        if (!programs) {
+            programs = new Map();
+            for (const info of Shell.AppSystem.get_default().get_installed()) {
+                const exe = info.get_executable && info.get_executable();
+                const a = exe && Shell.AppSystem.get_default().lookup_app(info.get_id());
+                const n = exe ? GLib.path_get_basename(exe) : '';
+                if (a && n && !INTERPRETERS.includes(n) && !programs.has(n) && info.should_show()) programs.set(n, a);
+            }
+        }
+        const seen = [];
+        for (const w of app.get_windows()) {
+            if ((w.get_wm_class() || '').toLowerCase().endsWith('.exe')) return null;
+            const pid = w.get_pid();
+            if (!pid || pid < 2 || seen.includes(pid)) continue;
+            seen.push(pid);
+            const [ok, bytes] = GLib.file_get_contents('/proc/' + pid + '/cmdline');
+            if (!ok) continue;
+            const args = [];                               /* the arguments are separated by zero bytes */
+            for (let i = 0, from = 0; i <= bytes.length && args.length < 3 && i < 4096; i++) {
+                if (i < bytes.length && bytes[i] !== 0) continue;
+                const x = i > from && i - from < 300 ? imports.byteArray.toString(bytes.slice(from, i)) : '';
+                if (x && !x.startsWith('-')) args.push(x);
+                from = i + 1;
+            }
+            for (const arg of args) {
+                const words = arg.split('/').filter(x => x);
+                for (const word of [words.pop() || ''].concat(words.reverse())) {       /* the file's name first, then its folders */
+                    const n = word.replace(/\.[A-Za-z0-9]{1,4}$/, '');
+                    if (n && !INTERPRETERS.includes(n) && programs.has(n)) return programs.get(n);
+                }
+            }
+        }
+    } catch (e) { /* a process that has gone, a file that cannot be read: the window keeps its title */ }
+    return null;
+}
+
 class SilikShell {
     enable() {
         this._t = TEXT[lang()];
@@ -187,7 +235,7 @@ class SilikShell {
         on(Main.panel, 'notify::height', () => this._layout());
         on(global.display, 'notify::focus-window', () => this._sync());
         on(Shell.AppSystem.get_default(), 'app-state-changed', () => this._sync());
-        on(Shell.AppSystem.get_default(), 'installed-changed', () => this._sync());
+        on(Shell.AppSystem.get_default(), 'installed-changed', () => { programs = null; this._sync(); });
         on(Shell.WindowTracker.get_default(), 'tracked-windows-changed', () => this._sync());
         on(AppFavorites.getAppFavorites(), 'changed', () => this._sync());
         on(global.workspace_manager, 'active-workspace-changed', () => this._syncWs());
@@ -220,6 +268,7 @@ class SilikShell {
         if (this._origIcon) { Shell.App.prototype.create_icon_texture = this._origIcon; this._origIcon = origIcon = null; }
         for (const [o, id] of this._sigs) o.disconnect(id);
         this._sigs = [];
+        programs = null;
         if (this._mon) { this._mon.cancel(); this._mon = null; }
         if (this._dash) { this._dash.set_height(-1); this._dash.show(); this._dash = null; }
         if (this._hadOverview !== undefined) Main.sessionMode.hasOverview = this._hadOverview;
@@ -314,7 +363,8 @@ class SilikShell {
 
     _appKeys(box, app, digit, focusApp, focusWin) {
         const run = app.state !== Shell.AppState.STOPPED;
-        const b = this._key(digit, app, app.get_name());
+        const as = programOf(app) || app;                  /* the name and icon of the program behind a nameless window */
+        const b = this._key(digit, as, as.get_name());
         if (run) b.add_style_class_name('silik-run');
         if (focusApp === app) b.add_style_class_name('silik-on');
         b.connect('clicked', (w, button) => {
