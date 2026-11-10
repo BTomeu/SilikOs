@@ -130,7 +130,7 @@ if kill -0 $qpid 2> /dev/null; then
     key ret || true; sleep 25; shot windows-program || true
   fi
   key meta_l-l || true; sleep 6                            # Super+L: locked, and the screen goes dark
-  mon "mouse_move 30 30" || true; sleep 4; shot lock || true   # the pointer wakes it: the lock screen (extensions are off there)
+  key ctrl || true; sleep 4; shot lock || true             # a modifier key wakes it without asking for the password: the lock screen
   key ret || true; sleep 4; shot unlock || true            # a key: the password prompt
   python3 - "$work/mon.sock" <<'EOF' || true
 import socket, sys, time

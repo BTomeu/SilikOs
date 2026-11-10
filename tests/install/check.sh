@@ -42,6 +42,8 @@ sid=$(loginctl list-sessions --no-legend | awk '$3 == "tester" { print $1; exit 
 is desktop.session-type "$(loginctl show-session "$sid" -p Type --value 2>&1)" x11
 has desktop.extension "$(asuser gnome-extensions info silik-shell@silikvolt.com)" "ENABLED"
 is desktop.shell-js-errors "$(journalctl -b --no-pager 2>/dev/null | grep -c 'JS ERROR')" 0
+# what they say, for a run that has some (the message and the first lines of its stack)
+journalctl -b --no-pager -o cat 2> /dev/null | grep -A5 'JS ERROR' | grep -v '^--$' | head -24 | while read -r line; do say desktop.shell-js-error info "$line"; done
 is desktop.gtk-theme "$(asuser gsettings get org.gnome.desktop.interface gtk-theme)" "'SilikOS'"
 is desktop.icon-theme "$(asuser gsettings get org.gnome.desktop.interface icon-theme)" "'SilikOS'"
 # the themes are made on the system from the installed stylesheets: made, from the real stylesheet (no import of
