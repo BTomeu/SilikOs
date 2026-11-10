@@ -11,7 +11,7 @@ uid=$(id -u tester)
 asuser() { runuser -u tester -- env XDG_RUNTIME_DIR=/run/user/$uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus DISPLAY=:0 "$@" 2>&1; }
 # the same, but started by the user's own session manager: the SELinux context of a logged-in user (unconfined_t),
 # not this service's (unconfined_service_t, which may not do what Wine needs: execmod on its libraries)
-insession() { systemd-run --quiet --user --machine=tester@ --wait --pipe --collect -p WorkingDirectory=/home/tester -E DISPLAY=:0 "$@" 2>&1; }
+insession() { asuser systemd-run --quiet --user --wait --pipe --collect -p WorkingDirectory=/home/tester -E DISPLAY=:0 "$@"; }
 
 # the session needs a moment after graphical.target
 for i in $(seq 1 60); do pgrep -u tester -x gnome-shell > /dev/null && break; sleep 3; done
@@ -67,7 +67,10 @@ if command -v wine > /dev/null; then
     runuser -u tester -- mkdir -p /home/tester/Downloads /home/tester/.ssh
     runuser -u tester -- sh -c 'echo "a secret key (test)" > /home/tester/.ssh/id_test'
     install -o tester -g tester -m 0644 /mnt/silikci/hello.exe /home/tester/Downloads/hello.exe
-    say win.selinux-context info "$(insession id -Z) ; selinuxuser_execmod $(getsebool selinuxuser_execmod 2>&1 | awk '{print $NF}')"
+    say win.selinux-context info "the session: $(insession id -Z) ; selinuxuser_execmod $(getsebool selinuxuser_execmod 2>&1 | awk '{print $NF}')"
+    has win.selinux-rule "$(semodule -l 2>&1 | grep -x silikos_wine)" silikos_wine
+    semodule -l 2> /dev/null | grep -qx silikos_wine || say win.selinux-rule-error info "$(semodule -i /usr/share/silikos/selinux/silikos_wine.cil 2>&1 | tail -4)"
+    has win.selinux-label "$(ls -Z /opt/silik-wine/bin/wine 2>&1)" wine_exec_t
     o=$(insession timeout 300 silik win open /home/tester/Downloads/hello.exe); rc=$?
     r=$(cat /home/tester/Windows/silikos-ci.txt 2> /dev/null)
     is win.open.ran "exit $rc: $r" "exit 0: ran secret=hidden"
@@ -81,6 +84,9 @@ if command -v wine > /dev/null; then
       o2=$(insession timeout 300 silik win open --no-sandbox /home/tester/Downloads/hello.exe); rc2=$?
       say win.open.without-sandbox info "exit $rc2: $(cat /home/tester/Windows/silikos-ci.txt 2> /dev/null) / $(echo "$o2" | tail -3 | tr '\n' ' ')"
     fi
+    # the SELinux domain a Windows program runs in, read by a Windows program (cmd) from the sandbox
+    insession timeout 120 silik -q win run default -- cmd /c "type Z:\\proc\\self\\attr\\current > W:\\silikos-ci-domain.txt" > /dev/null 2>&1
+    say win.selinux-domain info "$(tr -d '\0' < /home/tester/Windows/silikos-ci-domain.txt 2> /dev/null)"
     say win.user-namespaces info "max_user_namespaces $(cat /proc/sys/user/max_user_namespaces 2> /dev/null)"
     ausearch -m AVC -ts boot 2> /dev/null | grep denied | sed -E 's/.*denied +(\{[^}]*\}).*comm="([^"]*)".*scontext=([^ ]*) tcontext=([^ ]*) tclass=([^ ]*).*/\1 comm=\2 \3 -> \4 \5/' | sort | uniq -c | head -6 | while read -r line; do say win.selinux-denial info "$line"; done
   else

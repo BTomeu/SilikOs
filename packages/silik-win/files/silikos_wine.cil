@@ -1,0 +1,19 @@
+; SilikOS: Wine in the sandbox of `silik win`, under SELinux (targeted policy of EL 9).
+;
+; Wine maps Windows programs and changes them in memory before running them (execmod). EL 9 does not let an
+; ordinary session do that (boolean selinuxuser_execmod, off), and this package does not turn it on for the whole
+; system. The base's policy has a domain for Wine, wine_t, entered through programs labelled wine_exec_t, that
+; may. Two things are missing for the SilikOS build of Wine:
+;   - its programs are under /opt/silik-wine, where the base's file contexts do not name them
+;   - the sandbox (bubblewrap) sets "no new privileges" and mounts without setuid; a change of domain needs to be
+;     allowed there explicitly
+; Seen on the first installed system with Wine (10/11/2026): wineboot denied execmod, the session in unconfined_t.
+(filecon "/opt/silik-wine/bin/wine" file (system_u object_r wine_exec_t ((s0) (s0))))
+(filecon "/opt/silik-wine/bin/wine-preloader" file (system_u object_r wine_exec_t ((s0) (s0))))
+(filecon "/opt/silik-wine/bin/wineserver" file (system_u object_r wine_exec_t ((s0) (s0))))
+(roletype unconfined_r wine_t)
+(typetransition unconfined_t wine_exec_t process wine_t)
+(allow unconfined_t wine_exec_t (file (read getattr map execute open)))
+(allow unconfined_t wine_t (process (transition)))
+(allow wine_t wine_exec_t (file (entrypoint read getattr map execute open)))
+(allow unconfined_t wine_t (process2 (nnp_transition nosuid_transition)))
