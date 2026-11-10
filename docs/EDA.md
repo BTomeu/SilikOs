@@ -61,7 +61,8 @@ EPEL 9. SilikOS builds each from its authors' unmodified source at the tag writt
 (`tools/build_eda.sh NAME` on EL 9, `eda/NAME.spec`), tries it in a clean EL 9 (`eda/trial.sh`: ngspice solves a
 divider and an XSPICE gain block, Magic paints and saves a cell, KLayout writes a GDS file and reads it back) and
 keeps the package in the release `eda-tools` (workflow "EDA tools"). `tools/build_iso.sh` puts whatever packages
-are in `build/extra/` into the ISO, so the installed system has them and they show under Engineering in Start.
+are in `build/extra/` into the ISO, so the installed system has them (each brings a desktop entry; not yet
+seen in Start).
 Each keeps its own licence, installed with the package. `docs/STATUS.md` says which of this has been run.
 
 To change a version: the tag in `eda/versions`. To add a tool: a line there, `eda/NAME.spec`, a case in

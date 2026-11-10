@@ -5,7 +5,8 @@
 #      the ISO itself is the one a person would use, untouched
 #   2. QEMU installs from the ISO onto an empty virtual disk and powers off
 #   3. QEMU boots that disk; the system reports its own checks on the serial port (check.sh), the screen is saved
-#      (the desktop, Start after the Super key, the COMMAND bar after Super+Space, the lock screen and its prompt)
+#      (the desktop, Start after the Super key, the COMMAND bar after Super+Space, a Windows program opened from it,
+#      the lock screen and its prompt)
 #   OUT_DIR (default build/install-test): install.log, boot.log, report.txt, *.png;  exit 0 when no check failed
 #   SILIK_CI_APPEND="..."   more installer boot options, e.g. on a build machine behind a proxy:
 #                           "inst.proxy=http://10.0.2.2:PORT inst.noverifyssl" (10.0.2.2 is the host, seen from the VM)
@@ -44,6 +45,7 @@ mcopy -i "$work/ks.img" "$work/ci.ks" ::/ci.ks
 # a Windows test program for the installed system, when a cross compiler is here (and Wine on the ISO: check.sh)
 if command -v x86_64-w64-mingw32-gcc > /dev/null; then
   x86_64-w64-mingw32-gcc -O2 -o "$work/hello.exe" "$here/hello.c" && mcopy -i "$work/ks.img" "$work/hello.exe" ::/hello.exe
+  x86_64-w64-mingw32-gcc -O2 -mwindows -o "$work/win.exe" "$here/window.c" && mcopy -i "$work/ks.img" "$work/win.exe" ::/win.exe
 fi
 cp "$work/ks.img" "$out/ks.img"
 qemu-img create -q -f qcow2 "$out/disk.qcow2" "${disk_gb}G"
@@ -89,10 +91,19 @@ s.send(("screendump %s\n" % sys.argv[2]).encode()); time.sleep(2.5)
 EOF
   if command -v convert > /dev/null; then convert "$out/$1.ppm" "$out/$1.png" && rm -f "$out/$1.ppm"; fi
 }
-key() { python3 - "$work/mon.sock" "$1" <<'EOF'
+mon() { python3 - "$work/mon.sock" "$1" <<'EOF'   # mon COMMAND: one command to QEMU's monitor
 import socket, sys, time
 s = socket.socket(socket.AF_UNIX); s.connect(sys.argv[1]); time.sleep(0.3); s.recv(65536)
-s.send(("sendkey %s\n" % sys.argv[2]).encode()); time.sleep(0.5)
+s.send((sys.argv[2] + "\n").encode()); time.sleep(0.5)
+EOF
+}
+key() { mon "sendkey $1"; }
+typ() { python3 - "$work/mon.sock" "$1" <<'EOF'   # typ TEXT: typed on the keyboard, a key at a time
+import socket, sys, time
+names = {"/": "slash", ".": "dot", "-": "minus", " ": "spc"}
+s = socket.socket(socket.AF_UNIX); s.connect(sys.argv[1]); time.sleep(0.3); s.recv(65536)
+for c in sys.argv[2]:
+    k = names.get(c, c.lower()); s.send(("sendkey %s\n" % ("shift-" + k if c.isupper() else k)).encode()); time.sleep(0.25)
 EOF
 }
 : > "$out/boot.log"
@@ -114,7 +125,12 @@ if kill -0 $qpid 2> /dev/null; then
   key esc || true; sleep 2
   key meta_l-spc || true; sleep 5; shot command || true    # Super+Space: the COMMAND bar
   key esc || true; sleep 2
-  key meta_l-l || true; sleep 6; shot lock || true         # Super+L: the lock screen (extensions are off there)
+  if [ -f "$work/win.exe" ]; then                          # a Windows program, by its path typed in the COMMAND bar
+    key meta_l-spc || true; sleep 5; typ "/home/tester/Downloads/win.exe" || true; sleep 2
+    key ret || true; sleep 25; shot windows-program || true
+  fi
+  key meta_l-l || true; sleep 6                            # Super+L: locked, and the screen goes dark
+  mon "mouse_move 30 30" || true; sleep 4; shot lock || true   # the pointer wakes it: the lock screen (extensions are off there)
   key ret || true; sleep 4; shot unlock || true            # a key: the password prompt
   python3 - "$work/mon.sock" <<'EOF' || true
 import socket, sys, time

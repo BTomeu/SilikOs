@@ -124,11 +124,16 @@ Consequences to know:
 
 ## Limits
 
-- **Wine is not installable from EPEL 9 on EL 9.8 today** (seen 10/11/2026 in an AlmaLinux 9.8 container with
-  BaseOS, AppStream, CRB, extras and EPEL: `wine-core-8.0-1.el9` needs `mesa-libOSMesa`, which EL 9.8's Mesa 25 no
-  longer builds). `silik-win` only recommends `wine`, so the installation goes on without it and nothing says so:
-  `silik win open` then answers "Wine is not installed". Where Wine comes from is an open decision (a rebuild of the
-  package, a newer one). Everything in "run so far" below was run with Ubuntu's Wine 9.0.
+- **Wine is our own build**, `silik-wine` (Wine 11.0 from WineHQ's source, under `/opt/silik-wine`, built by the
+  workflow Wine and carried by the ISO). EPEL 9's Wine is not installable on EL 9.8 (seen 10/11/2026:
+  `wine-core-8.0-1.el9` needs `mesa-libOSMesa`, which EL 9.8's Mesa 25 no longer builds).
+- EL 9's SELinux policy does not let a user's program run Wine's kind of code (`selinuxuser_execmod` is off):
+  `silik-win` carries a rule (`silikos_wine.cil`) that gives Wine's three programs the policy's own Wine domain
+  (`wine_t`). The boolean stays off for everything else.
+- **No .NET (Mono) and no HTML engine (Gecko) in a new prefix.** WineHQ's Wine offers to download them with a dialog
+  the first time a prefix is made; behind a double-click that dialog stopped the first program (seen on the installed
+  system and in a container). `silik` sets a prefix up with `WINEDLLOVERRIDES=mscoree,mshtml=`, so nothing is asked
+  and nothing is downloaded. A .NET program does not start until Mono is put in its prefix (not handled yet).
 - Kernel-mode drivers do not exist under Wine [A: Wine's design, none tried here]: anti-cheat and copy-protection
   (DRM) drivers, and the drivers of hardware keys. Programs that insist on them need the virtual machine.
 - USB dongles (licence keys), serial ports, programmers and debug probes: the sandbox passes no USB or serial
@@ -177,7 +182,11 @@ purpose (a console program, a window, an installer that makes a start-menu short
   (nautilus 40.2) on an `.exe`, on one with the executable bit, and on an `.msi` runs `silik win open FILE`; GLib
   launches a synced entry with the right arguments.
 
-Not run: Wine on EL 9 itself (not installable, above) and so EPEL's Wine 8.0 with any of this; EL 9's kernel 5.14
-and SELinux with the sandbox; the rail and the applications list of the real shell with a Wine window; sound, a GPU,
-NVIDIA devices, a Wayland session, a login session (GDM); a real `.msi`; 32-bit programs; a real third-party
-installer; the virtual machine route, Altium.
+Run on an installed SilikOS (the CI's virtual machine, run 42864994059, 10/11/2026: kernel 5.14, SELinux enforcing,
+bubblewrap 0.6.3, `silik-wine` 11.0), from the test user's session: the first `silik win open hello.exe` sets the
+prefix up and runs the program in its sandbox (exit 0); the program writes to `W:\` and does not see a file of
+`~/.ssh`; its SELinux domain is `wine_t`.
+
+Not run: the rail and the applications list of the real shell with a Wine window; sound, a GPU, NVIDIA devices, a
+Wayland session; a real `.msi`; a 32-bit program on the installed system (one ran in the Wine workflow's container);
+a real third-party installer; a .NET program; the virtual machine route, Altium.

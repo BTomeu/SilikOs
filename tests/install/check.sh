@@ -73,7 +73,7 @@ if command -v wine > /dev/null; then
     semodule -l 2> /dev/null | grep -qx silikos_wine || say win.selinux-rule-error info "$(semodule -i /usr/share/silikos/selinux/silikos_wine.cil 2>&1 | tail -4)"
     has win.selinux-label "$(ls -Z /opt/silik-wine/bin/wine 2>&1)" wine_exec_t
     o=$(insession timeout 300 silik win open /home/tester/Downloads/hello.exe); rc=$?
-    r=$(cat /home/tester/Windows/silikos-ci.txt 2> /dev/null)
+    r=$(tr -d '\r' < /home/tester/Windows/silikos-ci.txt 2> /dev/null)   # a Windows program ends its lines with CR LF
     is win.open.ran "exit $rc: $r" "exit 0: ran secret=hidden"
     has win.open.sandboxed "$o" "bwrap"
     # what it printed, line by line (the commands start with $), for a run that failed
@@ -83,7 +83,19 @@ if command -v wine > /dev/null; then
       rm -f /home/tester/Windows/silikos-ci.txt
       insession silik win stop default > /dev/null
       o2=$(insession timeout 300 silik win open --no-sandbox /home/tester/Downloads/hello.exe); rc2=$?
-      say win.open.without-sandbox info "exit $rc2: $(cat /home/tester/Windows/silikos-ci.txt 2> /dev/null) / $(echo "$o2" | tail -3 | tr '\n' ' ')"
+      say win.open.without-sandbox info "exit $rc2: $(tr -d '\r' < /home/tester/Windows/silikos-ci.txt 2> /dev/null) / $(echo "$o2" | tail -3 | tr '\n' ' ')"
+    fi
+    # a Windows program with a window: it must be on the session's screen under its own name and class
+    if [ -f /mnt/silikci/win.exe ]; then
+      install -o tester -g tester -m 0644 /mnt/silikci/win.exe /home/tester/Downloads/win.exe
+      if insession xwininfo -root > /dev/null 2>&1; then
+        asuser systemd-run --quiet --user --collect -p WorkingDirectory=/home/tester -E DISPLAY=:0 silik win open /home/tester/Downloads/win.exe > /dev/null 2>&1
+        w=""; for i in $(seq 1 20); do sleep 3; w=$(insession xwininfo -root -tree | grep '"Silik Test"' | head -1); [ -n "$w" ] && break; done
+        has win.window "$w" '"win.exe"'
+        insession silik win stop default > /dev/null 2>&1
+      else
+        say win.window info "the window list cannot be read here (xwininfo): see the picture windows-program.png"
+      fi
     fi
     # the SELinux domain a Windows program runs in, read by a Windows program (cmd) from the sandbox
     insession timeout 120 silik -q win run default -- cmd /c "type Z:\\proc\\self\\attr\\current > W:\\silikos-ci-domain.txt" > /dev/null 2>&1
@@ -103,6 +115,17 @@ done
 if command -v ngspice > /dev/null; then
   printf 'divider\nv1 in 0 dc 1\nr1 in out 1k\nr2 out 0 1k\n.control\nop\nprint v(out)\n.endc\n.end\n' > /tmp/ci-div.cir
   has eda.ngspice-run "$(runuser -u tester -- ngspice -b /tmp/ci-div.cir 2>&1 | grep 'v(out)')" "5.000000e-01"
+fi
+# each of the others does a small job too, as the test user, without a screen
+if command -v klayout > /dev/null; then
+  has eda.klayout-run "$(runuser -u tester -- env QT_QPA_PLATFORM=offscreen klayout -zz -v 2>&1 | head -1)" "KLayout"
+fi
+if command -v magic > /dev/null; then
+  runuser -u tester -- sh -c 'cd /tmp && printf "box 0 0 100 100\npaint metal1\nsave ci-magic\nquit -noprompt\n" > ci-magic.tcl && magic -dnull -noconsole -T scmos ci-magic.tcl' > /tmp/ci-magic.out 2>&1
+  has eda.magic-run "$(grep -o metal1 /tmp/ci-magic.mag 2>&1 | head -1; tail -2 /tmp/ci-magic.out | tr '\n' ' ')" "metal1"
+fi
+if command -v xschem > /dev/null; then
+  has eda.xschem-run "$(runuser -u tester -- xschem --version 2>&1 | head -1)" "XSCHEM"
 fi
 say system.failed-units info "$(systemctl --failed --no-legend | awk '{print $2}' | tr '\n' ' ')"
 say system.packages info "$(rpm -qa | wc -l) packages, $(df -h / | awk 'NR==2 {print $3}') used"
