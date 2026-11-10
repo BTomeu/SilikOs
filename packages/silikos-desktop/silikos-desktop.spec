@@ -11,6 +11,8 @@ Requires:       gnome-shell
 Requires:       gnome-shell-extension-user-theme
 Requires:       gdm
 Requires:       glib2
+# /etc/dconf/profile/user (user-db:user, system-db:local) is the dconf package's own file on EL9
+Requires:       dconf
 Requires(post): dconf
 Requires(post): sed
 Requires(post): fontconfig
@@ -21,7 +23,6 @@ default of the login screen: the EDA tools this system is for are X11 programs.
 
 %install
 install -Dm0644 %{_sourcedir}/00-silikos %{buildroot}%{_sysconfdir}/dconf/db/local.d/00-silikos
-install -Dm0644 %{_sourcedir}/dconf-profile-user %{buildroot}%{_sysconfdir}/dconf/profile/user
 # the GTK 3 theme: Adwaita, then the Silik overrides (brand/silik-gtk3.css)
 install -d %{buildroot}%{_datadir}/themes/SilikOS/gtk-3.0
 printf '/* SilikOS GTK 3 theme: Adwaita with the Silik look on top */\n@import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained.css");\n' > %{buildroot}%{_datadir}/themes/SilikOS/gtk-3.0/gtk.css
@@ -61,7 +62,6 @@ dconf update >/dev/null 2>&1 || :
 
 %files
 %config(noreplace) %{_sysconfdir}/dconf/db/local.d/00-silikos
-%config(noreplace) %{_sysconfdir}/dconf/profile/user
 %{_datadir}/fonts/silikos/
 %{_datadir}/themes/SilikOS/
 %ghost %{_datadir}/themes/SilikOS/gnome-shell/gnome-shell.css

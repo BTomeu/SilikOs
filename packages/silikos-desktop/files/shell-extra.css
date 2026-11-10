@@ -19,3 +19,6 @@ stage { font-family: "Cascadia Mono", "DejaVu Sans Mono", monospace; font-size: 
 StEntry { border-radius: 4px; }
 StEntry:focus { box-shadow: inset 0 0 0 1px #ecebe7; border-color: #ecebe7; }
 .shell-link, .shell-link:hover { color: #ecebe7; text-decoration: underline; }
+/* the base's logo beside "Activities" (a file path fixed in the shell): not shown */
+#panel .panel-button .panel-logo-icon { icon-size: 0; padding: 0; margin: 0; width: 0; }
+#panel #panelActivities.panel-button { -natural-hpadding: 12px; }
