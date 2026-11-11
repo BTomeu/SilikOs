@@ -201,7 +201,9 @@ prefix up and runs the program in its sandbox (exit 0); the program writes to `W
 
 Run in the test container (11/11/2026, silik-wine 11.0, sandboxed): a 32-bit program; an installer that makes a
 start-menu shortcut (its program is then `win/silik-test` in `silik win apps`); a Windows Installer package built
-with wixl (`silik win open silik.msi` installs it).
+with wixl (`silik win open silik.msi` installs it). The same three on an installed SilikOS (the CI's virtual machine, run
+42968357962): all pass, and the installed program, typed as `win/silik-test` in the COMMAND bar, opens its window and
+is in the rail under its name.
 
 Not run: the rail and the applications list of the real shell with a Wine window; sound, a GPU, NVIDIA devices, a
 Wayland session; a real `.msi`; a 32-bit program on the installed system (one ran in the Wine workflow's container);

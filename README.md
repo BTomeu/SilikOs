@@ -23,6 +23,8 @@ an EL9 system. It is a try: `docs/STATUS.md` says what has been run and what has
 
 ![A Windows program opened from the COMMAND bar, on the installed system](docs/img/installed-windows-program.png)
 
+![A Windows program put there by its installer, opened by its address, on the installed system](docs/img/installed-windows-installed.png)
+
 ![KLayout on the installed system](docs/img/installed-klayout.png)
 
 ![Qucs-S on the installed system: it finds our ngspice](docs/img/installed-qucs-s.png)
