@@ -270,10 +270,13 @@ class SilikShell {
        happen between two pictures of the screen. */
     _switch() {
         if (this._switching) return;                         /* the exchange reads the newest choice when it comes */
-        if (!Flow.animated()) { this._down(); this._up(); return; }
+        const pieces = this._pieces();
+        /* (a piece not on screen, as under a full-screen window, would end its fade at once, inside the loop below,
+           and the loop would go on with pieces already taken down) */
+        if (!Flow.animated() || !pieces.every(a => a.mapped)) { this._down(); this._up(); return; }
         this._switching = true;
         this._closeStart(true);
-        this._pieces().forEach((a, i) => Flow.ease(a, { opacity: 0 }, Flow.T_LOOK_OUT, undefined, i ? null : () => this._swap()));
+        pieces.forEach((a, i) => Flow.ease(a, { opacity: 0 }, Flow.T_LOOK_OUT, undefined, i ? null : () => this._swap()));
     }
 
     _swap() {
@@ -318,7 +321,7 @@ class SilikShell {
         if (Main.layoutManager._startingUp) {
             this._hadOverview = Main.sessionMode.hasOverview;
             Main.sessionMode.hasOverview = false;
-            on(Main.layoutManager, 'startup-complete', () => { Main.sessionMode.hasOverview = this._hadOverview; });
+            on(Main.layoutManager, 'startup-complete', () => { Main.sessionMode.hasOverview = this._hadOverview; this._hadOverview = undefined; });
         }
         /* the same icons wherever the shell shows an application (window switcher, windows view, search) */
         this._origIcon = origIcon = Shell.App.prototype.create_icon_texture;
@@ -487,6 +490,9 @@ class SilikShell {
                 wb = new St.Button({ style_class: 'silik-win', reactive: true, track_hover: true, can_focus: true, x_expand: true });
                 wb.set_child(new St.Label({ x_expand: true, y_align: Clutter.ActorAlign.CENTER }));
                 wb.connect('clicked', () => { Main.overview.hide(); this._railGeom(); Main.activateWindow(w); });
+                /* the title follows the window's (a terminal's folder, an editor's file): nothing else would say it */
+                const tid = w.connect('notify::title', () => { const l = wb.get_child(); if (l) l.text = w.get_title() || ''; });
+                wb.connect('destroy', () => { try { w.disconnect(tid); } catch (e) { /* the window has gone */ } });
                 this._rw.set(w, wb);
             }
             const title = w.get_title() || '';
@@ -517,7 +523,10 @@ class SilikShell {
         for (const [box, list] of [[this._keys, keys], [this._open, open]]) {
             for (const c of box.get_children()) if (!list.includes(c)) { if (wanted.has(c)) box.remove_child(c); else c.destroy(); }
             list.forEach((a, i) => {
-                if (a.get_parent() !== box) box.insert_child_at_index(a, i);
+                if (a.get_parent() !== box) {                /* (from the other box: an actor has one parent at a time) */
+                    if (a.get_parent()) a.get_parent().remove_child(a);
+                    box.insert_child_at_index(a, i);
+                }
                 else if (box.get_child_at_index(i) !== a) box.set_child_at_index(a, i);
             });
         }
@@ -619,6 +628,8 @@ class SilikShell {
         Main.layoutManager.addChrome(this._startBox);
         this._entry.clutter_text.connect('text-changed', () => { this._sel = 0; this._fill(); });
         this._entry.clutter_text.connect('key-press-event', (o, ev) => this._startKey(ev));
+        /* (the Super key does not close Start: mutter keeps it while Start holds the keyboard, seen in the rig; Esc and
+           a click outside do) */
         this._cat = 'all';
         this._sel = 0;
         this._view = 'home';
@@ -650,9 +661,15 @@ class SilikShell {
     _recentFiles() {
         try {
             const home = GLib.get_home_dir();
-            return Gtk.RecentManager.get_default().get_items()
-                .filter(i => i.is_local() && !i.get_private_hint() && i.exists())
-                .sort((a, b) => b.get_modified() - a.get_modified()).slice(0, RECENT_N)
+            const items = Gtk.RecentManager.get_default().get_items()
+                .filter(i => i.is_local() && !i.get_private_hint())
+                .sort((a, b) => b.get_modified() - a.get_modified());
+            /* newest first, and only these looked for on disk (each look is a stat: on a network folder that does not
+               answer it waits, and the shell with it) */
+            const shown = [];
+            for (let k = 0; k < items.length && k < 2 * RECENT_N && shown.length < RECENT_N; k++)
+                if (items[k].exists()) shown.push(items[k]);
+            return shown
                 .map(i => {
                     const dir = GLib.path_get_dirname(i.get_uri_display() || '');
                     return { uri: i.get_uri(), name: i.get_display_name(), gicon: i.get_gicon(),
@@ -700,6 +717,7 @@ class SilikShell {
             const go = () => {
                 if (!this._startOpen) return;
                 this._closeStart();
+                Main.overview.hide();
                 try { Gio.AppInfo.launch_default_for_uri(f.uri, global.create_app_launch_context(0, -1)); }
                 catch (e) { Main.notify('SilikOS', String(e.message)); }
             };
@@ -718,7 +736,7 @@ class SilikShell {
         let i = this._sel;
         if (dx) i = i < p ? Math.max(0, Math.min(p - 1, i + dx)) : i;
         else if (dy > 0) i = i >= p ? Math.min(n - 1, i + 1) : i + PIN_COLS < p ? i + PIN_COLS       /* the cell below, or the last */
-            : Math.floor(i / PIN_COLS) < Math.floor((p - 1) / PIN_COLS) ? p - 1 : Math.min(n - 1, p);   /* of a short row, or the files */
+            : Math.floor(i / PIN_COLS) < Math.floor((p - 1) / PIN_COLS) ? p - 1 : n > p ? p : i;   /* of a short row, the files, or stay */
         else if (dy < 0) i = i < p ? (i - PIN_COLS >= 0 ? i - PIN_COLS : i) : (i > p ? i - 1 : Math.max(0, p - 1 - (p - 1) % PIN_COLS));
         this._homeKeys[this._sel].b.remove_style_class_name('silik-on');
         this._sel = Math.max(0, Math.min(n - 1, i));
@@ -738,7 +756,7 @@ class SilikShell {
     _openStart() {
         if (this._startOpen) return;
         const sys = Shell.AppSystem.get_default();
-        this._apps = Gio.AppInfo.get_all().filter(i => i.should_show()).map(i => sys.lookup_app(i.get_id())).filter(a => a)
+        this._apps = sys.get_installed().filter(i => i.should_show()).map(i => sys.lookup_app(i.get_id())).filter(a => a)
             .map(a => ({ app: a, name: a.get_name() || '', desc: a.get_description() || '', cat: category(a) }));
         this._apps.sort((a, b) => a.name.localeCompare(b.name));
         this._favIds = AppFavorites.getAppFavorites().getFavorites().map(a => a.get_id());
@@ -899,6 +917,7 @@ class SilikShell {
     _launch(app) {
         if (!this._startOpen) return;                       /* (a second click on the pane while it leaves) */
         this._closeStart();
+        Main.overview.hide();
         if (app.state !== Shell.AppState.STOPPED) { app.activate(); return; }
         app.open_new_window(-1);
         if (this._flow) this._flow.started(app);            /* its key answers at once */

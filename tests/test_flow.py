@@ -173,6 +173,48 @@ class Extension(unittest.TestCase):
         self.assertEqual(meta["shell-version"], ["40"])
 
 
+class ReviewFindings(unittest.TestCase):
+    """the defects found in review (11/11/2026), each seen in the rig before its fix and gone after (docs/STATUS.md);
+    these hold the fixes in the code"""
+
+    def setUp(self):
+        self.ext = text(os.path.join(EXT, "extension.js"))
+        self.flow = text(os.path.join(EXT, "flow.js"))
+
+    def body(self, src, name):
+        i = src.index("    " + name + "(")
+        return src[i:src.index("\n    }\n", i)]
+
+    def test_the_panels_menus_go_back_in_their_order(self):
+        """taken one by one from the front, every index read was 0: put back in the same order they came back reversed"""
+        self.assertIn("for (const [c, box, i] of this._taken.slice().reverse())", self.body(self.flow, "destroy"))
+
+    def test_a_key_leaves_one_box_before_it_enters_the_other(self):
+        """a running program added to the favourites: Clutter refused the insert and the key was left with no parent"""
+        sync = self.body(self.ext, "_sync")
+        self.assertLess(sync.index("a.get_parent().remove_child(a)"), sync.index("box.insert_child_at_index(a, i)"))
+
+    def test_a_look_switch_with_a_piece_off_screen_is_instant(self):
+        """under a full-screen window the pieces are not on screen: their fade would end inside the loop"""
+        sw = self.body(self.ext, "_switch")
+        self.assertIn("!pieces.every(a => a.mapped)", sw)
+        self.assertLess(sw.index("!pieces.every(a => a.mapped)"), sw.index("pieces.forEach("))
+
+    def test_the_panel_is_shown_before_it_is_tracked(self):
+        """tracking it is what hides it again over a full-screen window"""
+        back = self.body(self.flow, "_panelBack")
+        self.assertLess(back.index("lm.panelBox.show()"), back.index("lm._trackActor(lm.panelBox"))
+
+    def test_start_reads_the_shells_list_of_applications(self):
+        self.assertNotIn("Gio.AppInfo.get_all()", self.ext)
+        self.assertIn("sys.get_installed()", self.body(self.ext, "_openStart"))
+
+    def test_recent_files_are_looked_for_on_disk_only_as_many_as_shown(self):
+        rec = self.body(self.ext, "_recentFiles")
+        self.assertNotIn("i.exists())", rec.split("const shown")[0])      # (not in the filter of every entry)
+        self.assertIn("k < 2 * RECENT_N", rec)
+
+
 class Stylesheet(unittest.TestCase):
     def setUp(self):
         self.css = text(os.path.join(EXT, "stylesheet.css"))

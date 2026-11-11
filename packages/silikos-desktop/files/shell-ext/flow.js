@@ -171,8 +171,10 @@ var FlowLook = class FlowLook {
             this._clockBox = null;
             if (dm && dm._clockDisplay) dm._clockDisplay.show();
         }
-        /* the shell's menus go back where they were, in their order (unless the shell took them back itself) */
-        for (const [c, box, i] of this._taken) {
+        /* the shell's menus go back where they were, in their order (unless the shell took them back itself). They
+           were taken one by one from the front, so each index was read with the earlier ones gone: put back last
+           first, each at its index, they stand in their first order again */
+        for (const [c, box, i] of this._taken.slice().reverse()) {
             if (c.get_parent() !== this._tray) continue;
             this._tray.remove_child(c);
             box.insert_child_at_index(c, Math.min(i, box.get_n_children()));
@@ -196,8 +198,8 @@ var FlowLook = class FlowLook {
 
     _panelBack() {
         const lm = Main.layoutManager;
+        lm.panelBox.show();                                       /* (first: tracking it hides it again over a full-screen window) */
         if (this._tracked && lm._findActor(lm.panelBox) < 0) lm._trackActor(lm.panelBox, { affectsStruts: true, trackFullscreen: true });
-        lm.panelBox.show();
         lm._updatePanelBarrier();
     }
 
