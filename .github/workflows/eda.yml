@@ -59,6 +59,9 @@ jobs:
   kicad:
     needs: build
     if: ${{ !cancelled() }}
+    concurrency:            # one build of KiCad at a time: a later run waits, and finds this one's package
+      group: eda-kicad
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     container: almalinux:9
     timeout-minutes: 340

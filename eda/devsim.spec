@@ -1,5 +1,7 @@
 %include %{_specdir_eda}/common.inc
 %global __brp_python_bytecompile %{nil}
+# upstream's scripts are packaged as they are (one of its test scripts starts with "env python")
+%global __brp_mangle_shebangs %{nil}
 # git: submodules   (symdiff, the UMFPACK it solves with, and the three header-only Boost libraries it is built with)
 Name:           devsim
 Version:        %{upver}
