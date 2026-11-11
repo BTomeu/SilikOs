@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The look of the SilikOS shell (the extension silik-shell). `silik look` reads and sets it; the shell follows it
+     while the session runs. -->
+<schemalist>
+  <schema id="com.silikvolt.silikos.shell" path="/com/silikvolt/silikos/shell/">
+    <key name="look" type="s">
+      <choices>
+        <choice value="silik"/>
+        <choice value="bar"/>
+        <choice value="island"/>
+      </choices>
+      <default>'silik'</default>
+      <summary>The look of the desktop</summary>
+      <description>silik: the title bar is the command line, a text rail of keys, a status bar. bar: one bar across the bottom, the applications as icons. island: one floating piece centred at the bottom.</description>
+    </key>
+  </schema>
+</schemalist>

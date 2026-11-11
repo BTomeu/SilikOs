@@ -1,12 +1,13 @@
 Name:           silikos-desktop
-Version:        0.10.3
+Version:        0.11.0
 Release:        1%{?dist}
-Summary:        The SilikOS desktop: the Silik layout (command line, rail, status bar), GTK and shell themes, Cascadia Mono
+Summary:        The SilikOS desktop: the Silik layout and the Flow looks (bar, island), GTK and shell themes, Cascadia Mono
 License:        LicenseRef-SilikVolt AND OFL-1.1
 BuildArch:      noarch
 Requires:       silikos-branding >= 0.2.0
 Requires:       silik-command >= 0.2.0
-Requires:       silik-tools >= 0.2.1
+# `silik look` sets the look the shell follows; Start's session keys run `silik session`
+Requires:       silik-tools >= 0.5.0
 Requires:       gnome-shell
 Requires:       gnome-shell-extension-user-theme
 Requires:       gdm
@@ -26,7 +27,10 @@ Requires(post): fontconfig
 
 %description
 System-wide GNOME defaults (dconf database "local"), the Cascadia Mono font (SIL OFL 1.1) and the X11 session as the
-default of the login screen: the EDA tools this system is for are X11 programs.
+default of the login screen: the EDA tools this system is for are X11 programs. The shell extension silik-shell is
+the desktop in three looks, chosen by the key "look" of the settings com.silikvolt.silikos.shell (`silik look`):
+silik (the title bar is the command line, a text rail of keys, a status bar), bar (one bar across the bottom, the
+applications as icons) and island (one floating piece centred at the bottom).
 
 %install
 install -Dm0644 %{_sourcedir}/00-silikos %{buildroot}%{_sysconfdir}/dconf/db/local.d/00-silikos
@@ -46,10 +50,12 @@ install -Dm0644 %{_sourcedir}/shell-theme.sed %{buildroot}%{_datadir}/silikos/sh
 install -Dm0644 %{_sourcedir}/shell-extra.css %{buildroot}%{_datadir}/silikos/shell-extra.css
 install -Dm0644 %{_sourcedir}/shell-toggle-on.svg %{buildroot}%{_datadir}/themes/SilikOS/gnome-shell/toggle-on.svg
 install -Dm0644 %{_sourcedir}/shell-checkbox.svg %{buildroot}%{_datadir}/themes/SilikOS/gnome-shell/checkbox.svg
-# the Silik layout: a shell extension (title bar = command line, text rail, status bar)
-for f in metadata.json extension.js stylesheet.css; do
+# the desktop: a shell extension. The Silik look (title bar = command line, text rail, status bar) and the Flow looks
+# (flow.js: bar, island); the key that chooses one is a settings schema of the system (glib2's file trigger compiles it)
+for f in metadata.json extension.js flow.js stylesheet.css; do
   install -Dm0644 %{_sourcedir}/shell-ext/$f %{buildroot}%{_datadir}/gnome-shell/extensions/silik-shell@silikvolt.com/$f
 done
+install -Dm0644 %{_sourcedir}/com.silikvolt.silikos.shell.gschema.xml %{buildroot}%{_datadir}/glib-2.0/schemas/com.silikvolt.silikos.shell.gschema.xml
 # the icon theme: Adwaita with the Silik folders and file types (tools/gen_icons.py)
 (cd %{_sourcedir}/icons && find . -type f \( -name '*.svg' -o -name index.theme \) | while read -r f; do
   install -Dm0644 "$f" "%{buildroot}%{_datadir}/icons/SilikOS/$f"; done)
@@ -102,4 +108,5 @@ dconf update >/dev/null 2>&1 || :
 %{_prefix}/lib/environment.d/60-silikos-shell.conf
 %{_datadir}/silikos/
 %{_datadir}/gnome-shell/extensions/silik-shell@silikvolt.com/
+%{_datadir}/glib-2.0/schemas/com.silikvolt.silikos.shell.gschema.xml
 %license %{_datadir}/licenses/%{name}/CascadiaMono-LICENSE.txt

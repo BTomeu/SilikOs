@@ -60,6 +60,32 @@ has desktop.user-theme "$(asuser gnome-extensions info user-theme@gnome-shell-ex
 is desktop.user-theme-name "$(asuser gsettings get org.gnome.shell.extensions.user-theme name)" "'SilikOS'"
 has desktop.shell-stylesheet "$(tr '\0' '\n' < /proc/$(pgrep -u tester -x gnome-shell | head -1)/environ 2> /dev/null | grep '^G_RESOURCE_OVERLAYS=' | cut -c1-90)" "/org/gnome/shell/theme/gnome-shell.css=/usr/share/themes/SilikOS"
 has desktop.super-space "$(asuser gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings)" "silik-command"
+# the three looks (silik, bar, island): the setting is there with its default, the running shell takes each one
+# (seen from outside: the room it leaves to windows; the rail and the top bar are gone in bar and island) without an
+# error of the extension, and the session ends in the default one. Their pictures are tests/install/run.sh's.
+is look.default "$(asuser silik -q look --json)" '{"look": "silik", "looks": ["silik", "bar", "island"]}'
+exterr() { journalctl -b --no-pager -o cat 2> /dev/null | grep -A12 'JS ERROR' | awk '/JS ERROR/ { n += hit; hit = 0; seen = 1 } seen && /silik-shell@/ { hit = 1 } END { print n + hit }'; }
+# x,y,width,height of the room windows have on the first screen, then the screen's height (GTK 3, as the COMMAND bar has it)
+room() { asuser python3 -c "
+import gi
+gi.require_version('Gdk', '3.0')
+from gi.repository import Gdk
+m = Gdk.Display.get_default().get_primary_monitor() or Gdk.Display.get_default().get_monitor(0)
+w, g = m.get_workarea(), m.get_geometry()
+print('%d,%d,%d,%d %d' % (w.x - g.x, w.y - g.y, w.width, w.height, g.height))" 2> /dev/null; }
+for l in bar island silik; do
+  e0=$(exterr); s=$(asuser silik look $l); sleep 8
+  r=$(room); screen_h=${r##* }; r=${r%% *}; v=$(asuser gsettings get com.silikvolt.silikos.shell look); e=$(( $(exterr) - e0 ))
+  x=${r%%,*}; y=$(echo "$r" | cut -d, -f2); h=$(echo "$r" | cut -d, -f4)
+  if [ -z "$r" ]; then shape="not seen"
+  elif [ $l = silik ]; then shape=$([ "$x" -gt 0 ] && [ "$y" -gt 0 ] && echo "rail and title bar" || echo "NO rail or title bar")
+  else shape=$([ "$x" = 0 ] && [ "$y" = 0 ] && [ "$h" -lt "${screen_h:-0}" ] && echo "room from the top left, the bottom kept" || echo "NOT the room of this look"); fi
+  case "$v/$e/$shape" in
+    "'$l'/0/NO"*|"'$l'/0/NOT"*) say look.$l FAIL "$shape: windows have $r of a screen $screen_h high";;
+    "'$l'/0/"*) say look.$l ok "$(echo "$s" | head -1); windows have $r: $shape; no error of the extension";;
+    *) say look.$l FAIL "setting $v, $e errors of the extension, windows have $r";;
+  esac
+done
 has boot.plymouth "$(plymouth-set-default-theme 2>&1)" silikos
 s=$(silik status 2>&1); say silik.status "$([ $? = 0 ] && echo ok || echo FAIL)" "$(echo "$s" | head -3)"
 s=$(asuser silik eda check); say silik.eda-check info "$(echo "$s" | tail -2)"

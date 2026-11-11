@@ -1,6 +1,8 @@
 # SilikOS desktop defaults (dconf system database "local"; a user's own settings win).
 # The Silik layout (the shell extension silik-shell: command line, rail, status bar) and the Silik look: the GTK theme and the shell theme "SilikOS" (one ink on paper, ink title bars, inverse-video
 # selection, Cascadia Mono), the SilikVolt mark as the background, and the COMMAND bar on Super+Space.
+# The look of the layout (silik, bar, island) is the key "look" of com.silikvolt.silikos.shell: its default, silik, is
+# the schema's own; `silik look` sets a user's.
 
 [org/gnome/desktop/background]
 picture-uri='file:///usr/share/backgrounds/silikos/silikos-light.svg'

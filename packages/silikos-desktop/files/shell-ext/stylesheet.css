@@ -66,3 +66,88 @@
 .silik-msg { border-left-width: 0; }
 .silik-k { color: #6b6d72; }
 .silik-v { color: #1a1b1e; }
+
+/* the windows view shows an application's icon under each window: ours, in ink on its paper */
+.silik-app-icon.icon-dropshadow, .silik-mono.icon-dropshadow { color: #1a1b1e; }
+
+/* ---- the Flow looks (flow.js): one piece at the bottom, paper, the applications as icons */
+.silik-flow { background-color: #f7f6f3; color: #1a1b1e; font-size: 12px; }
+.silik-bar { border-top: 1px solid #1a1b1e; }
+.silik-island { border: 1px solid #1a1b1e; border-radius: 6px; padding: 0 6px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28); }
+
+/* the mark is the Start key */
+.silik-fmk { width: 60px; border-radius: 0; color: #1a1b1e; }
+.silik-fmk:hover, .silik-fmk:focus { background-color: #e6e5e0; }
+.silik-fmk.silik-on { background-color: #1a1b1e; color: #f7f6f3; }
+.silik-island .silik-fmk { width: 52px; height: 42px; border-radius: 4px; }
+.silik-fmk .silik-mk-mark { margin-right: 0; }
+
+/* the command field of the bar: the last command `silik` ran */
+.silik-fcmd { width: 280px; height: 26px; margin: 0 10px 0 0; padding: 0 10px; background-color: #fcfbf9; border: 1px solid #8a8b8f;
+  border-radius: 0; color: #1a1b1e; }
+.silik-fcmd:hover, .silik-fcmd:focus { border-color: #1a1b1e; }
+.silik-fcmd-pr { font-weight: 600; padding-right: 8px; }
+.silik-fcmd-cur { width: 7px; height: 14px; border: 1px solid #8a8b8f; }
+.silik-fcmd-last { color: #6b6d72; }
+.silik-fcmd-hint { color: #8a8b8f; font-size: 10px; padding-left: 8px; }
+
+/* a key of an application: an ink line on what runs, inverse video (and, on the bar, the name) on what has the focus */
+.silik-ak { padding: 0 13px; border-radius: 0; color: #1a1b1e; }
+.silik-ak:hover, .silik-ak:focus { background-color: #e6e5e0; }
+.silik-ak-line { height: 2px; }
+.silik-ak.silik-run .silik-ak-line { background-color: #1a1b1e; }
+.silik-ak.silik-on { background-color: #1a1b1e; color: #f7f6f3; }
+.silik-ak.silik-on .silik-ak-line { background-color: #f7f6f3; }
+.silik-ak-box { spacing: 9px; }
+.silik-ak-t { font-weight: 600; }
+.silik-island .silik-ak { height: 42px; border-radius: 4px; }
+.silik-island .silik-ak-line { margin: 0 5px 3px 5px; }
+.silik-bar .silik-ak-view { padding: 0 10px; }
+.silik-isep { width: 1px; height: 26px; margin: 0 6px; background-color: #b9b8b3; }
+.silik-fws { spacing: 4px; padding: 0 10px 0 2px; }
+.silik-fws .silik-ws-cell { width: 22px; height: 18px; font-size: 10px; }
+
+/* the shell's own status menus, moved in from its panel, and the clock */
+.silik-tray .panel-button { color: #1a1b1e; font-weight: normal; -natural-hpadding: 8px; -minimum-hpadding: 4px; border-radius: 0; }
+.silik-tray .panel-button:hover { background-color: #e6e5e0; }
+.silik-tray .panel-button:active, .silik-tray .panel-button:focus, .silik-tray .panel-button:checked { background-color: #1a1b1e; color: #f7f6f3; }
+.silik-tray .system-status-icon { icon-size: 16px; padding: 0 3px; }
+.silik-tray .panel-status-indicators-box, .silik-tray .panel-status-menu-box { spacing: 2px; }
+.silik-clock-t { font-size: 12px; }
+.silik-clock-d { font-size: 10px; color: #6b6d72; }
+.silik-tray .panel-button:active .silik-clock-d, .silik-tray .panel-button:focus .silik-clock-d { color: #b9b8b3; }
+.silik-island .silik-clock { spacing: 10px; }
+.silik-island .silik-clock-d { font-size: 12px; }
+.silik-island .silik-tray .panel-button { border-radius: 4px; }
+
+/* Start in a Flow look: it stands on the piece; the first page is the rail's applications and the files used last */
+.silik-start-flow { border-top-width: 1px; }
+.silik-start-bar { border-left-width: 0; border-bottom-width: 0; box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.2); }
+.silik-start-island { border-radius: 6px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28); }
+.silik-start-flow .silik-start-head { height: 42px; padding: 0 16px; }
+.silik-start-island .silik-start-head { border-radius: 5px 5px 0 0; }
+.silik-home { padding: 0 16px; }
+.silik-home-h { color: #6b6d72; font-size: 10px; padding: 14px 0 8px 0; }
+.silik-home-all { color: #6b6d72; font-size: 10px; border-radius: 0; }
+.silik-home-all:hover { color: #1a1b1e; }
+.silik-pins { border-left: 1px solid #dcdad5; border-top: 1px solid #dcdad5; }
+/* (the colour is given for the four sides: the shell paints every side in the colour of the top one) */
+.silik-pin { height: 84px; border: 0 solid #dcdad5; border-right-width: 1px; border-bottom-width: 1px; border-radius: 0; color: #1a1b1e; }
+.silik-pin:hover { background-color: #e6e5e0; }
+.silik-pin.silik-on { background-color: #1a1b1e; color: #f7f6f3; }
+.silik-pin-n { font-size: 10px; color: #8a8b8f; padding: 4px 0 0 6px; }
+.silik-pin.silik-on .silik-pin-n { color: #b9b8b3; }
+.silik-pin-box { spacing: 9px; }
+.silik-pin-t { font-size: 12px; }
+.silik-rec { height: 30px; padding: 0 4px; border: 0 solid #e6e5e0; border-bottom-width: 1px; border-radius: 0; color: #1a1b1e; }
+.silik-rec:hover { background-color: #e6e5e0; }
+.silik-rec.silik-on { background-color: #1a1b1e; color: #f7f6f3; }
+.silik-rec StIcon { -st-icon-style: symbolic; }
+.silik-rec-name { width: 190px; padding-left: 10px; }
+.silik-rec-dir { color: #6b6d72; padding-left: 10px; }
+.silik-rec.silik-on .silik-rec-dir { color: #b9b8b3; }
+.silik-start-flow .silik-start-foot { height: 42px; padding: 0 16px; border-top: 1px solid #1a1b1e; background-color: #f7f6f3; font-size: 12px;
+  color: #1a1b1e; spacing: 4px; }
+.silik-start-island .silik-start-foot { border-radius: 0 0 5px 5px; }
+.silik-start-sk { padding: 4px 8px; border-radius: 0; color: #1a1b1e; }
+.silik-start-sk:hover, .silik-start-sk:focus { background-color: #1a1b1e; color: #f7f6f3; }

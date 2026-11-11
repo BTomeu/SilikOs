@@ -8,6 +8,11 @@
  *               a filter as you type; Enter opens, Esc closes
  *   status bar  the one message channel (the last command `silik` ran, read from $XDG_RUNTIME_DIR/silik-last), then
  *               "key value" fields: workspace, base, kernel, host
+ * That is the look "silik". The key `look` of the settings com.silikvolt.silikos.shell (`silik look`) chooses it or
+ * one of the Flow looks, "bar" and "island" (flow.js): one piece at the bottom of the screen, the applications as
+ * icons. The icons and Start are shared; in a Flow look Start opens from the piece: the applications of the rail as a
+ * grid with their digit, the files used last, every application as soon as one types (or Tab), and the session's keys,
+ * which run `silik session lock | logout | off`. The look follows the key while the session runs.
  * Nothing here runs a system action: the keys open applications and windows, every action stays in `silik`. */
 'use strict';
 
@@ -15,21 +20,31 @@ const { Clutter, Gio, GLib, Gtk, Meta, Pango, PangoCairo, Shell, St } = imports.
 const Main = imports.ui.main;
 const AppFavorites = imports.ui.appFavorites;
 const Util = imports.misc.util;
+const Me = imports.misc.extensionUtils.getCurrentExtension();
+const Flow = Me.imports.flow;
 
 const RAIL_W = 152, SB_H = 22, START_W = 660, START_H = 520;
+const FLOW_W = 640, FLOW_H = 548, PIN_COLS = 4, RECENT_N = 5;      /* Start in a Flow look */
+const SCHEMA = 'com.silikvolt.silikos.shell';                      /* key "look": silik | bar | island */
 const COMMAND_ID = 'org.silikvolt.Command.desktop';   /* the COMMAND bar is the title bar's command line, not a rail key */
 
 const TEXT = {
     en: { ready: 'ready', ws: 'workspace', base: 'base', kernel: 'kernel', host: 'host', open: 'open', windows: 'Windows',
           filter: 'type to filter', kOpen: 'open', kMove: 'move', kCat: 'category', kClose: 'close', none: 'nothing matches',
+          hint: 'Super+Space', search: 'type to search the applications', pinned: 'pinned', recent: 'recent', all: 'all applications',
+          lock: 'lock', logout: 'log out', off: 'power off',
           cats: { all: 'All', fav: 'Rail', eda: 'Engineering', win: 'Windows programs', dev: 'Development', office: 'Office',
                   graphics: 'Graphics', net: 'Internet', media: 'Sound and video', tools: 'Tools', system: 'System', other: 'Other' } },
     ca: { ready: 'a punt', ws: 'espai', base: 'base', kernel: 'nucli', host: 'equip', open: 'obertes', windows: 'Finestres',
           filter: 'escriu per filtrar', kOpen: 'obre', kMove: 'mou', kCat: 'categoria', kClose: 'tanca', none: 'no hi ha res que coincideixi',
+          hint: 'Super+Espai', search: 'escriu per cercar les aplicacions', pinned: 'ancorades', recent: 'recents', all: 'totes les aplicacions',
+          lock: 'bloqueja', logout: 'tanca la sessió', off: 'apaga',
           cats: { all: 'Totes', fav: 'Rail', eda: 'Enginyeria', win: 'Programes de Windows', dev: 'Desenvolupament', office: 'Oficina',
                   graphics: 'Gràfics', net: 'Internet', media: 'So i vídeo', tools: 'Eines', system: 'Sistema', other: 'Altres' } },
     es: { ready: 'listo', ws: 'espacio', base: 'base', kernel: 'núcleo', host: 'equipo', open: 'abiertas', windows: 'Ventanas',
           filter: 'escribe para filtrar', kOpen: 'abre', kMove: 'mueve', kCat: 'categoría', kClose: 'cierra', none: 'nada coincide',
+          hint: 'Super+Espacio', search: 'escribe para buscar las aplicaciones', pinned: 'ancladas', recent: 'recientes', all: 'todas las aplicaciones',
+          lock: 'bloquea', logout: 'cierra la sesión', off: 'apaga',
           cats: { all: 'Todas', fav: 'Rail', eda: 'Ingeniería', win: 'Programas de Windows', dev: 'Desarrollo', office: 'Oficina',
                   graphics: 'Gráficos', net: 'Internet', media: 'Sonido y vídeo', tools: 'Herramientas', system: 'Sistema', other: 'Otras' } },
 };
@@ -221,14 +236,39 @@ function programOf(app) {
     return null;
 }
 
+/* the look asked for: the key of the settings, "silik" when the schema is not on this system */
+function lookSettings() {
+    try {
+        const src = Gio.SettingsSchemaSource.get_default();
+        return src && src.lookup(SCHEMA, true) ? new Gio.Settings({ schema_id: SCHEMA }) : null;
+    } catch (e) { return null; }
+}
+
 class SilikShell {
     enable() {
+        this._settings = lookSettings();
+        if (this._settings) this._lookSig = this._settings.connect('changed::look', () => { this._down(); this._up(); });
+        this._up();
+    }
+
+    disable() {
+        this._down();
+        if (this._settings) { this._settings.disconnect(this._lookSig); this._settings = null; }
+    }
+
+    /* ---- a look is put up whole and taken down whole */
+    _up() {
         this._t = TEXT[lang()];
         this._sigs = [];
         this._moved = [];
-        this._title();
-        this._rail();
-        this._status();
+        const look = this._settings ? this._settings.get_string('look') : 'silik';
+        this._flow = look === 'bar' || look === 'island'
+            ? new Flow.FlowLook(look, { t: this._t, icon, mark: markSmall, programOf, toggleStart: () => this._toggleStart(),
+                                        closeStart: () => this._closeStart(), command: () => this._command() })
+            : null;
+        if (this._flow) this._flow.build();
+        else { this._title(); this._rail(); this._status(); }
+        this._watchLast();
         this._start();
         const on = (o, s, f) => this._sigs.push([o, o.connect(s, f)]);
         on(Main.layoutManager, 'monitors-changed', () => this._layout());
@@ -249,7 +289,13 @@ class SilikShell {
         }
         /* the same icons wherever the shell shows an application (window switcher, windows view, search) */
         this._origIcon = origIcon = Shell.App.prototype.create_icon_texture;
-        Shell.App.prototype.create_icon_texture = function (size) { return silikIcon(this, size); };
+        Shell.App.prototype.create_icon_texture = function (size) {
+            const i = silikIcon(this, size);
+            /* the windows view then puts the window's own picture (a colour picture of another style) into the icon
+               it was given: this one keeps what it shows */
+            try { Object.defineProperty(i, 'gicon', { get() { return null; }, set() {} }); } catch (e) { /* it stays as it is */ }
+            return i;
+        };
         /* the rail is the dash; the Super key opens Start (the windows view keeps its key on the rail) */
         this._dash = Main.overview.dash;
         if (this._dash) { this._dash.hide(); this._dash.set_height(0); }
@@ -260,9 +306,10 @@ class SilikShell {
         this._layout();
         this._sync();
         this._syncWs();
+        this._syncMsg();
     }
 
-    disable() {
+    _down() {
         this._closeStart();
         delete Main.overview.toggle;
         if (this._origIcon) { Shell.App.prototype.create_icon_texture = this._origIcon; this._origIcon = origIcon = null; }
@@ -272,12 +319,15 @@ class SilikShell {
         if (this._mon) { this._mon.cancel(); this._mon = null; }
         if (this._dash) { this._dash.set_height(-1); this._dash.show(); this._dash = null; }
         if (this._hadOverview !== undefined) Main.sessionMode.hasOverview = this._hadOverview;
-        for (const a of [this._railBox, this._sb, this._catcher, this._startBox]) { Main.layoutManager.removeChrome(a); a.destroy(); }
+        for (const a of [this._catcher, this._startBox]) { Main.layoutManager.removeChrome(a); a.destroy(); }
+        if (this._flow) { this._flow.destroy(); this._flow = null; return; }
+        for (const a of [this._railBox, this._sb]) { Main.layoutManager.removeChrome(a); a.destroy(); }
         this._mk.destroy(); this._cmd.destroy();
         const dm = Main.panel.statusArea.dateMenu;
         if (dm && this._clockMoved) {
             Main.panel._rightBox.remove_child(dm.container);
             Main.panel._centerBox.add_child(dm.container);
+            this._clockMoved = false;
         }
         /* the shell's own keys come back only where the session's mode has them: on the lock screen (where the shell
            turns extensions off) it has just hidden them, and showing them there put "Activities" and the name of the
@@ -309,13 +359,9 @@ class SilikShell {
         cb.add_child(new St.Label({ text: '›', style_class: 'silik-cmd-pr', y_align: Clutter.ActorAlign.CENTER }));
         cb.add_child(new St.Widget({ style_class: 'silik-cmd-cur', y_align: Clutter.ActorAlign.CENTER }));
         cb.add_child(new St.Widget({ x_expand: true }));
-        cb.add_child(new St.Label({ text: 'Super+Space', style_class: 'silik-cmd-hint', y_align: Clutter.ActorAlign.CENTER }));
+        cb.add_child(new St.Label({ text: this._t.hint, style_class: 'silik-cmd-hint', y_align: Clutter.ActorAlign.CENTER }));
         this._cmd.set_child(cb);
-        this._cmd.connect('clicked', () => {
-            Main.overview.hide();
-            this._closeStart();
-            try { GLib.spawn_command_line_async('silik-command'); } catch (e) { Main.notify('SilikOS', String(e.message)); }
-        });
+        this._cmd.connect('clicked', () => this._command());
         Main.panel._leftBox.insert_child_at_index(this._mk, 0);
         Main.panel._leftBox.insert_child_at_index(this._cmd, 1);
 
@@ -325,6 +371,13 @@ class SilikShell {
             Main.panel._rightBox.insert_child_at_index(dm.container, 0);
             this._clockMoved = true;
         }
+    }
+
+    /* the COMMAND bar (Super+Space) */
+    _command() {
+        Main.overview.hide();
+        this._closeStart();
+        try { GLib.spawn_command_line_async('silik-command'); } catch (e) { Main.notify('SilikOS', String(e.message)); }
     }
 
     /* ---- rail: the task bar */
@@ -385,6 +438,7 @@ class SilikShell {
     }
 
     _sync() {
+        if (this._flow) { this._flow.sync(); return; }
         const fav = AppFavorites.getAppFavorites().getFavorites();
         const focusApp = Shell.WindowTracker.get_default().focus_app;
         const focusWin = global.display.focus_window;
@@ -400,6 +454,7 @@ class SilikShell {
     }
 
     _syncWs() {
+        if (this._flow) { this._flow.syncWs(); return; }
         const wm = global.workspace_manager;
         const n = wm.get_n_workspaces(), cur = wm.get_active_workspace_index();
         this._wsBox.destroy_all_children();
@@ -412,19 +467,21 @@ class SilikShell {
         if (this._ws) this._ws.text = (cur + 1) + '/' + n;
     }
 
-    /* ---- Start: a pane hanging from the mark */
+    /* ---- Start: a pane hanging from the mark (Silik), or standing on the piece at the bottom (Flow) */
     _start() {
-        const t = this._t;
+        const t = this._t, flow = this._flow;
         this._catcher = new St.Widget({ reactive: true, visible: false });
         this._catcher.connect('button-press-event', () => { this._closeStart(); return Clutter.EVENT_STOP; });
-        this._startBox = new St.BoxLayout({ style_class: 'silik-start', vertical: true, reactive: true, visible: false });
+        this._startBox = new St.BoxLayout({ style_class: flow ? 'silik-start silik-start-flow silik-start-' + flow.kind : 'silik-start',
+                                            vertical: true, reactive: true, visible: false });
         const head = new St.BoxLayout({ style_class: 'silik-start-head' });
         head.add_child(new St.Label({ text: '›', style_class: 'silik-start-pr', y_align: Clutter.ActorAlign.CENTER }));
-        this._entry = new St.Entry({ style_class: 'silik-start-entry', hint_text: t.filter, x_expand: true, can_focus: true,
+        this._entry = new St.Entry({ style_class: 'silik-start-entry', hint_text: flow ? t.search : t.filter, x_expand: true, can_focus: true,
                                      y_align: Clutter.ActorAlign.CENTER });
         head.add_child(this._entry);
         this._startBox.add_child(head);
-        const body = new St.BoxLayout({ y_expand: true });
+        if (flow) this._startHome();
+        const body = this._body = new St.BoxLayout({ y_expand: true });
         this._cats = new St.BoxLayout({ style_class: 'silik-start-cats', vertical: true, x_expand: false });
         body.add_child(this._cats);
         this._scroll = new St.ScrollView({ style_class: 'silik-start-scroll', x_expand: true, y_expand: true,
@@ -435,13 +492,26 @@ class SilikShell {
         body.add_child(this._scroll);
         this._startBox.add_child(body);
         const foot = new St.BoxLayout({ style_class: 'silik-start-foot' });
-        const kv = (k, v) => {
-            const b = new St.BoxLayout({ style_class: 'silik-start-kv' });
-            b.add_child(new St.Label({ text: k, style_class: 'silik-start-k' }));
-            b.add_child(new St.Label({ text: v }));
-            foot.add_child(b);
-        };
-        kv('Enter', t.kOpen); kv('↑↓', t.kMove); kv('Tab', t.kCat); kv('Esc', t.kClose);
+        if (flow) {
+            /* who is at the machine, and the session's keys: each one is a command of `silik` */
+            const who = GLib.get_real_name();
+            foot.add_child(new St.Label({ text: who && who !== 'Unknown' ? who : GLib.get_user_name(), style_class: 'silik-start-user',
+                                          x_expand: true, y_align: Clutter.ActorAlign.CENTER }));
+            for (const k of ['lock', 'logout', 'off']) {
+                const b = new St.Button({ style_class: 'silik-start-sk', label: t[k], reactive: true, track_hover: true, can_focus: true,
+                                          y_align: Clutter.ActorAlign.CENTER });
+                b.connect('clicked', () => this._session(k));
+                foot.add_child(b);
+            }
+        } else {
+            const kv = (k, v) => {
+                const b = new St.BoxLayout({ style_class: 'silik-start-kv' });
+                b.add_child(new St.Label({ text: k, style_class: 'silik-start-k' }));
+                b.add_child(new St.Label({ text: v }));
+                foot.add_child(b);
+            };
+            kv('Enter', t.kOpen); kv('↑↓', t.kMove); kv('Tab', t.kCat); kv('Esc', t.kClose);
+        }
         this._startBox.add_child(foot);
         Main.layoutManager.addChrome(this._catcher);
         Main.layoutManager.addChrome(this._startBox);
@@ -449,6 +519,112 @@ class SilikShell {
         this._entry.clutter_text.connect('key-press-event', (o, ev) => this._startKey(ev));
         this._cat = 'all';
         this._sel = 0;
+        this._view = 'home';
+    }
+
+    /* Start's first page in a Flow look: the rail's applications as a grid, digit first (Super+digit opens them), and
+       the files used last (the desktop's own list of recent files); typing, Tab or the key on the right lists everything */
+    _startHome() {
+        const t = this._t;
+        this._home = new St.BoxLayout({ style_class: 'silik-home', vertical: true, y_expand: true });
+        const h = new St.BoxLayout({ style_class: 'silik-home-h' });
+        h.add_child(new St.Label({ text: t.pinned, x_expand: true, y_align: Clutter.ActorAlign.CENTER }));
+        const all = new St.Button({ style_class: 'silik-home-all', label: t.all + ' ›', reactive: true, track_hover: true });
+        all.connect('clicked', () => { this._view = 'all'; this._sel = 0; this._fill(); this._entry.grab_key_focus(); });
+        h.add_child(all);
+        this._home.add_child(h);
+        this._pins = new St.Widget({ style_class: 'silik-pins', layout_manager: new Clutter.GridLayout({ column_homogeneous: true }),
+                                     x_expand: true });
+        this._pins.y_expand = true;                 /* said twice: only a changed value stops the cells' own wish to grow */
+        this._pins.y_expand = false;                /* from reaching the grid, which would take the whole page */
+        this._home.add_child(this._pins);
+        this._recT = new St.Label({ text: t.recent, style_class: 'silik-home-h' });
+        this._home.add_child(this._recT);
+        this._recs = new St.BoxLayout({ style_class: 'silik-recs', vertical: true });
+        this._home.add_child(this._recs);
+        this._startBox.add_child(this._home);
+    }
+
+    _recentFiles() {
+        try {
+            const home = GLib.get_home_dir();
+            return Gtk.RecentManager.get_default().get_items()
+                .filter(i => i.is_local() && !i.get_private_hint() && i.exists())
+                .sort((a, b) => b.get_modified() - a.get_modified()).slice(0, RECENT_N)
+                .map(i => {
+                    const dir = GLib.path_get_dirname(i.get_uri_display() || '');
+                    return { uri: i.get_uri(), name: i.get_display_name(), gicon: i.get_gicon(),
+                             dir: dir === home ? '~' : dir.startsWith(home + '/') ? '~' + dir.slice(home.length) : dir };
+                });
+        } catch (e) { return []; }
+    }
+
+    _fillHome() {
+        this._pins.destroy_all_children();
+        this._recs.destroy_all_children();
+        this._homeKeys = [];
+        const grid = this._pins.layout_manager;
+        const favs = AppFavorites.getAppFavorites().getFavorites().slice(0, 3 * PIN_COLS);
+        favs.forEach((app, i) => {
+            const as = programOf(app) || app;
+            const b = new St.Button({ style_class: 'silik-pin', reactive: true, track_hover: true, x_expand: true });
+            const w = new St.Widget({ layout_manager: new Clutter.BinLayout(), x_expand: true, y_expand: true });
+            w.add_child(new St.Label({ text: i < 9 ? String(i + 1) : '', style_class: 'silik-pin-n', x_expand: true, y_expand: true,
+                                       x_align: Clutter.ActorAlign.START, y_align: Clutter.ActorAlign.START }));
+            const col = new St.BoxLayout({ vertical: true, style_class: 'silik-pin-box', x_expand: true, y_expand: true,
+                                           x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER });
+            const ic = icon(as, 28);
+            ic.x_align = Clutter.ActorAlign.CENTER;
+            col.add_child(ic);
+            col.add_child(new St.Label({ text: as.get_name(), style_class: 'silik-pin-t', x_align: Clutter.ActorAlign.CENTER }));
+            w.add_child(col);
+            b.set_child(w);
+            b.connect('clicked', () => this._launch(app));
+            grid.attach(b, i % PIN_COLS, Math.floor(i / PIN_COLS), 1, 1);
+            this._homeKeys.push({ b, go: () => this._launch(app) });
+        });
+        for (let i = favs.length; i % PIN_COLS; i++)       /* the row is ruled to its end */
+            grid.attach(new St.Widget({ style_class: 'silik-pin silik-pin-none', x_expand: true }), i % PIN_COLS, Math.floor(i / PIN_COLS), 1, 1);
+        this._nPins = favs.length;
+        const files = this._recentFiles();
+        this._recT.visible = files.length > 0;
+        for (const f of files) {
+            const b = new St.Button({ style_class: 'silik-rec', reactive: true, track_hover: true, x_expand: true });
+            const box = new St.BoxLayout({ x_expand: true });
+            if (f.gicon) box.add_child(new St.Icon({ gicon: f.gicon, icon_size: 16, y_align: Clutter.ActorAlign.CENTER }));
+            box.add_child(new St.Label({ text: f.name, style_class: 'silik-rec-name', y_align: Clutter.ActorAlign.CENTER }));
+            box.add_child(new St.Label({ text: f.dir, style_class: 'silik-rec-dir', x_expand: true, y_align: Clutter.ActorAlign.CENTER }));
+            b.set_child(box);
+            const go = () => {
+                this._closeStart();
+                try { Gio.AppInfo.launch_default_for_uri(f.uri, global.create_app_launch_context(0, -1)); }
+                catch (e) { Main.notify('SilikOS', String(e.message)); }
+            };
+            b.connect('clicked', go);
+            this._recs.add_child(b);
+            this._homeKeys.push({ b, go });
+        }
+        if (this._sel >= this._homeKeys.length) this._sel = Math.max(0, this._homeKeys.length - 1);
+        if (this._homeKeys.length) this._homeKeys[this._sel].b.add_style_class_name('silik-on');
+    }
+
+    /* the grid's keys: left and right along the applications, up and down by rows, then down the files */
+    _moveHome(dx, dy) {
+        const n = this._homeKeys.length, p = this._nPins;
+        if (!n) return;
+        let i = this._sel;
+        if (dx) i = i < p ? Math.max(0, Math.min(p - 1, i + dx)) : i;
+        else if (dy > 0) i = i >= p ? Math.min(n - 1, i + 1) : i + PIN_COLS < p ? i + PIN_COLS       /* the cell below, or the last */
+            : Math.floor(i / PIN_COLS) < Math.floor((p - 1) / PIN_COLS) ? p - 1 : Math.min(n - 1, p);   /* of a short row, or the files */
+        else if (dy < 0) i = i < p ? (i - PIN_COLS >= 0 ? i - PIN_COLS : i) : (i > p ? i - 1 : Math.max(0, p - 1 - (p - 1) % PIN_COLS));
+        this._homeKeys[this._sel].b.remove_style_class_name('silik-on');
+        this._sel = Math.max(0, Math.min(n - 1, i));
+        this._homeKeys[this._sel].b.add_style_class_name('silik-on');
+    }
+
+    _session(what) {
+        this._closeStart();
+        try { GLib.spawn_command_line_async('silik session ' + what); } catch (e) { Main.notify('SilikOS', String(e.message)); }
     }
 
     _toggleStart() {
@@ -464,15 +640,16 @@ class SilikShell {
         this._favIds = AppFavorites.getAppFavorites().getFavorites().map(a => a.get_id());
         this._cat = 'all';
         this._sel = 0;
+        this._view = 'home';
         this._entry.set_text('');
         this._fillCats();
         this._fill();
         this._layout();
         this._catcher.show();
         this._startBox.show();
-        this._mk.add_style_class_name('silik-on');
+        this._markOn(true);
         if (!Main.pushModal(this._startBox, { actionMode: Shell.ActionMode.POPUP })) {
-            this._catcher.hide(); this._startBox.hide(); this._mk.remove_style_class_name('silik-on');
+            this._catcher.hide(); this._startBox.hide(); this._markOn(false);
             return;
         }
         this._startOpen = true;
@@ -485,7 +662,18 @@ class SilikShell {
         Main.popModal(this._startBox);
         this._catcher.hide();
         this._startBox.hide();
-        this._mk.remove_style_class_name('silik-on');
+        this._markOn(false);
+    }
+
+    _markOn(on) {
+        if (this._flow) this._flow.markOn(on);
+        else if (on) this._mk.add_style_class_name('silik-on');
+        else this._mk.remove_style_class_name('silik-on');
+    }
+
+    /* a Flow look's Start is on its first page until one types or asks for everything */
+    _atHome() {
+        return !!this._flow && this._view === 'home' && !this._entry.get_text().trim();
     }
 
     _catList() {
@@ -506,6 +694,12 @@ class SilikShell {
     }
 
     _fill() {
+        if (this._flow) {
+            const home = this._atHome();
+            this._home.visible = home;
+            this._body.visible = !home;
+            if (home) { this._fillHome(); return; }
+        }
         const q = this._entry.get_text().trim().toLowerCase();
         this._shown = this._apps.filter(a =>
             (this._cat === 'all' || (this._cat === 'fav' ? this._favIds.includes(a.app.get_id()) : a.cat === this._cat)) &&
@@ -538,7 +732,31 @@ class SilikShell {
 
     _startKey(ev) {
         const k = ev.get_key_symbol();
-        if (k === Clutter.KEY_Escape) { this._closeStart(); return Clutter.EVENT_STOP; }
+        if (this._atHome()) {
+            if (k === Clutter.KEY_Escape) { this._closeStart(); return Clutter.EVENT_STOP; }
+            if (k === Clutter.KEY_Right) { this._moveHome(1, 0); return Clutter.EVENT_STOP; }
+            if (k === Clutter.KEY_Left) { this._moveHome(-1, 0); return Clutter.EVENT_STOP; }
+            if (k === Clutter.KEY_Down) { this._moveHome(0, 1); return Clutter.EVENT_STOP; }
+            if (k === Clutter.KEY_Up) { this._moveHome(0, -1); return Clutter.EVENT_STOP; }
+            if (k === Clutter.KEY_Return || k === Clutter.KEY_KP_Enter) {
+                if (this._homeKeys.length) this._homeKeys[this._sel].go();
+                return Clutter.EVENT_STOP;
+            }
+            if (k === Clutter.KEY_Tab || k === Clutter.KEY_ISO_Left_Tab) {
+                this._view = 'all'; this._sel = 0; this._fillCats(); this._fill();
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
+        }
+        if (k === Clutter.KEY_Escape) {
+            if (this._flow) {                               /* back to the first page; Esc there closes */
+                this._view = 'home'; this._cat = 'all'; this._sel = 0;
+                if (this._entry.get_text()) this._entry.set_text(''); else { this._fillCats(); this._fill(); }
+            } else {
+                this._closeStart();
+            }
+            return Clutter.EVENT_STOP;
+        }
         if (k === Clutter.KEY_Down) { this._move(1); return Clutter.EVENT_STOP; }
         if (k === Clutter.KEY_Up) { this._move(-1); return Clutter.EVENT_STOP; }
         if (k === Clutter.KEY_Page_Down) { this._move(10); return Clutter.EVENT_STOP; }
@@ -590,18 +808,20 @@ class SilikShell {
         if (k) field(t.kernel, k);
         field(t.host, GLib.get_host_name());
         Main.layoutManager.addChrome(this._sb, { affectsStruts: true, trackFullscreen: true });
+    }
 
-        /* the last command `silik` ran */
+    /* the last command `silik` ran: the status bar's message, or the command field of the bar */
+    _watchLast() {
         this._last = Gio.File.new_for_path(GLib.build_filenamev([GLib.get_user_runtime_dir(), 'silik-last']));
         try {
             this._mon = this._last.monitor_file(Gio.FileMonitorFlags.NONE, null);
             this._mon.connect('changed', () => this._syncMsg());
         } catch (e) { this._mon = null; }
-        this._syncMsg();
     }
 
     _syncMsg() {
         const s = readText(this._last.get_path());
+        if (this._flow) { this._flow.syncMsg(s); return; }
         const i = s.indexOf(' ');
         if (s && i > 0) { this._msgT.text = s.slice(0, i); this._msgX.text = s.slice(i + 1).split('\n')[0]; }
         else { this._msgT.text = ''; this._msgX.text = this._t.ready; }
@@ -611,13 +831,20 @@ class SilikShell {
         const m = Main.layoutManager.primaryMonitor;
         if (!m) return;
         const s = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+        this._catcher.set_position(m.x, m.y);
+        this._catcher.set_size(m.width, m.height);
+        if (this._flow) {
+            this._flow.layout();
+            const [x, y, w, h] = this._flow.startPlace(FLOW_W * s, FLOW_H * s);
+            this._startBox.set_position(x, y);
+            this._startBox.set_size(w, h);
+            return;
+        }
         const ph = Main.layoutManager.panelBox.height, sb = SB_H * s, rw = RAIL_W * s;
         this._sb.set_position(m.x, m.y + m.height - sb);
         this._sb.set_size(m.width, sb);
         this._railBox.set_position(m.x, m.y + ph);
         this._railBox.set_size(rw, m.height - ph - sb);
-        this._catcher.set_position(m.x, m.y);
-        this._catcher.set_size(m.width, m.height);
         this._startBox.set_position(m.x + rw - s, m.y + ph);
         this._startBox.set_size(Math.min(START_W * s, m.width - rw), Math.min(START_H * s, m.height - ph - sb));
     }

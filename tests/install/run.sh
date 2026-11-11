@@ -159,6 +159,19 @@ if kill -0 $qpid 2> /dev/null; then
     eda ngspice 15; typ "quit" || true; key ret || true; sleep 3
     if grep -q 'SILIKOS-CI|eda.qucs-s|ok' "$out/boot.log"; then eda qucs-s 25 10; key alt-f4 || true; sleep 3; key alt-f4 || true; sleep 3; fi
   fi
+  # the other two looks, each chosen from the COMMAND bar by its address, with a window open: the look, Start in it;
+  # in the bar look also the lock screen and back (the shell turns the extension off there and on again)
+  look() { key meta_l-spc || true; sleep 5; typ "look/$1" || true; sleep 2; key ret || true; sleep 8; }
+  key meta_l-spc || true; sleep 5; typ "sys/files" || true; sleep 2; key ret || true; sleep 10
+  look bar; shot look-bar || true
+  key meta_l || true; sleep 4; shot look-bar-start || true; key esc || true; sleep 2
+  key meta_l-spc || true; sleep 5; typ "sys/lock" || true; sleep 2; key ret || true; sleep 8   # `silik session lock`
+  key ctrl || true; sleep 4; shot look-bar-lock || true
+  typ "silikos-ci" || true; key ret || true; sleep 8; shot look-bar-unlocked || true
+  look island; shot look-island || true
+  key meta_l || true; sleep 4; shot look-island-start || true; key esc || true; sleep 2
+  look silik; shot look-silik || true
+  key alt-f4 || true; sleep 3
   key meta_l-l || true; sleep 6                            # Super+L: locked, and the screen goes dark
   key ctrl || true; sleep 4; shot unlock || true           # a key wakes it: the password prompt (extensions are off there)
   key esc || true; sleep 4; shot lock || true              # Esc: back to the lock screen and its clock
