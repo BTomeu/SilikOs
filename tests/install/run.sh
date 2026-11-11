@@ -130,14 +130,16 @@ if kill -0 $qpid 2> /dev/null; then
     key ret || true; sleep 25; shot windows-program || true
   fi
   # the open EDA tools, each started from the COMMAND bar by its address, when the ISO carries them
-  eda() { key meta_l-spc || true; sleep 5; typ "app/$1" || true; sleep 2; key ret || true; sleep "$2"; shot "eda-$1" || true; }
+  eda() { key meta_l-spc || true; sleep 5; typ "app/$1" || true; sleep 2; key ret || true
+          if [ -n "${3:-}" ]; then sleep "$3"; shot "eda-$1-early" || true; fi       # (a second picture, sooner)
+          sleep "$2"; shot "eda-$1" || true; }
   if grep -q 'SILIKOS-CI|eda.klayout|ok' "$out/boot.log"; then
     key alt-f4 || true; sleep 3                            # (the Windows program's window)
-    eda klayout 35; key alt-f4 || true; sleep 3; key alt-f4 || true; sleep 3
+    eda klayout 25 10; key alt-f4 || true; sleep 3; key alt-f4 || true; sleep 3
     eda magic 25; key alt-f4 || true; sleep 3; key alt-f4 || true; sleep 3
     eda xschem 25; key alt-f4 || true; sleep 3
     eda ngspice 15; typ "quit" || true; key ret || true; sleep 3
-    if grep -q 'SILIKOS-CI|eda.qucs-s|ok' "$out/boot.log"; then eda qucs-s 35; key alt-f4 || true; sleep 3; key alt-f4 || true; sleep 3; fi
+    if grep -q 'SILIKOS-CI|eda.qucs-s|ok' "$out/boot.log"; then eda qucs-s 25 10; key alt-f4 || true; sleep 3; key alt-f4 || true; sleep 3; fi
   fi
   key meta_l-l || true; sleep 6                            # Super+L: locked, and the screen goes dark
   key ctrl || true; sleep 4; shot unlock || true           # a key wakes it: the password prompt (extensions are off there)

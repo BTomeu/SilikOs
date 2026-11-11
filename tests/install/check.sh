@@ -89,21 +89,24 @@ if command -v wine > /dev/null; then
       insession silik win stop default > /dev/null
       o2=$(insession timeout 300 silik win open --no-sandbox /home/tester/Downloads/hello.exe); rc2=$?
       say win.open.without-sandbox info "exit $rc2: $(tr -d '\r' < /home/tester/Windows/silikos-ci.txt 2> /dev/null) / $(echo "$o2" | tail -3 | tr '\n' ' ')"
-      # the program alone (no console window), with Wine's own error messages, and what Wine can load that it could not before
+      # which of them it is: the same command a second time (does it only fail right after the prefix is made?), then Wine
+      # itself with the command line `silik` gives it, with and without its messages, and with the file's name alone
+      P=/home/tester/.local/share/silikos/wine/default
       insession silik win stop default > /dev/null 2>&1
-      d1=$(insession sh -c 'cd /home/tester/Downloads && WINEPREFIX=/home/tester/.local/share/silikos/wine/default timeout 200 wine hello.exe 2>&1; echo "exit $?"' | tail -4 | tr '\n' ' ')
-      say win.open.plain info "wine hello.exe: $d1"
-      d2=$(insession sh -c 'cd /home/tester/Downloads && WINEPREFIX=/home/tester/.local/share/silikos/wine/default timeout 200 wine wineconsole hello.exe 2>&1; echo "exit $?"' | tail -6 | tr '\n' ' ')
-      say win.open.console info "wine wineconsole hello.exe: $d2"
-      say win.open.libraries info "$(rpm -q SDL2 2>&1 | tr '\n' ' ') $(ls /usr/lib64/libSDL2*.so* 2> /dev/null | tr '\n' ' ')"
-      if ls /usr/lib64/libSDL2-2.0.so.0* > /dev/null 2>&1; then        # (a library Wine loads when it is there: is it the difference?)
-        mkdir -p /tmp/sdl-aside && mv /usr/lib64/libSDL2-2.0.so.0* /tmp/sdl-aside/
-        insession env WINEPREFIX=/home/tester/.local/share/silikos/wine/default wineserver -k > /dev/null 2>&1; sleep 4
-        d3=$(insession sh -c 'cd /home/tester/Downloads && WINEPREFIX=/home/tester/.local/share/silikos/wine/default timeout 200 wine wineconsole hello.exe > /dev/null 2>&1; echo "exit $?"' | tail -1)
-        say win.open.without-sdl info "wine wineconsole hello.exe with SDL2 moved aside: $d3"
-        mv /tmp/sdl-aside/* /usr/lib64/
-      fi
-      insession env WINEPREFIX=/home/tester/.local/share/silikos/wine/default wineserver -k > /dev/null 2>&1; sleep 3
+      insession timeout 300 silik -q win open /home/tester/Downloads/hello.exe > /dev/null 2>&1; say win.open.again info "silik win open, a second time: exit $?"
+      insession silik win stop default > /dev/null 2>&1
+      insession timeout 300 silik -q win open --no-sandbox /home/tester/Downloads/hello.exe > /dev/null 2>&1; say win.open.again-plain info "silik win open --no-sandbox, a second time: exit $?"
+      insession silik win stop default > /dev/null 2>&1
+      d=$(insession sh -c "cd /home/tester/Downloads && env WINEDEBUG=-all WINEPREFIX=$P timeout 200 wine wineconsole /home/tester/Downloads/hello.exe 2>&1; echo \"exit \$?\"" | tail -2 | tr '\n' ' ')
+      say win.open.wine-as-silik info "wine wineconsole /full/path, no messages: $d"
+      insession env WINEPREFIX=$P wineserver -k > /dev/null 2>&1; sleep 4
+      d=$(insession sh -c "cd /home/tester/Downloads && env WINEPREFIX=$P timeout 200 wine wineconsole /home/tester/Downloads/hello.exe 2>&1; echo \"exit \$?\"" | tail -6 | tr '\n' ' ')
+      say win.open.wine-messages info "wine wineconsole /full/path, with its messages: $d"
+      insession env WINEPREFIX=$P wineserver -k > /dev/null 2>&1; sleep 4
+      d=$(insession sh -c "cd /home/tester/Downloads && env WINEDEBUG=-all WINEPREFIX=$P timeout 200 wine wineconsole hello.exe 2>&1; echo \"exit \$?\"" | tail -2 | tr '\n' ' ')
+      say win.open.wine-name info "wine wineconsole hello.exe, no messages: $d"
+      insession env WINEPREFIX=$P wineserver -k > /dev/null 2>&1; sleep 4
+      say win.open.updates info "the newest packages of the base: $(rpm -qa --qf '%{BUILDTIME} %{NAME}-%{VERSION}-%{RELEASE}\n' 'kernel' 'mesa-dri-drivers' 'llvm-libs' 'gnome-shell' 'mutter' 'xorg-x11-server-Xorg' 'glibc' | sort -n | tail -7 | cut -d' ' -f2 | tr '\n' ' ')"
     fi
     # a Windows program with a window: it must be on the session's screen under its own name and class
     if [ -f /mnt/silikci/win.exe ]; then
@@ -171,12 +174,16 @@ echo "$o" | grep -v '^[0-9]* ok' | head -8 | while read -r line; do say eda.try-
 say eda.tools info "$(runuser -u tester -- silik eda tools 2>&1 | grep -c '^●') of 11 open tools on the system"
 # the names and classes of the Tk tools' windows (what a desktop entry must say for the rail to know the program)
 if insession xwininfo -root > /dev/null 2>&1; then
-  for t in xschem magic; do
+  for t in xschem magic klayout qucs-s; do
     command -v $t > /dev/null || continue
     asuser systemd-run --quiet --user --collect --unit=ci-$t -p WorkingDirectory=/home/tester -E DISPLAY=:0 $t > /dev/null 2>&1
     sleep 12
-    say eda.$t-windows info "$(insession xwininfo -root -tree | grep -iE 'xschem|magic|tkcon|layout' | sed -E 's/^ *0x[0-9a-f]+ //; s/ +[0-9]+x[0-9]+.*//' | sort -u | head -6 | tr '\n' ';')"
+    say eda.$t-windows info "$(insession xwininfo -root -tree | grep -iE 'xschem|magic|tkcon|layout|qucs' | sed -E 's/^ *0x[0-9a-f]+ //; s/ +[0-9]+x[0-9]+.*//' | sort -u | head -6 | tr '\n' ';')"
     asuser systemctl --user stop ci-$t > /dev/null 2>&1
+    # (a program that fell over, or that the display server complained about, while it was open)
+    c=$(coredumpctl list --no-pager --no-legend 2> /dev/null | tail -2 | awk '{print $NF}' | tr '\n' ' ')
+    j=$(journalctl -b --no-pager -o cat --since '-40s' 2> /dev/null | grep -iE "$t|xcb|qt\.qpa|segfault|X Error" | grep -v 'SILIKOS-CI' | tail -3 | cut -c1-160 | tr '\n' '/')
+    [ -z "$c$j" ] || say eda.$t-trouble info "dumps: ${c:-none}; journal: ${j:-nothing}"
   done
 fi
 say system.failed-units info "$(systemctl --failed --no-legend | awk '{print $2}' | tr '\n' ' ')"
