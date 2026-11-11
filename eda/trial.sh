@@ -119,7 +119,7 @@ for v in (0.4, 0.3, 0.2, 0.1, 0.0, -0.1, -0.2, -0.3, -0.4, -0.5):
 info = devsim.get_parameter(name="info")
 print("RESULT forward %.3e reverse %.3e A/cm2" % (out[0.5], out[-0.5]))
 print("RESULT grows %s" % all(abs(out[b]) > abs(out[a]) for a, b in ((0.1, 0.2), (0.2, 0.3), (0.3, 0.4), (0.4, 0.5))))
-print("RESULT solver %s (of %s) math %s" % (devsim.get_parameter(name="direct_solver"), "/".join(info.get("direct_solver", [])), ",".join(info.get("math_libraries", []))))
+print("RESULT solver %s, BLAS and LAPACK from %s" % (devsim.get_parameter(name="direct_solver"), (info.get("math_libraries") or ["?"])[0]))
 EOP
     python3 diode.py > out.txt 2>&1 || { tail -30 out.txt; exit 1; }
     python3 - <<'EOP' || { grep RESULT out.txt; tail -5 out.txt; exit 1; }
@@ -129,7 +129,7 @@ f, r = (float(x) for x in re.search(r"RESULT forward (\S+) reverse (\S+)", t).gr
 assert abs(f) > 1e3 * abs(r) and "RESULT grows True" in t, (f, r)
 assert "mkl" not in re.search(r"RESULT solver \S+", t).group(0).lower() and "loading UMFPACK" in t and "libopenblas" in t
 EOP
-    echo "TRIAL-OK devsim $(rpm -q --qf '%{VERSION}' devsim) : a pn diode: $(grep 'RESULT forward' out.txt | cut -c8-), the current grows with the bias; $(grep 'RESULT solver' out.txt | cut -c8-)" ;;
+    echo "TRIAL-OK devsim $(rpm -q --qf '%{VERSION}' devsim) : a pn diode: $(grep 'RESULT forward' out.txt | cut -c8-), the current grows with the bias; $(grep 'RESULT solver' out.txt | cut -c8-) ($(grep -m1 'loading UMFPACK' out.txt))" ;;
   opencascade)   # a program built against it: a box, its volume, written as STEP
     again dnf -y -q install gcc-c++
     cat > box.cc <<'EOP'
@@ -184,6 +184,10 @@ EOP
     n=$(find /usr/share/kicad/template -name '*.kicad_pro' 2> /dev/null | wc -l)
     [ "$n" -gt 3 ] || { find /usr/share/kicad -maxdepth 2 | head -20; exit 1; }
     echo "TRIAL-OK kicad-templates $(rpm -q --qf '%{VERSION}' kicad-templates) : $n project templates" ;;
+  kicad-packages3d)
+    n=$(find /usr/share/kicad/3dmodels -type f 2> /dev/null | wc -l)
+    [ "$n" -gt 1000 ] || { find /usr/share/kicad -maxdepth 2 | head -20; exit 1; }
+    echo "TRIAL-OK kicad-packages3d $(rpm -q --qf '%{VERSION}' kicad-packages3d) : $n model files in $(ls -d /usr/share/kicad/3dmodels/*.3dshapes | wc -l) libraries ($(find /usr/share/kicad/3dmodels -type f | sed 's/.*[.]//' | sort | uniq -c | sort -rn | head -3 | awk '{print $1" ."$2}' | tr '\n' ' ')), $(du -sh /usr/share/kicad/3dmodels | cut -f1) installed" ;;
   kicad)     # from the command line, one of its own demonstration projects: netlist, Gerber and drill files, STEP
     v=$(kicad-cli version 2>&1 | tail -1)
     pcb=$(find /usr/share/kicad/demos -name '*.kicad_pcb' | sort | head -1); sch=${pcb%.kicad_pcb}.kicad_sch

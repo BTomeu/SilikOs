@@ -148,3 +148,38 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash eda/keep.sh kicad
+
+  # KiCad's 3D models: several gigabytes, asked for by nothing. Built and tried in one job, kept in the release
+  # eda-optional (the ISO takes eda-tools only)
+  models:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - name: The line of eda/versions
+        id: line
+        run: echo "sum=$(grep -E '^kicad-packages3d[[:space:]]' eda/versions | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: build/extra
+          key: eda-kicad-packages3d-${{ steps.line.outputs.sum }}-${{ hashFiles('eda/common.inc', 'eda/kicad-packages3d.spec') }}
+      - name: Build kicad-packages3d
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL; df -h . | tail -1
+          if ! docker run --rm -v "$PWD:/w" -w /w almalinux:9 bash -c 'dnf -y -q install git tar gzip findutils && bash tools/build_eda.sh kicad-packages3d' > build.log 2>&1; then
+            tail -40 build.log; df -h . | tail -1
+            echo "::error title=build kicad-packages3d::$(grep -iE 'error|no space|cannot|No match' build.log | tail -8 | tr '\n' ' ' | cut -c1-900)"
+            exit 1
+          fi
+          tail -3 build.log; df -h . | tail -1
+          sudo rm -rf build/eda-rpm
+      - name: What was built
+        run: echo "::notice title=kicad-packages3d built::$(cd build/extra && ls -la kicad-packages3d-*.rpm | awk '{print $5, $9}')"
+      - name: Try it in a clean EL 9, then keep it in the release eda-optional
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist && cp build/extra/kicad-packages3d-*.rpm dist/
+          bash eda/keep.sh kicad-packages3d

@@ -8,6 +8,8 @@ License:        CC-BY-SA-4.0 WITH KiCad-libraries-exception
 URL:            https://www.kicad.org/libraries/download/
 Source0:        kicad-packages3d-%{version}.tar.gz
 BuildArch:      noarch
+# (a fast compression: the default level takes very long on this much)
+%global _binary_payload w10.zstdio
 BuildRequires:  cmake make python3
 
 %description
@@ -17,6 +19,8 @@ an exception for the designs made with them). Upstream's files, unmodified, wher
 
 %prep
 %setup -q -n kicad-packages3d-%{version}
+# several gigabytes: the archive goes once it is unpacked, and the unpacked tree once it is installed
+rm -f %{SOURCE0}
 
 %build
 cmake -S . -B build -DCMAKE_INSTALL_PREFIX=%{_prefix}
@@ -28,5 +32,6 @@ DESTDIR=%{buildroot} cmake --install build
 %licences
 if [ -f LICENSE.md ]; then cp -p LICENSE.md %{buildroot}%{_datadir}/licenses/%{name}/; fi
 %filelist
+cd %{_builddir} && rm -rf kicad-packages3d-%{version}
 
 %files -f %{_builddir}/%{name}-files.list
