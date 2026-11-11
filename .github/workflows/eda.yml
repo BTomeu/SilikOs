@@ -6,7 +6,8 @@
 # "# release: optional" is kept in the release `eda-optional` instead: not on the ISO.
 # KiCad is built after the others, against the packages of ours it uses (the ones of this run).
 # Runs when a recipe changes, or by hand. A build is kept (cache) while its recipe (its line of eda/versions, its
-# spec, eda/common.inc; for KiCad also those of what it uses) does not change.
+# spec, eda/common.inc; for KiCad also those of what it uses) does not change. It is kept as soon as it is built, not
+# at the end of its job: a later step that fails (an upload GitHub refuses) does not throw hours of building away.
 name: EDA tools
 on:
   push:
@@ -39,7 +40,7 @@ jobs:
         id: line
         shell: bash
         run: echo "sum=$(grep -E '^${{ matrix.tool }}[[:space:]]' eda/versions | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
         id: cache
         with:
           path: build/extra
@@ -54,6 +55,11 @@ jobs:
             exit 1
           fi
           tail -5 build.log
+      - uses: actions/cache/save@v4
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          path: build/extra
+          key: ${{ steps.cache.outputs.cache-primary-key }}
       - name: What was built
         run: echo "::notice title=${{ matrix.tool }} built::$(cd build/extra && ls -la ${{ matrix.tool }}-*.rpm | awk '{print $5, $9}')"
       - uses: actions/upload-artifact@v4
@@ -81,7 +87,7 @@ jobs:
         id: line
         shell: bash
         run: echo "sum=$(grep -E '^(kicad|opencascade|nng|ngspice)[[:space:]]' eda/versions | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
         id: cache
         with:
           path: build/extra
@@ -110,6 +116,11 @@ jobs:
             exit 1
           fi
           tail -5 build.log; df -h . | tail -1
+      - uses: actions/cache/save@v4
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          path: build/extra
+          key: ${{ steps.cache.outputs.cache-primary-key }}
       - name: What was built
         run: echo "::notice title=kicad built::$(cd build/extra && ls -la kicad-*.rpm | awk '{print $5, $9}')"
       - uses: actions/upload-artifact@v4
@@ -176,7 +187,7 @@ jobs:
       - name: The line of eda/versions
         id: line
         run: echo "sum=$(grep -E '^kicad-packages3d[[:space:]]' eda/versions | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
         id: cache
         with:
           path: build/extra
@@ -192,6 +203,11 @@ jobs:
           fi
           tail -3 build.log; df -h . | tail -1
           sudo rm -rf build/eda-rpm
+      - uses: actions/cache/save@v4
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          path: build/extra
+          key: ${{ steps.cache.outputs.cache-primary-key }}
       - name: What was built
         run: echo "::notice title=kicad-packages3d built::$(cd build/extra && ls -la kicad-packages3d-*.rpm | awk '{print $5, $9}')"
       - name: Try it in a clean EL 9, then keep it in the release eda-optional
