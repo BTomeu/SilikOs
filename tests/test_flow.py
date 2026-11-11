@@ -103,6 +103,70 @@ class Extension(unittest.TestCase):
         self.assertIn("box.insert_child_at_index(c,", self.flow)
         self.assertIn("dm._clockDisplay.show()", self.flow)
 
+    def test_motion_goes_through_one_door(self):
+        """every eased change is made by flow.js's ease() or pulse(), which make it at once when animations are off
+        (the desktop's setting, or the shell's own inhibit on software rendering and remote sessions)"""
+        self.assertIn("function animated() {\n    return St.Settings.get().enable_animations;", self.flow)
+        for name in ("ease", "pulse"):
+            body = self.flow.split("function %s(" % name)[1].split("\n}\n")[0]
+            self.assertIn("!animated()", body)
+            self.assertEqual(body.count("actor.ease("), 1)
+        self.assertEqual(self.flow.count(".ease("), 2)               # the two above: nothing else calls the shell's ease
+        self.assertEqual(len(re.findall(r"\.ease\(", self.ext)), self.ext.count("Flow.ease("))
+        for js in (self.ext, self.flow):
+            for other in ("set_easing_duration", "save_easing_state", "Clutter.Timeline", "new Clutter.PropertyTransition", "Tweener"):
+                self.assertNotIn(other, js)
+
+    def test_nothing_runs_at_rest(self):
+        """no repeating timer, no repaint loop: one time limit for an application that never shows a window"""
+        self.assertEqual(self.flow.count("timeout_add"), 1)
+        limit = self.flow.split("timeout_add(")[1].split("}));")[0]
+        self.assertIn("return GLib.SOURCE_REMOVE;", limit)
+        self.assertNotIn("SOURCE_CONTINUE", self.flow + self.ext)
+        self.assertNotIn("timeout_add", self.ext)
+        for loop in ("add_tick_callback", "setInterval", "Mainloop", "queue_repaint"):
+            self.assertNotIn(loop, self.flow)
+        self.assertIn("repeatCount: PULSES - 1", self.flow)          # the breathing line ends by itself
+        self.assertIn("GLib.source_remove(id)", self.flow.split("    destroy() {")[1].split("\n    }\n")[0])
+
+    def test_the_keys_are_kept_not_rebuilt(self):
+        self.assertNotIn("this._apps.destroy_all_children()", self.flow)
+        self.assertNotIn("this._keys.destroy_all_children()", self.ext)
+        self.assertNotIn("this._open.destroy_all_children()", self.ext)
+        self.assertIn("this._keys = new Map();", self.flow)
+        self.assertIn("this._rk = new Map();", self.ext)
+
+    def test_windows_know_their_key_and_forget_it(self):
+        """the shell's minimise goes to the key in the three looks; a look taken down leaves no rectangle behind"""
+        for js in (self.ext, self.flow):
+            self.assertIn("win.set_icon_geometry(r)" if js is self.flow else "w.set_icon_geometry(g)", js)
+            self.assertIn("w.set_icon_geometry(null)", js)
+
+    def test_the_silik_look_does_not_move(self):
+        """its keys change at once: the only eased things in extension.js are Start in a Flow look and a change of look"""
+        self.assertEqual(self.ext.count("Flow.ease("), 4)
+        start = self.ext.split("    _openStart() {")[1].split("    _markOn(on) {")[0]
+        self.assertEqual(start.count("Flow.ease("), 2)
+        self.assertIn("if (this._flow) {", start)
+        self.assertIn("if (!this._flow || now) { gone(); return; }", start)
+        css = text(os.path.join(EXT, "stylesheet.css"))
+        silik, flow = css.split("the Flow looks (flow.js)")
+        self.assertNotIn("transition-duration", silik)
+        flow = re.sub(r"/\*.*?\*/", "", flow, flags=re.S)
+        for sel, ms in re.findall(r"([^{}]+)\{\s*transition-duration:\s*(\d+)ms;\s*\}", flow):
+            if ms == "0":
+                continue
+            for one in sel.split(","):                               # eased: only the grey that comes under the pointer
+                self.assertTrue(one.strip().endswith(":hover"), one)
+                self.assertNotIn("silik-on", one)
+
+    def test_taking_a_look_down_ends_what_was_moving(self):
+        down = self.ext.split("    _down() {")[1].split("\n    }\n")[0]
+        self.assertIn("this._closeStart(true);", down)
+        self.assertIn("a.remove_all_transitions(); a.opacity = 255;", down)
+        self.assertIn("this._switching = false;", self.ext.split("    disable() {")[1].split("\n    }\n")[0])
+        self.assertIn("this._gone = true;", self.flow.split("    destroy() {")[1].split("\n    }\n")[0])
+
     def test_metadata(self):
         meta = json.loads(text(os.path.join(EXT, "metadata.json")))
         self.assertEqual(meta["uuid"], "silik-shell@silikvolt.com")

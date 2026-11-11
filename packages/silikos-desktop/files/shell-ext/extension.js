@@ -13,7 +13,10 @@
  * icons. The icons and Start are shared; in a Flow look Start opens from the piece: the applications of the rail as a
  * grid with their digit, the files used last, every application as soon as one types (or Tab), and the session's keys,
  * which run `silik session lock | logout | off`. The look follows the key while the session runs.
- * Nothing here runs a system action: the keys open applications and windows, every action stays in `silik`. */
+ * Nothing here runs a system action: the keys open applications and windows, every action stays in `silik`.
+ * The Silik look does not move: a key changes at once, like a terminal. Its keys are kept, not rebuilt, when the focus
+ * or the windows change, and every window knows where its key is (the shell's minimise goes there). What moves in the
+ * bar and island looks goes through flow.js's ease(), which does nothing but set the value when animations are off. */
 'use strict';
 
 const { Clutter, Gio, GLib, Gtk, Meta, Pango, PangoCairo, Shell, St } = imports.gi;
@@ -247,13 +250,41 @@ function lookSettings() {
 class SilikShell {
     enable() {
         this._settings = lookSettings();
-        if (this._settings) this._lookSig = this._settings.connect('changed::look', () => { this._down(); this._up(); });
+        if (this._settings) this._lookSig = this._settings.connect('changed::look', () => this._switch());
         this._up();
     }
 
     disable() {
+        this._switching = false;                             /* a change of look on its way is dropped: the stock shell, now */
         this._down();
         if (this._settings) { this._settings.disconnect(this._lookSig); this._settings = null; }
+    }
+
+    /* what of the look is on the screen: the Silik look's title bar is the shell's own panel */
+    _pieces() {
+        return this._flow ? this._flow.pieces() : [Main.layoutManager.panelBox, this._railBox, this._sb];
+    }
+
+    /* another look was asked for: this one fades, the new one is put up in the same instant and fades in. Without
+       animations the two are exchanged at once. The stock panel is never seen in between: taking down and putting up
+       happen between two pictures of the screen. */
+    _switch() {
+        if (this._switching) return;                         /* the exchange reads the newest choice when it comes */
+        if (!Flow.animated()) { this._down(); this._up(); return; }
+        this._switching = true;
+        this._closeStart(true);
+        this._pieces().forEach((a, i) => Flow.ease(a, { opacity: 0 }, Flow.T_LOOK_OUT, undefined, i ? null : () => this._swap()));
+    }
+
+    _swap() {
+        if (!this._switching) return;
+        this._switching = false;
+        this._down();
+        this._up();
+        for (const a of this._pieces()) {
+            a.opacity = 0;
+            Flow.ease(a, { opacity: 255 }, Flow.T_LOOK_IN);
+        }
     }
 
     /* ---- a look is put up whole and taken down whole */
@@ -261,6 +292,8 @@ class SilikShell {
         this._t = TEXT[lang()];
         this._sigs = [];
         this._moved = [];
+        this._rk = new Map();                                /* the rail's keys: application -> key, window -> key */
+        this._rw = new Map();
         const look = this._settings ? this._settings.get_string('look') : 'silik';
         this._flow = look === 'bar' || look === 'island'
             ? new Flow.FlowLook(look, { t: this._t, icon, mark: markSmall, programOf, toggleStart: () => this._toggleStart(),
@@ -274,7 +307,7 @@ class SilikShell {
         on(Main.layoutManager, 'monitors-changed', () => this._layout());
         on(Main.panel, 'notify::height', () => this._layout());
         on(global.display, 'notify::focus-window', () => this._sync());
-        on(Shell.AppSystem.get_default(), 'app-state-changed', () => this._sync());
+        on(Shell.AppSystem.get_default(), 'app-state-changed', (sys, app) => { if (this._flow) this._flow.appState(app); this._sync(); });
         on(Shell.AppSystem.get_default(), 'installed-changed', () => { programs = null; this._sync(); });
         on(Shell.WindowTracker.get_default(), 'tracked-windows-changed', () => this._sync());
         on(AppFavorites.getAppFavorites(), 'changed', () => this._sync());
@@ -310,7 +343,9 @@ class SilikShell {
     }
 
     _down() {
-        this._closeStart();
+        this._closeStart(true);
+        for (const a of this._pieces()) { a.remove_all_transitions(); a.opacity = 255; }       /* (the panel is the shell's: as it was) */
+        if (this._geomLater) { Meta.later_remove(this._geomLater); this._geomLater = 0; }
         delete Main.overview.toggle;
         if (this._origIcon) { Shell.App.prototype.create_icon_texture = this._origIcon; this._origIcon = origIcon = null; }
         for (const [o, id] of this._sigs) o.disconnect(id);
@@ -320,7 +355,10 @@ class SilikShell {
         if (this._dash) { this._dash.set_height(-1); this._dash.show(); this._dash = null; }
         if (this._hadOverview !== undefined) Main.sessionMode.hasOverview = this._hadOverview;
         for (const a of [this._catcher, this._startBox]) { Main.layoutManager.removeChrome(a); a.destroy(); }
+        this._startBox = null;
         if (this._flow) { this._flow.destroy(); this._flow = null; return; }
+        for (const k of this._rk.values()) for (const w of k.app.get_windows()) w.set_icon_geometry(null);      /* the windows forget the keys */
+        this._rk.clear(); this._rw.clear();
         for (const a of [this._railBox, this._sb]) { Main.layoutManager.removeChrome(a); a.destroy(); }
         this._mk.destroy(); this._cmd.destroy();
         const dm = Main.panel.statusArea.dateMenu;
@@ -401,39 +439,60 @@ class SilikShell {
         Main.layoutManager.addChrome(this._railBox, { affectsStruts: true, trackFullscreen: true });
     }
 
-    _key(digit, app, name) {
-        const b = new St.Button({ style_class: 'silik-key', reactive: true, track_hover: true, can_focus: true, x_expand: true,
-                                  button_mask: St.ButtonMask.ONE | St.ButtonMask.TWO });
+    _keyBox(digit, app, name) {
         const box = new St.BoxLayout({ x_expand: true });
         box.add_child(new St.Widget({ style_class: 'silik-key-edge', y_align: Clutter.ActorAlign.CENTER }));   /* ink when it runs */
         box.add_child(new St.Label({ text: digit, style_class: 'silik-key-n', y_align: Clutter.ActorAlign.CENTER }));
         if (app) box.add_child(icon(app, 16));
         box.add_child(new St.Label({ text: name, style_class: app ? 'silik-key-t' : 'silik-key-t silik-key-plain', x_expand: true,
                                      y_align: Clutter.ActorAlign.CENTER }));
-        b.set_child(box);
+        return box;
+    }
+
+    _key(digit, app, name) {
+        const b = new St.Button({ style_class: 'silik-key', reactive: true, track_hover: true, can_focus: true, x_expand: true,
+                                  button_mask: St.ButtonMask.ONE | St.ButtonMask.TWO });
+        b.set_child(this._keyBox(digit, app, name));
         return b;
     }
 
-    _appKeys(box, app, digit, focusApp, focusWin) {
-        const run = app.state !== Shell.AppState.STOPPED;
-        const as = programOf(app) || app;                  /* the name and icon of the program behind a nameless window */
-        const b = this._key(digit, as, as.get_name());
-        if (run) b.add_style_class_name('silik-run');
-        if (focusApp === app) b.add_style_class_name('silik-on');
-        b.connect('clicked', (w, button) => {
-            Main.overview.hide();
-            if (run && button !== 2) app.activate();
-            else app.open_new_window(-1);
-        });
-        box.add_child(b);
+    /* the keys of one application, kept from one change to the next: its own key (made once; its digit, icon and name
+       are drawn again only when they change), then one key for each window when it has several */
+    _appKeys(out, app, digit, focusApp, focusWin) {
+        let k = this._rk.get(app);
+        if (!k) {
+            k = { app, b: this._key('', null, ''), as: null, digit: null };
+            k.b.connect('clicked', (w, button) => {            /* what the application is doing is read at the click */
+                Main.overview.hide();
+                this._railGeom();
+                if (app.state !== Shell.AppState.STOPPED && button !== 2) app.activate();
+                else app.open_new_window(-1);
+            });
+            this._rk.set(app, k);
+        }
+        /* the name and icon of the program behind a nameless window (and it stays that program's to its end) */
+        const as = programOf(app) || (k.as && k.as !== app ? k.as : app);
+        if (as !== k.as || digit !== k.digit) {
+            k.as = as; k.digit = digit;
+            k.b.set_child(this._keyBox(digit, as, as.get_name()));
+        }
+        Flow.cls(k.b, 'silik-run', app.state !== Shell.AppState.STOPPED);
+        Flow.cls(k.b, 'silik-on', focusApp === app);
+        out.push(k.b);
         const wins = app.get_windows().filter(w => !w.is_skip_taskbar());
         if (wins.length < 2) return;
         for (const w of wins) {            /* several windows: each one is a key below the application's */
-            const wb = new St.Button({ style_class: 'silik-win', reactive: true, track_hover: true, can_focus: true, x_expand: true });
-            wb.set_child(new St.Label({ text: w.get_title() || '', x_expand: true, y_align: Clutter.ActorAlign.CENTER }));
-            if (w === focusWin) wb.add_style_class_name('silik-on');
-            wb.connect('clicked', () => { Main.overview.hide(); Main.activateWindow(w); });
-            box.add_child(wb);
+            let wb = this._rw.get(w);
+            if (!wb) {
+                wb = new St.Button({ style_class: 'silik-win', reactive: true, track_hover: true, can_focus: true, x_expand: true });
+                wb.set_child(new St.Label({ x_expand: true, y_align: Clutter.ActorAlign.CENTER }));
+                wb.connect('clicked', () => { Main.overview.hide(); this._railGeom(); Main.activateWindow(w); });
+                this._rw.set(w, wb);
+            }
+            const title = w.get_title() || '';
+            if (wb.get_child().text !== title) wb.get_child().text = title;
+            Flow.cls(wb, 'silik-on', w === focusWin);
+            out.push(wb);
         }
     }
 
@@ -442,21 +501,65 @@ class SilikShell {
         const fav = AppFavorites.getAppFavorites().getFavorites();
         const focusApp = Shell.WindowTracker.get_default().focus_app;
         const focusWin = global.display.focus_window;
-        this._keys.destroy_all_children();
-        this._open.destroy_all_children();
-        fav.forEach((app, i) => this._appKeys(this._keys, app, i < 9 ? String(i + 1) : '', focusApp, focusWin));
+        const keys = [], open = [];
+        fav.forEach((app, i) => this._appKeys(keys, app, i < 9 ? String(i + 1) : '', focusApp, focusWin));
         const ids = fav.map(a => a.get_id());
         const others = Shell.AppSystem.get_default().get_running()
             .filter(a => !ids.includes(a.get_id()) && a.get_id() !== COMMAND_ID &&
                          a.get_windows().some(w => !w.is_skip_taskbar() && w.get_wm_class_instance() !== 'silik-command'));
-        for (const app of others) this._appKeys(this._open, app, '', focusApp, focusWin);
+        /* the open applications keep the order in which their keys came (the shell lists them in no order of its own) */
+        const came = Array.from(this._rk.keys());
+        const place = a => { const i = came.indexOf(a); return i < 0 ? came.length : i; };
+        others.sort((a, b) => place(a) - place(b));
+        for (const app of others) this._appKeys(open, app, '', focusApp, focusWin);
+        /* each box holds its keys in their order; a key that stays is not touched, one that is not wanted any more goes */
+        const wanted = new Set(keys.concat(open));
+        for (const [box, list] of [[this._keys, keys], [this._open, open]]) {
+            for (const c of box.get_children()) if (!list.includes(c)) { if (wanted.has(c)) box.remove_child(c); else c.destroy(); }
+            list.forEach((a, i) => {
+                if (a.get_parent() !== box) box.insert_child_at_index(a, i);
+                else if (box.get_child_at_index(i) !== a) box.set_child_at_index(a, i);
+            });
+        }
+        for (const [app, k] of this._rk) if (!wanted.has(k.b)) this._rk.delete(app);
+        for (const [w, wb] of this._rw) if (!wanted.has(wb)) this._rw.delete(w);
         this._openT.visible = others.length > 0;
+        if (!this._geomLater) this._geomLater = Meta.later_add(Meta.LaterType.IDLE, () => {     /* once the keys have their places */
+            this._geomLater = 0;
+            this._railGeom();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    /* every window knows the rectangle of its key in the rail (its own key when it has one, else the application's):
+       the shell's minimise goes there, and comes back from there */
+    _railGeom() {
+        if (this._flow || !this._railBox) return;
+        const rect = a => {
+            const [x, y] = a.get_transformed_position();
+            const [w, h] = a.get_transformed_size();
+            return w > 0 && h > 0 ? new Meta.Rectangle({ x: Math.round(x), y: Math.round(y), width: Math.round(w), height: Math.round(h) }) : null;
+        };
+        for (const k of this._rk.values()) {
+            const r = rect(k.b);
+            for (const w of k.app.get_windows()) {
+                const wb = this._rw.get(w);
+                const g = wb && wb.get_parent() ? rect(wb) : r;
+                if (g) w.set_icon_geometry(g);
+            }
+        }
     }
 
     _syncWs() {
         if (this._flow) { this._flow.syncWs(); return; }
         const wm = global.workspace_manager;
         const n = wm.get_n_workspaces(), cur = wm.get_active_workspace_index();
+        if (this._ws) this._ws.text = (cur + 1) + '/' + n;
+        const cells = this._wsBox.get_children();
+        if (cells.length === n) {                            /* the same cells: only the one that is on changes */
+            cells.forEach((c, i) => Flow.cls(c, 'silik-on', i === cur));
+            return;
+        }
         this._wsBox.destroy_all_children();
         for (let i = 0; i < n; i++) {
             const b = new St.Button({ style_class: 'silik-ws-cell', label: String(i + 1), reactive: true, track_hover: true, can_focus: true });
@@ -464,7 +567,6 @@ class SilikShell {
             b.connect('clicked', () => wm.get_workspace_by_index(i).activate(global.get_current_time()));
             this._wsBox.add_child(b);
         }
-        if (this._ws) this._ws.text = (cur + 1) + '/' + n;
     }
 
     /* ---- Start: a pane hanging from the mark (Silik), or standing on the piece at the bottom (Flow) */
@@ -596,6 +698,7 @@ class SilikShell {
             box.add_child(new St.Label({ text: f.dir, style_class: 'silik-rec-dir', x_expand: true, y_align: Clutter.ActorAlign.CENTER }));
             b.set_child(box);
             const go = () => {
+                if (!this._startOpen) return;
                 this._closeStart();
                 try { Gio.AppInfo.launch_default_for_uri(f.uri, global.create_app_launch_context(0, -1)); }
                 catch (e) { Main.notify('SilikOS', String(e.message)); }
@@ -623,6 +726,7 @@ class SilikShell {
     }
 
     _session(what) {
+        if (!this._startOpen) return;
         this._closeStart();
         try { GLib.spawn_command_line_async('silik session ' + what); } catch (e) { Main.notify('SilikOS', String(e.message)); }
     }
@@ -653,16 +757,30 @@ class SilikShell {
             return;
         }
         this._startOpen = true;
-        this._entry.grab_key_focus();
+        this._entry.grab_key_focus();                       /* the keyboard is Start's from here: the first key typed is taken */
+        if (this._flow) {                                   /* it rises from the piece it stands on */
+            const b = this._startBox, s = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+            b.remove_all_transitions();
+            b.opacity = 0;
+            b.translation_y = 10 * s;
+            Flow.ease(b, { opacity: 255, translation_y: 0 }, Flow.T_START_IN, Clutter.AnimationMode.EASE_OUT_CUBIC);
+        }
     }
 
-    _closeStart() {
+    /* the keyboard and the pointer go back at once; in a Flow look the pane then leaves (faster than it came) */
+    _closeStart(now) {
         if (!this._startOpen) return;
         this._startOpen = false;
         Main.popModal(this._startBox);
         this._catcher.hide();
-        this._startBox.hide();
         this._markOn(false);
+        const b = this._startBox;
+        const gone = () => { b.hide(); b.opacity = 255; b.translation_y = 0; };
+        b.remove_all_transitions();
+        if (!this._flow || now) { gone(); return; }
+        const s = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+        Flow.ease(b, { opacity: 0, translation_y: 6 * s }, Flow.T_START_OUT, Clutter.AnimationMode.EASE_IN_QUAD,
+                  () => { if (this._startBox === b && !this._startOpen) gone(); });
     }
 
     _markOn(on) {
@@ -779,8 +897,11 @@ class SilikShell {
     }
 
     _launch(app) {
+        if (!this._startOpen) return;                       /* (a second click on the pane while it leaves) */
         this._closeStart();
-        if (app.state !== Shell.AppState.STOPPED) app.activate(); else app.open_new_window(-1);
+        if (app.state !== Shell.AppState.STOPPED) { app.activate(); return; }
+        app.open_new_window(-1);
+        if (this._flow) this._flow.started(app);            /* its key answers at once */
     }
 
     /* ---- status bar */

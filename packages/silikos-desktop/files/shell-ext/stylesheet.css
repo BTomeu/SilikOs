@@ -75,6 +75,14 @@
 .silik-bar { border-top: 1px solid #1a1b1e; }
 .silik-island { border: 1px solid #1a1b1e; border-radius: 6px; padding: 0 6px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28); }
 
+/* In the Flow looks the grey under the pointer comes in eased (and goes at once, as the pointer does). Inverse video
+   is never cross-faded by the stylesheet: half way, ink on ink or paper on paper, the key would be empty. The key of
+   the focused application is the one inverse change that moves: its plate (flow.js) fades and the colours turn at the
+   middle, where both read. With the desktop's animations off the shell makes all of these changes at once. */
+.silik-fmk:hover, .silik-fcmd:hover, .silik-ak:hover, .silik-flow .silik-ws-cell:hover, .silik-tray .panel-button:hover, .silik-pin:hover,
+.silik-rec:hover, .silik-home-all:hover, .silik-start-flow .silik-start-row:hover, .silik-start-flow .silik-start-cat:hover { transition-duration: 120ms; }
+.silik-on, .silik-on:hover, .silik-tray .panel-button:active, .silik-tray .panel-button:focus, .silik-tray .panel-button:checked { transition-duration: 0ms; }
+
 /* the mark is the Start key */
 .silik-fmk { width: 60px; border-radius: 0; color: #1a1b1e; }
 .silik-fmk:hover, .silik-fmk:focus { background-color: #e6e5e0; }
@@ -92,16 +100,20 @@
 .silik-fcmd-hint { color: #8a8b8f; font-size: 10px; padding-left: 8px; }
 
 /* a key of an application: an ink line on what runs, inverse video (and, on the bar, the name) on what has the focus */
-.silik-ak { padding: 0 13px; border-radius: 0; color: #1a1b1e; }
+.silik-ak { border-radius: 0; color: #1a1b1e; }
 .silik-ak:hover, .silik-ak:focus { background-color: #e6e5e0; }
-.silik-ak-line { height: 2px; }
+.silik-ak-plate { background-color: #1a1b1e; }
+.silik-ak-box { padding: 0 13px; }
+.silik-ak-line { height: 2px; margin: 0 13px; }
 .silik-ak.silik-run .silik-ak-line { background-color: #1a1b1e; }
-.silik-ak.silik-on { background-color: #1a1b1e; color: #f7f6f3; }
+.silik-ak.silik-on { color: #f7f6f3; }
 .silik-ak.silik-on .silik-ak-line { background-color: #f7f6f3; }
-.silik-ak-box { spacing: 9px; }
-.silik-ak-t { font-weight: 600; }
+.silik-ak-view { padding: 0 13px; }
+/* (the space before the name is the name's own: it comes and goes with it when the name's width eases) */
+.silik-ak-t { font-weight: 600; padding-left: 9px; }
 .silik-island .silik-ak { height: 42px; border-radius: 4px; }
-.silik-island .silik-ak-line { margin: 0 5px 3px 5px; }
+.silik-island .silik-ak-plate { border-radius: 4px; }
+.silik-island .silik-ak-line { margin: 0 18px 3px 18px; }
 .silik-bar .silik-ak-view { padding: 0 10px; }
 .silik-isep { width: 1px; height: 26px; margin: 0 6px; background-color: #b9b8b3; }
 .silik-fws { spacing: 4px; padding: 0 10px 0 2px; }
