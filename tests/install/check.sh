@@ -89,6 +89,21 @@ if command -v wine > /dev/null; then
       insession silik win stop default > /dev/null
       o2=$(insession timeout 300 silik win open --no-sandbox /home/tester/Downloads/hello.exe); rc2=$?
       say win.open.without-sandbox info "exit $rc2: $(tr -d '\r' < /home/tester/Windows/silikos-ci.txt 2> /dev/null) / $(echo "$o2" | tail -3 | tr '\n' ' ')"
+      # the program alone (no console window), with Wine's own error messages, and what Wine can load that it could not before
+      insession silik win stop default > /dev/null 2>&1
+      d1=$(insession sh -c 'cd /home/tester/Downloads && WINEPREFIX=/home/tester/.local/share/silikos/wine/default timeout 200 wine hello.exe 2>&1; echo "exit $?"' | tail -4 | tr '\n' ' ')
+      say win.open.plain info "wine hello.exe: $d1"
+      d2=$(insession sh -c 'cd /home/tester/Downloads && WINEPREFIX=/home/tester/.local/share/silikos/wine/default timeout 200 wine wineconsole hello.exe 2>&1; echo "exit $?"' | tail -6 | tr '\n' ' ')
+      say win.open.console info "wine wineconsole hello.exe: $d2"
+      say win.open.libraries info "$(rpm -q SDL2 2>&1 | tr '\n' ' ') $(ls /usr/lib64/libSDL2*.so* 2> /dev/null | tr '\n' ' ')"
+      if ls /usr/lib64/libSDL2-2.0.so.0* > /dev/null 2>&1; then        # (a library Wine loads when it is there: is it the difference?)
+        mkdir -p /tmp/sdl-aside && mv /usr/lib64/libSDL2-2.0.so.0* /tmp/sdl-aside/
+        insession env WINEPREFIX=/home/tester/.local/share/silikos/wine/default wineserver -k > /dev/null 2>&1; sleep 4
+        d3=$(insession sh -c 'cd /home/tester/Downloads && WINEPREFIX=/home/tester/.local/share/silikos/wine/default timeout 200 wine wineconsole hello.exe > /dev/null 2>&1; echo "exit $?"' | tail -1)
+        say win.open.without-sdl info "wine wineconsole hello.exe with SDL2 moved aside: $d3"
+        mv /tmp/sdl-aside/* /usr/lib64/
+      fi
+      insession env WINEPREFIX=/home/tester/.local/share/silikos/wine/default wineserver -k > /dev/null 2>&1; sleep 3
     fi
     # a Windows program with a window: it must be on the session's screen under its own name and class
     if [ -f /mnt/silikci/win.exe ]; then
