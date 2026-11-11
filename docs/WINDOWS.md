@@ -75,7 +75,7 @@ program sees:
 | **the rest of the home folder** (SSH keys, design data, licence files, browser profiles…) | **not there**: the paths do not exist in the sandbox |
 | `/tmp`, `$XDG_RUNTIME_DIR` | its own, empty at start |
 | processes | its own only (a process namespace) |
-| environment | `HOME`, `PATH`, `USER`, the locale, `DISPLAY`, the Wine switches; nothing else (no session bus address, no tokens) |
+| environment | `HOME`, `PATH`, `USER`, the locale, `DISPLAY`, the Wine switches; nothing else (no tokens). The session bus address is set to one that does not exist: left unset, a library starts a bus of its own inside (below) |
 | the X11 display, the sound sockets (PulseAudio, PipeWire), the GPU devices (`/dev/dri`, `/dev/nvidia*`) | passed |
 | network | on; `--no-net` gives the sandbox no network |
 
@@ -121,6 +121,14 @@ Consequences to know:
 - What is visible read-only can be read: `/etc` (host name, user names, what any user can read there), device
   information in `/sys`, `~/Downloads`.
 - `root`: the sandbox is made for an ordinary user. Do not run Windows programs as root.
+
+A sandbox lives as long as any process of it. Wine's server leaves 3 s after its last program, and the sandbox with it.
+Found on an installed system (11/11/2026): with SDL2 installed (Qucs-S brings it; Wine loads it when it is there), a
+library inside found no session bus and started one (`dbus-launch --autolaunch`), which never ends: every Windows
+program left a sandbox and two processes behind. The sandbox is now told that there is no bus
+(`DBUS_SESSION_BUS_ADDRESS` names a socket that does not exist), and `silik win stop` and the next start of a prefix
+end whatever an earlier sandbox of it left (`$ kill -KILL ...`, only processes of that sandbox's process namespace
+that have the prefix's runtime folder mounted).
 
 ## Limits
 

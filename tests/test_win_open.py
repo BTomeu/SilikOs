@@ -245,7 +245,9 @@ class Open(Case):
         os.environ.update({"SECRET_TOKEN": "s3cret", "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1/bus", "WINEDLLOVERRIDES": "mscoree="})
         rc, o, e = self.run_("win", "open", self.file("Downloads/a.exe"))
         self.assertNotIn("s3cret", o)
-        self.assertNotIn("DBUS", o)
+        self.assertNotIn("/run/user/1/bus", o)                               # not the session's bus ...
+        for x in self.lines(o)[4:]:                                          # ... and no bus started inside either:
+            self.assertIn(" DBUS_SESSION_BUS_ADDRESS=%s " % silik.WIN_NO_BUS, x)   # the sandbox is told there is none
         for x in self.lines(o)[4:]:
             self.assertTrue(x.startswith("$ env -i "), x[:40])           # bwrap and nsenter themselves start clean
         self.assertIn(" DISPLAY=:7 ", self.lines(o)[-1])

@@ -135,7 +135,9 @@ Not run, and why:
 - **The timer under systemd**: the unit files pass `systemd-analyze verify`; no systemd ran them.
 - **`silik secure apply` by a normal user with a real `sudo`**, and `sudo silik secure status` from a desktop
   session: run as root in a container, with `sudo` replaced by a pass-through.
-- **The screen locking by idle, suspend or the lid**: only the settings were read and written. Locking with Super+L
+- **The screen locking by suspend or the lid**: only the settings were read and written. Locking by idle was seen on
+  an installed system (the CI's virtual machine, 11/11/2026: its checks ran for more than five minutes without a key
+  and the session was found locked, its screen dark 30 s later; the password opened it). Locking with Super+L
   was seen on an installed system (the CI's virtual machine, 10/11/2026): the locked screen asks for the password and
   shows the clock and the system icons only. It had shown the name of the focused program in the top bar, a fault of
   the shell extension, fixed in `silikos-desktop` 0.10.1.

@@ -119,6 +119,10 @@ for i in $(seq 1 $((t_boot * 6))); do
   if grep -q 'SILIKOS-CI|DONE' "$out/boot.log"; then done_=1; break; fi
 done
 if kill -0 $qpid 2> /dev/null; then
+  if grep -q 'SILIKOS-CI|session.locked|info|(true' "$out/boot.log"; then   # the checks outlasted the idle lock (5 min)
+    key ctrl || true; sleep 4; shot idle-lock || true      # the screen as the system left it: locked by itself
+    typ "silikos-ci" || true; key ret || true; sleep 8     # the test user's password (ci.ks.in)
+  fi
   key esc || true; sleep 2                                 # (a dialog of the first login, if there is one)
   shot desktop || true
   key meta_l || true; sleep 4; shot start || true          # the Super key: Start

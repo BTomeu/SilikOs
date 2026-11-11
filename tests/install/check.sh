@@ -85,6 +85,12 @@ if command -v wine > /dev/null; then
     r=$(tr -d '\r' < /home/tester/Windows/silikos-ci.txt 2> /dev/null)   # a Windows program ends its lines with CR LF
     is win.open.ran "exit $rc: $r" "exit 0: ran secret=hidden"
     has win.open.sandboxed "$o" "bwrap"
+    # when the program has ended its sandbox must end too (Wine's server leaves 3 s after its last program): with SDL2 on
+    # the system a bus was started inside and every program left a sandbox behind (found 11/11/2026)
+    sleep 8
+    n=$(pgrep -u tester -x bwrap | wc -l); b=$(pgrep -u tester -fc 'dbus-launch --autolaunch')
+    if [ "$n" = 0 ] && [ "$b" = 0 ]; then say win.sandbox-ends ok "nothing of the sandbox is left 8 s after the program (SDL2: $(rpm -q --qf '%{VERSION}' SDL2 2>&1 | head -1))"
+    else say win.sandbox-ends FAIL "$n sandbox processes and $b buses left: $(pgrep -u tester -fa 'bwrap|dbus-launch --autolaunch' | cut -c1-80 | head -3 | tr '\n' '/')"; fi
     # what it printed, line by line (the commands start with $), for a run that failed
     if [ "$rc" != 0 ] || [ -z "$r" ]; then
       echo "$o" | tail -14 | while read -r line; do say win.open.output info "$line"; done
@@ -180,4 +186,8 @@ if [ "$n" = 0 ]; then say system.oom ok "nothing was killed for lack of memory"
 else say system.oom FAIL "$n lines: $(journalctl -b --no-pager -o cat 2> /dev/null | grep -iE 'out of memory: killed|oom-kill' | tail -3 | cut -c1-150 | tr '\n' '/')"; fi
 say system.failed-units info "$(systemctl --failed --no-legend | awk '{print $2}' | tr '\n' ' ')"
 say system.packages info "$(rpm -qa | wc -l) packages, $(df -h / | awk 'NR==2 {print $3}') used"
+# is the session locked by now? (the screen locks after 5 minutes without a key, and these checks take longer: the
+# pictures that follow are taken after the password)
+act=$(asuser gdbus call --session --dest org.gnome.ScreenSaver --object-path /org/gnome/ScreenSaver --method org.gnome.ScreenSaver.GetActive 2>&1 | head -1)
+say session.locked info "$act after $(( SECONDS / 60 )) min of checks without a key"
 printf '\r\nSILIKOS-CI|DONE\r\n' > $out

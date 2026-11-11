@@ -22,7 +22,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.4.0"
+VERSION = "0.4.1"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -575,6 +575,7 @@ def eda_tune(ctx, a):
 # wineserver, the wineserver numbers them by process id (one process namespace) and it is the wineserver that opens
 # their files (one view of the files). So what a sandbox shows is fixed when it starts. docs/WINDOWS.md.
 import fcntl   # the modules below are used by this section only
+import signal
 import stat
 
 WIN_DEFAULT = "default"                               # the prefix of `silik win open` when none is named
@@ -586,6 +587,10 @@ WIN_ENV = ("DISPLAY", "LANG", "LANGUAGE", "TZ", "TERM", "PULSE_SERVER", "DESKTOP
 # Wine's own switches, passed on the `env` part of the line when they are set
 WINE_ENV = ("WINEDLLOVERRIDES", "WINEESYNC", "WINEFSYNC", "WINE_LARGE_ADDRESS_AWARE")
 WINE_SHARE = "/opt/silik-wine/share/wine:/usr/share/wine:/opt/wine"     # where Wine looks for Mono and Gecko
+# The sandbox has no session bus, and must be told so: a library that finds no address starts a bus of its own
+# (dbus-launch --autolaunch, through the display), and that bus never ends, so the sandbox never ends either. Seen
+# with SDL2 on the system, which Wine loads when it is there: every Windows program left a sandbox behind.
+WIN_NO_BUS = "unix:path=/nonexistent/no-session-bus-in-the-sandbox"
 
 
 def prefix_dir(n):
@@ -721,6 +726,7 @@ def win_env(d, display=True):
     e = {"HOME": os.path.join(d, "home"), "PATH": ":".join(path or ["/usr/bin", "/bin"]),
          "XDG_RUNTIME_DIR": os.environ.get("XDG_RUNTIME_DIR") or "/run/user/%d" % os.getuid()}
     e["USER"] = e["LOGNAME"] = os.environ.get("USER") or os.environ.get("LOGNAME") or "user"
+    e["DBUS_SESSION_BUS_ADDRESS"] = WIN_NO_BUS
     if display:
         for k, v in os.environ.items():
             if k in WIN_ENV or k.startswith("LC_"):
@@ -831,6 +837,39 @@ def win_session_info(name):
         return {}
 
 
+def win_reap(ctx, name):
+    """ends what is left of a sandbox whose wineserver has gone. A sandbox lives as long as any process of it does:
+    a helper that something started inside (a bus, a daemon) would keep it, its mounts and its processes for ever.
+    Only processes of the recorded process namespace that have this prefix's runtime folder mounted are ended."""
+    rt = win_runtime(name)
+    try:
+        ns = json.loads(read(os.path.join(rt, "session")) or "{}").get("ns") or ""
+        if not ns or ns == os.readlink("/proc/self/ns/pid") or win_session_info(name):
+            return
+        left = []
+        mark = "/silik-win/%s/tmp /tmp " % name       # (a mount's source is written from the root of its own filesystem)
+        for p in os.listdir("/proc"):
+            try:
+                if p.isdigit() and os.readlink("/proc/%s/ns/pid" % p) == ns and mark in read("/proc/%s/mountinfo" % p):
+                    left.append(int(p))
+            except OSError:
+                pass
+    except (ValueError, TypeError, AttributeError, OSError):
+        return
+    if left:
+        ctx.echo(["kill", "-KILL"] + [str(p) for p in sorted(left)])
+        for p in ([] if ctx.dry else left):
+            try:
+                os.kill(p, signal.SIGKILL)
+            except OSError:
+                pass
+    if not ctx.dry:
+        try:
+            os.unlink(os.path.join(rt, "session"))
+        except OSError:
+            pass
+
+
 def win_server_socket(rt):
     """the socket of the sandbox's wineserver (its place differs between Wine builds), '' when there is none"""
     for top in ("tmp", "run"):
@@ -847,6 +886,7 @@ def win_session(ctx, name, d, show=(), net=True):
     s = win_session_info(name)
     if s:
         return s
+    win_reap(ctx, name)                 # (what an earlier sandbox of this prefix may have left)
     rt = win_runtime(name)
     show = sorted(set(win_always()) | set(show))
     show = [p for p in show if not any(p != q and _under(p, q) for q in show)]
@@ -1155,6 +1195,7 @@ def win_stop(ctx, a):
             time.sleep(0.1)
     else:
         ctx.run(tail, check=False)
+    win_reap(ctx, a.prefix)
     return 0
 
 
