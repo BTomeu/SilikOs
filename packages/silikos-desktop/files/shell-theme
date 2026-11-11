@@ -1,22 +1,39 @@
 #!/bin/bash
-# SilikOS — the GNOME Shell theme "SilikOS" (silikos-desktop): made on this system from the installed shell's own
-# stylesheet, so that it always matches the shell's version: the accent blue becomes ink greys, the surfaces the ink
-# family, the face Cascadia Mono; then /usr/share/silikos/shell-extra.css (panel, slider, focus) is appended.
-# Run by the package's scriptlets and again whenever gnome-shell is updated. Nothing of the shell's theme is shipped.
+# SilikOS — the GNOME Shell themes (silikos-desktop): made on this system from the installed shell's own stylesheet,
+# so that they always match the shell's version: the accent blue becomes ink greys, the surfaces the ink family, the
+# face Cascadia Mono; then /usr/share/silikos/shell-extra.css (panel, slider, focus) is appended. "SilikOS" is one ink
+# on paper (also the lock and login screens': 60-silikos-shell.conf); for each accent of /usr/share/silikos/accents
+# (tools/gen_accents.py) "SilikOS-<accent>" is the same with the accent's sed applied first: the blues take the
+# accent. Run by the package's scriptlets and again whenever gnome-shell is updated. Nothing of the shell's theme is
+# shipped.
 set -u
-res=/usr/share/gnome-shell/gnome-shell-theme.gresource
-out=/usr/share/themes/SilikOS/gnome-shell
-data=/usr/share/silikos
+res=${SILIKOS_SHELL_RES:-/usr/share/gnome-shell/gnome-shell-theme.gresource}
+themes=${SILIKOS_THEMES:-/usr/share/themes}
+data=${SILIKOS_SHARE:-/usr/share/silikos}
 extract=${SILIKOS_EXTRACT:-/usr/libexec/silikos/resource-extract}
 [ -r "$res" ] || { echo "shell-theme: no $res (gnome-shell not installed yet)"; exit 0; }
-mkdir -p "$out"
-tmp=$(mktemp "$out/gnome-shell.css.XXXXXX") || exit 1
-if "$extract" "$res" /org/gnome/shell/theme/gnome-shell.css | sed -f "$data/shell-theme.sed" > "$tmp" && [ -s "$tmp" ]; then
-  cat "$data/shell-extra.css" >> "$tmp"
-  chmod 0644 "$tmp" && mv -f "$tmp" "$out/gnome-shell.css"
-  echo "shell-theme: $out/gnome-shell.css"
-else
-  rm -f "$tmp"
+src=$(mktemp) || exit 1
+trap 'rm -f "$src"' EXIT
+if ! "$extract" "$res" /org/gnome/shell/theme/gnome-shell.css > "$src" || ! [ -s "$src" ]; then
   echo "shell-theme: the shell's stylesheet could not be read: no theme made" >&2
   exit 1
 fi
+rc=0
+# make NAME [ACCENT-SED]
+make() {
+  local out=$themes/$1/gnome-shell pre=() tmp
+  [ -n "${2:-}" ] && pre=(-f "$2")
+  mkdir -p "$out" || { rc=1; return; }
+  tmp=$(mktemp "$out/gnome-shell.css.XXXXXX") || { rc=1; return; }
+  if sed "${pre[@]}" -f "$data/shell-theme.sed" "$src" > "$tmp" && [ -s "$tmp" ] && cat "$data/shell-extra.css" >> "$tmp"; then
+    chmod 0644 "$tmp" && mv -f "$tmp" "$out/gnome-shell.css" && echo "shell-theme: $out/gnome-shell.css" && return
+  fi
+  rm -f "$tmp"; rc=1
+  echo "shell-theme: $out/gnome-shell.css could not be made" >&2
+}
+make SilikOS
+for a in "$data"/accents/*.shell.sed; do
+  [ -e "$a" ] || continue
+  n=${a##*/}; make "SilikOS-${n%.shell.sed}" "$a"
+done
+exit $rc

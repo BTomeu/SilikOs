@@ -63,7 +63,7 @@ has desktop.super-space "$(asuser gsettings get org.gnome.settings-daemon.plugin
 # the three looks (silik, bar, island): the setting is there with its default, the running shell takes each one
 # (seen from outside: the room it leaves to windows; the rail and the top bar are gone in bar and island) without an
 # error of the extension, and the session ends in the default one. Their pictures are tests/install/run.sh's.
-is look.default "$(asuser silik -q look --json)" '{"look": "silik", "looks": ["silik", "bar", "island"]}'
+is look.default "$(asuser silik -q look --json)" '{"look": "silik", "looks": ["silik", "bar", "island"], "accent": "ink", "accents": ["ink", "cobalt", "pcb", "silicon"]}'
 exterr() { journalctl -b --no-pager -o cat 2> /dev/null | grep -A12 'JS ERROR' | awk '/JS ERROR/ { n += hit; hit = 0; seen = 1 } seen && /silik-shell@/ { hit = 1 } END { print n + hit }'; }
 # x,y,width,height of the room windows have on the first screen, then the screen's height (GTK 3, as the COMMAND bar has it)
 room() { asuser python3 -c "
@@ -87,6 +87,32 @@ for l in bar island silik; do
     *) say look.$l FAIL "setting $v, $e errors of the extension, windows have $r";;
   esac
 done
+# the accents: their themes are made beside SilikOS from the same installed stylesheets, without the base's blue; GTK
+# reads all four without a parsing error; `silik look --accent pcb` sets the key and both themes and the shell takes
+# it without an error of the extension; `--accent ink` brings the ink back (the pictures: tests/install/run.sh)
+for t in cobalt pcb silicon; do
+  g=/usr/share/themes/SilikOS-$t/gtk-3.0/gtk.css; sh=/usr/share/themes/SilikOS-$t/gnome-shell/gnome-shell.css
+  is accent.$t-themes "$([ -s $g ] && [ -s $sh ] && echo made || echo missing); blue $(cat $g $sh 2> /dev/null | grep -ci 3584e4)" "made; blue 0"
+done
+is accent.gtk-parse "$(asuser python3 -c "
+import gi
+gi.require_version('Gtk', '3.0')
+from gi.repository import Gtk
+n = 0
+for t in ('SilikOS', 'SilikOS-cobalt', 'SilikOS-pcb', 'SilikOS-silicon'):
+    errs = []
+    p = Gtk.CssProvider()
+    p.connect('parsing-error', lambda prov, sec, err: errs.append(err.message))
+    try:
+        p.load_from_path('/usr/share/themes/%s/gtk-3.0/gtk.css' % t)
+    except Exception as e:
+        errs.append(str(e))
+    n += len(errs)
+print('%d errors in 4 themes' % n)" 2>&1 | tail -1)" "0 errors in 4 themes"
+e0=$(exterr); s=$(asuser silik look --accent pcb); sleep 6
+is accent.pcb "$(asuser gsettings get com.silikvolt.silikos.shell accent) $(asuser gsettings get org.gnome.desktop.interface gtk-theme) $(asuser gsettings get org.gnome.shell.extensions.user-theme name) $(( $(exterr) - e0 )) errors" "'pcb' 'SilikOS-pcb' 'SilikOS-pcb' 0 errors"
+s=$(asuser silik look --accent ink); sleep 4
+is accent.ink-again "$(asuser gsettings get com.silikvolt.silikos.shell accent) $(asuser gsettings get org.gnome.desktop.interface gtk-theme) $(asuser gsettings get org.gnome.shell.extensions.user-theme name)" "'ink' 'SilikOS' 'SilikOS'"
 has boot.plymouth "$(plymouth-set-default-theme 2>&1)" silikos
 s=$(silik status 2>&1); say silik.status "$([ $? = 0 ] && echo ok || echo FAIL)" "$(echo "$s" | head -3)"
 s=$(asuser silik eda check); say silik.eda-check info "$(echo "$s" | tail -2)"

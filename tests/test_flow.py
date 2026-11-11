@@ -29,13 +29,15 @@ class Schema(unittest.TestCase):
         self.path = os.path.join(DESK, "files", SCHEMA + ".gschema.xml")
         self.root = ET.parse(self.path).getroot()
 
-    def test_one_key_with_the_three_looks(self):
+    def test_two_keys_the_three_looks_and_the_accents(self):
         schemas = self.root.findall("schema")
         self.assertEqual([s.get("id") for s in schemas], [SCHEMA])
         self.assertEqual(schemas[0].get("path"), "/com/silikvolt/silikos/shell/")
         keys = schemas[0].findall("key")
-        self.assertEqual([(k.get("name"), k.get("type")) for k in keys], [("look", "s")])
+        self.assertEqual([(k.get("name"), k.get("type")) for k in keys], [("look", "s"), ("accent", "s")])
         self.assertEqual([c.get("value") for c in keys[0].find("choices")], LOOKS)
+        self.assertEqual([c.get("value") for c in keys[1].find("choices")], ["ink", "cobalt", "pcb", "silicon"])
+        self.assertEqual(keys[1].find("default").text.strip(), "'ink'")     # one ink on paper until one is chosen
 
     def test_the_default_is_the_silik_look(self):
         self.assertEqual(self.root.find("schema/key/default").text.strip(), "'silik'")
@@ -55,7 +57,11 @@ class Extension(unittest.TestCase):
         spec = text(os.path.join(DESK, "silikos-desktop.spec"))
         line = re.search(r"for f in ([^;]+); do\n\s+install .*shell-ext/\$f", spec)
         self.assertIsNotNone(line)
-        self.assertEqual(sorted(line.group(1).split()), sorted(os.listdir(EXT)))
+        words = line.group(1).split()
+        # (the accents' files by their pattern: $(cd %{_sourcedir}/shell-ext && ls accent-*.css))
+        self.assertEqual(" ".join(words[-5:]), "$(cd %{_sourcedir}/shell-ext && ls accent-*.css)")
+        named = words[:-5] + sorted(f for f in os.listdir(EXT) if re.match(r"^accent-[a-z]+\.css$", f))
+        self.assertEqual(sorted(named), sorted(os.listdir(EXT)))
 
     def test_it_reads_the_key_and_follows_it(self):
         self.assertIn("const SCHEMA = '%s';" % SCHEMA, self.ext)

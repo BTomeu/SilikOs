@@ -1,0 +1,6 @@
+# The accents of the SilikOS desktop (tools/gen_accents.py; do not edit). ink: the look without an accent.
+# id accent hover mid tint muted-on-it
+ink #1a1b1e #2c2e32 #b9b8b3 #ecebe7 #b9b8b3
+cobalt #2a4fc0 #26449c #869ad7 #dee2ed #cad1e8
+pcb #1d6b45 #1c593c #7faa93 #dde5de #d0ddd4
+silicon #4338b8 #3a3296 #948ed3 #e1dfec #c1bde1

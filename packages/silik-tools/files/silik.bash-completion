@@ -1,6 +1,12 @@
 # bash completion for silik
 _silik() {
   local cur=${COMP_WORDS[COMP_CWORD]} g=${COMP_WORDS[1]}
+  # look: a look, --accent and its accents, at any place after the word look
+  if [ "$g" = look ] && [ "$COMP_CWORD" -ge 2 ]; then
+    if [ "${COMP_WORDS[COMP_CWORD-1]}" = --accent ]; then COMPREPLY=($(compgen -W "ink cobalt pcb silicon" -- "$cur"))
+    else COMPREPLY=($(compgen -W "silik bar island --accent --json" -- "$cur")); fi
+    return
+  fi
   case $COMP_CWORD in
     1) COMPREPLY=($(compgen -W "status update identity look session eda dev win hw secure --dry-run --version" -- "$cur"));;
     2) case $g in
@@ -9,7 +15,6 @@ _silik() {
          hw)  COMPREPLY=($(compgen -W "probe nvidia" -- "$cur"));;
          dev) COMPREPLY=($(compgen -W "tools try install" -- "$cur"));;
          identity) COMPREPLY=($(compgen -W "show silikos base" -- "$cur"));;
-         look) COMPREPLY=($(compgen -W "silik bar island" -- "$cur"));;
          session) COMPREPLY=($(compgen -W "lock logout off" -- "$cur"));;
          secure) COMPREPLY=($(compgen -W "status apply" -- "$cur"));;
        esac;;

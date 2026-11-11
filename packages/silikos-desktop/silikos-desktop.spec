@@ -1,13 +1,13 @@
 Name:           silikos-desktop
-Version:        0.12.1
+Version:        0.13.0
 Release:        1%{?dist}
-Summary:        The SilikOS desktop: the Silik layout and the Flow looks (bar, island), GTK and shell themes, Cascadia Mono
+Summary:        The SilikOS desktop: the Silik layout and the Flow looks (bar, island), its accents, GTK and shell themes, Cascadia Mono
 License:        LicenseRef-SilikVolt AND OFL-1.1
 BuildArch:      noarch
 Requires:       silikos-branding >= 0.2.0
 Requires:       silik-command >= 0.2.0
-# `silik look` sets the look the shell follows; Start's session keys run `silik session`
-Requires:       silik-tools >= 0.5.0
+# `silik look` sets the look and the accent the shell follows; Start's session keys run `silik session`
+Requires:       silik-tools >= 0.6.3
 Requires:       gnome-shell
 Requires:       gnome-shell-extension-user-theme
 Requires:       gdm
@@ -30,7 +30,9 @@ System-wide GNOME defaults (dconf database "local"), the Cascadia Mono font (SIL
 default of the login screen: the EDA tools this system is for are X11 programs. The shell extension silik-shell is
 the desktop in three looks, chosen by the key "look" of the settings com.silikvolt.silikos.shell (`silik look`):
 silik (the title bar is the command line, a text rail of keys, a status bar), bar (one bar across the bottom, the
-applications as icons) and island (one floating piece centred at the bottom).
+applications as icons) and island (one floating piece centred at the bottom). The key "accent" (`silik look --accent`)
+gives one colour to what is selected, focused, on or running: ink (none, the default), cobalt, pcb or silicon; the
+GTK and shell themes of each, SilikOS-ACCENT, are made on the system beside SilikOS.
 
 %install
 install -Dm0644 %{_sourcedir}/00-silikos %{buildroot}%{_sysconfdir}/dconf/db/local.d/00-silikos
@@ -50,9 +52,21 @@ install -Dm0644 %{_sourcedir}/shell-theme.sed %{buildroot}%{_datadir}/silikos/sh
 install -Dm0644 %{_sourcedir}/shell-extra.css %{buildroot}%{_datadir}/silikos/shell-extra.css
 install -Dm0644 %{_sourcedir}/shell-toggle-on.svg %{buildroot}%{_datadir}/themes/SilikOS/gnome-shell/toggle-on.svg
 install -Dm0644 %{_sourcedir}/shell-checkbox.svg %{buildroot}%{_datadir}/themes/SilikOS/gnome-shell/checkbox.svg
+# the accents (tools/gen_accents.py): their table and the sed scripts gtk-theme and shell-theme apply first; a theme
+# directory for each, SilikOS-ACCENT, made on the system like SilikOS
+install -Dm0644 %{_sourcedir}/accents/accents %{buildroot}%{_datadir}/silikos/accents/accents
+for f in %{_sourcedir}/accents/*.sed; do install -Dm0644 "$f" %{buildroot}%{_datadir}/silikos/accents/${f##*/}; done
+for f in %{_sourcedir}/accents/*.gtk.sed; do
+  t=%{buildroot}%{_datadir}/themes/SilikOS-$(basename "$f" .gtk.sed)
+  install -d "$t/gtk-3.0"
+  install -Dm0644 %{_sourcedir}/shell-toggle-on.svg "$t/gnome-shell/toggle-on.svg"
+  install -Dm0644 %{_sourcedir}/shell-checkbox.svg "$t/gnome-shell/checkbox.svg"
+  printf '[Desktop Entry]\nType=X-GNOME-Metatheme\nName=%s\nComment=SilikOS with an accent\nEncoding=UTF-8\n\n[X-GNOME-Metatheme]\nGtkTheme=%s\n' "${t##*/}" "${t##*/}" > "$t/index.theme"
+done
 # the desktop: a shell extension. The Silik look (title bar = command line, text rail, status bar) and the Flow looks
 # (flow.js: bar, island); the key that chooses one is a settings schema of the system (glib2's file trigger compiles it)
-for f in metadata.json extension.js flow.js stylesheet.css; do
+# (accent-ACCENT.css: the extension's rules that take an accent, loaded while the key "accent" names it)
+for f in metadata.json extension.js flow.js stylesheet.css $(cd %{_sourcedir}/shell-ext && ls accent-*.css); do
   install -Dm0644 %{_sourcedir}/shell-ext/$f %{buildroot}%{_datadir}/gnome-shell/extensions/silik-shell@silikvolt.com/$f
 done
 install -Dm0644 %{_sourcedir}/com.silikvolt.silikos.shell.gschema.xml %{buildroot}%{_datadir}/glib-2.0/schemas/com.silikvolt.silikos.shell.gschema.xml
@@ -88,7 +102,7 @@ fi
 
 %preun
 if [ "$1" = 0 ]; then systemctl disable silikos-themes.service >/dev/null 2>&1 || :; fi
-if [ "$1" = 0 ]; then rm -f %{_datadir}/themes/SilikOS/gnome-shell/gnome-shell.css %{_datadir}/themes/SilikOS/gtk-3.0/gtk.css || :; fi
+if [ "$1" = 0 ]; then rm -f %{_datadir}/themes/SilikOS/gnome-shell/gnome-shell.css %{_datadir}/themes/SilikOS/gtk-3.0/gtk.css %{_datadir}/themes/SilikOS-*/gnome-shell/gnome-shell.css %{_datadir}/themes/SilikOS-*/gtk-3.0/gtk.css || :; fi
 
 %postun
 dconf update >/dev/null 2>&1 || :
@@ -101,6 +115,16 @@ dconf update >/dev/null 2>&1 || :
 %ghost %{_datadir}/icons/SilikOS/icon-theme.cache
 %ghost %{_datadir}/themes/SilikOS/gnome-shell/gnome-shell.css
 %ghost %{_datadir}/themes/SilikOS/gtk-3.0/gtk.css
+# the accents' themes (one per accent of files/accents: tests/test_accents.py holds this list to them)
+%{_datadir}/themes/SilikOS-cobalt/
+%ghost %{_datadir}/themes/SilikOS-cobalt/gnome-shell/gnome-shell.css
+%ghost %{_datadir}/themes/SilikOS-cobalt/gtk-3.0/gtk.css
+%{_datadir}/themes/SilikOS-pcb/
+%ghost %{_datadir}/themes/SilikOS-pcb/gnome-shell/gnome-shell.css
+%ghost %{_datadir}/themes/SilikOS-pcb/gtk-3.0/gtk.css
+%{_datadir}/themes/SilikOS-silicon/
+%ghost %{_datadir}/themes/SilikOS-silicon/gnome-shell/gnome-shell.css
+%ghost %{_datadir}/themes/SilikOS-silicon/gtk-3.0/gtk.css
 %{_libexecdir}/silikos/shell-theme
 %{_libexecdir}/silikos/gtk-theme
 %{_libexecdir}/silikos/resource-extract

@@ -45,7 +45,8 @@ AnacondaSpokeWindow #nav-box {
  * Cascadia Mono. Softer than SilikStudio: off-white paper and 4 px corners on controls.
  * Used twice: appended to the installer's stylesheet (tools/build_iso.sh, images/product.img) and as the desktop's
  * GTK theme (packages/silikos-desktop: /usr/share/themes/SilikOS/gtk-3.0/gtk.css imports Adwaita, then this).
- * Colour is kept for data and for ok / warn / bad only. */
+ * Colour is kept for data and for ok / warn / bad only, and for an accent when the user chooses one: silik_accent
+ * (what is selected, focused, on) is the ink here; gtk-theme makes the themes SilikOS-<accent> with it changed. */
 
 @define-color silik_paper   #f7f6f3;   /* the working surface */
 @define-color silik_paper2  #eeede9;   /* bars inside a window, hover, read-only */
@@ -57,26 +58,28 @@ AnacondaSpokeWindow #nav-box {
 @define-color silik_ctl     #8a8b8f;   /* control borders */
 @define-color silik_onink   #f7f6f3;   /* text on ink */
 @define-color silik_onmu    #b9b8b3;   /* muted text on ink */
+@define-color silik_accent  @silik_ink;   /* selected, focused, on: the ink; an accent in SilikOS-<accent> */
+@define-color silik_accent2 @silik_ink2;  /* hover on it */
 
 /* the named colours Adwaita and applications read */
 @define-color theme_fg_color @silik_ink;
 @define-color theme_text_color @silik_ink;
 @define-color theme_bg_color @silik_paper;
 @define-color theme_base_color @silik_field;
-@define-color theme_selected_bg_color @silik_ink;
+@define-color theme_selected_bg_color @silik_accent;
 @define-color theme_selected_fg_color @silik_onink;
-@define-color theme_unfocused_selected_bg_color @silik_ink;
+@define-color theme_unfocused_selected_bg_color @silik_accent;
 @define-color theme_unfocused_selected_fg_color @silik_onink;
 @define-color insensitive_fg_color @silik_muted;
 @define-color insensitive_bg_color @silik_paper2;
 @define-color borders @silik_ctl;
 @define-color unfocused_borders @silik_rule;
-@define-color link_color @silik_ink;
+@define-color link_color @silik_accent;
 @define-color visited_link_color @silik_muted;
 
 * {
     font-family: "Cascadia Mono", "DejaVu Sans Mono", monospace;
-    outline-color: @silik_ink;
+    outline-color: @silik_accent;
     -gtk-outline-radius: 2px;
     text-shadow: none;
     -gtk-icon-shadow: none;
@@ -93,9 +96,9 @@ frame > border, .frame { border: 1px solid @silik_rule; border-radius: 0; box-sh
 *:selected, selection, row:selected, treeview.view:selected, iconview:selected,
 .view:selected, .view:selected:focus, textview text selection, entry selection, label selection,
 flowboxchild:selected, calendar:selected {
-    background-color: @silik_ink;
+    background-color: @silik_accent;
     color: @silik_onink;
-    border-color: @silik_ink;
+    border-color: @silik_accent;
 }
 row:selected label, row:selected image, treeview.view:selected, .view:selected { color: @silik_onink; }
 row:selected .dim-label { color: @silik_onmu; }
@@ -104,7 +107,7 @@ row:selected .dim-label { color: @silik_onmu; }
 .view, treeview.view, list, textview text, iconview { background-color: @silik_field; color: @silik_ink; }
 list row, row { border-radius: 0; }
 list row:hover, treeview.view:hover { background-color: @silik_paper2; }
-list row:selected:hover { background-color: @silik_ink; }
+list row:selected:hover { background-color: @silik_accent2; }
 treeview.view header button, .view header button {
     background: @silik_paper2; color: @silik_muted; border: none; border-bottom: 1px solid @silik_rule;
     border-radius: 0; box-shadow: none; font-weight: 400;
@@ -125,26 +128,26 @@ button:checked label, button:active label { color: @silik_onink; }
 button:disabled { background-color: @silik_paper2; color: @silik_muted; border-color: @silik_rule; }
 button:disabled label { color: @silik_muted; }
 button.suggested-action, button.default {
-    background-image: none; background-color: @silik_ink; color: @silik_onink; border-color: @silik_ink;
+    background-image: none; background-color: @silik_accent; color: @silik_onink; border-color: @silik_accent;
 }
 button.suggested-action label, button.default label { color: @silik_onink; }
-button.suggested-action:hover, button.default:hover { background-color: @silik_ink2; }
+button.suggested-action:hover, button.default:hover { background-color: @silik_accent2; }
 button.suggested-action:disabled { background-color: @silik_paper2; border-color: @silik_rule; }
 button.suggested-action:disabled label { color: @silik_muted; }
 button.destructive-action { background-image: none; background-color: @silik_paper; color: #a3261d; border-color: #a3261d; }
 button.destructive-action:hover { background-color: #a3261d; color: @silik_onink; }
 button.link, button.link label { color: @silik_ink; text-decoration: underline; border-color: transparent; background: none; }
-*:link, *:visited { color: @silik_ink; }
+*:link, *:visited { color: @silik_accent; }
 
 /* inputs */
 entry, spinbutton, spinbutton.horizontal {
     background-image: none; background-color: @silik_field; color: @silik_ink; caret-color: @silik_ink;
     border: 1px solid @silik_ctl; border-radius: 4px; box-shadow: none; min-height: 22px;
 }
-entry:focus, spinbutton:focus-within { border-color: @silik_ink; box-shadow: inset 0 0 0 1px @silik_ink; }
+entry:focus, spinbutton:focus-within { border-color: @silik_accent; box-shadow: inset 0 0 0 1px @silik_accent; }
 entry:disabled { background-color: @silik_paper2; color: @silik_muted; border-color: @silik_rule; }
 entry image { color: @silik_muted; }
-entry progress { background-color: @silik_ink; border: none; }
+entry progress { background-color: @silik_accent; border: none; }
 spinbutton button { border: none; border-radius: 0; background: transparent; }
 combobox button.combo, button.combo { border-radius: 4px; }
 
@@ -155,7 +158,7 @@ check, radio {
 }
 check { border-radius: 3px; }
 check:checked, radio:checked, check:indeterminate, radio:indeterminate {
-    background-image: none; background-color: @silik_ink; border-color: @silik_ink; color: @silik_onink;
+    background-image: none; background-color: @silik_accent; border-color: @silik_accent; color: @silik_onink;
 }
 check:hover, radio:hover { border-color: @silik_ink; }
 check:disabled, radio:disabled { background-color: @silik_paper2; border-color: @silik_rule; }
@@ -163,22 +166,22 @@ switch {
     background-image: none; background-color: @silik_paper2; border: 1px solid @silik_ctl; border-radius: 12px;
     box-shadow: none; color: transparent;
 }
-switch:checked { background-color: @silik_ink; border-color: @silik_ink; }
+switch:checked { background-color: @silik_accent; border-color: @silik_accent; }
 switch slider {
     background-image: none; background-color: @silik_field; border: 1px solid @silik_ctl; border-radius: 12px; box-shadow: none;
 }
-switch:checked slider { border-color: @silik_ink; }
+switch:checked slider { border-color: @silik_accent; }
 scale trough, progressbar trough, levelbar trough {
     background-image: none; background-color: @silik_paper2; border: 1px solid @silik_rule; border-radius: 2px; box-shadow: none;
 }
 scale highlight, progressbar progress {
-    background-image: none; background-color: @silik_ink; border: 1px solid @silik_ink; border-radius: 2px; box-shadow: none;
+    background-image: none; background-color: @silik_accent; border: 1px solid @silik_accent; border-radius: 2px; box-shadow: none;
 }
 scale slider {
     background-image: none; background-color: @silik_field; border: 1px solid @silik_ink; border-radius: 10px; box-shadow: none;
 }
 progressbar text { color: @silik_muted; }
-spinner { color: @silik_ink; }
+spinner { color: @silik_accent; }
 
 /* the title bar: an ink slab; what sits on it is light */
 headerbar, .titlebar, headerbar.titlebar, window.csd > .titlebar, .titlebar:backdrop, headerbar:backdrop {

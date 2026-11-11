@@ -11,6 +11,7 @@
 #   silik hw    probe | nvidia install | nvidia status
 #   silik identity show | silikos | base
 #   silik look  [silik | bar | island] [--json]     the desktop's look; no argument: which one is in use
+#   silik look  [LOOK] --accent ink|cobalt|pcb|silicon   its accent: one colour for what is selected, focused, on
 #   silik session lock | logout | off             (the last two ask first)
 #   silik update
 #   silik secure status [--json] [--offline] | apply [--keep-ssh]
@@ -25,7 +26,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.6.2"
+VERSION = "0.6.3"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -2610,31 +2611,77 @@ LOOKS = (
 )
 
 
+# The accent (key "accent", silikos-desktop 0.13): one colour for what is selected, focused, on or running; text,
+# frames and title bars stay ink on paper. Its colours are silikos-desktop's (tools/gen_accents.py); the extension
+# follows the key, GTK programs and the shell's own parts follow the themes SilikOS-<accent> (gtk-theme and
+# shell-theme make them on the system), which this sets with the key. "ink" is the look without an accent: SilikOS.
+ACCENTS = (
+    ("ink", "one ink on paper"),
+    ("cobalt", "cobalt blue #2a4fc0"),
+    ("pcb", "PCB green #1d6b45"),
+    ("silicon", "silicon indigo #4338b8"),
+)
+THEMES = "/usr/share/themes"
+USER_THEME = "org.gnome.shell.extensions.user-theme"
+
+
 def look_now(ctx):
     """the look in use, or '' when the setting is not on this system (silikos-desktop older than 0.11, or no desktop)"""
     v = ctx.query(["gsettings", "get", LOOK_SCHEMA, "look"]).strip().strip("'")
     return v if v in [k for k, _ in LOOKS] else ""
 
 
+def accent_now(ctx):
+    """the accent in use, or '' when the key is not on this system (silikos-desktop older than 0.13)"""
+    v = ctx.query(["gsettings", "get", LOOK_SCHEMA, "accent"]).strip().strip("'")
+    return v if v in [k for k, _ in ACCENTS] else ""
+
+
+def accent_theme(ident):
+    return "SilikOS" if ident == "ink" else "SilikOS-" + ident
+
+
 def cmd_look(ctx, a):
     now = look_now(ctx)
-    if a.which is None:
+    if a.which is None and a.accent is None:
+        acc = accent_now(ctx) if now else ""
         if a.json:
-            print(json.dumps({"look": now or None, "looks": [k for k, _ in LOOKS]}))
+            print(json.dumps({"look": now or None, "looks": [k for k, _ in LOOKS],
+                              "accent": acc or None, "accents": [k for k, _ in ACCENTS]}))
             return 0 if now else 1
         for k, what in LOOKS:
             print("%s %-7s %s" % ("●" if k == now else " ", k, what))
+        if acc:
+            for k, what in ACCENTS:
+                print("%s %-7s accent: %s" % ("●" if k == acc else " ", k, what))
         if not now:
             print("silik: no setting %s on this system: the looks come with silikos-desktop 0.11" % LOOK_SCHEMA, file=sys.stderr)
             return 1
         return 0
     if not now and not ctx.dry:
         die("no setting %s on this system: the looks come with silikos-desktop 0.11" % LOOK_SCHEMA)
-    ctx.run(["gsettings", "set", LOOK_SCHEMA, "look", a.which])
-    if not ctx.dry and look_now(ctx) != a.which:
-        # (gsettings exits 0 when it cannot reach the session's settings service: under sudo, or from a shell
-        # without the session's bus, nothing changes)
-        die("the look is still %s: run it as the user, in the desktop session (gsettings could not change the setting)" % (look_now(ctx) or "unknown"))
+    if a.accent is not None and not ctx.dry:
+        if not accent_now(ctx):
+            die("no accent on this system: the accents come with silikos-desktop 0.13")
+        theme = accent_theme(a.accent)
+        missing = [p for p in (os.path.join(THEMES, theme, "gtk-3.0", "gtk.css"), os.path.join(THEMES, theme, "gnome-shell", "gnome-shell.css"))
+                   if not os.path.isfile(p)]
+        if missing:
+            die("the theme %s is not made on this system (%s): sudo /usr/libexec/silikos/gtk-theme; sudo /usr/libexec/silikos/shell-theme"
+                % (theme, ", ".join(missing)))
+    if a.which is not None:
+        ctx.run(["gsettings", "set", LOOK_SCHEMA, "look", a.which])
+        if not ctx.dry and look_now(ctx) != a.which:
+            # (gsettings exits 0 when it cannot reach the session's settings service: under sudo, or from a shell
+            # without the session's bus, nothing changes)
+            die("the look is still %s: run it as the user, in the desktop session (gsettings could not change the setting)" % (look_now(ctx) or "unknown"))
+    if a.accent is not None:
+        theme = accent_theme(a.accent)
+        ctx.run(["gsettings", "set", LOOK_SCHEMA, "accent", a.accent])
+        ctx.run(["gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", theme])
+        ctx.run(["gsettings", "set", USER_THEME, "name", theme])
+        if not ctx.dry and accent_now(ctx) != a.accent:
+            die("the accent is still %s: run it as the user, in the desktop session (gsettings could not change the setting)" % (accent_now(ctx) or "unknown"))
     return 0
 
 
@@ -2669,8 +2716,10 @@ def parser():
     x = s.add_parser("update"); x.set_defaults(fn=cmd_update)
     x = s.add_parser("identity", help="the names the system shows: silikos | base | show")
     x.add_argument("which", nargs="?", default="show", choices=["show", "silikos", "base"]); x.set_defaults(fn=cmd_identity)
-    x = s.add_parser("look", help="the desktop's look: silik | bar | island (no argument: which one is in use)")
-    x.add_argument("which", nargs="?", choices=[k for k, _ in LOOKS]); x.add_argument("--json", action="store_true"); x.set_defaults(fn=cmd_look)
+    x = s.add_parser("look", help="the desktop's look: silik | bar | island, and its accent (no argument: which are in use)")
+    x.add_argument("which", nargs="?", choices=[k for k, _ in LOOKS])
+    x.add_argument("--accent", choices=[k for k, _ in ACCENTS], help="one colour for what is selected, focused, on or running (ink: none)")
+    x.add_argument("--json", action="store_true"); x.set_defaults(fn=cmd_look)
     x = s.add_parser("session", help="this session: lock | logout | off (the last two ask first)")
     x.add_argument("what", choices=sorted(SESSION)); x.set_defaults(fn=cmd_session)
 

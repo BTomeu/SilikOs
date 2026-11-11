@@ -1,5 +1,6 @@
 # SilikOS: the installed GNOME Shell stylesheet -> the SilikOS one (packages/silikos-desktop/files/shell-theme).
-# the accent blue and its tints -> ink greys (selection, focus) 
+# the accent blue and its tints -> ink greys (selection, focus); tools/gen_accents.py gives these sources the colours
+# of an accent, for the themes SilikOS-<accent>
 s/#1b6acb/#6b6d72/gI
 s/#1f76e1/#7a7c81/gI
 s/#1d72d8/#74767b/gI

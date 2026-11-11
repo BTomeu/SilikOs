@@ -251,13 +251,38 @@ class SilikShell {
     enable() {
         this._settings = lookSettings();
         if (this._settings) this._lookSig = this._settings.connect('changed::look', () => this._switch());
+        if (this._settings && this._settings.settings_schema.has_key('accent'))
+            this._accentSig = this._settings.connect('changed::accent', () => this._accent());
+        this._accent();
         this._up();
     }
 
     disable() {
         this._switching = false;                             /* a change of look on its way is dropped: the stock shell, now */
         this._down();
-        if (this._settings) { this._settings.disconnect(this._lookSig); this._settings = null; }
+        this._accent(true);
+        if (this._settings) {
+            this._settings.disconnect(this._lookSig);
+            if (this._accentSig) this._settings.disconnect(this._accentSig);
+            this._accentSig = 0;
+            this._settings = null;
+        }
+    }
+
+    /* the accent (key "accent"; `silik look --accent`): the extension's rules that take it are accent-<id>.css
+       (tools/gen_accents.py), one class more specific than stylesheet.css: a stylesheet loaded later does not win at
+       the same specificity. "ink" has no file. The shell's own parts and GTK take it from the themes SilikOS-<id>,
+       which `silik look --accent` chooses. A new theme of the shell (user-theme) keeps the stylesheets loaded. */
+    _accent(off) {
+        const theme = St.ThemeContext.get_for_stage(global.stage).get_theme();
+        if (this._accentFile) {
+            try { theme.unload_stylesheet(this._accentFile); } catch (e) { /* it was not loaded */ }
+            this._accentFile = null;
+        }
+        const id = !off && this._accentSig ? this._settings.get_string('accent') : 'ink';
+        const f = Me.dir.get_child('accent-' + id + '.css');
+        if (id === 'ink' || !f.query_exists(null)) return;
+        try { theme.load_stylesheet(f); this._accentFile = f; } catch (e) { logError(e, 'silik-shell: accent ' + id); }
     }
 
     /* what of the look is on the screen: the Silik look's title bar is the shell's own panel */

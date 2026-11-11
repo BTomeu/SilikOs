@@ -1,29 +1,46 @@
 #!/usr/bin/bash
-# gtk-theme: make the SilikOS GTK 3 theme from the installed GTK's own Adwaita stylesheet.
+# gtk-theme: make the SilikOS GTK 3 themes from the installed GTK's own Adwaita stylesheet.
 # Adwaita's compiled stylesheet carries its accent blue as literal colours in several hundred rules, so overriding
 # rules one by one always leaves some blue; this takes the stylesheet out of libgtk-3 (gresource), changes the
 # colours (gtk-theme.sed) and appends the Silik look (silik-gtk3.css). The stylesheet is read with resource-extract
 # (python3-gobject): the `gresource` tool belongs to glib2-devel and is not on an installed system. Nothing of GTK is modified: the result is
-# /usr/share/themes/SilikOS/gtk-3.0/gtk.css. Run by the package at install time and whenever gtk3 is updated.
-# When the stylesheet cannot be read, the theme imports Adwaita and only the Silik overrides apply.
+# /usr/share/themes/SilikOS/gtk-3.0/gtk.css (one ink on paper) and, for each accent of /usr/share/silikos/accents
+# (tools/gen_accents.py), /usr/share/themes/SilikOS-<accent>/gtk-3.0/gtk.css: the same with the accent's sed applied
+# first, so Adwaita's blues and the Silik selection take the accent instead of the ink. Run by the package at install
+# time and whenever gtk3 is updated. When the stylesheet cannot be read, a theme imports Adwaita and only the Silik
+# overrides apply.
 set -u
-dir=${SILIKOS_THEME_DIR:-/usr/share/themes/SilikOS/gtk-3.0}
+themes=${SILIKOS_THEMES:-/usr/share/themes}
 share=${SILIKOS_SHARE:-/usr/share/silikos}
 res=/org/gtk/libgtk/theme/Adwaita/gtk-contained.css
-mkdir -p "$dir" || exit 1
 tmp=$(mktemp) || exit 1
 trap 'rm -f "$tmp"' EXIT
 extract=${SILIKOS_EXTRACT:-/usr/libexec/silikos/resource-extract}
 lib="the installed GTK 3"
-if "$extract" gtk "$res" > "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
-  { echo "/* SilikOS GTK 3 theme: GTK's Adwaita with the Silik colours (made by $0 from $lib), then the Silik look */"
-    sed -f "$share/gtk-theme.sed" "$tmp"
-    cat "$share/silik-gtk3.css"; } > "$dir/gtk.css.new"
-  echo "gtk-theme: $dir/gtk.css from $lib"
-else
-  { echo '/* SilikOS GTK 3 theme: Adwaita, then the Silik look (the stylesheet of GTK could not be read) */'
-    echo '@import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained.css");'
-    cat "$share/silik-gtk3.css"; } > "$dir/gtk.css.new"
-  echo "gtk-theme: $dir/gtk.css imports Adwaita (no stylesheet read from GTK): the accent blue stays in places" >&2
-fi
-mv -f "$dir/gtk.css.new" "$dir/gtk.css"
+read_ok=0
+"$extract" gtk "$res" > "$tmp" 2>/dev/null && [ -s "$tmp" ] && read_ok=1
+rc=0
+# make NAME [ACCENT-SED]
+make() {
+  local dir=$themes/$1/gtk-3.0 pre=()
+  [ -n "${2:-}" ] && pre=(-f "$2")
+  mkdir -p "$dir" || { rc=1; return; }
+  if [ "$read_ok" = 1 ]; then
+    { echo "/* SilikOS GTK 3 theme $1: GTK's Adwaita with the Silik colours (made by $0 from $lib), then the Silik look */"
+      sed "${pre[@]}" -f "$share/gtk-theme.sed" "$tmp"
+      if [ -n "${2:-}" ]; then sed -f "$2" "$share/silik-gtk3.css"; else cat "$share/silik-gtk3.css"; fi; } > "$dir/gtk.css.new" || { rc=1; return; }
+    echo "gtk-theme: $dir/gtk.css from $lib"
+  else
+    { echo "/* SilikOS GTK 3 theme $1: Adwaita, then the Silik look (the stylesheet of GTK could not be read) */"
+      echo '@import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained.css");'
+      if [ -n "${2:-}" ]; then sed -f "$2" "$share/silik-gtk3.css"; else cat "$share/silik-gtk3.css"; fi; } > "$dir/gtk.css.new" || { rc=1; return; }
+    echo "gtk-theme: $dir/gtk.css imports Adwaita (no stylesheet read from GTK): the accent blue stays in places" >&2
+  fi
+  mv -f "$dir/gtk.css.new" "$dir/gtk.css" || rc=1
+}
+make SilikOS
+for a in "$share"/accents/*.gtk.sed; do
+  [ -e "$a" ] || continue
+  n=${a##*/}; make "SilikOS-${n%.gtk.sed}" "$a"
+done
+exit $rc
