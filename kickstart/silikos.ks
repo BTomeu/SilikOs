@@ -38,6 +38,7 @@ silik-tools
 silik-command
 silik-eda-compat
 silik-eda-open
+silik-dev
 silik-win
 silikos-security
 %end

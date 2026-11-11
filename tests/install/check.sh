@@ -22,7 +22,7 @@ has name.pretty "$PRETTY_NAME" "SilikOS"
 is name.id "$ID" almalinux
 has name.redhat-release "$(cat /etc/redhat-release)" "AlmaLinux"
 has name.boot-entries "$(grep -h '^title' /boot/loader/entries/*.conf | head -3)" "SilikOS"
-for p in silik-tools silik-command silikos-branding silikos-desktop silikos-security silik-eda-compat silik-eda-open silik-win; do
+for p in silik-tools silik-command silikos-branding silikos-desktop silikos-security silik-eda-compat silik-eda-open silik-dev silik-win; do
   if v=$(rpm -q $p 2>&1); then say package.$p ok "$v"; else say package.$p FAIL "$v"; fi
 done
 is security.selinux "$(getenforce 2>&1)" Enforcing
@@ -232,6 +232,17 @@ if insession xwininfo -root > /dev/null 2>&1; then
     [ -z "$c$j" ] || say eda.$t-trouble info "dumps: ${c:-none}; journal: ${j:-nothing}"
   done
 fi
+# embedded development (package silik-dev): the ARM compiler, newlib and ST-LINK's tools of EPEL, OpenOCD and dfu-util
+# of the ISO, the base's debugger; `silik dev try` makes them do their jobs (no probe or board is needed for them)
+if command -v arm-none-eabi-gcc > /dev/null; then
+  say dev.compiler ok "$(arm-none-eabi-gcc --version | head -1)"
+  o=$(runuser -u tester -- sh -c 'cd /tmp && silik -q dev try' 2>&1); rc=$?
+  if [ $rc = 0 ]; then say dev.try ok "$(echo "$o" | tail -1 | sed 's/; the files.*//')"; else say dev.try FAIL "exit $rc: $(echo "$o" | tail -1 | sed 's/; the files.*//')"; fi
+  echo "$o" | grep -v '^[0-9]* ok' | head -8 | while read -r line; do say dev.try-job info "$line"; done
+else
+  say dev.compiler info "no arm-none-eabi-gcc on the system (EPEL was not reachable at installation?)"
+fi
+say dev.tools info "$(runuser -u tester -- silik dev tools 2>&1 | grep -c '^●') of 9 embedded tools on the system; the probes' rules: $(ls /usr/lib/udev/rules.d/ 2> /dev/null | grep -E 'openocd|stlink' | tr '\n' ' ')"
 # memory: what is left with the session and the tests' programs, and whether the kernel had to kill for lack of it
 say system.memory info "$(free -m | awk '/^Mem:/ { printf "%d MB, %d MB available; ", $2, $7 } /^Swap:/ { printf "swap %d of %d MB used", $3, $2 }')"
 n=$(journalctl -b --no-pager -o cat 2> /dev/null | grep -ciE 'out of memory: killed|oom-kill')

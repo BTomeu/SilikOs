@@ -1,0 +1,90 @@
+# The embedded-development tools of SilikOS: OpenOCD and dfu-util are not in EL 9's repositories or in EPEL 9, so each
+# is built here from upstream's source at the tag of dev/versions (dev/<tool>.spec), tried in a clean EL 9
+# (dev/trial.sh) and kept in the release `dev-tools`. Then the whole stack is tried there: the ARM compiler, newlib
+# and ST-LINK's tools of EPEL 9, the base's gdb, these two and `silik dev try`. The CI's ISO takes the packages from
+# that release (workflow CI). Runs when a recipe changes, or by hand.
+name: Dev tools
+on:
+  push:
+    branches: [main]
+    paths: ['dev/**', 'tools/build_dev.sh', '.github/workflows/dev.yml', 'eda/common.inc', 'packages/silik-dev/**']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: [openocd, dfu-util]
+    runs-on: ubuntu-24.04
+    container: almalinux:9
+    timeout-minutes: 60
+    steps:
+      - name: Tools
+        run: dnf -y -q install git tar gzip findutils
+      - uses: actions/checkout@v4
+      - name: Build ${{ matrix.tool }}
+        shell: bash
+        run: |
+          if ! bash tools/build_dev.sh ${{ matrix.tool }} > build.log 2>&1; then
+            tail -80 build.log
+            echo "::error title=build ${{ matrix.tool }}::$(grep -iE 'error|no such file|not found|cannot|undefined|unpackaged|No match' build.log | tail -10 | tr '\n' ' ' | cut -c1-900)"
+            exit 1
+          fi
+          tail -5 build.log
+      - name: What was built
+        run: echo "::notice title=${{ matrix.tool }} built::$(cd build/extra && ls -la ${{ matrix.tool }}-*.rpm | awk '{print $5, $9}')"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dev-${{ matrix.tool }}
+          path: build/extra/${{ matrix.tool }}-*.rpm
+          compression-level: 0
+
+  trial:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dev-*
+          path: dist
+          merge-multiple: true
+      - name: Our own packages (silik, the job files)
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q rpm createrepo-c
+          bash tools/build_rpms.sh
+          cp build/repo/silik-tools-*.rpm build/repo/silik-dev-*.rpm dist/
+          ls -la dist
+      - name: Try each tool, then the whole stack, in a clean EL 9
+        run: |
+          rc=0
+          for t in openocd dfu-util stack; do
+            case $t in stack) pk='/dist/*.rpm' ;; *) pk="/dist/$t-*.rpm" ;; esac
+            if out=$(docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD/dev:/dev-recipes:ro" almalinux:9 bash -c "bash /dev-recipes/trial.sh $t $pk" 2>&1); then
+              echo "$out" | tail -12
+              echo "::notice title=$t on EL 9::$(echo "$out" | grep '^TRIAL-OK' | cut -c10-400)"
+            else
+              echo "$out" | tail -60
+              echo "::error title=trial $t::$(echo "$out" | tail -12 | tr '\n' ' ' | cut -c1-900)"
+              rc=1
+            fi
+          done
+          exit $rc
+      - name: Keep the packages in the release dev-tools
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view dev-tools --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || gh release create dev-tools --repo "$GITHUB_REPOSITORY" \
+            --title "Embedded-development tools for SilikOS (EL 9)" --prerelease \
+            --notes "OpenOCD and dfu-util built from upstream's unmodified sources on EL 9 (dev/*.spec, dev/versions): neither is in EL 9's repositories or EPEL 9. Each keeps its own licence (GPL-2.0-or-later, in the package). Not products of or supported by their authors' projects."
+          for t in openocd dfu-util; do
+            for f in dist/$t-*.rpm; do
+              gh release view dev-tools --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep "^$t-" | while read -r old; do
+                [ "$old" = "$(basename "$f")" ] || gh release delete-asset dev-tools "$old" --repo "$GITHUB_REPOSITORY" -y
+              done
+              gh release upload dev-tools "$f" --repo "$GITHUB_REPOSITORY" --clobber
+            done
+          done

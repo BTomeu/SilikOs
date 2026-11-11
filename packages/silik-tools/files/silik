@@ -7,6 +7,7 @@
 #               | list | create PREFIX | run PREFIX -- PROG.exe [ARGS] | install PREFIX SETUP.exe | rm PREFIX
 #               | vm create --iso WIN.iso [--name N --ram GB --disk GB --cpus N] | vm start [N] | vm stop [N]
 #               | vm app [N] --exe 'C:\path\app.exe' --user U
+#   silik dev   tools [--json] | try [JOB] | install FILE     embedded development; FILE: a vendor's IDE installer
 #   silik hw    probe | nvidia install | nvidia status
 #   silik identity show | silikos | base
 #   silik look  [silik | bar | island] [--json]     the desktop's look; no argument: which one is in use
@@ -24,7 +25,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -2293,6 +2294,239 @@ def secure_apply(ctx, a):
     return 1 if failed else 0
 
 
+# ------------------------------------------------------------------ dev: embedded development
+# `silik dev tools` lists the embedded-development tools on the system (package silik-dev brings the open ones), and
+# the vendors' IDEs when they are installed; `silik dev try` makes the open ones do real jobs; `silik dev install
+# FILE` runs the installer of a vendor's IDE that the user downloaded. STM32CubeIDE (ST) and Code Composer Studio
+# (TI) are their vendors' programs under their vendors' licences: SilikOS does not carry them; it gives them a
+# system they install on and one command to do it. The installer shows its licence; nothing here accepts it.
+DEV_TOOLS = (   # command, package, what it is for
+    ("arm-none-eabi-gcc", "arm-none-eabi-gcc-cs", "C compiler for ARM Cortex-M / -R"),
+    ("arm-none-eabi-g++", "arm-none-eabi-gcc-cs-c++", "C++ compiler for the same"),
+    ("gdb", "gdb", "debugger (the base's: ARM is among its targets)"),
+    ("openocd", "openocd", "flashing and debugging through a probe (ST-LINK, CMSIS-DAP, XDS110)"),
+    ("st-flash", "stlink", "flashing through an ST-LINK"),
+    ("dfu-util", "dfu-util", "firmware download over USB (DFU)"),
+    ("make", "make", "builds"),
+    ("cmake", "cmake", "builds"),
+    ("picocom", "picocom", "serial terminal"),
+)
+# a vendor's IDE: its key, its name, the program to look for, the folders it may be under, and how its downloaded
+# file is recognised (lower case). The folders are where the vendors' installers put them by default [A: from the
+# vendors' documentation, not from an installation made here].
+DEV_IDES = (
+    ("stm32cubeide", "STM32CubeIDE (ST)", "stm32cubeide", ("/opt/st", "~/st"), ("stm32cubeide",)),
+    ("ccs", "Code Composer Studio (TI)", "ccstudio", ("/opt/ti", "~/ti"), ("ccs_", "ccs-", "ccs_setup", "ccstudio")),
+)
+DEV_TRY = os.environ.get("SILIK_DEV_TRY") or "/usr/share/silikos/dev/try"
+DEV_CPU = ["-mcpu=cortex-m4", "-mthumb", "-mfloat-abi=hard", "-mfpu=fpv4-sp-d16"]
+# OpenOCD reads a probe's and a part's description and says their names, without looking for the probe
+DEV_OCD_ASK = 'noinit; echo "probe [adapter name], part [target names]"; shutdown'
+
+
+def dev_find_ide(exe, roots, depth=5):
+    """the newest program called EXE under one of ROOTS (a few folders deep: the vendors' folders carry a version), or ''"""
+    found = []
+    for root in roots:
+        root = os.path.expanduser(root)
+        if not os.path.isdir(root):
+            continue
+        base = root.rstrip("/").count("/")
+        for d, dirs, files in os.walk(root):
+            if d.count("/") - base >= depth:
+                dirs[:] = []
+            if exe in files and os.access(os.path.join(d, exe), os.X_OK):
+                found.append(os.path.join(d, exe))
+    return sorted(found)[-1] if found else ""
+
+
+def dev_tools(ctx, a):
+    rows = []
+    for exe, pkg, what in DEV_TOOLS:
+        path = shutil.which(exe)
+        ver = ctx.query(["rpm", "-q", "--qf", "%{VERSION}", pkg]).strip() if path and shutil.which("rpm") else ""
+        rows.append({"tool": exe, "package": pkg, "for": what, "path": path, "version": ver if ver and " " not in ver else ""})
+    ides = [{"ide": key, "name": name, "path": dev_find_ide(exe, roots) or None} for key, name, exe, roots, _ in DEV_IDES]
+    if a.json:
+        print(json.dumps({"tools": rows, "ides": ides}, indent=1))
+        return 0
+    lines = ["%s %-18s %-12s %s" % (SEC_MARK["ok" if r["path"] else "unknown"], r["tool"],
+                                    (r["version"] or "found") if r["path"] else "missing", r["for"]) for r in rows]
+    for i in ides:
+        lines.append("%s %-18s %s" % (SEC_MARK["ok" if i["path"] else "unknown"], i["ide"],
+                                     i["path"] or "not installed: %s is its vendor's program; `silik dev install FILE` runs the installer you downloaded" % i["name"]))
+    missing = sorted(set(r["package"] for r in rows if not r["path"]))
+    if missing:
+        lines.append("missing: sudo dnf install " + " ".join(missing))
+    text = "\n".join(lines)
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        print(text.encode("ascii", "replace").decode("ascii"))
+    return 0
+
+
+def dev_try_jobs():
+    """the jobs of `silik dev try`: name, the tools it needs, its commands, and what its result must show.
+    A command is (argv, the file its output goes to); a check is (file, a regular expression, what it means).
+    Each job stands alone (one that needs the program builds it again)."""
+    cc = ["arm-none-eabi-gcc"] + DEV_CPU + ["-Os", "-g", "-Wall", "-ffreestanding", "-ffunction-sections", "-fdata-sections"]
+    link = ["-nostartfiles", "-T", "cortex-m.ld", "-Wl,--gc-sections"]
+    blink = (cc + link + ["-nostdlib", "-Wl,-Map=blink.map", "-o", "blink.elf", "startup.c", "main.c"], "cc.out")
+    return (
+        ("build", ("arm-none-eabi-gcc",), [blink, (["arm-none-eabi-objcopy", "-O", "binary", "blink.elf", "blink.bin"], "objcopy.out"),
+                                           (["arm-none-eabi-readelf", "-h", "-S", "blink.elf"], "readelf.out"),
+                                           (["arm-none-eabi-nm", "-n", "blink.elf"], "nm.out"),
+                                           (["arm-none-eabi-size", "blink.elf"], "size.out")],
+         [("readelf.out", r"Machine:\s+ARM", "a Cortex-M4 program compiled"),
+          ("readelf.out", r"\.isr_vector\s+PROGBITS\s+08000000", "its vector table is at the start of flash (0x08000000)"),
+          ("nm.out", r"(?m)^080000[0-9a-f]{2} T Reset_Handler$", "its reset handler is in flash"),
+          ("nm.out", r"(?m)^2000[0-9a-f]{4} [BbDd] ticks$", "its data is in RAM (0x20000000)"),
+          ("nm.out", r"(?m)^2000[0-9a-f]{4} D level$", "with its initial values kept in flash")]),
+        ("libc", ("arm-none-eabi-gcc",), [(cc + link + ["--specs=nano.specs", "--specs=nosys.specs", "-o", "hello.elf", "startup.c", "hello.c"], "libc.out"),
+                                          (["arm-none-eabi-nm", "hello.elf"], "libc-nm.out")],
+         [("libc-nm.out", r"(?m) T snprintf$", "the C library for this processor (newlib-nano, hard float) links")]),
+        ("cxx", ("arm-none-eabi-gcc", "arm-none-eabi-g++"),
+         [(cc + ["-c", "-o", "startup.o", "startup.c"], "cxx-start.out"),        # (the start is C)
+          (["arm-none-eabi-g++"] + DEV_CPU + ["-Os", "-std=c++17", "-fno-exceptions", "-fno-rtti", "-ffreestanding"] + link +
+           ["-nostdlib", "-o", "sum.elf", "startup.o", "sum.cpp"], "cxx.out"),
+                                         (["arm-none-eabi-nm", "sum.elf"], "cxx-nm.out")],
+         [("cxx-nm.out", r"(?m) [BbDd] result$", "C++ for the same processor compiles and links")]),
+        ("debug", ("arm-none-eabi-gcc", "gdb"), [blink, (["gdb", "-batch", "-ex", "set architecture armv7e-m", "-ex", "file blink.elf", "-ex", "info address main",
+                                                         "-ex", "info line main", "-ex", "disassemble main"], "gdb.out")],
+         [("gdb.out", r'Symbol "main" is a function at address 0x80000[0-9a-f]{2}', "the debugger reads the program: main is in flash"),
+          ("gdb.out", r"main\.c", "it knows the source line"),
+          ("gdb.out", r"(?m)^\s+0x080000[0-9a-f]{2} <\+\d+>:\s+\S+", "it disassembles the ARM code")]),
+        ("probe", ("openocd",), [(["openocd", "-f", "interface/stlink.cfg", "-f", "target/stm32g4x.cfg", "-c", DEV_OCD_ASK], "openocd-st.out"),
+                                 (["openocd", "-f", "interface/xds110.cfg", "-f", "target/ti_msp432.cfg", "-c", DEV_OCD_ASK], "openocd-ti.out")],
+         [("openocd-st.out", r"(?m)^probe hla, part stm32g4x\.cpu$", "OpenOCD reads its descriptions of the ST-LINK probe and the STM32G4 (no probe is plugged in for that)"),
+          ("openocd-ti.out", r"(?m)^probe xds110, part msp432\.cpu$", "and of TI's XDS110 probe and the MSP432")]),
+        ("dfu", ("dfu-util",), [(["dfu-util", "--version"], "dfu.out")],
+         [("dfu.out", r"dfu-util \d+\.\d+", "dfu-util starts")]),
+        ("stlink", ("st-info",), [(["st-info", "--version"], "stlink.out")],
+         [("stlink.out", r"\d+\.\d+", "the ST-LINK tools start")]),
+    )
+
+
+def dev_try(ctx, a):
+    jobs = [j for j in dev_try_jobs() if a.job in ("all", j[0])]
+    if not jobs:
+        die("no such job: %s (%s, all)" % (a.job, ", ".join(j[0] for j in dev_try_jobs())), 2)
+    if not os.path.isdir(DEV_TRY) and not ctx.dry:
+        die("the files of the jobs are not here (%s): they come with the package silik-dev" % DEV_TRY)
+    work = eda_work(ctx, "dev-try")
+    ctx.run(["cp", "-r", DEV_TRY + "/.", work])
+    ctx.echo(["cd", work])
+    if not ctx.dry:
+        os.chdir(work)
+    rows = []
+    for name, needs, cmds, checks in jobs:
+        missing = [t for t in needs if not shutil.which(t)]
+        if missing and not ctx.dry:
+            rows.append(("unknown", name, "not run: %s %s not on the system" % (", ".join(missing), "is" if len(missing) == 1 else "are")))
+            continue
+        failed = None
+        for argv, out in cmds:
+            if failed is not None:              # (what follows a command that failed has nothing to work on)
+                break
+            if not ctx.quiet:
+                print("$ " + " ".join(shlex.quote(x) for x in argv) + " > " + out, flush=True)
+            if ctx.dry:
+                continue
+            ctx.note(argv)
+            try:
+                with open(out, "w") as f:
+                    rc = subprocess.run(argv, stdout=f, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL).returncode
+            except OSError as e:                # (a program that is not there after all, or that may not be run)
+                failed = "%s could not be started: %s" % (argv[0], e.strerror or e)
+                continue
+            if rc != 0:
+                failed = "%s exited %d: %s" % (argv[0], rc, " / ".join(read(out).strip().splitlines()[-2:]))
+        if ctx.dry:
+            continue
+        for path, rx, means in checks:
+            if failed is None and not re.search(rx, read(path)):
+                failed = "not seen: " + means + " (" + os.path.join(work, path) + ")"
+        said = "; ".join(c[2] for c in checks)
+        if not failed and name == "build":      # what the linker made of it (the tool's own numbers)
+            m = re.search(r"(?m)^\s*(\d+)\s+(\d+)\s+(\d+)\s+\d+\s+[0-9a-f]+\s+blink\.elf", read("size.out"))
+            if m:
+                said += ": %s bytes of code, %s of data, %s of cleared memory" % m.groups()
+        rows.append(("bad", name, failed) if failed else ("ok", name, said))
+    if ctx.dry:
+        return 0
+    for verdict, name, said in rows:
+        line = "%s %-7s %s" % (SEC_MARK[verdict], name, said)
+        try:
+            print(line)
+        except UnicodeEncodeError:
+            print(line.encode("ascii", "replace").decode("ascii"))
+    n = {v: len([r for r in rows if r[0] == v]) for v in ("ok", "bad", "unknown")}
+    print("%d ok, %d failed, %d not run; the files are in %s" % (n["ok"], n["bad"], n["unknown"], work))
+    return 1 if n["bad"] else 0
+
+
+def dev_which_ide(path):
+    n = os.path.basename(path).lower()
+    for key, name, exe, roots, marks in DEV_IDES:
+        if any(m in n for m in marks):
+            return key, name, exe, roots
+    return None
+
+
+def dev_install(ctx, a):
+    """runs a vendor's own installer from the file the user downloaded (a .zip is unpacked first). The installer
+    shows its licence and asks what it asks: nothing here answers for the user, and nothing is downloaded."""
+    src = os.path.abspath(os.path.expanduser(a.file))
+    ide = dev_which_ide(src)
+    if not ide:
+        die("not an installer this command knows: %s (it knows the Linux installers of %s, by their file names)" % (
+            os.path.basename(src), " and ".join(i[1] for i in DEV_IDES)), 2)
+    key, name, exe, roots = ide
+    if not os.path.isfile(src) and not ctx.dry:
+        die("no such file: " + src)
+    print("%s is its vendor's program, under its vendor's licence: the installer shows it and asks; SilikOS only runs it" % name)
+    run = src
+    if src.lower().endswith(".zip"):
+        work = eda_work(ctx, "dev-install")
+        ctx.run(["unzip", "-q", "-o", src, "-d", work])
+        if ctx.dry:
+            run = os.path.join(work, "<the installer inside>")
+        else:
+            inside = sorted(os.path.join(d, f) for d, _, fs in os.walk(work) for f in fs if f.lower().endswith((".sh", ".run")))
+            if not inside:
+                die("no installer (.sh or .run) inside " + src)
+            run = inside[0]
+    low = os.path.basename(run).lower()
+    if not ctx.dry and not low.endswith((".sh", ".run")):
+        die("not a Linux installer (.sh, .run, or a .zip of one): " + os.path.basename(run))
+    if key == "stm32cubeide":
+        # ST's bundle for RPM systems installs packages (the IDE, the ST-LINK server, the probes' device rules): as root
+        if "rpm_bundle" not in low and not ctx.dry:
+            print("silik: this is not ST's bundle for RPM systems (…amd64.rpm_bundle.sh): that is the one made for this base", file=sys.stderr)
+        ctx.run(["sudo", "sh", run], check=False)
+    else:
+        # TI's installer is a program with its own window; it installs for the user who runs it
+        ctx.run(["chmod", "+x", run])
+        ctx.run([run], check=False)
+    if ctx.dry:
+        return 0
+    found = dev_find_ide(exe, roots)
+    if not found:
+        print("silik: no %s under %s after the installer: `silik dev tools` looks again" % (exe, " or ".join(roots)), file=sys.stderr)
+        return 1
+    print("%s %s: %s" % (SEC_MARK["ok"], key, found))
+    if key == "ccs":      # TI's own script for the probes' device rules, when the installation has it
+        top = found
+        for _ in range(4):
+            top = os.path.dirname(top)
+            script = os.path.join(top, "install_scripts", "install_drivers.sh")
+            if os.path.isfile(script):
+                print("the probes' device rules are TI's own script, as root:  sudo %s" % script)
+                break
+    return 0
+
+
 # ------------------------------------------------------------------ look, session
 # The desktop has three looks, all of the same shell extension (silik-shell) and the same parts in other places:
 #   silik    the title bar is the command line, a rail of text keys on the left, a status bar
@@ -2385,6 +2619,12 @@ def parser():
     x = e.add_parser("tune", help="ngspice evaluates transistor models on this machine's cores (its default is 2 threads)")
     x.add_argument("--threads", type=int); x.add_argument("--undo", action="store_true"); x.set_defaults(fn=eda_tune)
 
+    d = s.add_parser("dev", help="embedded development: the tools on this system, real jobs with them, a vendor's IDE installer").add_subparsers(dest="cmd")
+    x = d.add_parser("tools", help="the embedded-development tools and the vendors' IDEs on this system"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=dev_tools)
+    x = d.add_parser("try", help="the tools do real jobs: build, libc, cxx, debug, probe, dfu, stlink")
+    x.add_argument("job", nargs="?", default="all"); x.set_defaults(fn=dev_try)
+    x = d.add_parser("install", help="runs the installer of STM32CubeIDE or Code Composer Studio that you downloaded (FILE: .zip, .sh or .run)")
+    x.add_argument("file"); x.set_defaults(fn=dev_install)
     w = s.add_parser("win", help="Windows programs: Wine prefixes and a Windows virtual machine").add_subparsers(dest="cmd")
     def box(x):   # the sandbox switches, before the positional arguments
         x.add_argument("--no-net", action="store_true", help="the program has no network")

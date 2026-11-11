@@ -7,7 +7,7 @@ on:
   push:
     branches: [main]
     tags: ['v*']
-    paths-ignore: ['docs/**', 'README.md', 'wine/**', 'tools/build_wine.sh', 'tools/build_wine_addons.sh', '.github/workflows/wine.yml', 'eda/**', 'tools/build_eda.sh', '.github/workflows/eda.yml', 'tools/bench_ngspice_flags.sh', '.github/workflows/bench.yml']   # the documents, and the other workflows' own: none of them is in the ISO
+    paths-ignore: ['docs/**', 'README.md', 'wine/**', 'tools/build_wine.sh', 'tools/build_wine_addons.sh', '.github/workflows/wine.yml', 'eda/**', 'tools/build_eda.sh', '.github/workflows/eda.yml', 'tools/bench_ngspice_flags.sh', '.github/workflows/bench.yml', 'dev/**', 'tools/build_dev.sh', '.github/workflows/dev.yml']   # the documents, and the other workflows' own: none of them is in the ISO
   pull_request:
   workflow_dispatch:
 concurrency:
@@ -60,6 +60,9 @@ jobs:
           # the open EDA tools (workflow EDA tools, release eda-tools)
           if gh release download eda-tools --repo "$GITHUB_REPOSITORY" --pattern '*.rpm' --dir build/extra 2> /dev/null; then ls -la build/extra
           else echo "::notice title=EDA tools::no eda-tools release yet: the ISO of this run has no KLayout, Magic, Xschem or ngspice"; fi
+          # the embedded-development tools (workflow Dev tools, release dev-tools)
+          if gh release download dev-tools --repo "$GITHUB_REPOSITORY" --pattern '*.rpm' --dir build/extra 2> /dev/null; then ls -la build/extra
+          else echo "::notice title=Dev tools::no dev-tools release yet: the ISO of this run has no OpenOCD or dfu-util"; fi
       - name: Packages and ISO
         run: |
           bash tools/build_rpms.sh

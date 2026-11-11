@@ -1,0 +1,5 @@
+# The embedded-development tools SilikOS builds for EL 9 (neither is in the base's repositories or in EPEL 9; the ARM
+# compiler, newlib and stlink are in EPEL 9 and the base's own gdb debugs ARM targets: packages/silik-dev):
+#   name      upstream git repository                    tag     a fourth field: the release archive to build from ({ver} = the version)
+openocd   https://github.com/openocd-org/openocd     v0.12.0
+dfu-util  https://git.code.sf.net/p/dfu-util/dfu-util  v0.11   https://dfu-util.sourceforge.net/releases/dfu-util-{ver}.tar.gz
