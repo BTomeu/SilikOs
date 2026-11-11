@@ -32,6 +32,6 @@ case "$name" in
     silik -q dev try > try.out 2>&1 || { cat try.out; exit 1; }
     cat try.out
     grep -q '^7 ok, 0 failed, 0 not run' try.out || exit 1
-    echo "TRIAL-OK $(arm-none-eabi-gcc --version | head -1), $(gdb --version | head -1) : silik dev try: $(tail -1 try.out | sed 's/; the files.*//'); $(grep '^. build' try.out | sed 's/.*: //')" ;;
+    echo "TRIAL-OK $(arm-none-eabi-gcc --version | head -1), $(gdb --version | head -1) : silik dev try: $(tail -1 try.out | sed 's/; the files.*//'); the program: $(grep ' build ' try.out | sed 's/.*: //')" ;;
   *) echo "no trial for $name" >&2; exit 2 ;;
 esac

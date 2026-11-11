@@ -24,8 +24,8 @@ to them (no group to join).
 
 %build
 [ -x configure ] || ./bootstrap nosubmodule
-# (--enable-release: the version says 0.12.0, the tag this is built from, not "snapshot" and a date)
-%configure --disable-werror --disable-internal-jimtcl --disable-internal-libjaylink --disable-jlink --disable-doxygen-html --enable-release
+# (built from the git tree at the tag, not from the release archive: it calls itself "0.12.0-snapshot" and the build's date)
+%configure --disable-werror --disable-internal-jimtcl --disable-internal-libjaylink --disable-jlink --disable-doxygen-html
 make %{?_smp_mflags}
 
 %install
