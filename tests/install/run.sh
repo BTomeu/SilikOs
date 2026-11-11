@@ -137,6 +137,7 @@ if kill -0 $qpid 2> /dev/null; then
     eda magic 25; key alt-f4 || true; sleep 3; key alt-f4 || true; sleep 3
     eda xschem 25; key alt-f4 || true; sleep 3
     eda ngspice 15; typ "quit" || true; key ret || true; sleep 3
+    if grep -q 'SILIKOS-CI|eda.qucs-s|ok' "$out/boot.log"; then eda qucs-s 35; key alt-f4 || true; sleep 3; key alt-f4 || true; sleep 3; fi
   fi
   key meta_l-l || true; sleep 6                            # Super+L: locked, and the screen goes dark
   key ctrl || true; sleep 4; shot unlock || true           # a key wakes it: the password prompt (extensions are off there)

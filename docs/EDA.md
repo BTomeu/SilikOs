@@ -110,8 +110,25 @@ on two circuits made for the purpose with the simulator's own model defaults:
 So: a circuit of many transistors gains from as many threads as the machine has cores (here 31 % less time than the
 default of two), and `silik eda tune` sets that for the user. The KLU solver is not turned on: it gained nothing on
 the first circuit and lost on the second. Nothing is claimed for other machines: `silik eda bench` measures there.
-Not measured: other compiler flags for ngspice (its sources cannot be downloaded from this build machine), the other
-tools.
+
+**Compiler flags give nothing** (workflow Bench, `tools/bench_ngspice_flags.sh`, 10/11/2026: ngspice 47 built four
+ways on a GitHub runner with 4 processors and timed on the same two circuits, best of 3; the shipped build and the
+x86-64-v2 one timed a second time at the end of the same job):
+
+| Build | Transistors, 1 thread | 2 threads | 4 threads | RC ladder |
+|---|---|---|---|---|
+| `-O2` (as shipped) | 8.83 s | 5.17 s | 4.91 s | 3.02 s |
+| `-O3` | 9.00 s | 5.42 s | 5.03 s | 3.60 s |
+| `-O2 -march=x86-64-v2` (the level EL 9 requires) | 8.81 s | 5.20 s | 4.88 s | 3.03 s |
+| `-O3 -march=x86-64-v3` (AVX2, FMA: not every EL 9 machine) | 8.72 s | 5.25 s | 4.81 s | 3.44 s |
+| `-O2 -march=x86-64-v2`, again | 8.85 s | 5.18 s | 4.90 s | 3.08 s |
+| `-O2`, again | 8.83 s | 5.21 s | 4.90 s | 2.99 s |
+
+(run 42924825158). `-O3` is slower than `-O2` on both circuits; the processor levels change the transistor circuit
+by 1 % or less, which is what the same build differs from itself. A first run of the same job on another runner
+(42922454396) had shown the x86-64-v2 build 6 % and 13 % ahead: with the control it was that machine's drift, not
+the flags. The package stays as it is. Not measured: the other tools; a real design; link-time or profile-guided
+optimisation.
 
 To change a version: the tag in `eda/versions`. To add a tool: a line there, `eda/NAME.spec`, a case in
 `eda/trial.sh`, its name in the workflow's two lists and in `silik-eda-open`.
