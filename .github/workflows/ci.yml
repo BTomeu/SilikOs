@@ -21,8 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Tools
-        # (the runners' package servers fail at times: tried three times before the job gives up)
-        run: for i in 1 2 3; do sudo apt-get update -q && sudo apt-get install -y -q rpm createrepo-c && exit 0; sleep 90; done; exit 1
+        run: bash tools/ci_apt.sh rpm createrepo-c
       - name: Unit tests
         run: python3 -m unittest discover -s tests -v
       - name: Packages
@@ -47,10 +46,7 @@ jobs:
       - name: Tools and disk space
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
-          for i in 1 2 3; do
-            sudo apt-get update -q && sudo apt-get install -y -q rpm createrepo-c xorriso mtools cpio qemu-system-x86 qemu-utils imagemagick gcc-mingw-w64-x86-64 gcc-mingw-w64-i686 wixl && break
-            [ $i = 3 ] && exit 1; sleep 90
-          done
+          bash tools/ci_apt.sh rpm createrepo-c xorriso mtools cpio qemu-system-x86 qemu-utils imagemagick gcc-mingw-w64-x86-64 gcc-mingw-w64-i686 wixl
           df -h /
       - name: Wine and the open EDA tools for the ISO, when their workflows have made them (releases wine-*, eda-tools)
         env:
