@@ -7,7 +7,8 @@ License:        CC-BY-SA-4.0 WITH KiCad-libraries-exception
 URL:            https://www.kicad.org/libraries/download/
 Source0:        kicad-symbols-%{version}.tar.gz
 BuildArch:      noarch
-BuildRequires:  cmake make python3
+# the script that packs the libraries is written for Python 3.10 or later: the base's Python 3.12, beside its 3.9
+BuildRequires:  cmake make python3.12
 
 %description
 KiCad %{version}: the schematic symbol libraries, as KiCad's project publishes them (its libraries' licence: CC BY-SA 4.0 with
@@ -18,7 +19,7 @@ an exception for the designs made with them). Upstream's files, unmodified, wher
 %setup -q -n kicad-symbols-%{version}
 
 %build
-cmake -S . -B build -DCMAKE_INSTALL_PREFIX=%{_prefix}
+cmake -S . -B build -DCMAKE_INSTALL_PREFIX=%{_prefix} -DPython3_EXECUTABLE=/usr/bin/python3.12
 # (the symbol libraries are packed from their folders into one file each at this step)
 cmake --build build
 

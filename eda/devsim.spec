@@ -14,8 +14,9 @@ URL:            https://devsim.org
 Source0:        devsim-%{version}.tar.gz
 ExclusiveArch:  x86_64
 BuildRequires:  cmake gcc gcc-c++ gcc-gfortran libquadmath-devel make bison flex zlib-devel python3-devel
-# BLAS and LAPACK are loaded when the module is imported: the base's OpenBLAS (no Intel MKL here)
-Requires:       python3 openblas
+# BLAS and LAPACK are loaded when the module is imported: the base's OpenBLAS (its one-thread library,
+# libopenblas.so.0, the package openblas-serial; no Intel MKL here)
+Requires:       python3 openblas-serial
 Recommends:     python3-numpy
 
 %description
