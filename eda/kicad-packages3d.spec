@@ -32,6 +32,7 @@ DESTDIR=%{buildroot} cmake --install build
 %licences
 if [ -f LICENSE.md ]; then cp -p LICENSE.md %{buildroot}%{_datadir}/licenses/%{name}/; fi
 %filelist
-cd %{_builddir} && rm -rf kicad-packages3d-%{version}
+# (its files, not the folder: the build's last step still enters it)
+find %{_builddir}/kicad-packages3d-%{version} -mindepth 1 -delete
 
 %files -f %{_builddir}/%{name}-files.list
