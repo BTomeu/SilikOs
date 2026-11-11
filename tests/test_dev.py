@@ -61,7 +61,8 @@ def tools(scripts):
 
 
 NM = "08000000 R g_vectors\n08000044 T Reset_Handler\n08000084 T main\n20000000 D level\n20000004 B ticks\n"
-READELF = "  Machine:                           ARM\n  [ 1] .isr_vector       PROGBITS        08000000 010000 000040 00   A  0   0  4\n"
+READELF = ("  Machine:                           ARM\n  [ 1] .isr_vector       PROGBITS        08000000 010000 000040 00   A  0   0  4\n"
+           "  LOAD           0x002000 0x20000000 0x080000c0 0x00004 0x00008 RW  0x1000\n")
 GOOD = {
     "arm-none-eabi-gcc": "exit 0",
     "arm-none-eabi-objcopy": "exit 0",
@@ -172,7 +173,118 @@ class Try(unittest.TestCase):
             self.assertNotRegex(text("packages/silik-dev/files/" + f), r"0x4[0-9A-Fa-f]{7}")
 
 
+def installer_tools(d, rc=0, installs=None):
+    """stand-ins for sudo (runs its command), chmod and rm (the real ones), and a log of what ran; INSTALLS: a folder
+    the installer makes with an executable in it, as a vendor's installer would"""
+    log = os.path.join(d, "ran.log")
+    body = "echo \"$0 $*\" >> %s\n" % log
+    if installs:
+        body += "mkdir -p %s && printf '#!/bin/sh\\n' > %s/%s && chmod +x %s/%s\n" % (
+            installs[0], installs[0], installs[1], installs[0], installs[1])
+    body += "exit %d" % rc
+    return log, body
+
+
+class InstallRuns(unittest.TestCase):
+    """dev_install for real, with stand-in installers (the vendors' own are not here)"""
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        self.home = os.path.join(self.d, "home")
+        os.makedirs(self.home)
+        self.keep = {k: os.environ.get(k) for k in ("HOME", "XDG_CACHE_HOME")}
+        os.environ.update(HOME=self.home, XDG_CACHE_HOME=os.path.join(self.home, ".cache"))
+
+    def tearDown(self):
+        import shutil
+        for k, v in self.keep.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        shutil.rmtree(self.d, ignore_errors=True)
+
+    def zip_of(self, name, members):
+        import zipfile
+        z = os.path.join(self.d, name)
+        with zipfile.ZipFile(z, "w") as f:
+            for m, body in members.items():
+                info = zipfile.ZipInfo(m)
+                info.external_attr = 0o755 << 16
+                f.writestr(info, body)
+        return z
+
+    def test_only_the_vendors_installer_is_run_from_an_archive(self):
+        ti = os.path.join(self.home, "ti", "ccs2030", "ccs", "eclipse")
+        log = os.path.join(self.d, "ran.log")
+        setup = "#!/bin/sh\necho setup >> %s\nmkdir -p %s && printf '#!/bin/sh\\n' > %s/ccstudio && chmod +x %s/ccstudio\n" % (log, ti, ti, ti)
+        z = self.zip_of("CCS_20.3.0.00014_linux.zip", {"AAA/x.sh": "#!/bin/sh\necho WRONG >> %s\n" % log,
+                                                       "README_first.sh": "#!/bin/sh\necho WRONG >> %s\n" % log,
+                                                       "CCS_20.3.0/ccs_setup_20.3.0.00014.run": setup})
+        rc, o, e = call("dev", "install", z)
+        self.assertEqual(rc, 0, e)
+        with open(log) as f:
+            self.assertEqual(f.read().split(), ["setup"])
+        self.assertIn("● ccs: " + os.path.join(ti, "ccstudio"), o)
+        self.assertFalse([x for x in os.listdir(os.path.join(self.home, ".cache", "silikos")) if x.startswith("dev-install-")],
+                         "the unpacked archive is removed")
+
+    def test_several_installers_is_an_error_not_a_guess(self):
+        z = self.zip_of("CCS_20.3.0.00014_linux.zip", {"a/ccs_setup_20.3.0.run": "#!/bin/sh\n", "b/ccs_setup_20.3.1.run": "#!/bin/sh\n"})
+        rc, o, e = call("dev", "install", z)
+        self.assertEqual(rc, 1)
+        self.assertIn("several installers inside the archive", e)
+
+    def test_an_archive_without_the_installer_is_an_error(self):
+        z = self.zip_of("CCS_20.3.0.00014_linux.zip", {"install.sh": "#!/bin/sh\n"})
+        rc, o, e = call("dev", "install", z)
+        self.assertEqual(rc, 1)
+        self.assertIn("no installer of the expected name inside the archive (scripts there: install.sh)", e)
+
+    def test_the_installers_exit_code_is_the_commands(self):
+        """an older version already installed must not make a failed or declined installation read as ok"""
+        old = os.path.join(self.home, "ti", "ccs1280", "ccs", "eclipse")
+        os.makedirs(old)
+        with open(os.path.join(old, "ccstudio"), "w") as f:
+            f.write("#!/bin/sh\n")
+        os.chmod(os.path.join(old, "ccstudio"), 0o755)
+        run = os.path.join(self.d, "ccs_setup_20.3.0.00014.run")
+        with open(run, "w") as f:
+            f.write("#!/bin/sh\nexit 3\n")
+        rc, o, e = call("dev", "install", run)
+        self.assertEqual(rc, 3)
+        self.assertNotIn("●", o)
+        self.assertIn("the installer exited 3", e)
+
+    def test_newest_by_version_not_by_text(self):
+        for v in ("ccs910", "ccs1280", "ccs1100"):
+            p = os.path.join(self.home, "ti", v, "ccs", "eclipse")
+            os.makedirs(p)
+            with open(os.path.join(p, "ccstudio"), "w") as f:
+                f.write("")
+            os.chmod(os.path.join(p, "ccstudio"), 0o755)
+        self.assertIn("/ccs1280/", silik.dev_find_ide("ccstudio", ("~/ti",)))
+        self.assertEqual([p.split("/")[-4] for p in silik.dev_find_ides("ccstudio", ("~/ti",))], ["ccs910", "ccs1100", "ccs1280"])
+        self.assertLess(silik.dev_version_key("stm32cubeide_1.9.0"), silik.dev_version_key("stm32cubeide_1.19.0"))
+
+
 class Install(unittest.TestCase):
+    def test_file_names(self):
+        for n, key in (("en.st-stm32cubeide_1.19.0_amd64.rpm_bundle.sh.zip", "stm32cubeide"), ("CCS_20.3.0.00014_linux.zip", "ccs"),
+                       ("CCS12.8.1.00005_linux-x64.tar.gz", "ccs"), ("ccs_setup_12.8.1.00005.run", "ccs")):
+            self.assertEqual(silik.dev_which_ide("/dl/" + n)[0], key, n)
+        for n in ("setup.exe", "accsess.zip", "focus.run"):
+            self.assertIsNone(silik.dev_which_ide("/dl/" + n), n)
+
+    def test_st_bundle_for_debian_is_refused(self):
+        rc, o, e = call("--dry-run", "dev", "install", "/dl/en.st-stm32cubeide_1.19.0_amd64.deb_bundle.sh.zip")
+        self.assertEqual(rc, 2)
+        self.assertIn("bundle for Debian systems", e)
+
+    def test_tar_archive_is_unpacked_with_tar(self):
+        rc, o = run("dev", "install", "/dl/CCS12.8.1.00005_linux-x64.tar.gz")
+        self.assertTrue(o.splitlines()[1].startswith("$ tar -xzf /dl/CCS12.8.1.00005_linux-x64.tar.gz -C "))
+
     def test_st_bundle_is_unpacked_and_run_as_root(self):
         rc, o = run("dev", "install", "/dl/en.st-stm32cubeide_1.19.0_amd64.rpm_bundle.sh.zip")
         self.assertEqual(rc, 0)
@@ -180,6 +292,7 @@ class Install(unittest.TestCase):
         self.assertIn("its vendor's program, under its vendor's licence", lines[0])
         self.assertTrue(lines[1].startswith("$ unzip -q -o /dl/en.st-stm32cubeide_1.19.0_amd64.rpm_bundle.sh.zip -d "))
         self.assertTrue(lines[2].startswith("$ sudo sh "))
+        self.assertTrue(lines[3].startswith("$ rm -rf ") and "dev-install-" in lines[3])
 
     def test_ti_installer_runs_as_the_user(self):
         rc, o = run("dev", "install", "/dl/ccs_setup_20.3.0.00014.run")

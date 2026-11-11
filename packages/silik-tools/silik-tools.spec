@@ -1,5 +1,5 @@
 Name:           silik-tools
-Version:        0.6.0
+Version:        0.6.1
 Release:        1%{?dist}
 Summary:        silik: the SilikOS system command (EDA boxes, Windows programs, hardware)
 License:        LicenseRef-SilikVolt
@@ -14,7 +14,8 @@ Recommends:     pciutils
 %description
 `silik status`, `silik eda ...` (EL6 / EL7 / EL8 userlands for EDA tools, as podman containers that show their windows
 on this desktop), `silik win ...` (Windows programs: a double-click runs them with Wine in a sandbox; a Windows
-virtual machine for the rest), `silik hw ...`, `silik look` (the desktop's look: silik, bar, island), `silik session`,
+virtual machine for the rest), `silik dev ...` (embedded development), `silik hw ...`, `silik look` (the desktop's
+look: silik, bar, island), `silik session`,
 `silik update`.
 Every action prints the commands it runs; --dry-run runs nothing.
 

@@ -25,7 +25,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.6.0"
+VERSION = "0.6.1"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -2311,21 +2311,29 @@ DEV_TOOLS = (   # command, package, what it is for
     ("cmake", "cmake", "builds"),
     ("picocom", "picocom", "serial terminal"),
 )
-# a vendor's IDE: its key, its name, the program to look for, the folders it may be under, and how its downloaded
-# file is recognised (lower case). The folders are where the vendors' installers put them by default [A: from the
-# vendors' documentation, not from an installation made here].
+# a vendor's IDE: its key, its name, the program to look for, the folders it may be under, how its downloaded file
+# is recognised and which script inside an archive is its installer (regular expressions on the lower-case file
+# name). The names and folders are the vendors' defaults [A: from the vendors' documentation, not from an
+# installation made here]: ST's st-stm32cubeide_V_..._amd64.rpm_bundle.sh (in a zip), TI's CCS_V_linux.zip or
+# CCSV_linux-x64.tar.gz holding ccs_setup_V.run.
 DEV_IDES = (
-    ("stm32cubeide", "STM32CubeIDE (ST)", "stm32cubeide", ("/opt/st", "~/st"), ("stm32cubeide",)),
-    ("ccs", "Code Composer Studio (TI)", "ccstudio", ("/opt/ti", "~/ti"), ("ccs_", "ccs-", "ccs_setup", "ccstudio")),
+    ("stm32cubeide", "STM32CubeIDE (ST)", "stm32cubeide", ("/opt/st", "~/st"), r"stm32cubeide", r"stm32cubeide.*\.sh$"),
+    ("ccs", "Code Composer Studio (TI)", "ccstudio", ("/opt/ti", "~/ti"), r"^(ccs[_-]?\d|ccs_setup|ccstudio)", r"^ccs_setup.*\.run$"),
 )
+DEV_ARCHIVES = (".zip", ".tar.gz", ".tgz")
 DEV_TRY = os.environ.get("SILIK_DEV_TRY") or "/usr/share/silikos/dev/try"
 DEV_CPU = ["-mcpu=cortex-m4", "-mthumb", "-mfloat-abi=hard", "-mfpu=fpv4-sp-d16"]
 # OpenOCD reads a probe's and a part's description and says their names, without looking for the probe
 DEV_OCD_ASK = 'noinit; echo "probe [adapter name], part [target names]"; shutdown'
 
 
-def dev_find_ide(exe, roots, depth=5):
-    """the newest program called EXE under one of ROOTS (a few folders deep: the vendors' folders carry a version), or ''"""
+def dev_version_key(path):
+    """for sorting by the numbers in a path: ccs1280 after ccs910, stm32cubeide_1.19.0 after stm32cubeide_1.9.0"""
+    return [(1, int(t), "") if t.isdigit() else (0, 0, t) for t in re.split(r"(\d+)", path)]
+
+
+def dev_find_ides(exe, roots, depth=5):
+    """every program called EXE under ROOTS (a few folders deep: the vendors' folders carry a version), oldest first"""
     found = []
     for root in roots:
         root = os.path.expanduser(root)
@@ -2337,7 +2345,13 @@ def dev_find_ide(exe, roots, depth=5):
                 dirs[:] = []
             if exe in files and os.access(os.path.join(d, exe), os.X_OK):
                 found.append(os.path.join(d, exe))
-    return sorted(found)[-1] if found else ""
+    return sorted(found, key=dev_version_key)
+
+
+def dev_find_ide(exe, roots, depth=5):
+    """the newest program called EXE under one of ROOTS, or ''"""
+    found = dev_find_ides(exe, roots, depth)
+    return found[-1] if found else ""
 
 
 def dev_tools(ctx, a):
@@ -2346,7 +2360,7 @@ def dev_tools(ctx, a):
         path = shutil.which(exe)
         ver = ctx.query(["rpm", "-q", "--qf", "%{VERSION}", pkg]).strip() if path and shutil.which("rpm") else ""
         rows.append({"tool": exe, "package": pkg, "for": what, "path": path, "version": ver if ver and " " not in ver else ""})
-    ides = [{"ide": key, "name": name, "path": dev_find_ide(exe, roots) or None} for key, name, exe, roots, _ in DEV_IDES]
+    ides = [{"ide": key, "name": name, "path": dev_find_ide(exe, roots) or None} for key, name, exe, roots, _, _ in DEV_IDES]
     if a.json:
         print(json.dumps({"tools": rows, "ides": ides}, indent=1))
         return 0
@@ -2376,13 +2390,16 @@ def dev_try_jobs():
     return (
         ("build", ("arm-none-eabi-gcc",), [blink, (["arm-none-eabi-objcopy", "-O", "binary", "blink.elf", "blink.bin"], "objcopy.out"),
                                            (["arm-none-eabi-readelf", "-h", "-S", "blink.elf"], "readelf.out"),
+                                           (["arm-none-eabi-readelf", "-l", "blink.elf"], "segments.out"),
                                            (["arm-none-eabi-nm", "-n", "blink.elf"], "nm.out"),
                                            (["arm-none-eabi-size", "blink.elf"], "size.out")],
          [("readelf.out", r"Machine:\s+ARM", "a Cortex-M4 program compiled"),
           ("readelf.out", r"\.isr_vector\s+PROGBITS\s+08000000", "its vector table is at the start of flash (0x08000000)"),
           ("nm.out", r"(?m)^080000[0-9a-f]{2} T Reset_Handler$", "its reset handler is in flash"),
           ("nm.out", r"(?m)^2000[0-9a-f]{4} [BbDd] ticks$", "its data is in RAM (0x20000000)"),
-          ("nm.out", r"(?m)^2000[0-9a-f]{4} D level$", "with its initial values kept in flash")]),
+          ("nm.out", r"(?m)^2000[0-9a-f]{4} D level$", "an initialised variable among them"),
+          ("segments.out", r"(?m)^\s*LOAD\s+0x[0-9a-f]+ 0x2000[0-9a-f]{4} 0x080[0-9a-f]{5} 0x0*[1-9a-f][0-9a-f]* ",
+           "whose initial values are loaded from flash (a segment at a RAM address with a flash load address)")]),
         ("libc", ("arm-none-eabi-gcc",), [(cc + link + ["--specs=nano.specs", "--specs=nosys.specs", "-o", "hello.elf", "startup.c", "hello.c"], "libc.out"),
                                           (["arm-none-eabi-nm", "hello.elf"], "libc-nm.out")],
          [("libc-nm.out", r"(?m) T snprintf$", "the C library for this processor (newlib-nano, hard float) links")]),
@@ -2468,56 +2485,79 @@ def dev_try(ctx, a):
 
 def dev_which_ide(path):
     n = os.path.basename(path).lower()
-    for key, name, exe, roots, marks in DEV_IDES:
-        if any(m in n for m in marks):
-            return key, name, exe, roots
+    for key, name, exe, roots, file_rx, setup_rx in DEV_IDES:
+        if re.search(file_rx, n):
+            return key, name, exe, roots, setup_rx
     return None
 
 
+def dev_pick_installer(work, setup_rx):
+    """the one installer inside an unpacked archive: a script whose name is the vendor's installer's. None or several
+    is an error that lists what is there (the user can then give the script itself): never a guess, since ST's runs
+    as root"""
+    scripts = sorted(os.path.join(d, f) for d, _, fs in os.walk(work) for f in fs if f.lower().endswith((".sh", ".run")))
+    match = [p for p in scripts if re.search(setup_rx, os.path.basename(p).lower())]
+    if len(match) == 1:
+        return match[0]
+    shown = ", ".join(os.path.relpath(p, work) for p in scripts) or "none"
+    if not match:
+        die("no installer of the expected name inside the archive (scripts there: %s)" % shown)
+    die("several installers inside the archive (%s): give the one to run, for example  silik dev install %s" % (
+        ", ".join(os.path.relpath(p, work) for p in match), shlex.quote(match[0])))
+
+
 def dev_install(ctx, a):
-    """runs a vendor's own installer from the file the user downloaded (a .zip is unpacked first). The installer
-    shows its licence and asks what it asks: nothing here answers for the user, and nothing is downloaded."""
+    """runs a vendor's own installer from the file the user downloaded (an archive is unpacked first, and removed
+    after). The installer shows its licence and asks what it asks: nothing here answers for the user, and nothing is
+    downloaded. Its exit code is this command's."""
     src = os.path.abspath(os.path.expanduser(a.file))
     ide = dev_which_ide(src)
     if not ide:
         die("not an installer this command knows: %s (it knows the Linux installers of %s, by their file names)" % (
             os.path.basename(src), " and ".join(i[1] for i in DEV_IDES)), 2)
-    key, name, exe, roots = ide
+    key, name, exe, roots, setup_rx = ide
+    low = os.path.basename(src).lower()
+    if key == "stm32cubeide" and "deb_bundle" in low:
+        die("this is ST's bundle for Debian systems: SilikOS is an RPM system; ST's RPM bundle (…amd64.rpm_bundle.sh) is the one", 2)
     if not os.path.isfile(src) and not ctx.dry:
         die("no such file: " + src)
     print("%s is its vendor's program, under its vendor's licence: the installer shows it and asks; SilikOS only runs it" % name)
-    run = src
-    if src.lower().endswith(".zip"):
+    run, work = src, None
+    if low.endswith(DEV_ARCHIVES):
         work = eda_work(ctx, "dev-install")
-        ctx.run(["unzip", "-q", "-o", src, "-d", work])
-        if ctx.dry:
-            run = os.path.join(work, "<the installer inside>")
+        if low.endswith(".zip"):
+            ctx.run(["unzip", "-q", "-o", src, "-d", work])
         else:
-            inside = sorted(os.path.join(d, f) for d, _, fs in os.walk(work) for f in fs if f.lower().endswith((".sh", ".run")))
-            if not inside:
-                die("no installer (.sh or .run) inside " + src)
-            run = inside[0]
-    low = os.path.basename(run).lower()
-    if not ctx.dry and not low.endswith((".sh", ".run")):
-        die("not a Linux installer (.sh, .run, or a .zip of one): " + os.path.basename(run))
+            ctx.run(["tar", "-xzf", src, "-C", work])
+        run = os.path.join(work, "<the installer inside>") if ctx.dry else dev_pick_installer(work, setup_rx)
+    elif not ctx.dry and not low.endswith((".sh", ".run")):
+        die("not a Linux installer (.sh, .run, or an archive of one): " + os.path.basename(src))
+    before = set(dev_find_ides(exe, roots)) if not ctx.dry else set()
     if key == "stm32cubeide":
         # ST's bundle for RPM systems installs packages (the IDE, the ST-LINK server, the probes' device rules): as root
-        if "rpm_bundle" not in low and not ctx.dry:
+        if "rpm_bundle" not in os.path.basename(run).lower() and not ctx.dry:
             print("silik: this is not ST's bundle for RPM systems (…amd64.rpm_bundle.sh): that is the one made for this base", file=sys.stderr)
-        ctx.run(["sudo", "sh", run], check=False)
+        rc, _ = ctx.run(["sudo", "sh", run], check=False)
     else:
         # TI's installer is a program with its own window; it installs for the user who runs it
         ctx.run(["chmod", "+x", run])
-        ctx.run([run], check=False)
+        rc, _ = ctx.run([run], check=False)
+    if work:
+        ctx.run(["rm", "-rf", work])            # (the unpacked archive: a gigabyte or more)
     if ctx.dry:
         return 0
-    found = dev_find_ide(exe, roots)
+    found = dev_find_ides(exe, roots)
+    if rc:
+        print("silik: the installer exited %d: nothing is said to be installed%s" % (
+            rc, " (%s was there before it)" % found[-1] if found else ""), file=sys.stderr)
+        return rc
     if not found:
         print("silik: no %s under %s after the installer: `silik dev tools` looks again" % (exe, " or ".join(roots)), file=sys.stderr)
         return 1
-    print("%s %s: %s" % (SEC_MARK["ok"], key, found))
+    new = [p for p in found if p not in before]
+    print("%s %s: %s%s" % (SEC_MARK["ok"], key, (new or found)[-1], "" if new else "  (it was there before: the installer added no other)"))
     if key == "ccs":      # TI's own script for the probes' device rules, when the installation has it
-        top = found
+        top = (new or found)[-1]
         for _ in range(4):
             top = os.path.dirname(top)
             script = os.path.join(top, "install_scripts", "install_drivers.sh")
@@ -2562,6 +2602,10 @@ def cmd_look(ctx, a):
     if not now and not ctx.dry:
         die("no setting %s on this system: the looks come with silikos-desktop 0.11" % LOOK_SCHEMA)
     ctx.run(["gsettings", "set", LOOK_SCHEMA, "look", a.which])
+    if not ctx.dry and look_now(ctx) != a.which:
+        # (gsettings exits 0 when it cannot reach the session's settings service: under sudo, or from a shell
+        # without the session's bus, nothing changes)
+        die("the look is still %s: run it as the user, in the desktop session (gsettings could not change the setting)" % (look_now(ctx) or "unknown"))
     return 0
 
 
@@ -2577,6 +2621,8 @@ SESSION = {
 
 
 def cmd_session(ctx, a):
+    if not shutil.which(SESSION[a.what][0]) and not ctx.dry:
+        die("%s is not on this system: this is for a desktop session" % SESSION[a.what][0])
     rc, _ = ctx.run(SESSION[a.what], check=False, capture=True)
     if rc:
         die("%s exited %d: is this a desktop session?" % (SESSION[a.what][0], rc), rc)

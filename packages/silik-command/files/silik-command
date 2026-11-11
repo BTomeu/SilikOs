@@ -36,7 +36,7 @@ TEXT = {
            "win_program": "programa de Windows", "win_open": "executa amb Wine, dins l'entorn aïllat", "off": "apaga o reinicia",
            "look_silik": "aspecte: Silik (la línia d'ordres a dalt, un rail, una barra d'estat)", "look_bar": "aspecte: barra (una barra a baix)",
            "look_island": "aspecte: illa (una peça flotant a baix)",
-           "dev_tools": "les eines de desenvolupament encastat d'aquest sistema", "dev_try": "les eines d'encastat fan les seves feines de prova"},
+           "dev_tools": "les eines de desenvolupament encastat d'aquest sistema", "dev_try": "les eines de desenvolupament encastat fan les seves feines de prova"},
     "es": {"placeholder": "dirección o nombre: app/ eda/ dev/ win/ sys/ look/ o una ruta", "run": "ejecuta", "complete": "completa", "close": "cierra",
            "none": "no hay coincidencias", "status": "estado del sistema", "secure": "seguridad: audita este sistema", "secure_apply": "seguridad: pone los valores de SilikOS", "update": "actualiza el sistema", "settings": "configuración",
            "terminal": "terminal", "files": "archivos", "lock": "bloquea la pantalla", "logout": "cierra la sesión", "eda_check": "comprueba el entorno EDA", "eda_tools": "las herramientas EDA abiertas de este sistema", "eda_try": "las herramientas EDA abiertas hacen sus trabajos de prueba",
@@ -45,7 +45,7 @@ TEXT = {
            "win_program": "programa de Windows", "win_open": "ejecuta con Wine, en el entorno aislado", "off": "apaga o reinicia",
            "look_silik": "aspecto: Silik (la línea de órdenes arriba, un rail, una barra de estado)", "look_bar": "aspecto: barra (una barra abajo)",
            "look_island": "aspecto: isla (una pieza flotante abajo)",
-           "dev_tools": "las herramientas de desarrollo embebido de este sistema", "dev_try": "las herramientas de embebido hacen sus trabajos de prueba"},
+           "dev_tools": "las herramientas de desarrollo embebido de este sistema", "dev_try": "las herramientas de desarrollo embebido hacen sus trabajos de prueba"},
 }
 
 

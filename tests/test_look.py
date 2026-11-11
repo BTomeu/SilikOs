@@ -72,11 +72,18 @@ class Look(unittest.TestCase):
             self.assertEqual(json.loads(o), {"look": "island", "looks": ["silik", "bar", "island"]})
 
     def test_set_runs_gsettings(self):
-        with fake_gsettings("silik") as log:
+        with fake_gsettings("bar") as log:
             rc, o, _ = call("look", "bar")
             self.assertEqual(rc, 0)
             with open(log) as f:
-                self.assertEqual(f.read().splitlines()[-1], "set com.silikvolt.silikos.shell look bar")
+                self.assertIn("set com.silikvolt.silikos.shell look bar", f.read().splitlines())
+
+    def test_a_set_that_does_not_take_is_an_error(self):
+        """gsettings exits 0 when it cannot reach the session's settings (under sudo, without the session's bus)"""
+        with fake_gsettings("silik"):          # (the stand-in answers silik whatever was set)
+            rc, o, e = call("look", "island")
+            self.assertEqual(rc, 1)
+            self.assertIn("the look is still silik", e)
 
     def test_no_setting_on_this_system(self):
         """silikos-desktop older than 0.11, or no desktop: said so, nothing set, never 'ok'"""
