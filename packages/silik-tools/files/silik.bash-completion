@@ -2,12 +2,14 @@
 _silik() {
   local cur=${COMP_WORDS[COMP_CWORD]} g=${COMP_WORDS[1]}
   case $COMP_CWORD in
-    1) COMPREPLY=($(compgen -W "status update identity eda win hw secure --dry-run --version" -- "$cur"));;
+    1) COMPREPLY=($(compgen -W "status update identity look session eda win hw secure --dry-run --version" -- "$cur"));;
     2) case $g in
          eda) COMPREPLY=($(compgen -W "list create setup enter run import-vm rm check kernel-arg tools try bench tune" -- "$cur"));;
          win) COMPREPLY=($(compgen -W "list open create run install stop rm sync apps vm" -- "$cur"));;
          hw)  COMPREPLY=($(compgen -W "probe nvidia" -- "$cur"));;
          identity) COMPREPLY=($(compgen -W "show silikos base" -- "$cur"));;
+         look) COMPREPLY=($(compgen -W "silik bar island" -- "$cur"));;
+         session) COMPREPLY=($(compgen -W "lock logout off" -- "$cur"));;
          secure) COMPREPLY=($(compgen -W "status apply" -- "$cur"));;
        esac;;
     3) case "$g ${COMP_WORDS[2]}" in

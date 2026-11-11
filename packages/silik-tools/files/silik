@@ -9,6 +9,8 @@
 #               | vm app [N] --exe 'C:\path\app.exe' --user U
 #   silik hw    probe | nvidia install | nvidia status
 #   silik identity show | silikos | base
+#   silik look  [silik | bar | island] [--json]     the desktop's look; no argument: which one is in use
+#   silik session lock | logout | off             (the last two ask first)
 #   silik update
 #   silik secure status [--json] [--offline] | apply [--keep-ssh]
 # Global: --dry-run prints the commands and runs nothing; -q hides the `$ ...` lines.
@@ -22,7 +24,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.4.2"
+VERSION = "0.5.0"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -2291,6 +2293,62 @@ def secure_apply(ctx, a):
     return 1 if failed else 0
 
 
+# ------------------------------------------------------------------ look, session
+# The desktop has three looks, all of the same shell extension (silik-shell) and the same parts in other places:
+#   silik    the title bar is the command line, a rail of text keys on the left, a status bar
+#   bar      one bar at the bottom: Start, the command line, the applications, workspaces, system, clock
+#   island   one floating piece at the bottom: Start, the applications, system, clock
+# The choice is one setting of the user (com.silikvolt.silikos.shell look); the shell follows it at once.
+LOOK_SCHEMA = "com.silikvolt.silikos.shell"
+LOOKS = (
+    ("silik", "the title bar is the command line, a rail of text keys, a status bar"),
+    ("bar", "one bar at the bottom: Start, the command line, the applications, workspaces, system, clock"),
+    ("island", "one floating piece at the bottom: Start, the applications, system, clock"),
+)
+
+
+def look_now(ctx):
+    """the look in use, or '' when the setting is not on this system (silikos-desktop older than 0.11, or no desktop)"""
+    v = ctx.query(["gsettings", "get", LOOK_SCHEMA, "look"]).strip().strip("'")
+    return v if v in [k for k, _ in LOOKS] else ""
+
+
+def cmd_look(ctx, a):
+    now = look_now(ctx)
+    if a.which is None:
+        if a.json:
+            print(json.dumps({"look": now or None, "looks": [k for k, _ in LOOKS]}))
+            return 0 if now else 1
+        for k, what in LOOKS:
+            print("%s %-7s %s" % ("●" if k == now else " ", k, what))
+        if not now:
+            print("silik: no setting %s on this system: the looks come with silikos-desktop 0.11" % LOOK_SCHEMA, file=sys.stderr)
+            return 1
+        return 0
+    if not now and not ctx.dry:
+        die("no setting %s on this system: the looks come with silikos-desktop 0.11" % LOOK_SCHEMA)
+    ctx.run(["gsettings", "set", LOOK_SCHEMA, "look", a.which])
+    return 0
+
+
+# The session's keys (Start's foot in the bar and island looks, the COMMAND bar's sys/lock, sys/logout, sys/off). The
+# screen is locked by the shell's own service; leaving and powering off go through the session's question (it waits
+# for an answer and for programs with unsaved work), never around it.
+SESSION = {
+    "lock": ["gdbus", "call", "--session", "--dest", "org.gnome.ScreenSaver", "--object-path", "/org/gnome/ScreenSaver",
+             "--method", "org.gnome.ScreenSaver.Lock"],
+    "logout": ["gnome-session-quit", "--logout"],
+    "off": ["gnome-session-quit", "--power-off"],
+}
+
+
+def cmd_session(ctx, a):
+    rc, _ = ctx.run(SESSION[a.what], check=False, capture=True)
+    if rc:
+        die("%s exited %d: is this a desktop session?" % (SESSION[a.what][0], rc), rc)
+    return 0
+
+
 # ------------------------------------------------------------------ command line
 def parser():
     p = argparse.ArgumentParser(prog="silik", description="SilikOS system command")
@@ -2302,6 +2360,10 @@ def parser():
     x = s.add_parser("update"); x.set_defaults(fn=cmd_update)
     x = s.add_parser("identity", help="the names the system shows: silikos | base | show")
     x.add_argument("which", nargs="?", default="show", choices=["show", "silikos", "base"]); x.set_defaults(fn=cmd_identity)
+    x = s.add_parser("look", help="the desktop's look: silik | bar | island (no argument: which one is in use)")
+    x.add_argument("which", nargs="?", choices=[k for k, _ in LOOKS]); x.add_argument("--json", action="store_true"); x.set_defaults(fn=cmd_look)
+    x = s.add_parser("session", help="this session: lock | logout | off (the last two ask first)")
+    x.add_argument("what", choices=sorted(SESSION)); x.set_defaults(fn=cmd_session)
 
     e = s.add_parser("eda", help="EDA: EL6 / EL7 / EL8 boxes for the vendors' tools, and the open tools").add_subparsers(dest="cmd")
     x = e.add_parser("list"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=eda_list)
