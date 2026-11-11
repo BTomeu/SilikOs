@@ -81,6 +81,7 @@ for l in bar island silik; do
   elif [ $l = silik ]; then shape=$([ "$x" -gt 0 ] && [ "$y" -gt 0 ] && echo "rail and title bar" || echo "NO rail or title bar")
   else shape=$([ "$x" = 0 ] && [ "$y" = 0 ] && [ "$h" -lt "${screen_h:-0}" ] && echo "room from the top left, the bottom kept" || echo "NOT the room of this look"); fi
   case "$v/$e/$shape" in
+    "'$l'/0/not seen") say look.$l FAIL "the room windows have could not be read (GTK on :0): the look was not seen";;
     "'$l'/0/NO"*|"'$l'/0/NOT"*) say look.$l FAIL "$shape: windows have $r of a screen $screen_h high";;
     "'$l'/0/"*) say look.$l ok "$(echo "$s" | head -1); windows have $r: $shape; no error of the extension";;
     *) say look.$l FAIL "setting $v, $e errors of the extension, windows have $r";;
@@ -215,7 +216,9 @@ for t in iverilog verilator gtkwave; do
   if v=$(rpm -q $t 2> /dev/null); then say eda.$t ok "$v"; else say eda.$t FAIL "not installed (EPEL): $v"; fi
 done
 o=$(runuser -u tester -- sh -c 'cd /tmp && silik -q eda try' 2>&1); rc=$?
-if [ $rc = 0 ]; then say eda.try ok "$(echo "$o" | tail -1 | sed 's/; the files.*//')"; else say eda.try FAIL "exit $rc: $(echo "$o" | tail -1 | sed 's/; the files.*//')"; fi
+# (ok only when every job ran: a job "not run" is a tool missing from the system, and the command still exits 0)
+sum=$(echo "$o" | tail -1 | sed 's/; the files.*//')
+if [ $rc = 0 ] && echo "$sum" | grep -q ', 0 failed, 0 not run$'; then say eda.try ok "$sum"; else say eda.try FAIL "exit $rc: $sum"; fi
 echo "$o" | grep -v '^[0-9]* ok' | head -8 | while read -r line; do say eda.try-job info "$line"; done
 say eda.tools info "$(runuser -u tester -- silik eda tools 2>&1 | grep -c '^●') of 11 open tools on the system"
 # the names and classes of the Tk tools' windows (what a desktop entry must say for the rail to know the program)
@@ -237,11 +240,15 @@ fi
 if command -v arm-none-eabi-gcc > /dev/null; then
   say dev.compiler ok "$(arm-none-eabi-gcc --version | head -1)"
   o=$(runuser -u tester -- sh -c 'cd /tmp && silik -q dev try' 2>&1); rc=$?
-  if [ $rc = 0 ]; then say dev.try ok "$(echo "$o" | tail -1 | sed 's/; the files.*//')"; else say dev.try FAIL "exit $rc: $(echo "$o" | tail -1 | sed 's/; the files.*//')"; fi
+  sum=$(echo "$o" | tail -1 | sed 's/; the files.*//')
+  if [ $rc = 0 ] && echo "$sum" | grep -q ', 0 failed, 0 not run$'; then say dev.try ok "$sum"; else say dev.try FAIL "exit $rc: $sum"; fi
   echo "$o" | grep -v '^[0-9]* ok' | head -8 | while read -r line; do say dev.try-job info "$line"; done
 else
-  say dev.compiler info "no arm-none-eabi-gcc on the system (EPEL was not reachable at installation?)"
+  say dev.compiler FAIL "no arm-none-eabi-gcc on the system (silik-dev asks for it; EPEL was not reachable at installation?)"
 fi
+for p in openocd dfu-util; do      # (ours, from the release dev-tools: on the ISO)
+  if v=$(rpm -q $p 2>&1); then say package.$p ok "$v"; else say package.$p FAIL "$v"; fi
+done
 say dev.tools info "$(runuser -u tester -- silik dev tools 2>&1 | grep -c '^●') of 9 embedded tools on the system; the probes' rules: $(ls /usr/lib/udev/rules.d/ 2> /dev/null | grep -E 'openocd|stlink' | tr '\n' ' ')"
 # memory: what is left with the session and the tests' programs, and whether the kernel had to kill for lack of it
 say system.memory info "$(free -m | awk '/^Mem:/ { printf "%d MB, %d MB available; ", $2, $7 } /^Swap:/ { printf "swap %d of %d MB used", $3, $2 }')"

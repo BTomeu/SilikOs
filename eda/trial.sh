@@ -197,8 +197,14 @@ EOP
     kicad-cli pcb export gerbers -o out/ "$pcb" > gbr.txt 2>&1 || { tail -20 gbr.txt; exit 1; }
     kicad-cli pcb export drill -o out/ "$pcb" > drl.txt 2>&1 || { tail -20 drl.txt; exit 1; }
     kicad-cli pcb export step -o out/board.step "$pcb" > step.txt 2>&1 || { tail -20 step.txt; exit 1; }
-    grep -q '(net ' out/net.net && grep -lq 'TF.FileFunction,Copper' out/*.g* && ls out/*.drl > /dev/null && grep -q 'MANIFOLD_SOLID_BREP\|ADVANCED_BREP\|SHELL_BASED' out/board.step || { ls -la out; tail -5 net.txt gbr.txt drl.txt step.txt; exit 1; }
-    ng=$(grep -l 'libngspice' /usr/lib64/kicad/*.so /usr/bin/_eeschema.kiface /usr/bin/*.kiface 2> /dev/null | head -1)
+    # (each check says which one failed: KiCad 10 writes the netlist with each list on a line of its own)
+    for c in "netlist: nets with their nodes|grep -q '(nets' out/net.net && grep -q '(node' out/net.net" \
+             "Gerber: a copper layer|grep -lq 'TF.FileFunction,Copper' out/*.g*" \
+             "drill file|ls out/*.drl" \
+             "STEP: a solid of the board|grep -q 'MANIFOLD_SOLID_BREP\\|ADVANCED_BREP\\|SHELL_BASED' out/board.step"; do
+      bash -c "${c#*|}" > /dev/null 2>&1 || { echo "not seen: ${c%%|*}"; ls -la out | head -40; for f in net.txt gbr.txt drl.txt step.txt; do echo "== $f"; tail -n 5 "$f"; done; exit 1; }
+    done
+    ng=$(grep -l 'libngspice' /usr/bin/*.kiface /usr/lib64/kicad/*.so 2> /dev/null | head -1 || true)
     python3 -c 'import pcbnew; print("pcbnew", pcbnew.Version())' > py.txt 2>&1 || { cat py.txt; exit 1; }
     echo "TRIAL-OK kicad $v : its demonstration $(basename "$pcb"): a netlist, $(ls out/*.g* | wc -l) Gerber files, a drill file and a STEP model of the board (Open CASCADE); $(cat py.txt) from Python; its simulator names $(grep -aom1 'libngspice[a-z.0-9]*' "${ng:-/dev/null}" 2> /dev/null || echo 'no ngspice library')" ;;
   *) echo "no trial for $name" >&2; exit 2 ;;

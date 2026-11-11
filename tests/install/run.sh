@@ -165,7 +165,7 @@ if kill -0 $qpid 2> /dev/null; then
   key meta_l-spc || true; sleep 5; typ "sys/files" || true; sleep 2; key ret || true; sleep 10
   look bar; shot look-bar || true
   key meta_l || true; sleep 4; shot look-bar-start || true; key esc || true; sleep 2
-  key meta_l-spc || true; sleep 5; typ "sys/lock" || true; sleep 2; key ret || true; sleep 8   # `silik session lock`
+  key meta_l-spc || true; sleep 5; typ "sys/lock" || true; sleep 2; key ret || true; sleep 14  # `silik session lock` (and the fade to the lock screen)
   key ctrl || true; sleep 4; shot look-bar-lock || true
   typ "silikos-ci" || true; key ret || true; sleep 8; shot look-bar-unlocked || true
   look island; shot look-island || true

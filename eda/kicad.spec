@@ -20,6 +20,8 @@ BuildRequires:  libgit2-devel unixODBC-devel protobuf-devel protobuf-compiler po
 # programming interface, and the simulator as a shared library
 BuildRequires:  opencascade nng ngspice
 Requires:       python3-wxpython4
+# its simulator: our ngspice's shared library, loaded at run time (rpm cannot see that by itself)
+Requires:       libngspice.so.0()(64bit)
 # its symbols, footprints and project templates are packages of their own (eda/kicad-*.spec); weak, so that the
 # program installs alone. The 3D models (kicad-packages3d) are large and are not asked for
 Recommends:     kicad-symbols kicad-footprints kicad-templates

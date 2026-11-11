@@ -1,7 +1,7 @@
 %include %{_specdir_eda}/common.inc
 Name:           ngspice
 Version:        %{upver}
-Release:        1.silik%{?dist}
+Release:        2.silik%{?dist}
 Summary:        ngspice, the circuit simulator, with XSPICE and CIDER (upstream's source built for SilikOS / EL 9)
 License:        BSD-3-Clause AND LGPL-2.1-or-later AND LicenseRef-Upstream
 URL:            https://ngspice.sourceforge.io

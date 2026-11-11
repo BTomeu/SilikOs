@@ -7,19 +7,27 @@ on:
   push:
     branches: [main]
     tags: ['v*']
-    paths-ignore: ['docs/**', 'README.md', 'wine/**', 'tools/build_wine.sh', 'tools/build_wine_addons.sh', '.github/workflows/wine.yml', 'eda/**', 'tools/build_eda.sh', '.github/workflows/eda.yml', 'tools/bench_ngspice_flags.sh', '.github/workflows/bench.yml', 'dev/**', 'tools/build_dev.sh', '.github/workflows/dev.yml']   # the documents, and the other workflows' own: none of them is in the ISO
+    paths-ignore: ['docs/**', 'README.md', 'wine/**', 'tools/build_wine.sh', 'tools/build_wine_addons.sh', '.github/workflows/wine.yml', 'eda/**', 'tools/build_eda.sh', '.github/workflows/eda.yml', 'tools/bench_ngspice_flags.sh', '.github/workflows/bench.yml', 'dev/**', 'tools/build_dev.sh', '.github/workflows/dev.yml']   # the documents, and the other workflows' own recipes: their packages reach the ISO through their releases, so this runs when those workflows end (below)
   pull_request:
   workflow_dispatch:
+  # the ISO takes the packages of the releases wine-*, eda-tools and dev-tools: a run of the workflow that keeps them
+  # is followed by an installation test of what it kept
+  workflow_run:
+    workflows: ['Wine', 'EDA tools', 'Dev tools']
+    types: [completed]
+    branches: [main]
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
+# read-only by default; the installation test writes the branch ci-results, a tag's release job the release
 permissions:
-  contents: write
+  contents: read
 jobs:
   packages:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with: { persist-credentials: false }
       - name: Unit tests
         run: python3 -m unittest discover -s tests -v
       - name: Packages
@@ -33,9 +41,12 @@ jobs:
   install:
     needs: packages
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write        # (the branch ci-results)
     timeout-minutes: 170
     steps:
       - uses: actions/checkout@v4
+        with: { persist-credentials: false }
       - name: KVM for the runner's user
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -52,18 +63,31 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p build/extra
-          tag=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 50 --json tagName -q '[.[] | select(.tagName | startswith("wine-"))][0].tagName' || true)
-          if [ -n "$tag" ]; then gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern 'silik-wine-*.rpm' --dir build/extra && ls -la build/extra
-          else echo "::notice title=Wine::no wine-* release yet: the ISO of this run has no Wine (run the workflow Wine once)"; fi
-          # the open EDA tools (workflow EDA tools, release eda-tools)
-          if gh release download eda-tools --repo "$GITHUB_REPOSITORY" --pattern '*.rpm' --dir build/extra 2> /dev/null; then ls -la build/extra
-          else echo "::notice title=EDA tools::no eda-tools release yet: the ISO of this run has no KLayout, Magic, Xschem or ngspice"; fi
-          # the embedded-development tools (workflow Dev tools, release dev-tools)
-          if gh release download dev-tools --repo "$GITHUB_REPOSITORY" --pattern '*.rpm' --dir build/extra 2> /dev/null; then ls -la build/extra
-          else echo "::notice title=Dev tools::no dev-tools release yet: the ISO of this run has no OpenOCD or dfu-util"; fi
+          # get RELEASE PATTERN WHAT: its packages into build/extra. A release that does not exist yet is said (the ISO
+          # is then without WHAT); any other failure (the API, a download cut short) stops the job: an ISO quietly
+          # missing a release's packages would make a green run of a system without them
+          get() {
+            if out=$(gh release view "$1" --repo "$GITHUB_REPOSITORY" --json tagName 2>&1); then
+              gh release download "$1" --repo "$GITHUB_REPOSITORY" --pattern "$2" --dir build/extra --clobber \
+                || { echo "::error title=release $1::the download of its packages failed"; exit 1; }
+            elif echo "$out" | grep -qi 'not found'; then
+              echo "::notice title=$1::no such release yet: the ISO of this run has no $3"
+            else
+              echo "::error title=release $1::$out"; exit 1
+            fi
+          }
+          tags=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 50 --json tagName -q '.[].tagName') || { echo "::error title=releases::cannot list them"; exit 1; }
+          wine=$(echo "$tags" | grep '^wine-' | head -1 || true)
+          if [ -n "$wine" ]; then get "$wine" 'silik-wine-*.rpm' Wine; else echo "::notice title=Wine::no wine-* release yet: the ISO of this run has no Wine"; fi
+          get eda-tools '*.rpm' "the open EDA tools"                # (workflow EDA tools)
+          get dev-tools '*.rpm' "OpenOCD or dfu-util"               # (workflow Dev tools)
+          ls -la build/extra
+      # our packages as the packages job built them (in EL 9, with the base's rpmbuild): the ISO carries those
+      - uses: actions/download-artifact@v4
+        with: { name: silikos-packages, path: build/repo }
       - name: Packages and ISO
         run: |
-          bash tools/build_rpms.sh
+          createrepo_c --quiet build/repo && ls build/repo
           bash tools/build_iso.sh
       - name: Install the ISO in a virtual machine, boot the installed system, check it
         run: bash tests/install/run.sh build/SilikOS-*-netinstall.iso build/install-test
@@ -87,7 +111,7 @@ jobs:
             build/install-test/*.ppm
             build/install-test/ci.ks
       - name: Keep the last report and pictures of main on the branch ci-results
-        if: always() && github.ref == 'refs/heads/main'
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}   # (a run cancelled by a newer one keeps the last report)
         run: |
           d=$(mktemp -d)
           cp build/install-test/report.txt build/install-test/*.png "$d/" 2>/dev/null || true
@@ -111,6 +135,8 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: install
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write        # (the release)
     steps:
       - uses: actions/download-artifact@v4
         with:

@@ -5,7 +5,7 @@
 klayout  https://github.com/KLayout/klayout                   v0.30.13
 magic    https://github.com/RTimothyEdwards/magic             8.3.696
 xschem   https://github.com/StefanSchippers/xschem            3.4.7
-ngspice  https://git.code.sf.net/p/ngspice/ngspice            latest:ngspice-   https://sourceforge.net/projects/ngspice/files/ng-spice-rework/{ver}/ngspice-{ver}.tar.gz/download
+ngspice  https://git.code.sf.net/p/ngspice/ngspice            ngspice-47        https://sourceforge.net/projects/ngspice/files/ng-spice-rework/{ver}/ngspice-{ver}.tar.gz/download
 netgen   https://github.com/RTimothyEdwards/netgen            1.5.328
 yosys    https://github.com/YosysHQ/yosys                     v0.70             https://github.com/YosysHQ/yosys/releases/download/v{ver}/yosys.tar.gz
 nvc      https://github.com/nickg/nvc                         r1.23.1           https://github.com/nickg/nvc/releases/download/r{ver}/nvc-{ver}.tar.gz

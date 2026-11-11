@@ -26,9 +26,10 @@ fi
 set -e
 gh release view $rel --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || gh release create $rel --repo "$GITHUB_REPOSITORY" --title "$title" --prerelease --notes "$notes"
 for f in dist/*.rpm; do
-  # one package per tool in the release: an older build of the same tool goes (kicad- is not kicad-symbols-)
+  # the new package first, then an older build of the same tool goes (kicad- is not kicad-symbols-): the release is
+  # never without one
+  gh release upload $rel "$f" --repo "$GITHUB_REPOSITORY" --clobber
   gh release view $rel --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | { grep -E "^$tool-[0-9]" || true; } | while read -r old; do
     [ "$old" = "$(basename "$f")" ] || gh release delete-asset $rel "$old" --repo "$GITHUB_REPOSITORY" -y
   done
-  gh release upload $rel "$f" --repo "$GITHUB_REPOSITORY" --clobber
 done
