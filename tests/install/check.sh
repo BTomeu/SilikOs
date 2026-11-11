@@ -77,7 +77,11 @@ if command -v wine > /dev/null; then
     has win.selinux-rule "$(semodule -l 2>&1 | grep -x silikos_wine)" silikos_wine
     semodule -l 2> /dev/null | grep -qx silikos_wine || say win.selinux-rule-error info "$(semodule -i /usr/share/silikos/selinux/silikos_wine.cil 2>&1 | tail -4)"
     has win.selinux-label "$(ls -Z /opt/silik-wine/bin/wine 2>&1)" wine_exec_t
-    o=$(insession timeout 300 silik win open /home/tester/Downloads/hello.exe); rc=$?
+    # (the command's own exit code is printed after it: the status of `systemd-run --wait` is the unit's, which is also
+    # a failure when something else of the unit went wrong, e.g. a process of it killed for lack of memory)
+    o=$(insession sh -c 'timeout 300 silik win open /home/tester/Downloads/hello.exe; echo "silik-exit $?"'); unit=$?
+    rc=$(echo "$o" | sed -n 's/^silik-exit //p' | tail -1); o=$(echo "$o" | grep -v '^silik-exit ')
+    [ "$unit" = 0 ] || say win.open.unit info "the session's unit of that command ended with $unit (the command itself: ${rc:-?})"
     r=$(tr -d '\r' < /home/tester/Windows/silikos-ci.txt 2> /dev/null)   # a Windows program ends its lines with CR LF
     is win.open.ran "exit $rc: $r" "exit 0: ran secret=hidden"
     has win.open.sandboxed "$o" "bwrap"
@@ -87,26 +91,9 @@ if command -v wine > /dev/null; then
       # the same program without the sandbox tells Wine's part from the sandbox's
       rm -f /home/tester/Windows/silikos-ci.txt
       insession silik win stop default > /dev/null
-      o2=$(insession timeout 300 silik win open --no-sandbox /home/tester/Downloads/hello.exe); rc2=$?
+      o2=$(insession sh -c 'timeout 300 silik win open --no-sandbox /home/tester/Downloads/hello.exe; echo "silik-exit $?"')
+      rc2=$(echo "$o2" | sed -n 's/^silik-exit //p' | tail -1); o2=$(echo "$o2" | grep -v '^silik-exit ')
       say win.open.without-sandbox info "exit $rc2: $(tr -d '\r' < /home/tester/Windows/silikos-ci.txt 2> /dev/null) / $(echo "$o2" | tail -3 | tr '\n' ' ')"
-      # which of them it is: the same command a second time (does it only fail right after the prefix is made?), then Wine
-      # itself with the command line `silik` gives it, with and without its messages, and with the file's name alone
-      P=/home/tester/.local/share/silikos/wine/default
-      insession silik win stop default > /dev/null 2>&1
-      insession timeout 300 silik -q win open /home/tester/Downloads/hello.exe > /dev/null 2>&1; say win.open.again info "silik win open, a second time: exit $?"
-      insession silik win stop default > /dev/null 2>&1
-      insession timeout 300 silik -q win open --no-sandbox /home/tester/Downloads/hello.exe > /dev/null 2>&1; say win.open.again-plain info "silik win open --no-sandbox, a second time: exit $?"
-      insession silik win stop default > /dev/null 2>&1
-      d=$(insession sh -c "cd /home/tester/Downloads && env WINEDEBUG=-all WINEPREFIX=$P timeout 200 wine wineconsole /home/tester/Downloads/hello.exe 2>&1; echo \"exit \$?\"" | tail -2 | tr '\n' ' ')
-      say win.open.wine-as-silik info "wine wineconsole /full/path, no messages: $d"
-      insession env WINEPREFIX=$P wineserver -k > /dev/null 2>&1; sleep 4
-      d=$(insession sh -c "cd /home/tester/Downloads && env WINEPREFIX=$P timeout 200 wine wineconsole /home/tester/Downloads/hello.exe 2>&1; echo \"exit \$?\"" | tail -6 | tr '\n' ' ')
-      say win.open.wine-messages info "wine wineconsole /full/path, with its messages: $d"
-      insession env WINEPREFIX=$P wineserver -k > /dev/null 2>&1; sleep 4
-      d=$(insession sh -c "cd /home/tester/Downloads && env WINEDEBUG=-all WINEPREFIX=$P timeout 200 wine wineconsole hello.exe 2>&1; echo \"exit \$?\"" | tail -2 | tr '\n' ' ')
-      say win.open.wine-name info "wine wineconsole hello.exe, no messages: $d"
-      insession env WINEPREFIX=$P wineserver -k > /dev/null 2>&1; sleep 4
-      say win.open.updates info "the newest packages of the base: $(rpm -qa --qf '%{BUILDTIME} %{NAME}-%{VERSION}-%{RELEASE}\n' 'kernel' 'mesa-dri-drivers' 'llvm-libs' 'gnome-shell' 'mutter' 'xorg-x11-server-Xorg' 'glibc' | sort -n | tail -7 | cut -d' ' -f2 | tr '\n' ' ')"
     fi
     # a Windows program with a window: it must be on the session's screen under its own name and class
     if [ -f /mnt/silikci/win.exe ]; then
@@ -176,7 +163,7 @@ say eda.tools info "$(runuser -u tester -- silik eda tools 2>&1 | grep -c '^●'
 if insession xwininfo -root > /dev/null 2>&1; then
   for t in xschem magic klayout qucs-s; do
     command -v $t > /dev/null || continue
-    asuser systemd-run --quiet --user --collect --unit=ci-$t -p WorkingDirectory=/home/tester -E DISPLAY=:0 $t > /dev/null 2>&1
+    asuser systemd-run --quiet --user --collect --unit=ci-$t -p TimeoutStopSec=5 -p WorkingDirectory=/home/tester -E DISPLAY=:0 $t > /dev/null 2>&1
     sleep 12
     say eda.$t-windows info "$(insession xwininfo -root -tree | grep -iE 'xschem|magic|tkcon|layout|qucs' | sed -E 's/^ *0x[0-9a-f]+ //; s/ +[0-9]+x[0-9]+.*//' | sort -u | head -6 | tr '\n' ';')"
     asuser systemctl --user stop ci-$t > /dev/null 2>&1
@@ -186,6 +173,11 @@ if insession xwininfo -root > /dev/null 2>&1; then
     [ -z "$c$j" ] || say eda.$t-trouble info "dumps: ${c:-none}; journal: ${j:-nothing}"
   done
 fi
+# memory: what is left with the session and the tests' programs, and whether the kernel had to kill for lack of it
+say system.memory info "$(free -m | awk '/^Mem:/ { printf "%d MB, %d MB available; ", $2, $7 } /^Swap:/ { printf "swap %d of %d MB used", $3, $2 }')"
+n=$(journalctl -b --no-pager -o cat 2> /dev/null | grep -ciE 'out of memory: killed|oom-kill')
+if [ "$n" = 0 ]; then say system.oom ok "nothing was killed for lack of memory"
+else say system.oom FAIL "$n lines: $(journalctl -b --no-pager -o cat 2> /dev/null | grep -iE 'out of memory: killed|oom-kill' | tail -3 | cut -c1-150 | tr '\n' '/')"; fi
 say system.failed-units info "$(systemctl --failed --no-legend | awk '{print $2}' | tr '\n' ' ')"
 say system.packages info "$(rpm -qa | wc -l) packages, $(df -h / | awk 'NR==2 {print $3}') used"
 printf '\r\nSILIKOS-CI|DONE\r\n' > $out

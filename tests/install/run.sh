@@ -19,7 +19,7 @@ here=$(cd "$(dirname "$0")" && pwd); root=$(cd "$here/../.." && pwd)
 iso=${1:?usage: tests/install/run.sh ISO [OUT_DIR]}
 out=${2:-$root/build/install-test}
 mem=${SILIK_CI_MEM:-4096}; cpus=${SILIK_CI_CPUS:-$(nproc)}; disk_gb=${SILIK_CI_DISK:-24}
-t_install=${SILIK_CI_INSTALL_MIN:-110}; t_boot=${SILIK_CI_BOOT_MIN:-15}
+t_install=${SILIK_CI_INSTALL_MIN:-110}; t_boot=${SILIK_CI_BOOT_MIN:-25}
 mkdir -p "$out"; out=$(cd "$out" && pwd); iso=$(cd "$(dirname "$iso")" && pwd)/$(basename "$iso")
 work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
 
