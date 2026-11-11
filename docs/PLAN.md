@@ -1,4 +1,4 @@
-# SilikOS — plan (09/11/2026)
+# SilikOS — plan (09/11/2026; decisions 8 to 10: 11/11/2026)
 
 Owner: Tomeu (SilikVolt). Goal of this try: a Linux system with the look and the way of working of SilikStudio (a
 little softer), where Cadence Virtuoso and Synopsys Sentaurus run, and where some Windows-only programs (Altium) can
@@ -32,6 +32,21 @@ be used.
    session log. A shell of our own (no GNOME underneath) comes only after v0 is used on a real machine.
 7. **x86_64 first.** The EDA tools and Altium exist only for x86_64 [A: as far as known on 09/11/2026]. ARM is a
    later experiment (`docs/HARDWARE.md`).
+8. **Three looks, one shell** (owner, 11/11/2026: the Silik look stays, and a second way of working "with the flow
+   of Ubuntu and Windows, but unique"; of three drawings the owner kept two). `silik look silik | bar | island`
+   (`look/…` in the COMMAND bar) sets one setting and the shell extension follows it at once: **silik** (title bar =
+   command line, text rail, status bar), **bar** (one bar at the bottom: Start, the command line, the applications as
+   icons, workspaces, system, clock), **island** (one floating piece at the bottom). All three keep the same ink on
+   paper, the mark as Start, the digits, the COMMAND bar on Super+Space and every action through `silik`.
+9. **The kernel is not touched** (owner, 11/11/2026: "the rule is simple: maximum compatibility with the programs; if
+   that means the kernel cannot be touched, it is not touched"). Speed and security come from settings on top of the
+   base's kernel (sysctl files, boot arguments, service choices), each one measured before it is claimed. Secure Boot
+   therefore stays the base's own chain.
+10. **Signing and hosting** (owner, 11/11/2026: "you choose"; chosen, not built). The package signing key is made by
+   the owner on their machine and kept there with an offline copy; nobody else holds it. Automatic signing uses it as
+   a secret of a protected publishing environment that runs only with the owner's approval. The package repository
+   is static files (metadata on GitHub Pages, packages on GitHub Releases) behind a host name of the owner's, so that
+   it can move without touching installed systems. Open: the host name; where an ISO larger than 2 GB goes.
 
 ## Phases
 
@@ -43,7 +58,7 @@ be used.
 | 0d | An EL6 box with Sentaurus / Cadence (or the imported RHEL 6.6 machine); licence check | owner's installers and licences |
 | 0e | Altium: Wine try, then the Windows virtual machine | owner's licences |
 | 1 | Hosted package repository, updates, signed packages | after phase 0 |
-| 2 | Desktop: own shell pieces (panel, window rules, settings), first-run setup | after phase 0 |
+| 2 | Desktop: own shell pieces (panel, window rules, settings), first-run setup | the looks bar and island: done (`docs/STATUS.md`); the rest after phase 0 |
 | 3 | ARM image (as a virtual machine first) | after phase 0 |
 
 ## Risks
