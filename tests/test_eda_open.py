@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import stat
+import sys
 import tempfile
 import unittest
 
@@ -63,9 +64,13 @@ class Case(unittest.TestCase):
         os.makedirs(os.environ["HOME"])
         self.try0 = silik.EDA_TRY
         silik.EDA_TRY = FILES
+        self.py0, self.dm0 = silik.PYTHON, silik.devsim_module
+        silik.PYTHON = "python3"                               # (the stand-in in this PATH, when a test puts one)
+        silik.devsim_module = lambda: None                     # (whatever this machine's Python has)
 
     def tearDown(self):
         silik.EDA_TRY = self.try0
+        silik.PYTHON, silik.devsim_module = self.py0, self.dm0
         os.chdir(self.cwd)
         for k, v in self.old.items():
             if v is None:
@@ -87,11 +92,11 @@ class Tools(Case):
         d = json.loads(o)
         self.assertEqual(rc, 0)
         self.assertEqual([t["tool"] for t in d["tools"]],
-                         ["xschem", "ngspice", "qucs-s", "magic", "klayout", "netgen", "yosys", "nvc", "iverilog", "verilator", "gtkwave"])
+                         ["xschem", "ngspice", "qucs-s", "magic", "klayout", "netgen", "yosys", "nvc", "iverilog", "verilator", "gtkwave", "kicad", "devsim"])
         self.assertTrue(all(t["path"] is None for t in d["tools"]))
         self.assertIsNone(d["ngspice_threads"])
         rc, o = run("eda", "tools")
-        self.assertIn("missing: sudo dnf install xschem ngspice qucs-s magic klayout netgen yosys nvc iverilog verilator gtkwave", o)
+        self.assertIn("missing: sudo dnf install xschem ngspice qucs-s magic klayout netgen yosys nvc iverilog verilator gtkwave kicad devsim", o)
 
     def test_one_found_is_said(self):
         self.tool("ngspice", "exit 0")
@@ -99,6 +104,29 @@ class Tools(Case):
         self.assertRegex(o, r"(?m)^● ngspice +found")
         self.assertIn("ngspice threads: 2 (its default)", o)
         self.assertNotRegex(o, r"missing: .*ngspice")
+
+    def test_devsim_is_a_module_of_python_not_a_program(self):
+        """found by its folder among the system Python's modules (looked for, never imported)"""
+        self.tool("devsim", "exit 0")                          # a program of that name does not count
+        silik.devsim_module = self.dm0                         # (the real finder, on a module made below)
+        if self.dm0():
+            self.skipTest("this machine's Python has DEVSIM")
+        rc, o = run("eda", "tools")
+        self.assertRegex(o, r"(?m)^\? devsim +missing")
+        mod = os.path.join(self.tmp, "site", "devsim")
+        os.makedirs(mod)
+        with open(os.path.join(mod, "__init__.py"), "w") as f:
+            f.write("raise RuntimeError('silik must not import DEVSIM to find it')\n")
+        sys.path.insert(0, os.path.dirname(mod))
+        try:
+            importlib.invalidate_caches()
+            self.assertEqual(silik.devsim_module(), mod)
+            rc, o = run("eda", "tools")
+            self.assertRegex(o, r"(?m)^● devsim +found")
+            self.assertNotIn("devsim", o.split("missing: ")[-1])
+        finally:
+            sys.path.remove(os.path.dirname(mod))
+            importlib.invalidate_caches()
 
 
 class Tune(Case):
@@ -195,7 +223,7 @@ class Try(Case):
         self.assertRegex(o, r"(?m)^● sim +an inverter's output is high")
         self.assertRegex(o, r"(?m)^▼ digital +not seen: the counter counts ten clock edges")
         self.assertRegex(o, r"(?m)^\? layout +not run: magic, netgen are not on the system")
-        self.assertRegex(o, r"(?m)^1 ok, 1 failed, 10 not run; the files: ")
+        self.assertRegex(o, r"(?m)^1 ok, 1 failed, 11 not run; the files: ")
 
     def test_the_files_of_a_run_are_under_the_users_cache_not_in_tmp(self):
         self.tool("ngspice", "echo 'v(out) = 3.300000e+00'; echo 'v(out) = 2.640000e-08'")
@@ -224,6 +252,43 @@ class Try(Case):
         self.assertRegex(o, r"(?m)^1 ok, 0 failed, 0 not run")
         rc, o = run("-q", "eda", "try", "nothing")
         self.assertEqual(rc, 2)
+
+    def test_the_device_job_says_the_currents_it_found(self):
+        self.tool("python3", "echo 'PASS rectifies: forward 1.234e+01 A/cm2 at 0.5 V, reverse 5.600e-10 A/cm2 at -0.5 V'; echo 'PASS grows: the forward current rises with each 0.1 V'")
+        silik.devsim_module = lambda: "/somewhere/devsim"
+        rc, o = run("-q", "eda", "try", "device")
+        self.assertEqual(rc, 0)
+        self.assertRegex(o, r"(?m)^● device +a pn diode simulated by DEVSIM conducts forward and blocks in reverse; its forward current grows with the bias: 12 A/cm2 at 0\.5 V, 5\.6e-10 A/cm2 at -0\.5 V$")
+
+    def test_a_diode_that_does_not_rectify_is_a_failed_job(self):
+        self.tool("python3", "echo 'FAIL rectifies: forward 1.0e-09 A/cm2 at 0.5 V, reverse 1.0e-09 A/cm2 at -0.5 V'; echo 'PASS grows: x'")
+        silik.devsim_module = lambda: "/somewhere/devsim"
+        rc, o = run("-q", "eda", "try", "device")
+        self.assertEqual(rc, 1)
+        self.assertRegex(o, r"(?m)^▼ device +not seen: a pn diode simulated by DEVSIM conducts forward")
+
+    def test_the_jobs_python_is_silik_s_own(self):
+        """DEVSIM is looked for in the Python silik runs on: its job runs that one, not whatever "python3" a PATH has"""
+        self.assertEqual(self.py0, sys.executable or "python3")
+        silik.devsim_module = lambda: "/somewhere/devsim"
+        silik.PYTHON = "/opt/its/python3"
+        rc, o = run("eda", "try", "device")
+        self.assertIn("$ /opt/its/python3 diode.py > devsim.out", o)
+
+    def test_a_device_job_without_its_file_is_not_run(self):
+        """a newer silik beside an older silik-eda-open: the job's file is not there"""
+        with tempfile.TemporaryDirectory() as d:
+            silik.EDA_TRY = d
+            silik.devsim_module = lambda: "/somewhere/devsim"
+            rc, o = run("-q", "eda", "try", "device")
+        self.assertEqual(rc, 0)
+        self.assertRegex(o, r"(?m)^\? device +not run: diode\.py \(a file of silik-eda-open\) is not on the system")
+
+    def test_without_devsim_the_device_job_is_not_run(self):
+        self.tool("python3", "exit 0")
+        rc, o = run("-q", "eda", "try", "device")
+        self.assertEqual(rc, 0)
+        self.assertRegex(o, r"(?m)^\? device +not run: devsim is not on the system")
 
     def test_a_tool_that_exits_with_an_error(self):
         self.tool("ngspice", "echo 'Error: unknown model'; exit 1")

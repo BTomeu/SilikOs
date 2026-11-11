@@ -19,7 +19,7 @@ _silik() {
          "win open") COMPREPLY=($(compgen -W "--prefix --no-net --no-sandbox" -- "$cur") $(compgen -f -- "$cur"));;
          "win vm") COMPREPLY=($(compgen -W "create start stop app" -- "$cur"));;
          "hw nvidia") COMPREPLY=($(compgen -W "install status" -- "$cur"));;
-         "eda try") COMPREPLY=($(compgen -W "all sim schematic layout postlayout gds digital waves gates verilate vhdl lint synth" -- "$cur"));;
+         "eda try") COMPREPLY=($(compgen -W "all sim schematic layout postlayout gds digital waves gates verilate vhdl lint synth device" -- "$cur"));;
          "eda tune") COMPREPLY=($(compgen -W "--threads --undo" -- "$cur"));;
          "dev try") COMPREPLY=($(compgen -W "all build libc cxx debug probe dfu stlink" -- "$cur"));;
          "dev install") COMPREPLY=($(compgen -f -- "$cur"));;

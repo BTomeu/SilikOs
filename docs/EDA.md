@@ -66,16 +66,20 @@ the supported systems; check them for the release in use].
 | Yosys | Verilog synthesis (with ABC) | built here |
 | NVC | VHDL simulation | built here |
 | Qucs-S | schematic and simulation in one window, with ngspice | built here (its Qt 6 comes from EPEL 9) |
+| KiCad | schematics and printed circuit boards, 3D view and STEP export, Gerber viewer, a simulator (our ngspice's library); `kicad-cli` for the same jobs from a command line | built here (10.0.8) against EPEL 9's wxWidgets 3.2 and wxPython, with its symbol, footprint and template libraries as packages of their own. **Not in the release yet**: its trial in a clean EL 9 has not passed (`docs/STATUS.md`), so the ISO has its libraries but not KiCad |
+| DEVSIM | TCAD: semiconductor device simulation (1D, 2D, 3D), used from Python (`import devsim`) | built here |
+| Open CASCADE, nng | the 3D kernel behind KiCad's STEP models, and the messaging library of its programming interface | built here (KiCad needs them; neither is in EL 9 or EPEL 9) |
 | Icarus Verilog, Verilator, GTKWave | Verilog simulation, lint, waveforms | EPEL 9 |
 
-The first eight are not in EL 9's repositories or in EPEL 9. (GHDL, the other VHDL simulator, cannot be built on EL
-9.8 today: it is written in Ada, and the only Ada compiler, EPEL's `gcc-gnat`, is not installable beside the base's
-GCC: seen 10/11/2026, `gcc-11.5.0-14.el9.alma.1` obsoletes it. KiCad is not built either: its 3D library,
-OpenCascade, is in neither repository.) SilikOS builds each from its authors' unmodified source
+All but the last row are not in EL 9's repositories or in EPEL 9. (GHDL, the other VHDL simulator, cannot be built
+on EL 9.8 today: it is written in Ada, and the only Ada compiler, EPEL's `gcc-gnat`, is not installable beside the
+base's GCC: seen 10/11/2026, `gcc-11.5.0-14.el9.alma.1` obsoletes it.) SilikOS builds each from its authors' unmodified source
 at the version written in `eda/versions` (`tools/build_eda.sh NAME` on EL 9, `eda/NAME.spec`), tries it in a clean
 EL 9 (`eda/trial.sh`: each must do a small real job) and keeps the package in the release `eda-tools` (workflow "EDA
 tools"). `tools/build_iso.sh` puts whatever packages are in `build/extra/` into the ISO. The package
 `silik-eda-open` (in the kickstart) asks for all of them, EPEL's included, and carries the files of `silik eda try`.
+The ISO also installs every package of the release `eda-tools` (`tools/build_iso.sh` adds their names to the
+kickstart's list), Open CASCADE's -devel requirements with it.
 Each tool keeps its own licence, installed with its package. No PDK is shipped: the layout jobs use the `scmos`
 technology that comes with Magic, and simple transistor models written for the exercise (their delays are the
 exercise's, not a process's). `docs/STATUS.md` says which of this
@@ -96,6 +100,9 @@ silik eda try [JOB]             they do real jobs together, each command printed
                                   vhdl        NVC simulates a counter written in VHDL
                                   lint        Verilator checks the counter
                                   synth       Yosys synthesises it to gates and flip-flops
+                                  device      DEVSIM: a silicon pn diode in one dimension, swept from -0.5 V to +0.5 V: it
+                                              conducts forward (more than 1000 times the reverse current) and its forward
+                                              current grows with each 0.1 V (the exercise's doping, not a real device's)
 silik eda bench                 times ngspice on this machine with 1, 2 and all its cores (a circuit made on the spot)
 silik eda tune [--threads N]    writes the threads ngspice evaluates transistor models on to ~/.spiceinit (--undo)
 ```

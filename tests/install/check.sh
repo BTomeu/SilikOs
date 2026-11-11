@@ -191,7 +191,7 @@ else
   say win.wine info "no Wine on the system (the ISO carries it when build/extra has silik-wine)"
 fi
 # the open EDA tools (on the ISO when the workflow EDA tools has made them)
-for t in klayout magic xschem ngspice netgen yosys nvc qucs-s; do
+for t in klayout magic xschem ngspice netgen yosys nvc qucs-s devsim kicad kicad-symbols kicad-footprints kicad-templates opencascade nng; do
   if v=$(rpm -q $t 2> /dev/null); then say eda.$t ok "$v"; else say eda.$t info "not on the ISO"; fi
 done
 if command -v ngspice > /dev/null; then
@@ -209,6 +209,14 @@ fi
 if command -v xschem > /dev/null; then
   has eda.xschem-run "$(runuser -u tester -- xschem --version 2>&1 | head -1)" "XSCHEM"
 fi
+if command -v kicad-cli > /dev/null; then      # KiCad from its command line, and the simulator library it loads (our ngspice's)
+  has eda.kicad-run "$(runuser -u tester -- kicad-cli version 2>&1 | tail -1)" "$(rpm -q --qf '%{VERSION}' kicad)"
+  is eda.kicad-ngspice "$(test -e /usr/lib64/libngspice.so.0 && echo present || echo missing)" present
+fi
+if rpm -q devsim > /dev/null 2>&1; then        # DEVSIM is a module of the system's Python: imported, with the solver and BLAS it took
+  o=$(runuser -u tester -- python3 -c 'import devsim; print("imported; math libraries:", ",".join(devsim.get_parameter(name="info").get("math_libraries") or ["none"]))' 2>&1 | tail -1)
+  case "$o" in "imported; math libraries:"*libopenblas*) say eda.devsim-run ok "$o";; *) say eda.devsim-run FAIL "$o";; esac
+fi
 # the tools of EPEL the package silik-eda-open asks for, and the jobs the open tools do together (`silik eda try`:
 # an inverter simulated, a transistor drawn, extracted and compared with its schematic, its GDS read, a counter
 # simulated, checked and synthesised), as the test user; a job whose tool is not on the ISO is "not run", not a failure
@@ -219,15 +227,15 @@ o=$(runuser -u tester -- sh -c 'cd /tmp && silik -q eda try' 2>&1); rc=$?
 # (ok only when every job ran: a job "not run" is a tool missing from the system, and the command still exits 0)
 sum=$(echo "$o" | tail -1 | sed 's/; the files.*//')
 if [ $rc = 0 ] && echo "$sum" | grep -q ', 0 failed, 0 not run$'; then say eda.try ok "$sum"; else say eda.try FAIL "exit $rc: $sum"; fi
-echo "$o" | grep -v '^[0-9]* ok' | head -8 | while read -r line; do say eda.try-job info "$line"; done
-say eda.tools info "$(runuser -u tester -- silik eda tools 2>&1 | grep -c '^●') of 11 open tools on the system"
+echo "$o" | grep -v '^[0-9]* ok' | head -16 | while read -r line; do say eda.try-job info "$line"; done
+say eda.tools info "$(runuser -u tester -- silik eda tools 2>&1 | grep -c '^●') of 13 open tools on the system"
 # the names and classes of the Tk tools' windows (what a desktop entry must say for the rail to know the program)
 if insession xwininfo -root > /dev/null 2>&1; then
-  for t in xschem magic klayout qucs-s; do
+  for t in xschem magic klayout qucs-s kicad; do
     command -v $t > /dev/null || continue
     asuser systemd-run --quiet --user --collect --unit=ci-$t -p TimeoutStopSec=5 -p WorkingDirectory=/home/tester -E DISPLAY=:0 $t > /dev/null 2>&1
     sleep 12
-    say eda.$t-windows info "$(insession xwininfo -root -tree | grep -iE 'xschem|magic|tkcon|layout|qucs' | sed -E 's/^ *0x[0-9a-f]+ //; s/ +[0-9]+x[0-9]+.*//' | sort -u | head -6 | tr '\n' ';')"
+    say eda.$t-windows info "$(insession xwininfo -root -tree | grep -iE 'xschem|magic|tkcon|layout|qucs|kicad' | sed -E 's/^ *0x[0-9a-f]+ //; s/ +[0-9]+x[0-9]+.*//' | sort -u | head -6 | tr '\n' ';')"
     asuser systemctl --user stop ci-$t > /dev/null 2>&1
     # (a program that fell over, or that the display server complained about, while it was open)
     c=$(coredumpctl list --no-pager --no-legend 2> /dev/null | tail -2 | awk '{print $NF}' | tr '\n' ' ')

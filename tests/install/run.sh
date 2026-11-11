@@ -158,6 +158,8 @@ if kill -0 $qpid 2> /dev/null; then
     eda xschem 25; key alt-f4 || true; sleep 3
     eda ngspice 15; typ "quit" || true; key ret || true; sleep 3
     if grep -q 'SILIKOS-CI|eda.qucs-s|ok' "$out/boot.log"; then eda qucs-s 25 10; key alt-f4 || true; sleep 3; key alt-f4 || true; sleep 3; fi
+    # KiCad as a new user meets it (what it asks on its first start included), then its window
+    if grep -q 'SILIKOS-CI|eda.kicad|ok' "$out/boot.log"; then eda kicad 30 12; key alt-f4 || true; sleep 3; key alt-f4 || true; sleep 3; key alt-f4 || true; sleep 3; fi
   fi
   # the other two looks, each chosen from the COMMAND bar by its address, with a window open: the look, Start in it;
   # in the bar look also the lock screen and back (the shell turns the extension off there and on again)
