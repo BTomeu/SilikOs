@@ -1,9 +1,12 @@
-# The open EDA tools of SilikOS: KLayout, Magic, Xschem, ngspice (with XSPICE), Netgen, Yosys, NVC and Qucs-S are not in EL 9's repositories or in
-# EPEL 9, so each is built here from upstream's source at the tag of eda/versions (eda/<tool>.spec), tried in a clean
-# EL 9 (eda/trial.sh: it must do a small real job) and kept in the release `eda-tools`. The CI's ISO takes the
-# packages from that release, so the installed system has them (workflow CI).
+# The open EDA tools of SilikOS: KLayout, Magic, Xschem, ngspice (with XSPICE, and as a shared library), Netgen, Yosys,
+# NVC, Qucs-S, DEVSIM and KiCad (with Open CASCADE and nng, which it needs, and its libraries) are not in EL 9's
+# repositories or in EPEL 9, so each is built here from upstream's source at the tag of eda/versions (eda/<tool>.spec),
+# tried in a clean EL 9 (eda/trial.sh: it must do a small real job) and kept in the release `eda-tools`. The CI's ISO
+# takes the packages from that release, so the installed system has them (workflow CI). A recipe that says
+# "# release: optional" is kept in the release `eda-optional` instead: not on the ISO.
+# KiCad is built after the others, against the packages of ours it uses (the ones of this run).
 # Runs when a recipe changes, or by hand. A build is kept (cache) while its recipe (its line of eda/versions, its
-# spec, eda/common.inc) does not change.
+# spec, eda/common.inc; for KiCad also those of what it uses) does not change.
 name: EDA tools
 on:
   push:
@@ -17,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        tool: [klayout, magic, xschem, ngspice, netgen, yosys, nvc, qucs-s]
+        tool: [klayout, magic, xschem, ngspice, netgen, yosys, nvc, qucs-s, devsim, opencascade, nng, kicad-symbols, kicad-footprints, kicad-templates]
     runs-on: ubuntu-24.04
     container: almalinux:9
     timeout-minutes: 330
@@ -52,13 +55,65 @@ jobs:
           path: build/extra/${{ matrix.tool }}-*.rpm
           compression-level: 0
 
+  # KiCad, against our Open CASCADE, nng and ngspice (the packages of this run; the release's when one was not made)
+  kicad:
+    needs: build
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    container: almalinux:9
+    timeout-minutes: 340
+    steps:
+      - name: Tools
+        run: dnf -y -q install git tar gzip findutils zstd
+      - uses: actions/checkout@v4
+      - name: The lines of eda/versions KiCad is made from
+        id: line
+        shell: bash
+        run: echo "sum=$(grep -E '^(kicad|opencascade|nng|ngspice)[[:space:]]' eda/versions | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: build/extra
+          key: eda-kicad-${{ steps.line.outputs.sum }}-${{ hashFiles('eda/common.inc', 'eda/kicad.spec', 'eda/opencascade.spec', 'eda/nng.spec', 'eda/ngspice.spec') }}
+      - uses: actions/download-artifact@v4
+        if: steps.cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        with: { name: eda-opencascade, path: build/deps }
+      - uses: actions/download-artifact@v4
+        if: steps.cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        with: { name: eda-nng, path: build/deps }
+      - uses: actions/download-artifact@v4
+        if: steps.cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        with: { name: eda-ngspice, path: build/deps }
+      - name: Build kicad
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          df -h . | tail -1
+          if ! bash tools/build_eda.sh kicad > build.log 2>&1; then
+            tail -60 build.log
+            grep -nE 'FAILED:|error:|Error |CMake Error|Could NOT|not found|No match|unpackaged' build.log | cut -c1-300 | head -150
+            echo "::error title=build kicad::$(grep -E 'FAILED:|error:|CMake Error|Could NOT|No match|unpackaged|nothing provides' build.log | sort -u | head -12 | tr '\n' ' ' | cut -c1-1200)"
+            exit 1
+          fi
+          tail -5 build.log; df -h . | tail -1
+      - name: What was built
+        run: echo "::notice title=kicad built::$(cd build/extra && ls -la kicad-*.rpm | awk '{print $5, $9}')"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eda-kicad
+          path: build/extra/kicad-*.rpm
+          compression-level: 0
+
   trial:
     needs: build
     if: ${{ !cancelled() }}
     strategy:
       fail-fast: false
       matrix:
-        tool: [klayout, magic, xschem, ngspice, netgen, yosys, nvc, qucs-s]
+        tool: [klayout, magic, xschem, ngspice, netgen, yosys, nvc, qucs-s, devsim, opencascade, nng, kicad-symbols, kicad-footprints, kicad-templates]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -67,27 +122,26 @@ jobs:
         with:
           name: eda-${{ matrix.tool }}
           path: dist
-      - name: Try ${{ matrix.tool }} in a clean EL 9
-        run: |
-          if out=$(docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD/eda:/eda:ro" almalinux:9 bash -c 'bash /eda/trial.sh ${{ matrix.tool }} /dist/*.rpm' 2>&1); then
-            echo "$out" | tail -5
-            echo "::notice title=${{ matrix.tool }} on EL 9::$(echo "$out" | grep '^TRIAL-OK' | cut -c10-300)"
-          else
-            echo "$out" | tail -60
-            echo "::error title=trial ${{ matrix.tool }}::$(echo "$out" | tail -12 | tr '\n' ' ' | cut -c1-900)"
-            exit 1
-          fi
-      - name: Keep the package in the release eda-tools
+      - name: Try ${{ matrix.tool }} in a clean EL 9, then keep it in the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release view eda-tools --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || gh release create eda-tools --repo "$GITHUB_REPOSITORY" \
-            --title "Open EDA tools for SilikOS (EL 9)" --prerelease \
-            --notes "Open EDA tools (KLayout, Magic, Xschem, ngspice, Netgen, Yosys, NVC, Qucs-S) built from upstream's unmodified sources on EL 9 (eda/*.spec, eda/versions): none is in EL 9's repositories or EPEL 9. Each keeps its own licence (in the package). Not products of or supported by their authors' projects."
-          for f in dist/*.rpm; do
-            # one package per tool in the release: an older build of the same tool goes
-            gh release view eda-tools --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep "^${{ matrix.tool }}-" | while read -r old; do
-              [ "$old" = "$(basename "$f")" ] || gh release delete-asset eda-tools "$old" --repo "$GITHUB_REPOSITORY" -y
-            done
-            gh release upload eda-tools "$f" --repo "$GITHUB_REPOSITORY" --clobber
-          done
+        run: bash eda/keep.sh ${{ matrix.tool }}
+
+  kicad-trial:
+    needs: kicad
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: eda-kicad, path: dist }
+      # KiCad runs on our Open CASCADE, nng and ngspice: the packages of this run beside it (eda/keep.sh takes the
+      # release's when one was not made in this run), and its symbols and footprints for a real job
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with: { pattern: 'eda-{opencascade,nng,ngspice,kicad-symbols,kicad-footprints,kicad-templates}', path: deps, merge-multiple: true }
+      - name: Try kicad in a clean EL 9, then keep it in the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash eda/keep.sh kicad

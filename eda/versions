@@ -10,3 +10,14 @@ netgen   https://github.com/RTimothyEdwards/netgen            1.5.328
 yosys    https://github.com/YosysHQ/yosys                     v0.70             https://github.com/YosysHQ/yosys/releases/download/v{ver}/yosys.tar.gz
 nvc      https://github.com/nickg/nvc                         r1.23.1           https://github.com/nickg/nvc/releases/download/r{ver}/nvc-{ver}.tar.gz
 qucs-s   https://github.com/ra3xdh/qucs_s                     26.1.1            https://github.com/ra3xdh/qucs_s/releases/download/{ver}/qucs-s-{ver}.tar.gz
+# KiCad, with what it needs that neither EL 9 nor EPEL 9 has (Open CASCADE, nng; its simulator is our ngspice's
+# shared library) and its libraries of symbols, footprints and templates; the 3D models are a package of their own
+opencascade      https://github.com/Open-Cascade-SAS/OCCT                 V7_9_3
+nng              https://github.com/nanomsg/nng                           v1.12.5
+kicad            https://gitlab.com/kicad/code/kicad.git                  10.0.8
+kicad-symbols    https://gitlab.com/kicad/libraries/kicad-symbols.git     10.0.8
+kicad-footprints https://gitlab.com/kicad/libraries/kicad-footprints.git  10.0.8
+kicad-templates  https://gitlab.com/kicad/libraries/kicad-templates.git   10.0.8
+kicad-packages3d https://gitlab.com/kicad/libraries/kicad-packages3D.git  10.0.8
+# DEVSIM: TCAD device simulation (a Python module)
+devsim           https://github.com/devsim/devsim                         v2.8.2

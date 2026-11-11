@@ -11,7 +11,8 @@ BuildRequires:  gcc gcc-c++ make autoconf automake libtool bison flex readline-d
 BuildRequires:  libX11-devel libXaw-devel libXmu-devel libXext-devel libXft-devel fontconfig-devel freetype-devel fftw-devel
 
 %description
-ngspice %{version}: SPICE simulation with the XSPICE code models (mixed-signal, event-driven) and CIDER, OpenMP on.
+ngspice %{version}: SPICE simulation with the XSPICE code models (mixed-signal, event-driven) and CIDER, OpenMP on;
+the program, and the same simulator as a shared library (libngspice) for programs that simulate in their own window.
 Upstream's source, unmodified, built on EL 9 by SilikVolt (eda/ngspice.spec).
 
 %prep
@@ -24,11 +25,21 @@ mkdir -p release && cd release
 ../configure --prefix=%{_prefix} --libdir=%{_libdir} --mandir=%{_mandir} --with-x --enable-xspice --enable-cider \
   --enable-openmp --with-readline=yes --disable-debug CFLAGS="-O2" CXXFLAGS="-O2"
 make %{?_smp_mflags}
+cd ..
+# the same simulator as a shared library (libngspice.so.0, ngspice/sharedspice.h, ngspice.pc): what a program that
+# simulates inside its own window loads (KiCad's simulator). A second build of the same source: upstream's configure
+# makes either the program or the library
+mkdir -p shared && cd shared
+../configure --prefix=%{_prefix} --libdir=%{_libdir} --mandir=%{_mandir} --with-ngshared --enable-xspice --enable-cider \
+  --enable-openmp --disable-debug CFLAGS="-O2" CXXFLAGS="-O2"
+make %{?_smp_mflags}
 
 %install
-cd release
-make install DESTDIR=%{buildroot}
-cd ..
+(cd shared && make install DESTDIR=%{buildroot})
+# the program's build last: what both install (the code models, the scripts) is the program's
+(cd release && make install DESTDIR=%{buildroot})
+rm -f %{buildroot}%{_libdir}/libngspice.la
+test -e %{buildroot}%{_libdir}/libngspice.so.0 && test -s %{buildroot}%{_includedir}/ngspice/sharedspice.h
 %licences
 mkdir -p %{buildroot}%{_datadir}/applications
 cat > %{buildroot}%{_datadir}/applications/ngspice.desktop <<'EOD'
