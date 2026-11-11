@@ -1,0 +1,6 @@
+* the schematic's side of the comparison (LVS): a CMOS inverter, the sizes the layout was drawn to
+.global Vdd Gnd
+.subckt inverter
+MP out in vdd vdd pfet w=8u l=2u ad=48p pd=28u as=48p ps=28u
+MN out in gnd Gnd nfet w=4u l=2u ad=24p pd=20u as=24p ps=20u
+.ends

@@ -48,7 +48,7 @@ class Case(unittest.TestCase):
     """a home folder and a PATH of their own; `tool(name, script)` puts a stand-in program in the PATH"""
 
     def setUp(self):
-        self.old = {k: os.environ.get(k) for k in ("HOME", "PATH", "SILIK_EDA_TRY", "XDG_RUNTIME_DIR")}
+        self.old = {k: os.environ.get(k) for k in ("HOME", "PATH", "SILIK_EDA_TRY", "XDG_RUNTIME_DIR", "XDG_CACHE_HOME")}
         self.cwd = os.getcwd()
         self.tmp = tempfile.mkdtemp(prefix="silik-eda-test-")
         self.bin = os.path.join(self.tmp, "bin")
@@ -59,6 +59,7 @@ class Case(unittest.TestCase):
                 os.symlink(src, os.path.join(self.bin, exe))
         os.environ.update({"HOME": os.path.join(self.tmp, "home"), "PATH": self.bin, "SILIK_EDA_TRY": FILES})
         os.environ.pop("XDG_RUNTIME_DIR", None)
+        os.environ.pop("XDG_CACHE_HOME", None)                 # the runs' folders: under this test's home
         os.makedirs(os.environ["HOME"])
         self.try0 = silik.EDA_TRY
         silik.EDA_TRY = FILES
@@ -72,8 +73,6 @@ class Case(unittest.TestCase):
             else:
                 os.environ[k] = v
         shutil.rmtree(self.tmp, ignore_errors=True)
-        for d in [x for x in os.listdir(tempfile.gettempdir()) if x.startswith(("silik-eda-try-", "silik-eda-bench-"))]:
-            shutil.rmtree(os.path.join(tempfile.gettempdir(), d), ignore_errors=True)
 
     def tool(self, name, script):
         p = os.path.join(self.bin, name)
@@ -162,10 +161,13 @@ class Bench(Case):
 
 class Try(Case):
     def test_every_file_a_job_reads_is_in_the_package(self):
-        made = {"counter.vvp", "nfet1.spice", "nfet1.gds", "lvs.out"}
+        made = {"counter.vvp", "gates.vvp", "inverter_lvs.spice", "inverter.spice", "inverter.gds", "lvs.out", "rlc.spice", "counter.vcd",
+                "counter.fst", "counter_gates.v"}
         for name, needs, cmds, checks in silik.eda_try_jobs():
             for argv, out in cmds:
-                for word in " ".join(argv).replace("gds=", " ").split():
+                for word in " ".join(argv).replace("gds=", " ").replace(";", " ").split():
+                    if word.startswith("/"):                    # (a file of another package, e.g. Xschem's example)
+                        continue
                     if re.search(r"\.(cir|tcl|spice|py|v|vhd|vvp|gds|out)$", word) and word not in made:
                         self.assertTrue(os.path.isfile(os.path.join(FILES, word)), "%s: %s is not in packages/silik-eda-open/files" % (name, word))
         spec = text(os.path.join(ROOT, "packages/silik-eda-open/silik-eda-open.spec"))
@@ -175,9 +177,11 @@ class Try(Case):
     def test_the_commands_are_printed(self):
         rc, o = run("--dry-run", "eda", "try")
         self.assertEqual(rc, 0)
-        for line in ("$ ngspice -b inverter.cir > inverter.out", "$ magic -dnull -noconsole -T scmos nfet1.tcl > magic.out",
-                     "$ netgen -batch lvs 'nfet1.spice nfet1' 'nfet1_ref.spice nfet1' nosetup lvs.out > netgen.out",
-                     "$ klayout -zz -r gds_read.py -rd gds=nfet1.gds > klayout.out", "$ iverilog -o counter.vvp counter_tb.v counter.v > iverilog.out",
+        for line in ("$ ngspice -b inverter.cir > inverter.out", "$ magic -dnull -noconsole -T scmos inverter.tcl > magic.out",
+                     "$ netgen -batch lvs 'inverter_lvs.spice inverter' 'inverter_ref.spice inverter' nosetup lvs.out > netgen.out",
+                     "$ klayout -zz -r gds_read.py -rd gds=inverter.gds > klayout.out", "$ ngspice -b inverter_post.cir > post.out",
+                     "$ xschem -n -s -q -x -o . /usr/share/doc/xschem/examples/rlc.sch > xschem.out", "$ fst2vcd counter.fst > waves.out",
+                     "$ obj_dir/counter_sim > verilated.out", "$ vvp gates.vvp > vvp_gates.out", "$ iverilog -o counter.vvp counter_tb.v counter.v > iverilog.out",
                      "$ vvp counter.vvp > vvp.out", "$ verilator --lint-only -Wall counter.v > verilator.out",
                      "$ nvc -a counter_tb.vhd -e counter_tb -r --stop-time=200ns > nvc.out"):
             self.assertIn(line, o)
@@ -188,10 +192,30 @@ class Try(Case):
         self.tool("vvp", "echo 'FAIL count=9'")
         rc, o = run("-q", "eda", "try")
         self.assertEqual(rc, 1)
-        self.assertRegex(o, r"(?m)^● sim +the inverter's output is high")
+        self.assertRegex(o, r"(?m)^● sim +an inverter's output is high")
         self.assertRegex(o, r"(?m)^▼ digital +not seen: the counter counts ten clock edges")
         self.assertRegex(o, r"(?m)^\? layout +not run: magic, netgen are not on the system")
-        self.assertRegex(o, r"(?m)^1 ok, 1 failed, 5 not run; the files: ")
+        self.assertRegex(o, r"(?m)^1 ok, 1 failed, 10 not run; the files: ")
+
+    def test_the_files_of_a_run_are_under_the_users_cache_not_in_tmp(self):
+        self.tool("ngspice", "echo 'v(out) = 3.300000e+00'; echo 'v(out) = 2.640000e-08'")
+        rc, o = run("-q", "eda", "try", "sim")
+        work = o.strip().splitlines()[-1].split("the files: ")[1]
+        self.assertTrue(work.startswith(os.path.join(os.environ["HOME"], ".cache", "silikos", "eda-try-")), work)
+        self.assertTrue(os.path.isfile(os.path.join(work, "inverter.out")))
+
+    def test_a_program_that_cannot_be_started_is_a_failed_job_not_a_crash(self):
+        self.tool("ngspice", "exit 0")
+        os.chmod(os.path.join(self.bin, "ngspice"), 0o644)      # there, but not a program
+        import shutil as sh
+        which = sh.which
+        silik.shutil.which = lambda n, *a, **k: os.path.join(self.bin, n) if n == "ngspice" else which(n, *a, **k)
+        try:
+            rc, o = run("-q", "eda", "try", "sim")
+        finally:
+            silik.shutil.which = which
+        self.assertEqual(rc, 1)
+        self.assertRegex(o, r"(?m)^▼ sim +ngspice could not be started: ")
 
     def test_one_job_by_name(self):
         self.tool("ngspice", "echo 'v(out) = 3.300000e+00'; echo 'v(out) = 2.640000e-08'")

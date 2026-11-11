@@ -76,19 +76,26 @@ at the version written in `eda/versions` (`tools/build_eda.sh NAME` on EL 9, `ed
 EL 9 (`eda/trial.sh`: each must do a small real job) and keeps the package in the release `eda-tools` (workflow "EDA
 tools"). `tools/build_iso.sh` puts whatever packages are in `build/extra/` into the ISO. The package
 `silik-eda-open` (in the kickstart) asks for all of them, EPEL's included, and carries the files of `silik eda try`.
-Each tool keeps its own licence, installed with its package. No PDK is shipped. `docs/STATUS.md` says which of this
+Each tool keeps its own licence, installed with its package. No PDK is shipped: the layout jobs use the `scmos`
+technology that comes with Magic, and simple transistor models written for the exercise (their delays are the
+exercise's, not a process's). `docs/STATUS.md` says which of this
 has been run.
 
 ```
 silik eda tools                 which of them are on this system, their versions, the simulator's threads
-silik eda try [JOB]             they do small real jobs together, each command printed:
-                                  sim      ngspice: a CMOS inverter, its output for a low and a high input
-                                  layout   Magic draws a transistor and extracts it; Netgen compares it with its schematic
-                                  gds      Magic writes the layout as GDS; KLayout reads it
-                                  digital  Icarus Verilog simulates a counter
-                                  vhdl     NVC simulates a counter written in VHDL
-                                  lint     Verilator checks it
-                                  synth    Yosys synthesises it to gates and flip-flops
+silik eda try [JOB]             they do real jobs together, each command printed (the files: ~/.cache/silikos/eda-try-*):
+                                  sim         ngspice: a CMOS inverter from its netlist, its output for a low and a high input
+                                  schematic   Xschem turns one of its own schematics into a netlist; ngspice simulates it
+                                  layout      Magic draws the inverter (no design-rule error), extracts it; Netgen: it matches the schematic
+                                  postlayout  ngspice simulates the extracted inverter, with the layout's capacitances: levels, two delays
+                                  gds         Magic writes the layout as GDS; KLayout reads it
+                                  digital     Icarus Verilog simulates a counter
+                                  waves       its waveforms packed and read back by GTKWave's tools
+                                  gates       Yosys writes the counter as gates; Icarus Verilog simulates the gates
+                                  verilate    Verilator compiles the counter and its bench to a program, and runs it
+                                  vhdl        NVC simulates a counter written in VHDL
+                                  lint        Verilator checks the counter
+                                  synth       Yosys synthesises it to gates and flip-flops
 silik eda bench                 times ngspice on this machine with 1, 2 and all its cores (a circuit made on the spot)
 silik eda tune [--threads N]    writes the threads ngspice evaluates transistor models on to ~/.spiceinit (--undo)
 ```

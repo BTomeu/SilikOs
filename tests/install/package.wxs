@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- tests/install/package.wxs: a Windows Installer package (.msi) for the installation test, built with wixl: it
+     installs the test program as C:\Program Files\SilikMsi\silikmsi.exe. A double-click on an .msi must install it. -->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="Silik MSI Test" Language="1033" Version="1.0.0" Manufacturer="SilikVolt" UpgradeCode="6f0b8f0e-3a52-4c0e-9d6b-2f7a5d0c9a41">
+    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine"/>
+    <Media Id="1" Cabinet="silik.cab" EmbedCab="yes"/>
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLDIR" Name="SilikMsi">
+          <Component Id="Program" Guid="b7f6f5b1-6a1e-4f0a-8c53-0d1f8f3a2c77" Win64="yes">
+            <File Id="ProgramFile" Name="silikmsi.exe" Source="win.exe" KeyPath="yes"/>
+          </Component>
+        </Directory>
+      </Directory>
+    </Directory>
+    <Feature Id="Main" Level="1">
+      <ComponentRef Id="Program"/>
+    </Feature>
+  </Product>
+</Wix>

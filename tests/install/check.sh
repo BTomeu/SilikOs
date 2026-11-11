@@ -113,6 +113,33 @@ if command -v wine > /dev/null; then
         say win.window info "the window list cannot be read here (xwininfo): see the picture windows-program.png"
       fi
     fi
+    # a 32-bit Windows program
+    if [ -f /mnt/silikci/hello32.exe ]; then
+      install -o tester -g tester -m 0644 /mnt/silikci/hello32.exe /home/tester/Downloads/hello32.exe
+      insession timeout 300 silik -q win open /home/tester/Downloads/hello32.exe 'Z:\home\tester\.ssh\id_test' 'W:\silikos-ci32.txt' > /tmp/ci-32.out 2>&1
+      is win.32bit "$(tr -d '\r' < /home/tester/Windows/silikos-ci32.txt 2> /dev/null)" "ran secret=hidden"
+    fi
+    # an installer: it copies a program into the prefix and makes a start-menu shortcut; the program must then be an
+    # application of this desktop, and start as one
+    if [ -f /mnt/silikci/setup.exe ] && [ -f /home/tester/Downloads/win.exe ]; then
+      install -o tester -g tester -m 0644 /mnt/silikci/setup.exe /home/tester/Downloads/setup.exe
+      insession timeout 300 silik -q win open /home/tester/Downloads/setup.exe > /tmp/ci-setup.out 2>&1
+      has win.installer "$(asuser silik win apps | tr '\n' ' '; tail -2 /tmp/ci-setup.out | tr '\r\n' '  ')" "win/silik-test"
+      e=$(find /home/tester/.local/share/applications -path '*silik-win*' -name '*.desktop' 2> /dev/null | head -1)
+      has win.installer-entry "$(grep -E '^(Name|Exec|StartupWMClass)=' "$e" 2>&1 | tr '\n' ' ')" "Exec=silik win run default -- "
+      if insession xwininfo -root > /dev/null 2>&1; then
+        asuser systemd-run --quiet --user --collect -p WorkingDirectory=/home/tester -E DISPLAY=:0 silik win run default -- 'C:\Program Files\SilikTest\siliktest.exe' > /dev/null 2>&1
+        w=""; for i in $(seq 1 20); do sleep 3; w=$(insession xwininfo -root -tree | grep '"Silik Test"' | head -1); [ -n "$w" ] && break; done
+        has win.installed-window "$w" '"siliktest.exe"'
+        insession silik win stop default > /dev/null 2>&1
+      fi
+    fi
+    # a Windows Installer package: a double-click on an .msi installs it
+    if [ -f /mnt/silikci/silik.msi ]; then
+      install -o tester -g tester -m 0644 /mnt/silikci/silik.msi /home/tester/Downloads/silik.msi
+      insession timeout 300 silik -q win open /home/tester/Downloads/silik.msi > /tmp/ci-msi.out 2>&1
+      has win.msi "$(ls '/home/tester/.local/share/silikos/wine/default/drive_c/Program Files/SilikMsi/' 2>&1 | tr '\n' ' '; tail -2 /tmp/ci-msi.out | tr '\r\n' '  ')" "silikmsi.exe"
+    fi
     # .NET: a program compiled with Wine Mono's own compiler and run, both in the sandbox (the package silik-wine-mono)
     say win.addons info "$(rpm -q silik-wine-mono silik-wine-gecko 2>&1 | tr '\n' ' ')"
     mcs=$(ls /opt/silik-wine/share/wine/mono/wine-mono-*/lib/mono/4.5/mcs.exe 2> /dev/null | head -1)

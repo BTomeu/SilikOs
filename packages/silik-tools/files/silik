@@ -22,7 +22,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.4.1"
+VERSION = "0.4.2"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -343,8 +343,8 @@ def eda_kernel_arg(ctx, a):
 # ------------------------------------------------------------------ open EDA tools
 # KLayout, Magic, Xschem, ngspice, Netgen, Yosys, NVC and Qucs-S (built for EL 9 from their authors' sources: eda/)
 # and Icarus Verilog, Verilator and GTKWave (EPEL 9), brought by the package silik-eda-open. `silik eda tools` says which are
-# on the system, `silik eda try` makes them do three small real jobs together (the files of
-# /usr/share/silikos/eda/try), `silik eda bench` times the simulator on this machine and `silik eda tune` sets what
+# on the system, `silik eda try` makes them do real jobs together (the files of /usr/share/silikos/eda/try: an
+# inverter from schematic to layout, extraction, comparison and simulation; a counter from Verilog to gates), `silik eda bench` times the simulator on this machine and `silik eda tune` sets what
 # the measurement shows to matter (the threads ngspice evaluates transistor models on: its default is 2).
 import re         # used by this section only
 import tempfile
@@ -363,6 +363,7 @@ OPEN_TOOLS = (   # command, package, what it is for
     ("gtkwave", "gtkwave", "waveform viewer"),
 )
 EDA_TRY = os.environ.get("SILIK_EDA_TRY") or "/usr/share/silikos/eda/try"
+XSCHEM_EXAMPLE = "/usr/share/doc/xschem/examples/rlc.sch"          # a schematic that comes with Xschem
 SPICEINIT_NOTE = "* silik eda tune: the threads ngspice evaluates transistor models on (its default is 2)"
 
 
@@ -414,20 +415,41 @@ def eda_tools(ctx, a):
 
 def eda_try_jobs():
     """the jobs of `silik eda try`: name, the tools it needs, its commands, and what its result must show.
-    A command is (argv, the file its output goes to or None); a check is (file, a regular expression, what it means)."""
+    A command is (argv, the file its output goes to); a check is (file, a regular expression, what it means).
+    Each job stands alone (one that needs a layout draws it again)."""
+    magic = (["magic", "-dnull", "-noconsole", "-T", "scmos", "inverter.tcl"], "magic.out")
+    icarus = [(["iverilog", "-o", "counter.vvp", "counter_tb.v", "counter.v"], "iverilog.out"), (["vvp", "counter.vvp"], "vvp.out")]
     return (
         ("sim", ("ngspice",), [(["ngspice", "-b", "inverter.cir"], "inverter.out")],
-         [("inverter.out", r"v\(out\) = 3\.\d+e\+00[\s\S]*v\(out\) = \d\.\d+e-\d\d", "the inverter's output is high for a low input and low for a high one")]),
-        ("layout", ("magic", "netgen"), [(["magic", "-dnull", "-noconsole", "-T", "scmos", "nfet1.tcl"], "magic.out"),
-                                         (["netgen", "-batch", "lvs", "nfet1.spice nfet1", "nfet1_ref.spice nfet1", "nosetup", "lvs.out"], "netgen.out")],
-         [("nfet1.spice", r"(?m)^M\d+ d g s \S+ nfet w=4u l=2u", "Magic extracted the transistor it drew"),
+         [("inverter.out", r"v\(out\) = 3\.\d+e\+00[\s\S]*v\(out\) = \d\.\d+e-\d\d", "an inverter's output is high for a low input and low for a high one")]),
+        ("schematic", ("xschem", "ngspice"), [(["xschem", "-n", "-s", "-q", "-x", "-o", ".", XSCHEM_EXAMPLE], "xschem.out"),
+                                             (["ngspice", "-b", "rlc.spice"], "rlc.out")],
+         [("rlc.spice", r"(?im)^L\S* ", "Xschem turned one of its own schematics (an RLC circuit) into a netlist"),
+          ("rlc.out", r"No\. of Data Rows : [1-9]\d+", "ngspice simulated it")]),
+        ("layout", ("magic", "netgen"), [magic, (["netgen", "-batch", "lvs", "inverter_lvs.spice inverter", "inverter_ref.spice inverter", "nosetup", "lvs.out"], "netgen.out")],
+         [("magic.out", r"design rule errors: 0\b", "the inverter drawn in Magic breaks no design rule"),
+          ("inverter_lvs.spice", r"(?m)^M\d+ out in vdd vdd pfet w=8u l=2u[\s\S]*^M\d+ out in gnd \S+ nfet w=4u l=2u", "Magic extracted its two transistors"),
           ("lvs.out", r"Final result: Circuits match uniquely", "Netgen: the layout matches the schematic")]),
-        ("gds", ("magic", "klayout"), [(["magic", "-dnull", "-noconsole", "-T", "scmos", "nfet1_gds.tcl"], "magic_gds.out"),
-                                       (["klayout", "-zz", "-r", "gds_read.py", "-rd", "gds=nfet1.gds"], "klayout.out")],
-         [("klayout.out", r"read nfet1: [1-9]\d* shapes", "KLayout reads the GDS file Magic wrote")]),
-        ("digital", ("iverilog", "vvp"), [(["iverilog", "-o", "counter.vvp", "counter_tb.v", "counter.v"], "iverilog.out"),
-                                          (["vvp", "counter.vvp"], "vvp.out")],
+        ("postlayout", ("magic", "ngspice"), [magic, (["ngspice", "-b", "inverter_post.cir"], "post.out")],
+         [("inverter.spice", r"(?m)^C\d+ \S+ \S+ [\d.]+f", "the extraction carries the layout's parasitic capacitances"),
+          ("post.out", r"(?m)^vhigh += +3\.\d+e\+00[\s\S]*^vlow += +\d\.\d+e-\d\d[\s\S]*^tphl += +\d\.\d+e-1[01][\s\S]*^tplh += +\d\.\d+e-1[01]",
+           "the extracted inverter switches in simulation")]),
+        ("gds", ("magic", "klayout"), [magic, (["klayout", "-zz", "-r", "gds_read.py", "-rd", "gds=inverter.gds"], "klayout.out")],
+         [("klayout.out", r"read inverter: [1-9]\d* shapes", "KLayout reads the GDS file Magic wrote")]),
+        ("digital", ("iverilog", "vvp"), icarus,
          [("vvp.out", r"PASS count=10", "the counter counts ten clock edges in simulation")]),
+        ("waves", ("iverilog", "vvp", "vcd2fst", "fst2vcd"), icarus + [(["vcd2fst", "counter.vcd", "counter.fst"], "vcd2fst.out"),
+                                                                    (["fst2vcd", "counter.fst"], "waves.out")],
+         [("waves.out", r"\$var \S+ 4 \S+ q ", "the simulation's waveforms, packed by GTKWave's tools and read back, have the count in them")]),
+        ("gates", ("yosys", "iverilog", "vvp"),
+         [(["yosys", "-q", "-p", "read_verilog counter.v; synth -top counter; abc -g AND,NAND,OR,NOR,XOR,XNOR,MUX; clean; write_verilog -noattr counter_gates.v"], "yosys_gates.out"),
+          (["iverilog", "-o", "gates.vvp", "counter_tb.v", "counter_gates.v"], "iverilog_gates.out"), (["vvp", "gates.vvp"], "vvp_gates.out")],
+         [("counter_gates.v", r"module counter", "Yosys wrote the counter as gates"),
+          ("vvp_gates.out", r"PASS count=10", "the gates count the same ten clock edges in Icarus Verilog")]),
+        ("verilate", ("verilator", "g++", "make"),
+         [(["verilator", "--binary", "--timing", "-Wno-fatal", "--top-module", "counter_tb", "-o", "counter_sim", "counter_tb.v", "counter.v"], "verilate.out"),
+          (["obj_dir/counter_sim"], "verilated.out")],
+         [("verilated.out", r"PASS count=10", "Verilator compiled the counter and its bench to a program, and it counts ten")]),
         ("vhdl", ("nvc",), [(["nvc", "-a", "counter_tb.vhd", "-e", "counter_tb", "-r", "--stop-time=200ns"], "nvc.out")],
          [("nvc.out", r"PASS count=10", "the VHDL counter counts ten clock edges in simulation")]),
         ("lint", ("verilator",), [(["verilator", "--lint-only", "-Wall", "counter.v"], "verilator.out")],
@@ -437,13 +459,23 @@ def eda_try_jobs():
     )
 
 
+def eda_work(ctx, kind):
+    """a new folder for the files of a run, under the user's cache folder: /tmp may not run programs (a system
+    mounted that way for safety), and one of the jobs builds a program and runs it"""
+    base = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache"), "silikos")
+    if ctx.dry:
+        return os.path.join(base, kind + "-XXXX")
+    os.makedirs(base, exist_ok=True)
+    return tempfile.mkdtemp(prefix=kind + "-", dir=base)
+
+
 def eda_try(ctx, a):
     jobs = [j for j in eda_try_jobs() if a.job in ("all", j[0])]
     if not jobs:
         die("no such job: %s (%s, all)" % (a.job, ", ".join(j[0] for j in eda_try_jobs())), 2)
     if not os.path.isdir(EDA_TRY):
         die("the files of the jobs are not here (%s): they come with the package silik-eda-open" % EDA_TRY)
-    work = tempfile.mkdtemp(prefix="silik-eda-try-") if not ctx.dry else "/tmp/silik-eda-try-XXXX"
+    work = eda_work(ctx, "eda-try")
     ctx.run(["cp", "-r", EDA_TRY + "/.", work])
     ctx.echo(["cd", work])
     if not ctx.dry:
@@ -456,13 +488,19 @@ def eda_try(ctx, a):
             continue
         failed = None
         for argv, out in cmds:
+            if failed is not None:              # (what follows a command that failed has nothing to work on)
+                break
             if not ctx.quiet:
                 print("$ " + " ".join(shlex.quote(x) for x in argv) + (" > " + out if out else ""), flush=True)
             if ctx.dry:
                 continue
             ctx.note(argv)
-            with open(out, "w") as f:
-                rc = subprocess.run(argv, stdout=f, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL).returncode
+            try:
+                with open(out, "w") as f:
+                    rc = subprocess.run(argv, stdout=f, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL).returncode
+            except OSError as e:                # (a program that is not there after all, or that may not be run)
+                failed = "%s could not be started: %s" % (argv[0], e.strerror or e)
+                continue
             if rc != 0 and failed is None:
                 failed = "%s exited %d: %s" % (argv[0], rc, " / ".join(read(out).strip().splitlines()[-2:]))
         if ctx.dry:
@@ -470,11 +508,16 @@ def eda_try(ctx, a):
         for path, rx, means in checks:
             if failed is None and not re.search(rx, read(path)):
                 failed = "not seen: " + means + " (" + os.path.join(work, path) + ")"
-        rows.append(("bad", name, failed) if failed else ("ok", name, "; ".join(c[2] for c in checks)))
+        said = "; ".join(c[2] for c in checks)
+        if not failed and name == "postlayout":     # the two delays it measured (with the exercise's simple transistor models)
+            t = [re.search(r"(?m)^%s += +(\S+)" % k, read("post.out")) for k in ("tphl", "tplh")]
+            if all(t):
+                said += ": %.0f ps falling, %.0f ps rising" % (float(t[0].group(1)) * 1e12, float(t[1].group(1)) * 1e12)
+        rows.append(("bad", name, failed) if failed else ("ok", name, said))
     if ctx.dry:
         return 0
     count = {k: sum(1 for r in rows if r[0] == k) for k in ("ok", "bad", "unknown")}
-    text = "\n".join(["%s %-8s %s" % (SEC_MARK[s], n, d) for s, n, d in rows] +
+    text = "\n".join(["%s %-10s %s" % (SEC_MARK[s], n, d) for s, n, d in rows] +
                      ["%d ok, %d failed, %d not run; the files: %s" % (count["ok"], count["bad"], count["unknown"], work)])
     try:
         print(text)
@@ -502,7 +545,7 @@ def eda_bench(ctx, a):
         die("ngspice is not on the system (package ngspice, with silik-eda-open)")
     cores = cpu_cores()
     threads = sorted(set([1, 2, cores] + ([os.cpu_count()] if a.all_threads and os.cpu_count() else [])))
-    work = tempfile.mkdtemp(prefix="silik-eda-bench-") if not ctx.dry else "/tmp/silik-eda-bench-XXXX"
+    work = eda_work(ctx, "eda-bench")
     ctx.echo(["cd", work])
     if not ctx.dry:
         os.chdir(work)
@@ -2271,7 +2314,7 @@ def parser():
     x = e.add_parser("check"); x.set_defaults(fn=eda_check)
     x = e.add_parser("kernel-arg"); x.set_defaults(fn=eda_kernel_arg)
     x = e.add_parser("tools", help="the open EDA tools on this system"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=eda_tools)
-    x = e.add_parser("try", help="the open tools do small real jobs together: sim, layout, gds, digital, vhdl, lint, synth")
+    x = e.add_parser("try", help="the open tools do real jobs together: sim, schematic, layout, postlayout, gds, digital, waves, gates, verilate, vhdl, lint, synth")
     x.add_argument("job", nargs="?", default="all"); x.set_defaults(fn=eda_try)
     x = e.add_parser("bench", help="times ngspice on this machine with 1, 2 and all its cores")
     x.add_argument("--rings", type=int, default=40); x.add_argument("--stages", type=int, default=51)

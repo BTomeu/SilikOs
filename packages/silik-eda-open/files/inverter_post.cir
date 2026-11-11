@@ -1,0 +1,18 @@
+the inverter as Magic extracted it from its layout (inverter.spice), simulated: its levels and its delays
+.include inverter.spice
+* the scmos technology names its transistors nfet and pfet and gives no models: simple ones (level 1), for the exercise
+.model nfet nmos level=1 vto=0.7 kp=120u lambda=0.02
+.model pfet pmos level=1 vto=-0.7 kp=40u lambda=0.02
+* (the net the layout names gnd is the simulator's ground)
+vdd vdd 0 dc 3.3
+vin in 0 pulse(0 3.3 1n 0.1n 0.1n 4n 10n)
+cload out 0 20f
+.tran 10p 12n
+.control
+run
+meas tran vhigh find v(out) at=0.9n
+meas tran vlow find v(out) at=4n
+meas tran tphl trig v(in) val=1.65 rise=1 targ v(out) val=1.65 fall=1
+meas tran tplh trig v(in) val=1.65 fall=1 targ v(out) val=1.65 rise=1
+.endc
+.end

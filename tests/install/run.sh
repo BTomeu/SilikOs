@@ -11,7 +11,8 @@
 #   SILIK_CI_APPEND="..."   more installer boot options, e.g. on a build machine behind a proxy:
 #                           "inst.proxy=http://10.0.2.2:PORT inst.noverifyssl" (10.0.2.2 is the host, seen from the VM)
 # Needs qemu-system-x86_64, qemu-img, xorriso, mtools, python3; ImageMagick for PNG (else the pictures stay .ppm);
-# x86_64-w64-mingw32-gcc to try a Windows program in the installed system (when the ISO carries Wine).
+# x86_64-w64-mingw32-gcc to try a Windows program in the installed system (when the ISO carries Wine);
+# i686-w64-mingw32-gcc for a 32-bit one, wixl for a Windows Installer package.
 # With /dev/kvm an installation takes tens of minutes; without it (SILIK_CI_TCG=1 to allow) many hours.
 # In GitHub Actions each check is also an annotation (notice or error) of the run.
 set -euo pipefail
@@ -46,6 +47,15 @@ mcopy -i "$work/ks.img" "$work/ci.ks" ::/ci.ks
 if command -v x86_64-w64-mingw32-gcc > /dev/null; then
   x86_64-w64-mingw32-gcc -O2 -o "$work/hello.exe" "$here/hello.c" && mcopy -i "$work/ks.img" "$work/hello.exe" ::/hello.exe
   x86_64-w64-mingw32-gcc -O2 -mwindows -o "$work/win.exe" "$here/window.c" && mcopy -i "$work/ks.img" "$work/win.exe" ::/win.exe
+  # an installer that makes a start-menu shortcut (it installs win.exe), and the same program as a 32-bit one
+  x86_64-w64-mingw32-gcc -O2 -o "$work/setup.exe" "$here/setup.c" -lole32 -luuid && mcopy -i "$work/ks.img" "$work/setup.exe" ::/setup.exe
+  if command -v i686-w64-mingw32-gcc > /dev/null; then
+    i686-w64-mingw32-gcc -O2 -o "$work/hello32.exe" "$here/hello.c" && mcopy -i "$work/ks.img" "$work/hello32.exe" ::/hello32.exe
+  fi
+  # a Windows Installer package of it (wixl, of msitools)
+  if command -v wixl > /dev/null && [ -f "$work/win.exe" ]; then
+    cp "$here/package.wxs" "$work/" && (cd "$work" && wixl -a x64 -o silik.msi package.wxs) && mcopy -i "$work/ks.img" "$work/silik.msi" ::/silik.msi
+  fi
 fi
 cp "$work/ks.img" "$out/ks.img"
 qemu-img create -q -f qcow2 "$out/disk.qcow2" "${disk_gb}G"
@@ -132,6 +142,10 @@ if kill -0 $qpid 2> /dev/null; then
   if [ -f "$work/win.exe" ]; then                          # a Windows program, by its path typed in the COMMAND bar
     key meta_l-spc || true; sleep 5; typ "/home/tester/Downloads/win.exe" || true; sleep 2
     key ret || true; sleep 25; shot windows-program || true
+  fi
+  if grep -q 'SILIKOS-CI|win.installer|ok' "$out/boot.log"; then   # the program the test's installer installed, by its address
+    key alt-f4 || true; sleep 3
+    key meta_l-spc || true; sleep 5; typ "win/silik-test" || true; sleep 2; key ret || true; sleep 20; shot windows-installed || true
   fi
   # the open EDA tools, each started from the COMMAND bar by its address, when the ISO carries them
   eda() { key meta_l-spc || true; sleep 5; typ "app/$1" || true; sleep 2; key ret || true

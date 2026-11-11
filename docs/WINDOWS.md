@@ -199,6 +199,10 @@ bubblewrap 0.6.3, `silik-wine` 11.0), from the test user's session: the first `s
 prefix up and runs the program in its sandbox (exit 0); the program writes to `W:\` and does not see a file of
 `~/.ssh`; its SELinux domain is `wine_t`.
 
+Run in the test container (11/11/2026, silik-wine 11.0, sandboxed): a 32-bit program; an installer that makes a
+start-menu shortcut (its program is then `win/silik-test` in `silik win apps`); a Windows Installer package built
+with wixl (`silik win open silik.msi` installs it).
+
 Not run: the rail and the applications list of the real shell with a Wine window; sound, a GPU, NVIDIA devices, a
 Wayland session; a real `.msi`; a 32-bit program on the installed system (one ran in the Wine workflow's container);
 a real third-party installer; a real .NET application (only a program compiled for the test); the virtual machine
