@@ -20,12 +20,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Tools
-        run: bash tools/ci_apt.sh rpm createrepo-c
       - name: Unit tests
         run: python3 -m unittest discover -s tests -v
       - name: Packages
-        run: bash tools/build_rpms.sh
+        # (built in an EL 9 container, with the base's own rpmbuild: nothing of the runner's package servers is needed)
+        run: docker run --rm -v "$PWD:/src" -w /src almalinux:9 bash -c 'dnf -y -q install rpm-build createrepo_c > /dev/null && bash tools/build_rpms.sh'
       - uses: actions/upload-artifact@v4
         with:
           name: silikos-packages
