@@ -698,7 +698,8 @@ class SilikShell {
             const home = this._atHome();
             this._home.visible = home;
             this._body.visible = !home;
-            if (home) { this._fillHome(); return; }
+            if (home) { this._fillHome(); this._layout(); return; }
+            this._layout();
         }
         const q = this._entry.get_text().trim().toLowerCase();
         this._shown = this._apps.filter(a =>
@@ -835,7 +836,15 @@ class SilikShell {
         this._catcher.set_size(m.width, m.height);
         if (this._flow) {
             this._flow.layout();
-            const [x, y, w, h] = this._flow.startPlace(FLOW_W * s, FLOW_H * s);
+            /* Start's first page is as tall as what it holds (few pinned applications and no recent file leave no
+               empty paper); the list of everything keeps the full height, so it does not jump while one types */
+            let fh = FLOW_H * s;
+            if (this._atHome()) {
+                this._startBox.set_height(-1);
+                const [, nat] = this._startBox.get_preferred_height(Math.min(FLOW_W * s, m.width));
+                if (nat > 0) fh = Math.min(fh, nat);
+            }
+            const [x, y, w, h] = this._flow.startPlace(FLOW_W * s, fh);
             this._startBox.set_position(x, y);
             this._startBox.set_size(w, h);
             return;

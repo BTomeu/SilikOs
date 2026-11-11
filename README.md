@@ -31,6 +31,10 @@ an EL9 system. It is a try: `docs/STATUS.md` says what has been run and what has
 
 ![The login screen of the installed system](docs/img/installed-login.png)
 
+![The bar look on the installed system (`silik look bar`)](docs/img/installed-look-bar.png)
+
+![The island look on the installed system (`silik look island`)](docs/img/installed-look-island.png)
+
 The system as installed by the CI in a virtual machine on 10/11/2026 (a real session; the pictures of the last run: branch `ci-results`).
 
 ![The SilikOS desktop](docs/img/desktop.png)
