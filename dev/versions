@@ -1,12 +1,15 @@
 # The embedded-development tools SilikOS builds for EL 9 (neither is in the base's repositories or in EPEL 9; the ARM
 # compiler, newlib and stlink are in EPEL 9 and the base's own gdb debugs ARM targets: packages/silik-dev):
-#   name      upstream git repository                    tag     a fourth field: the release archive to build from ({ver} = the version)
-#   and a fifth, that archive's sha256 (the build stops on any other)
-openocd   https://github.com/openocd-org/openocd     v0.12.0
+#   name      upstream git repository                    tag     a fourth field: the commit that tag names (40 hex: the
+#   build stops when the tag names another), or the release archive to build from ({ver} = the version) and a fifth,
+#   that archive's sha256 (the build stops on any other). "multi": the recipe's "# source: URL COMMIT" lines; "pypi":
+#   dev/pylab-requirements.txt, every archive with its sha256. Commits of openocd and savvycan read with `git ls-remote`
+#   on 12/11/2026.
+openocd   https://github.com/openocd-org/openocd     v0.12.0  9ea7f3d647c8ecf6b0f1424002dfc3f4504a162c
 dfu-util  https://git.code.sf.net/p/dfu-util/dfu-util  v0.11   https://dfu-util.sourceforge.net/releases/dfu-util-{ver}.tar.gz  b4b53ba21a82ef7e3d4c47df2952adf5fa494f499b6b0b57c58c5d04ae8ff19e
 stm32flash  https://sourceforge.net/projects/stm32flash/  v0.7  https://downloads.sourceforge.net/project/stm32flash/stm32flash-{ver}.tar.gz  c4c9cd8bec79da63b111d15713ef5cc2cd947deca411d35d6e3065e227dc414a
 silik-pylab  pypi  1.0
-savvycan  https://github.com/collin80/SavvyCAN  V220
+savvycan  https://github.com/collin80/SavvyCAN  V220  7c576c5ffe240da7d4aae9741162a4583efff6b0
 sigrok  multi  0.6.20261112
 sdcc  https://sourceforge.net/projects/sdcc/  4.6.0  https://downloads.sourceforge.net/project/sdcc/sdcc/{ver}/sdcc-src-{ver}.tar.bz2  5fd6a93e5997ce01756868fe35e441095cfb637894a80c262514a634094973b6
 sigrok-firmware-fx2lafw  multi  0.1.7.20261112

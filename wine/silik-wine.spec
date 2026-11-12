@@ -16,6 +16,8 @@ Summary:        Wine for SilikOS: Windows programs on EL 9
 License:        LGPL-2.1-or-later
 URL:            https://www.winehq.org
 Source0:        wine-%{version}.tar.xz
+# (upstream's signature of it, checked by tools/build_wine.sh: in the source package, for whoever rebuilds it)
+Source1:        wine-%{version}.tar.xz.sign
 ExclusiveArch:  x86_64
 BuildRequires:  gcc make flex bison mingw64-gcc mingw32-gcc
 BuildRequires:  libX11-devel libXext-devel libXrender-devel libXrandr-devel libXi-devel libXcursor-devel

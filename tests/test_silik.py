@@ -6,6 +6,7 @@ import importlib.util
 import io
 import os
 import re
+import shutil
 import tempfile
 import unittest
 
@@ -334,13 +335,74 @@ class ReviewFindings(unittest.TestCase):
                 else:
                     os.environ["XDG_DATA_HOME"] = oldhome
 
-    def test_linkfree(self):
+    def test_open_below_never_goes_through_a_link(self):
         with tempfile.TemporaryDirectory() as h:
             os.makedirs(os.path.join(h, "p", "a"))
             os.makedirs(os.path.join(h, "out"))
             os.symlink(os.path.join(h, "out"), os.path.join(h, "p", "a", "link"))
-            self.assertTrue(silik._linkfree(os.path.join(h, "p"), os.path.join(h, "p", "a", "new", "deeper")))
-            self.assertFalse(silik._linkfree(os.path.join(h, "p"), os.path.join(h, "p", "a", "link", "x")))
+            fd = silik._open_below(h, ["p", "a", "new", "deeper"])
+            self.assertIsNotNone(fd)
+            os.close(fd)
+            self.assertTrue(os.path.isdir(os.path.join(h, "p", "a", "new", "deeper")))
+            self.assertIsNone(silik._open_below(h, ["p", "a", "link", "x"]))
+            self.assertIsNone(silik._open_below(h, ["p", "..", "out"]))
+            self.assertEqual(os.listdir(os.path.join(h, "out")), [])
+
+    def adopt_race(self, swap_on):
+        """win_adopt while the sandbox swaps the folder the entry goes to for a link to ~/.config/autostart, at the
+        moment SWAP_ON ("open": as that folder is about to be opened; "rename": after it was opened, just before the
+        move) - the race of the audit of 12/11/2026: a check by path, then a move by path, followed the link"""
+        h = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, h)
+        old, oldhome = silik.WINE_ROOT, os.environ.get("XDG_DATA_HOME")
+        silik.WINE_ROOT = os.path.join(h, "wine")
+        os.environ["XDG_DATA_HOME"] = os.path.join(h, "data")
+        auto = os.path.join(h, "autostart")
+        os.makedirs(auto)
+        programs = os.path.join(h, "wine", "p", "home", ".local", "share", "applications", "wine", "Programs")
+        os.makedirs(programs)                                         # a plain folder when it is looked at
+        real = os.path.join(h, "data", "applications", "wine", "Programs")
+        os.makedirs(real)
+        with open(os.path.join(real, "Tool.desktop"), "w") as f:
+            f.write("[Desktop Entry]\nType=Application\nName=Tool\nExec=env WINEPREFIX=%s wine C:\\\\t.exe\n" % os.path.join(h, "wine", "p"))
+
+        real_open, real_rename = os.open, os.rename       # (silik.os is this os: the stand-ins below replace both)
+
+        def swap():
+            real_rename(programs, programs + ".moved")
+            os.symlink(auto, programs)
+
+        def fake_open(path, flags, *a, **kw):
+            if swap_on == "open" and path == "Programs" and not os.path.islink(programs):
+                swap()
+            return real_open(path, flags, *a, **kw)
+
+        def fake_rename(a, b, *rest, **kw):
+            if swap_on == "rename" and not os.path.islink(programs):
+                swap()
+            return real_rename(a, b, *rest, **kw)
+        silik.os.open, silik.os.rename = fake_open, fake_rename
+        try:
+            silik.win_adopt(False)
+        finally:
+            silik.os.open, silik.os.rename = real_open, real_rename
+            silik.WINE_ROOT = old
+            if oldhome is None:
+                os.environ.pop("XDG_DATA_HOME", None)
+            else:
+                os.environ["XDG_DATA_HOME"] = oldhome
+        self.assertTrue(os.path.islink(programs))                     # the swap did happen
+        self.assertEqual(os.listdir(auto), [])                        # nothing reached the link's target
+        self.assertFalse(os.path.exists(os.path.join(real, "Tool.desktop")))
+        return programs + ".moved"
+
+    def test_adopt_race_a_folder_swapped_for_a_link_before_it_is_opened(self):
+        moved = self.adopt_race("open")
+        self.assertEqual(os.listdir(moved), [])                       # the entry was removed, not moved
+
+    def test_adopt_race_a_folder_swapped_for_a_link_after_it_was_opened(self):
+        moved = self.adopt_race("rename")
+        self.assertEqual(os.listdir(moved), ["Tool.desktop"])         # it went into the folder that was opened
 
 
 if __name__ == "__main__":

@@ -1,14 +1,17 @@
 #!/usr/bin/bash
 # eda/keep.sh NAME: the last steps of the workflow EDA tools for one tool whose package is in dist/: try it in a clean
 # EL 9 (eda/trial.sh), and when it did its job keep the package in the release `eda-tools` (`eda-optional` for a
-# recipe that says "# release: optional"). A tool that runs on packages of ours ("# uses:" in its recipe) gets them
-# beside it: the ones in deps/ (this run's), else the release's. Needs docker, gh (GH_TOKEN), GITHUB_REPOSITORY.
+# recipe that says "# release: optional"), with its source package (src/*.src.rpm, in the same release); what they
+# replace goes to the release sources-archive (tools/release_keep.sh), never deleted. A tool that runs on packages of
+# ours ("# uses:" in its recipe) gets them beside it: the ones in deps/ (this run's), else the release's.
+# Needs docker, gh (GH_TOKEN), GITHUB_REPOSITORY.
 set -uo pipefail
 tool=$1
 mkdir -p deps
 for u in $(sed -n 's/^# uses: *//p' "eda/$tool.spec"); do
   ls deps/"$u"-[0-9]*.rpm > /dev/null 2>&1 || gh release download eda-tools --repo "$GITHUB_REPOSITORY" --pattern "$u-[0-9]*.rpm" --dir deps || true
 done
+rm -f deps/*.src.rpm dist/*.src.rpm      # (source packages are kept, not tried: they are not installed)
 if out=$(docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD/deps:/deps:ro" -v "$PWD/eda:/eda:ro" almalinux:9 bash -c "bash /eda/trial.sh $tool /dist/*.rpm \$(ls /deps/*.rpm 2> /dev/null)" 2>&1); then
   echo "$out" | tail -5
   echo "::notice title=$tool on EL 9::$(echo "$out" | grep '^TRIAL-OK' | cut -c10-300)"
@@ -25,13 +28,8 @@ if grep -q '^# release: optional' "eda/$tool.spec"; then
 fi
 set -e
 gh release view $rel --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || gh release create $rel --repo "$GITHUB_REPOSITORY" --title "$title" --prerelease --notes "$notes"
-for f in dist/*.rpm; do
-  # the new package first, then an older build of the same PACKAGE goes: its name from the file's (NAME-VERSION-
-  # RELEASE.ARCH.rpm), so opencascade-devel's upload never removes the opencascade just uploaded, and kicad- is not
-  # kicad-symbols-; the release is never without one
-  n=$(basename "$f" | sed -E 's/-[^-]+-[^-]+\.[^.]+\.rpm$//')
-  gh release upload $rel "$f" --repo "$GITHUB_REPOSITORY" --clobber
-  gh release view $rel --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | { grep -E "^$n-[0-9]" || true; } | while read -r old; do
-    [ "$old" = "$(basename "$f")" ] || gh release delete-asset $rel "$old" --repo "$GITHUB_REPOSITORY" -y
-  done
-done
+# the binary packages and their source package; an older build of the same PACKAGE (its name from the file's,
+# NAME-VERSION-RELEASE.ARCH.rpm: opencascade-devel never replaces opencascade, kicad- is not kicad-symbols-) moves to
+# the release sources-archive after the new one is up
+ls src/"$tool"-[0-9]*.src.rpm > /dev/null 2>&1 || { echo "::error title=keep $tool::no source package in src/"; exit 1; }
+bash tools/release_keep.sh $rel dist/*.rpm src/"$tool"-[0-9]*.src.rpm

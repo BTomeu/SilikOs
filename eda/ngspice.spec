@@ -3,7 +3,11 @@ Name:           ngspice
 Version:        %{upver}
 Release:        2.silik%{?dist}
 Summary:        ngspice, the circuit simulator, with XSPICE and CIDER (upstream's source built for SilikOS / EL 9)
-License:        BSD-3-Clause AND LGPL-2.1-or-later AND LicenseRef-Upstream
+# read in the release archive of 47 (12/11/2026), COPYING: the Modified BSD licence for most of it; KLU LGPL-2.1-or-later;
+# numparam LGPL-2.0-or-later ("version 2 ... or any later version"); the XSPICE table models GPL-2.0-or-later; OSDI
+# MPL-2.0; XSPICE and the ndev device public domain; Kundert's sparse matrix package its own notice (not on the SPDX
+# list: kept as LICENSE.sparse). (tclspice, LGPLv2, is not built)
+License:        BSD-3-Clause AND LGPL-2.1-or-later AND LGPL-2.0-or-later AND GPL-2.0-or-later AND MPL-2.0 AND LicenseRef-Public-Domain AND LicenseRef-ngspice-sparse
 URL:            https://ngspice.sourceforge.io
 Source0:        ngspice-%{version}.tar.gz
 ExclusiveArch:  x86_64
@@ -41,6 +45,8 @@ make %{?_smp_mflags}
 rm -f %{buildroot}%{_libdir}/libngspice.la
 test -e %{buildroot}%{_libdir}/libngspice.so.0 && test -s %{buildroot}%{_includedir}/ngspice/sharedspice.h
 %licences
+awk '/Revision and copyright information/ {on = 1} on {print} on && /implied warranty/ {exit}' src/maths/sparse/spalloc.c > %{buildroot}%{_datadir}/licenses/%{name}/LICENSE.sparse
+grep -q 'Kundert' %{buildroot}%{_datadir}/licenses/%{name}/LICENSE.sparse
 mkdir -p %{buildroot}%{_datadir}/applications
 cat > %{buildroot}%{_datadir}/applications/ngspice.desktop <<'EOD'
 [Desktop Entry]

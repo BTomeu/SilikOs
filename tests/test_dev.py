@@ -367,8 +367,8 @@ class Recipes(unittest.TestCase):
     def test_release_archives_are_pinned_by_their_hashes(self):
         for l in text("dev/versions").splitlines():
             w = l.split()
-            if l.startswith("#") or len(w) < 4:
-                continue
+            if l.startswith("#") or len(w) < 4 or re.match(r"^[0-9a-f]{40}$", w[3]):
+                continue                                  # (a git tree at its commit: tests/test_sources.py)
             self.assertEqual(len(w), 5, l)
             self.assertRegex(w[4], r"^[0-9a-f]{64}$", l)
         self.assertIn("sha256sum -c --quiet", text("tools/build_dev.sh"))

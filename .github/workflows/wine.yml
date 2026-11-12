@@ -4,13 +4,16 @@
 # 32-bit Windows program run, a .NET program is compiled and run, the HTML engine loads Gecko. Kept as the release
 # `wine-<version>`. The CI's ISO takes the packages from that release (workflow CI), so the installed system has
 # Wine and the installation test runs Windows programs in it.
+# Each build also makes its source package (build/srpm/: Wine's archive and signature; the add-ons' binary and source
+# archives), kept in the same release; a package a newer build replaces moves to the release sources-archive with its
+# source (tools/release_keep.sh).
 # Runs when a recipe changes, or by hand (Actions > Wine > Run workflow, with a version). The build of Wine takes
 # about half an hour and is kept (cache) while its recipe does not change, so a change to the rest is quick.
 name: Wine
 on:
   push:
     branches: [main]
-    paths: ['wine/**', 'tools/build_wine.sh', 'tools/build_wine_addons.sh', '.github/workflows/wine.yml']
+    paths: ['wine/**', 'tools/build_wine.sh', 'tools/build_wine_addons.sh', 'tools/release_keep.sh', '.github/workflows/wine.yml']
   workflow_dispatch:
     inputs:
       version:
@@ -38,8 +41,10 @@ jobs:
       - uses: actions/cache@v4
         id: cache
         with:
-          path: build/extra
-          key: silik-wine-${{ inputs.version }}-${{ hashFiles('wine/silik-wine.spec', 'tools/build_wine.sh') }}
+          path: |
+            build/extra
+            build/srpm
+          key: silik-wine-${{ inputs.version }}-${{ hashFiles('wine/silik-wine.spec', 'wine/sources', 'tools/build_wine.sh') }}
       - name: Build silik-wine
         if: steps.cache.outputs.cache-hit != 'true'
         env:
@@ -60,6 +65,11 @@ jobs:
           name: silik-wine
           path: build/extra/silik-wine-*.rpm
           compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: srpm-wine
+          path: build/srpm/silik-wine-[0-9]*.src.rpm
+          compression-level: 0
 
   addons:
     needs: build
@@ -78,8 +88,10 @@ jobs:
       - uses: actions/cache@v4
         id: cache
         with:
-          path: build/addons
-          key: silik-wine-addons-${{ needs.build.outputs.version }}-${{ hashFiles('wine/silik-wine-addons.spec', 'tools/build_wine_addons.sh') }}
+          path: |
+            build/addons
+            build/addons-srpm
+          key: silik-wine-addons-${{ needs.build.outputs.version }}-${{ hashFiles('wine/silik-wine-addons.spec', 'wine/sources', 'tools/build_wine_addons.sh') }}
       - name: Build silik-wine-mono and silik-wine-gecko
         if: steps.cache.outputs.cache-hit != 'true'
         shell: bash
@@ -90,13 +102,19 @@ jobs:
             exit 1
           fi
           grep -E '^(this Wine asks|source:)' build.log
-          mkdir -p build/addons && mv build/extra/silik-wine-mono-*.rpm build/extra/silik-wine-gecko-*.rpm build/addons/
+          mkdir -p build/addons build/addons-srpm && mv build/extra/silik-wine-mono-*.rpm build/extra/silik-wine-gecko-*.rpm build/addons/
+          mv build/srpm/silik-wine-addons-*.src.rpm build/addons-srpm/
       - name: What was built
         run: echo "::notice title=Wine add-ons built::$(cd build/addons && ls -la *.rpm | awk '{print $5, $9}' | tr '\n' ' ')"
       - uses: actions/upload-artifact@v4
         with:
           name: silik-wine-addons
           path: build/addons/*.rpm
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: srpm-wine-addons
+          path: build/addons-srpm/*.src.rpm
           compression-level: 0
 
   trial:
@@ -159,6 +177,13 @@ jobs:
     permissions:
       contents: write        # (the release wine-<version>)
     steps:
+      - uses: actions/checkout@v4          # (tools/release_keep.sh)
+        with: { persist-credentials: false }
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: srpm-wine*
+          path: src
+          merge-multiple: true
       - uses: actions/download-artifact@v4
         with:
           name: silik-wine
@@ -176,12 +201,8 @@ jobs:
           gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || gh release create "$tag" --repo "$GITHUB_REPOSITORY" \
             --title "silik-wine $V" --prerelease \
             --notes "Wine $V (upstream's source, unmodified, LGPL) built on EL 9 for SilikOS: wine/silik-wine.spec. Not a product of or supported by WineHQ."
-          # one package of each name in the release: an older build of the same package goes
-          for f in dist/silik-wine-*.rpm; do
-            n=$(basename "$f" | sed -E 's/-[0-9][^-]*-[^-]*$//')
-            gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -E "^$n-[0-9]" | while read -r old; do
-              [ "$old" = "$(basename "$f")" ] || gh release delete-asset "$tag" "$old" --repo "$GITHUB_REPOSITORY" -y
-            done
-          done
-          gh release upload "$tag" --repo "$GITHUB_REPOSITORY" --clobber dist/silik-wine-*.rpm
+          # one package of each name in the release, with its source package: an older build of the same package moves
+          # to the release sources-archive (after the new one is up), never deleted
+          ls src/silik-wine-[0-9]*.src.rpm src/silik-wine-addons-*.src.rpm > /dev/null || { echo "::error title=keep::no source packages"; exit 1; }
+          bash tools/release_keep.sh "$tag" dist/silik-wine-*.rpm src/*.src.rpm
           gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --notes "Wine $V (upstream's source, unmodified, LGPL) built on EL 9 for SilikOS (wine/silik-wine.spec), with Wine Mono and Wine Gecko (upstream's binary archives, unmodified; their own licences) as packages of their own (wine/silik-wine-addons.spec). Not a product of or supported by WineHQ."

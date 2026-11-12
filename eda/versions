@@ -1,23 +1,26 @@
 # The open EDA tools SilikOS builds for EL 9 (none of them is in the base's repositories or in EPEL 9; Icarus Verilog,
 # Verilator and GTKWave are in EPEL 9 and come from there: packages/silik-eda-open):
-#   name     upstream git repository                              tag ("latest:PREFIX" = the newest tag PREFIX<number> at build time)
-#            a fourth field: the release archive to build from instead of the git tree ({ver} = the version)
-klayout  https://github.com/KLayout/klayout                   v0.30.13
-magic    https://github.com/RTimothyEdwards/magic             8.3.696
-xschem   https://github.com/StefanSchippers/xschem            3.4.7
-ngspice  https://git.code.sf.net/p/ngspice/ngspice            ngspice-47        https://sourceforge.net/projects/ngspice/files/ng-spice-rework/{ver}/ngspice-{ver}.tar.gz/download
-netgen   https://github.com/RTimothyEdwards/netgen            1.5.328
-yosys    https://github.com/YosysHQ/yosys                     v0.70             https://github.com/YosysHQ/yosys/releases/download/v{ver}/yosys.tar.gz
-nvc      https://github.com/nickg/nvc                         r1.23.1           https://github.com/nickg/nvc/releases/download/r{ver}/nvc-{ver}.tar.gz
-qucs-s   https://github.com/ra3xdh/qucs_s                     26.1.1            https://github.com/ra3xdh/qucs_s/releases/download/{ver}/qucs-s-{ver}.tar.gz
+#   name     upstream git repository                              tag
+#            then either the commit that tag names (a 40-hex git commit: the build stops when the tag names another)
+#            or the release archive to build from instead of the git tree ({ver} = the version) and its sha256 (the
+#            build stops on any other archive)
+# Commits read with `git ls-remote` and archives downloaded and hashed on 12/11/2026, at the tags written here.
+klayout  https://github.com/KLayout/klayout                   v0.30.13          06b8ff4909ad1696c06c634183d8fd0eaa8a1b83
+magic    https://github.com/RTimothyEdwards/magic             8.3.696           0cdada32138a376f3b0339ef4753b1f2f47d7f09
+xschem   https://github.com/StefanSchippers/xschem            3.4.7             92dd8fe5f4d5c1057489710d8a22f18fdc9d7ed0
+ngspice  https://git.code.sf.net/p/ngspice/ngspice            ngspice-47        https://sourceforge.net/projects/ngspice/files/ng-spice-rework/{ver}/ngspice-{ver}.tar.gz/download  894e649651f1838a14095e5a5439e7d3aa63e87ede14d283173fda4fcdef675f
+netgen   https://github.com/RTimothyEdwards/netgen            1.5.328           9a0fb6faec499be5489fd0d429cd3fdc8a16d4c1
+yosys    https://github.com/YosysHQ/yosys                     v0.70             https://github.com/YosysHQ/yosys/releases/download/v{ver}/yosys.tar.gz  c6bd8b83aad633f6786fc861fe8f5dbc74c37bfae77f7bd0220e6f00f15f1d55
+nvc      https://github.com/nickg/nvc                         r1.23.1           https://github.com/nickg/nvc/releases/download/r{ver}/nvc-{ver}.tar.gz  6e3d1551a3fce8087c96daf9bb8a5514be68850f1c4a30a5e05b8ee2be03acdd
+qucs-s   https://github.com/ra3xdh/qucs_s                     26.1.1            https://github.com/ra3xdh/qucs_s/releases/download/{ver}/qucs-s-{ver}.tar.gz  8f898fca5a738383ddeefdcda8f552ea60d966e8f89d9e378e6e10cf174fb06e
 # KiCad, with what it needs that neither EL 9 nor EPEL 9 has (Open CASCADE, nng; its simulator is our ngspice's
 # shared library) and its libraries of symbols, footprints and templates; the 3D models are a package of their own
-opencascade      https://github.com/Open-Cascade-SAS/OCCT                 V7_9_3
-nng              https://github.com/nanomsg/nng                           v1.12.5
-kicad            https://gitlab.com/kicad/code/kicad.git                  10.0.8
-kicad-symbols    https://gitlab.com/kicad/libraries/kicad-symbols.git     10.0.8
-kicad-footprints https://gitlab.com/kicad/libraries/kicad-footprints.git  10.0.8
-kicad-templates  https://gitlab.com/kicad/libraries/kicad-templates.git   10.0.8
-kicad-packages3d https://gitlab.com/kicad/libraries/kicad-packages3D.git  10.0.8
-# DEVSIM: TCAD device simulation (a Python module)
-devsim           https://github.com/devsim/devsim                         v2.8.2
+opencascade      https://github.com/Open-Cascade-SAS/OCCT                 V7_9_3  a016080bf6738d6aeae020badee4e888ad1540a5
+nng              https://github.com/nanomsg/nng                           v1.12.5  437a5f746722dee04020dc8869894c1f1f02b177
+kicad            https://gitlab.com/kicad/code/kicad.git                  10.0.8  e432beac2668303194ba2040274f9e5efe773fc0
+kicad-symbols    https://gitlab.com/kicad/libraries/kicad-symbols.git     10.0.8  45efbd93be87e365a21d743daf9b8a07e6414df6
+kicad-footprints https://gitlab.com/kicad/libraries/kicad-footprints.git  10.0.8  a337146e090931ad1176e20ed0b7100990fac5fa
+kicad-templates  https://gitlab.com/kicad/libraries/kicad-templates.git   10.0.8  3ed4538b0f965d821df63a5fffc4441e723cfe7f
+kicad-packages3d https://gitlab.com/kicad/libraries/kicad-packages3D.git  10.0.8  8975715167d1a76f9b44be155ac02326f704cdbb
+# DEVSIM: TCAD device simulation (a Python module; its submodules are at the commits this one names)
+devsim           https://github.com/devsim/devsim                         v2.8.2  3ceee47987906e1d8dcc72ba8dbb13f2fa0f0ce7
