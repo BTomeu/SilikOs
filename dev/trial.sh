@@ -77,6 +77,49 @@ sys.stdout.buffer.write(bytes(b for b in bits for _ in range(spb)))" > uart.bin
     rc=0; QT_QPA_PLATFORM=offscreen timeout 8 pulseview > p.out 2>&1 || rc=$?
     [ "$rc" = 124 ] || { cat p.out; echo "PulseView ended with $rc before 8 s"; exit 1; }
     echo "TRIAL-OK $(sigrok-cli -V | head -1) : a UART line decoded to \"$got\"; the demo device captured 1000 samples; $n protocol decoders; PulseView up 8 s off screen" ;;
+  sdcc)   # an 8051 C program compiled and linked to Intel HEX and run in ucsim's 8051 simulator: it prints what it
+          # computed through ucsim's simulator interface; the same file compiled for STM8 and Z80
+    again dnf -y -q install "$@"
+    cat > fib.c <<'EOF'
+/* ucsim's simulator interface: a byte in external RAM (the command "set hw simif xram 0x7654"):
+   'p' then a character prints it, 's' stops the simulation */
+#define SIMIF (*(volatile __xdata unsigned char *) 0x7654)
+static void put(char c) { SIMIF = 'p'; SIMIF = c; }
+static void puts_(const char *s) { while (*s) put(*s++); }
+static void putu(unsigned long v) { char b[10]; unsigned char n = 0; do { b[n++] = '0' + v % 10; v /= 10; } while (v); while (n) put(b[--n]); }
+void main(void)
+{
+    unsigned long a = 0, b = 1, t;
+    unsigned char i;
+    for (i = 0; i < 30; i++) { t = a + b; a = b; b = t; }
+    puts_("fib(30)="); putu(a); put('\n');
+    SIMIF = 's';
+}
+EOF
+    sdcc -mmcs51 fib.c > c.out 2>&1 || { cat c.out; exit 1; }
+    head -1 fib.ihx | grep -q '^:' && tail -1 fib.ihx | grep -q '^:00000001FF' || { head -3 fib.ihx; tail -1 fib.ihx; exit 1; }
+    printf 'set hw simif xram 0x7654\nrun\nquit\n' | timeout 60 ucsim_51 -t 8051 fib.ihx > sim.out 2>&1 || true
+    grep -q 'fib(30)=832040' sim.out || { cat sim.out; exit 1; }
+    sed 's/__xdata//' fib.c > port.c
+    sdcc -mstm8 -c port.c -o port-stm8.rel > s.out 2>&1 && sdcc -mz80 -c port.c -o port-z80.rel >> s.out 2>&1 || { cat s.out; exit 1; }
+    n=0; while read -r l; do [ "${l:7:2}" != 00 ] || n=$((n + 16#${l:1:2})); done < fib.ihx   # (the data records' bytes)
+    echo "TRIAL-OK $(sdcc -v | head -1 | sed 's/ : .* TD- / /') : an 8051 program compiled and linked to Intel HEX ($n bytes), run by ucsim_51: it printed \"$(grep -o 'fib(30)=[0-9]*' sim.out)\"; the same C compiled for STM8 and Z80" ;;
+  sigrok-firmware-fx2lafw)   # (given with the sigrok package) every firmware file libsigrok's drivers name is found on
+                             # libsigrok's own search path, SIGROK_FIRMWARE_DIR unset: the one a Saleae clone needs among them
+    again dnf -y -q install "$@"
+    unset SIGROK_FIRMWARE_DIR SIGROK_FIRMWARE_PATH
+    sigrok-cli -l 4 -V > v.out 2>&1 || { cat v.out; exit 1; }
+    # (its log at level 4: "sr: [time] backend: Firmware search paths:", then a line " - DIR" for each, in order)
+    awk '/Firmware search paths:/ { on = 1; next } on && / - \// { sub(/.* - /, ""); print; next } { on = 0 }' v.out > paths
+    grep -qx /usr/share/sigrok-firmware paths || { cat v.out; echo "libsigrok does not look in /usr/share/sigrok-firmware"; exit 1; }
+    found=0; total=0; missing=""
+    for fw in $(grep -aoh 'fx2lafw-[a-z0-9-]*\.fw' /usr/lib64/libsigrok.so.* | sort -u); do
+      hit=$(while read -r d; do if [ -s "$d/$fw" ]; then echo "$d/$fw"; break; fi; done < paths)
+      total=$((total + 1)); if [ -n "$hit" ]; then found=$((found + 1)); else missing="$missing $fw"; fi
+    done
+    [ "$total" -gt 0 ] && [ "${missing#*fx2lafw-saleae-logic.fw}" = "$missing" ] || { echo "found $found of $total; not found:$missing"; exit 1; }
+    sigrok-cli -d fx2lafw --scan > scan.out 2>&1 || { cat scan.out; exit 1; }
+    echo "TRIAL-OK sigrok-firmware-fx2lafw $(rpm -q --qf '%{VERSION}' sigrok-firmware-fx2lafw) : $(ls /usr/share/sigrok-firmware/*.fw | wc -l) firmware files in /usr/share/sigrok-firmware, on libsigrok's own search path; $found of the $total firmware files libsigrok's drivers name are found there (the Saleae Logic clones' fx2lafw-saleae-logic.fw, $(stat -c %s /usr/share/sigrok-firmware/fx2lafw-saleae-logic.fw) bytes, among them)${missing:+; not made by fx2lafw:$missing}; sigrok-cli scans for fx2lafw devices (none here)" ;;
   stack)
     again dnf -y -q install "$@"       # (silik-dev's weak dependencies bring the compiler, newlib, stlink, gdb, make)
     silik dev tools

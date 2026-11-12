@@ -2500,6 +2500,7 @@ DEV_TOOLS = (   # command, package, what it is for
     ("esptool", "silik-pylab", "Espressif (ESP32) flashing"),
     ("pulseview", "sigrok", "logic analysers, scopes, multimeters: capture, protocol decoding (PulseView)"),
     ("sigrok-cli", "sigrok", "the same from a command line: capture, decode SPI / I2C / UART / CAN..."),
+    ("sdcc", "sdcc", "C compiler for 8051, STM8, Z80 and other small cores (with the ucsim simulators)"),
 )
 # a vendor's IDE: its key, its name, the program to look for, the folders it may be under, how its downloaded file
 # is recognised and which script inside an archive is its installer (regular expressions on the lower-case file

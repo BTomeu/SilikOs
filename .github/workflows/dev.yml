@@ -1,5 +1,6 @@
-# The embedded-development and bench tools of SilikOS: OpenOCD, dfu-util, stm32flash, SavvyCAN and silik-pylab (python-can,
-# cantools, esptool, pymodbus) are not in EL 9's repositories or in EPEL 9 for it, so each
+# The embedded-development and bench tools of SilikOS: OpenOCD, dfu-util, stm32flash, SavvyCAN, silik-pylab (python-can,
+# cantools, esptool, pymodbus), sigrok, SDCC and the fx2lafw firmware (built with that SDCC: job build-uses) are not in
+# EL 9's repositories or in EPEL 9 for it, so each
 # is built here from upstream's source at the tag of dev/versions (dev/<tool>.spec), tried in a clean EL 9
 # (dev/trial.sh) and kept in the release `dev-tools`. Then the whole stack is tried there: the ARM compiler, newlib
 # and ST-LINK's tools of EPEL 9, the base's gdb, these two and `silik dev try`. The CI's ISO takes the packages from
@@ -21,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        tool: [openocd, dfu-util, stm32flash, silik-pylab, savvycan, sigrok]
+        tool: [openocd, dfu-util, stm32flash, silik-pylab, savvycan, sigrok, sdcc]
     runs-on: ubuntu-24.04
     container: almalinux:9
     timeout-minutes: 60
@@ -47,8 +48,45 @@ jobs:
           path: build/extra/${{ matrix.tool }}-*.rpm
           compression-level: 0
 
-  trial:
+  # the tools built with packages of ours ("# uses:" in the recipe): after those, with the ones of this run (the
+  # release's when one was not made). fx2lafw's firmware is compiled with our SDCC
+  build-uses:
     needs: build
+    if: ${{ !cancelled() }}
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: [sigrok-firmware-fx2lafw]
+    runs-on: ubuntu-24.04
+    container: almalinux:9
+    timeout-minutes: 30
+    steps:
+      - name: Tools
+        run: dnf -y -q install git tar gzip findutils
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with: { name: dev-sdcc, path: build/deps }
+      - name: Build ${{ matrix.tool }}
+        shell: bash
+        run: |
+          if ! bash tools/build_dev.sh ${{ matrix.tool }} > build.log 2>&1; then
+            tail -80 build.log
+            echo "::error title=build ${{ matrix.tool }}::$(grep -iE 'error|no such file|not found|cannot|undefined|unpackaged|No match' build.log | tail -10 | tr '\n' ' ' | cut -c1-900)"
+            exit 1
+          fi
+          tail -5 build.log
+      - name: What was built
+        run: echo "::notice title=${{ matrix.tool }} built::$(cd build/extra && ls -la ${{ matrix.tool }}-*.rpm | awk '{print $5, $9}')"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dev-${{ matrix.tool }}
+          path: build/extra/${{ matrix.tool }}-*.rpm
+          compression-level: 0
+
+  trial:
+    needs: [build, build-uses]
     permissions:
       contents: write        # (keeps the tried packages in the release)
     runs-on: ubuntu-24.04
@@ -70,8 +108,12 @@ jobs:
       - name: Try each tool, then the whole stack, in a clean EL 9
         run: |
           rc=0
-          for t in openocd dfu-util stm32flash silik-pylab savvycan sigrok stack; do
-            case $t in stack) pk='/dist/*.rpm' ;; *) pk="/dist/$t-*.rpm" ;; esac
+          for t in openocd dfu-util stm32flash silik-pylab savvycan sigrok sdcc sigrok-firmware-fx2lafw stack; do
+            case $t in
+              stack) pk='/dist/*.rpm' ;;
+              sigrok-firmware-fx2lafw) pk="/dist/$t-[0-9]*.rpm /dist/sigrok-[0-9]*.rpm" ;;   # (libsigrok must find it)
+              *) pk="/dist/$t-[0-9]*.rpm" ;;
+            esac
             if out=$(docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD/dev:/dev-recipes:ro" almalinux:9 bash -c "bash /dev-recipes/trial.sh $t $pk" 2>&1); then
               echo "$out" | tail -12
               echo "::notice title=$t on EL 9::$(echo "$out" | grep '^TRIAL-OK' | cut -c10-400)"
@@ -88,9 +130,9 @@ jobs:
         run: |
           gh release view dev-tools --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || gh release create dev-tools --repo "$GITHUB_REPOSITORY" \
             --title "Embedded-development tools for SilikOS (EL 9)" --prerelease \
-            --notes "Tools of the bench built from upstream's unmodified sources on EL 9 (dev/*.spec, dev/versions): OpenOCD, dfu-util, stm32flash, SavvyCAN, sigrok (sigrok-cli, PulseView, the protocol decoders), and silik-pylab (python-can, cantools, esptool, pymodbus from PyPI's source archives, pinned by sha256). None is in EL 9's repositories or EPEL 9. Each keeps its own licence, in the package. Not products of or supported by their authors' projects."
-          for t in openocd dfu-util stm32flash silik-pylab savvycan sigrok; do
-            for f in dist/$t-*.rpm; do
+            --notes "Tools of the bench built from upstream's unmodified sources on EL 9 (dev/*.spec, dev/versions): OpenOCD, dfu-util, stm32flash, SavvyCAN, sigrok (sigrok-cli, PulseView, the protocol decoders) with the fx2lafw firmware of FX2 logic analysers, SDCC (the compiler it is built with), and silik-pylab (python-can, cantools, esptool, pymodbus from PyPI's source archives, pinned by sha256). None is in EL 9's repositories or EPEL 9. Each keeps its own licence, in the package. Not products of or supported by their authors' projects."
+          for t in openocd dfu-util stm32flash silik-pylab savvycan sigrok sdcc sigrok-firmware-fx2lafw; do
+            for f in dist/$t-[0-9]*.rpm; do
               n=$(basename "$f" | sed -E 's/-[^-]+-[^-]+\.[^.]+\.rpm$//')     # (the package's own name: a subpackage keeps its own)
               gh release upload dev-tools "$f" --repo "$GITHUB_REPOSITORY" --clobber      # (the new one first: never a gap)
               gh release view dev-tools --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | { grep -E "^$n-[0-9]" || true; } | while read -r old; do
