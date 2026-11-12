@@ -157,12 +157,37 @@ def app_items(dirs, lang="en"):
     return out
 
 
-def silik_json(args):
+# what the bar asks silik for: the EDA boxes, the Wine prefixes, the installed Windows programs. The three run at once,
+# and in the window while GTK loads (docs/STATUS.md: one after the other they were most of the time to the window)
+SILIK_LISTS = (["eda", "list", "--json"], ["win", "list", "--json"], ["win", "apps", "--json"])
+
+
+def silik_json_start(args):
+    """`silik -q ARGS` started (silik_json_read takes its answer); None when it cannot start"""
     try:
-        p = subprocess.run([SILIK, "-q"] + args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True, timeout=5)
-        return json.loads(p.stdout) if p.returncode == 0 and p.stdout.strip() else []
-    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return subprocess.Popen([SILIK, "-q"] + args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True)
+    except OSError:
+        return None
+
+
+def silik_json_read(p, timeout=5):
+    """the JSON a started silik printed; [] when it failed, printed nothing or took more than TIMEOUT s (then ended)"""
+    if p is None:
         return []
+    try:
+        out, _ = p.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        p.kill()
+        p.communicate()
+        return []
+    try:
+        return json.loads(out) if p.returncode == 0 and out.strip() else []
+    except ValueError:
+        return []
+
+
+def silik_json(args):
+    return silik_json_read(silik_json_start(args))
 
 
 def system_items(t, boxes=(), prefixes=(), programs=()):
@@ -290,10 +315,12 @@ def launch(item, t=None):
         return False
 
 
-def all_items(lang):
-    t = TEXT[lang]
-    return system_items(t, silik_json(["eda", "list", "--json"]), silik_json(["win", "list", "--json"]),
-                        silik_json(["win", "apps", "--json"])) + app_items(desktop_dirs(), lang)
+def all_items(lang, started=None):
+    """every entry; STARTED: the SILIK_LISTS calls already started (silik_json_start), else they start here"""
+    started = [silik_json_start(a) for a in SILIK_LISTS] if started is None else started
+    apps = app_items(desktop_dirs(), lang)       # read while silik answers
+    boxes, prefixes, programs = (silik_json_read(p) for p in started)
+    return system_items(TEXT[lang], boxes, prefixes, programs) + apps
 
 
 # ------------------------------------------------------------------ window
@@ -320,14 +347,14 @@ THEMES = {
 }
 
 
-def run_window(query, theme, lang):
+def run_window(query, theme, lang, started=None):
     import gi
     gi.require_version("Gtk", "3.0")
     gi.require_version("Gdk", "3.0")
     from gi.repository import Gdk, Gtk, Pango
 
     t = TEXT[lang]
-    items = all_items(lang)
+    items = all_items(lang, started)
     css = Gtk.CssProvider()
     # rounded corners need a compositing window manager (GNOME has one); square without it
     vals = dict(THEMES[theme], radius="10px" if Gdk.Screen.get_default().is_composited() else "0")
@@ -470,6 +497,7 @@ def main(argv):
         for it in match(all_items(lang), list_only, TEXT[lang], limit=50):
             print("%s\t%s" % (it.address, it.twin))
         return 0
+    started = [silik_json_start(a) for a in SILIK_LISTS]     # they answer while the theme is read and GTK loads
     if theme not in THEMES:
         theme = "light"
         try:
@@ -478,7 +506,7 @@ def main(argv):
                 theme = "dark"
         except (OSError, subprocess.TimeoutExpired):
             pass
-    run_window(query, theme, lang)
+    run_window(query, theme, lang, started)
     return 0
 
 

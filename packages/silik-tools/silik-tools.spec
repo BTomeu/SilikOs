@@ -20,9 +20,20 @@ look: silik, bar, island), `silik session`,
 Every action prints the commands it runs; --dry-run runs nothing.
 
 %install
-install -Dm0755 %{_sourcedir}/silik %{buildroot}%{_bindir}/silik
+# the command is a module that /usr/bin/silik imports, so that Python takes it compiled (a script run directly is
+# compiled again at every start: 20-30 ms of it). Compiled here only by the base's Python 3.9 (the CI and
+# tools/build_rpms.sh in an almalinux:9 container); built elsewhere the package has no __pycache__ and silik still runs.
+# checked-hash: the compiled file is used while the source's contents match it, whatever its date says
+install -Dm0644 %{_sourcedir}/silik %{buildroot}%{_datadir}/silikos/python/silik_main.py
+install -Dm0755 %{_sourcedir}/silik-launch %{buildroot}%{_bindir}/silik
+if /usr/bin/python3 -c 'import sys; sys.exit(sys.version_info[:2] != (3, 9))' 2>/dev/null; then
+  /usr/bin/python3 -c 'import py_compile as c, sys; c.compile(sys.argv[1], dfile=sys.argv[2], doraise=True, invalidation_mode=c.PycInvalidationMode.CHECKED_HASH)' \
+    %{buildroot}%{_datadir}/silikos/python/silik_main.py %{_datadir}/silikos/python/silik_main.py
+fi
 install -Dm0644 %{_sourcedir}/silik.bash-completion %{buildroot}%{_datadir}/bash-completion/completions/silik
 
 %files
 %{_bindir}/silik
+%dir %{_datadir}/silikos
+%{_datadir}/silikos/python
 %{_datadir}/bash-completion/completions/silik
