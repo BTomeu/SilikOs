@@ -90,8 +90,8 @@ silik secure status              revisa la seguretat del sistema
 |---|---|---|
 | **Xips (EDA)** | ngspice, Xschem, Magic, KLayout, Netgen, Yosys, Icarus Verilog, Verilator, NVC (VHDL), Qucs-S, DEVSIM (simulació de dispositius); KiCad està en camí | compilades per nosaltres, o d'EPEL |
 | **Eines antigues** | les versions de Cadence/Synopsys fetes per a Red Hat 6 o 7 funcionen dins de **capses** (contenidors) amb aquell sistema antic | `silik eda create` |
-| **Microcontroladors** | compilador ARM, gdb, OpenOCD, dfu-util, ST-LINK, stm32flash, esptool; els IDEs dels fabricants s'instal·len amb `silik dev install` des de la teva descàrrega | EPEL i compilades per nosaltres |
-| **Banc** | CAN (PEAK, Kvaser, candleLight, CANable; CAN FD), SavvyCAN, cantools (fitxers DBC), python-can, ports sèrie i RS485, Modbus, Wireshark, PulseView i sigrok (analitzadors lògics, 131 descodificadors) | EL 9, EPEL i compilades per nosaltres |
+| **Microcontroladors** | compilador ARM, gdb, OpenOCD, dfu-util, ST-LINK, stm32flash, esptool, SDCC (8051, STM8, Z80); els IDEs dels fabricants s'instal·len amb `silik dev install` des de la teva descàrrega | EPEL i compilades per nosaltres |
+| **Banc** | CAN (PEAK, Kvaser, candleLight, CANable; CAN FD), SavvyCAN, cantools (fitxers DBC), python-can, ports sèrie i RS485, Modbus, Wireshark, PulseView i sigrok (analitzadors lògics, 131 descodificadors; també els barats de 24 MHz amb el firmware fx2lafw) | EL 9, EPEL i compilades per nosaltres |
 | **Windows** | Wine per als programes que hi funcionen, dins d'una capsa que no veu els teus fitxers; una màquina virtual Windows per a la resta, on es pot passar un dispositiu USB sencer (per exemple un Vector VN1630, que només té controlador per a Windows) | compilat per nosaltres (Wine 11) |
 | **SilikStudio** | la primera tecla de l'escriptori | el seu propi repositori |
 
@@ -111,7 +111,7 @@ l'instal·la des de la seva descàrrega i amb la seva llicència. SilikOS hi pos
 
 Tot està en un repositori de GitHub. Hi ha tres maneres de comprovar que funciona, de més ràpida a més real:
 
-1. **Proves automàtiques** (255 ara mateix): comproven el codi de `silik`, els fitxers de l'escriptori, les regles
+1. **Proves automàtiques** (272 ara mateix): comproven el codi de `silik`, els fitxers de l'escriptori, les regles
    de colors…, en segons.
 2. **El banc de proves**: un escriptori GNOME de veritat dins d'un contenidor, on s'instal·len els paquets i es fan
    fotos de pantalla. Totes les imatges dels colors, les icones, SavvyCAN o PulseView surten d'aquí.
@@ -137,6 +137,9 @@ sense haver-ho executat de veritat. Les suposicions es marquen amb [A].
 - L'aspecte illa per defecte.
 - Les actualitzacions automàtiques.
 - Les eines CAN i el banc (SavvyCAN, cantools, PulseView…).
+- SDCC i el firmware fx2lafw (sense cap analitzador real connectat).
+- Els programes Qt (SavvyCAN, PulseView, KLayout) amb l'aspecte i l'accent de SilikOS.
+- La secció Banc a l'Inici, i l'Inici que s'obre més ràpid (de 64–76 ms a 15–17 ms amb 152 aplicacions).
 
 **Aturat per decisions o coses del propietari:**
 - **GitHub no executa feines** per un problema de facturació del compte. Fins que s'arregli, no es pot construir la
@@ -147,10 +150,8 @@ sense haver-ho executat de veritat. Les suposicions es marquen amb [A].
 - **KiCad**: compilat, però la seva prova es va quedar a mitges per la facturació.
 
 **Següents passos proposats:**
-- El firmware dels analitzadors lògics barats (fx2lafw, que necessita el compilador SDCC).
-- Que les aplicacions Qt (KLayout, SavvyCAN, PulseView) agafin el tema de SilikOS.
-- Una secció «Banc» a l'Inici.
 - Una ISO que instal·li sense xarxa.
+- Que l'ordre `silik` i el COMMAND bar arrenquin més ràpid (s'està mesurant).
 
 ## 8. Petit glossari
 
