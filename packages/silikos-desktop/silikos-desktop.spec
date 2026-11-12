@@ -78,7 +78,8 @@ done
 # the desktop: a shell extension. The Silik look (title bar = command line, text rail, status bar) and the Flow looks
 # (flow.js: bar, island); the key that chooses one is a settings schema of the system (glib2's file trigger compiles it)
 # (accent-ACCENT.css: the extension's rules that take an accent, loaded while the key "accent" names it)
-for f in metadata.json extension.js flow.js stylesheet.css $(cd %{_sourcedir}/shell-ext && ls accent-*.css); do
+# (glass.css: the panes on glass, loaded while the key "glass" is on)
+for f in metadata.json extension.js flow.js stylesheet.css glass.css $(cd %{_sourcedir}/shell-ext && ls accent-*.css); do
   install -Dm0644 %{_sourcedir}/shell-ext/$f %{buildroot}%{_datadir}/gnome-shell/extensions/silik-shell@silikvolt.com/$f
 done
 install -Dm0644 %{_sourcedir}/com.silikvolt.silikos.shell.gschema.xml %{buildroot}%{_datadir}/glib-2.0/schemas/com.silikvolt.silikos.shell.gschema.xml

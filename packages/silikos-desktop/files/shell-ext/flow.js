@@ -20,12 +20,14 @@
  * made at once. Nothing moves, and no timer runs, while nothing changes. */
 'use strict';
 
-const { Clutter, Gio, GLib, GnomeDesktop, Meta, Pango, Shell, St } = imports.gi;
+const { Clutter, Gio, GLib, GObject, GnomeDesktop, Meta, Pango, Shell, St } = imports.gi;
 const Main = imports.ui.main;
 const AppFavorites = imports.ui.appFavorites;
+const Background = imports.ui.background;
 
 const BAR_H = 46;                                 /* the bar, its ink line included */
 const ISL_H = 54, ISL_GAP = 12, ISL_TOP = 8;      /* the island, the space under it, the space kept free above it */
+var ISL_R = 6;                                    /* its corners (stylesheet.css: .silik-island, .silik-start-island) */
 const COMMAND_ID = 'org.silikvolt.Command.desktop';
 
 /* ---- motion: the one door. Times in ms. */
@@ -154,8 +156,18 @@ var FlowLook = class FlowLook {
         }
     }
 
+    /* the piece's glass (the key "glass"): made or taken away; layout() keeps it under the piece */
+    glass(on) {
+        if (!on === !this._mica) return;
+        if (on) {
+            this._mica = new Mica(this._piece, Main.layoutManager.primaryIndex, false, this.kind === 'island' ? ISL_R : 0);
+            this.layout();
+        } else { this._mica.destroy(); this._mica = null; }
+    }
+
     destroy() {
         this._gone = true;
+        if (this._mica) { this._mica.destroy(); this._mica = null; }
         if (this._geomLater) { Meta.later_remove(this._geomLater); this._geomLater = 0; }
         for (const k of this._keys.values())                 /* the windows forget the keys */
             for (const w of k.app.get_windows()) w.set_icon_geometry(null);
@@ -537,14 +549,17 @@ var FlowLook = class FlowLook {
         if (this.kind === 'bar') {
             this._piece.set_position(m.x, m.y + m.height - BAR_H * s);
             this._piece.set_size(m.width, BAR_H * s);
+            if (this._mica) this._mica.place(m.x, m.y + m.height - BAR_H * s, m.width, BAR_H * s);
             return;
         }
         const band = (ISL_GAP + ISL_H + ISL_TOP) * s;
         this._band.set_position(m.x, m.y + m.height - band);
         this._band.set_size(m.width, band);
         const [, w] = this._piece.get_preferred_width(-1);
-        this._piece.set_position(m.x + Math.max(0, Math.floor((m.width - w) / 2)), m.y + m.height - (ISL_GAP + ISL_H) * s);
+        const x = m.x + Math.max(0, Math.floor((m.width - w) / 2)), y = m.y + m.height - (ISL_GAP + ISL_H) * s;
+        this._piece.set_position(x, y);
         this._piece.set_height(ISL_H * s);
+        if (this._mica) this._mica.place(x, y, w, ISL_H * s);
     }
 
     /* where Start opens: on the bar from the left edge, or centred above the island */
@@ -558,7 +573,124 @@ var FlowLook = class FlowLook {
         }
         const top = (ISL_GAP + ISL_H + ISL_TOP) * s;
         h = Math.min(h, m.height - top - ISL_TOP * s);
+        /* a pane a few pixels wider or narrower than the island under it reads as a mistake: within 24 px it takes the
+           island's width, and their edges line up (seen in the rig: 640 over 636) */
+        const iw = this._piece.get_preferred_width(-1)[1];
+        if (Math.abs(iw - w) <= 24 * s) w = iw;
         w = Math.min(w, m.width);
         return [m.x + Math.floor((m.width - w) / 2), m.y + m.height - top - h, w, h];
+    }
+};
+
+/* ---- glass (the key "glass"): a pane is paper at 0.86 (glass.css) over its glass, the wallpaper under it blurred.
+   Only the wallpaper, never the windows: what shows through a pane is the same whatever is open, so nothing behind it
+   can make its text unreadable, and it costs nothing at rest. The blur is the shell's own (Shell.BlurEffect) in ACTOR
+   mode: made when the glass is first painted and kept until the wallpaper or the pane's place or size change; a still
+   screen, a key that lights up or a clock that ticks paint the kept picture. (Its BACKGROUND mode, which blurs the
+   screen as it is, was tried and left: GNOME Shell 40 then blurs what is outside the part of the screen being redrawn
+   as it was in an older frame, and every small change left a lighter box on the pane; seen in the rig, 12/11/2026.)
+   The glass ends where the pane's frame ends: a rounded pane's glass is cut to its corners. */
+var GLASS_SIGMA = 16;                                /* the blur's radius in px at scale 1 */
+
+/* The glass is blurred a margin wider than the pane, so that its edges blur what really is next to them, and a mask
+   cuts it to the pane, square or with its corners. The blur also draws in the nothing beyond its picture: the glass
+   grew transparent toward its edges, over about 4 sigma (seen in the rig: the windows behind the COMMAND bar showed
+   at its edges). The mask takes that out: a pixel of the glass is the average of the wallpaper it was made from,
+   its colour divided by its coverage (the picture is premultiplied: rgb / a). What the mask writes is blended as
+   straight colour and alpha (written premultiplied, the rounded edge came out with a dark fringe: seen in the rig),
+   so its alpha is the pane's opacity times the mask's edge.
+   The mask is drawn on the picture the shell made of the glass, whose box Clutter makes larger than the actor
+   (_clutter_actor_box_enlarge_for_effects, GNOME Shell 40: 3 px more, the actor 2 px in from the top left when it
+   stands on whole pixels, as the glass does: place() rounds). Without that the corners of the COMMAND bar's glass
+   were not cut (seen in the rig). */
+const PAD = 2, GROW = 3;
+const ROUND_DECL = 'uniform vec2 silik_tex;\nuniform vec2 silik_off;\nuniform vec2 silik_size;\nuniform float silik_radius;\n';
+const ROUND_CODE = 'vec2 silik_p = cogl_tex_coord_in[0].xy * silik_tex - silik_off;\n' +
+    'vec2 silik_q = abs(silik_p - 0.5 * silik_size) - (0.5 * silik_size - vec2(silik_radius));\n' +
+    'float silik_d = length(max(silik_q, 0.0)) + min(max(silik_q.x, silik_q.y), 0.0) - silik_radius;\n' +
+    'vec3 silik_rgb = cogl_color_out.a > 0.004 ? cogl_color_out.rgb / cogl_color_out.a : vec3(0.0);\n' +
+    'cogl_color_out = vec4(silik_rgb, cogl_color_in.a * clamp(0.5 - silik_d, 0.0, 1.0));\n';
+
+const RoundMask = GObject.registerClass({ GTypeName: 'SilikRoundMask' }, class RoundMask extends Shell.GLSLEffect {
+    _init(params) {
+        super._init(params);
+        this._at = ['silik_tex', 'silik_off', 'silik_size', 'silik_radius'].map(n => this.get_uniform_location(n));
+    }
+
+    vfunc_build_pipeline() {
+        this.add_glsl_snippet(Shell.SnippetHook.FRAGMENT, ROUND_DECL, ROUND_CODE, false);
+    }
+
+    /* the actor is W x H; the pane, of corners R, stands M in from its edges */
+    shape(W, H, m, r) {
+        this.set_uniform_float(this._at[0], 2, [W + GROW, H + GROW]);
+        this.set_uniform_float(this._at[1], 2, [PAD + m, PAD + m]);
+        this.set_uniform_float(this._at[2], 2, [W - 2 * m, H - 2 * m]);
+        this.set_uniform_float(this._at[3], 1, [r]);
+    }
+});
+
+/* Mica(pane, monitor, inside, radius): the glass of PANE, on the wallpaper of that monitor. INSIDE: it is the pane's
+   own lowest child (a window); else the pane's sibling just under it, with the pane's opacity, rise and visibility.
+   RADIUS: the pane's corners in px at scale 1 (0: square). place(x, y, w, h) says where the pane is on the screen.
+   The glass is never hidden: while its pane is hidden it is at opacity 0, which the shell does not paint. A hidden
+   actor that is shown again is drawn from scratch, and the blur with it (measured in the rig: 7-11 ms more at each
+   opening of Start then). */
+var Mica = class Mica {
+    constructor(pane, monitor, inside, radius) {
+        const s = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+        this._inside = inside;
+        this._mon = monitor;
+        this._r = radius * s;
+        this._m = 3 * GLASS_SIGMA * s;                   /* the margin blurred beyond the pane: the blur reaches 3 sigma */
+        this._at = null;
+        this.actor = new St.Widget({ reactive: false });
+        this._glass = new St.Widget({ clip_to_allocation: true, reactive: false });
+        this.actor.add_child(this._glass);
+        /* the mask on the holder, the blur on the glass in it: both on the glass, the blur came out shifted in the
+           mask's picture and the pane's edges let what is behind through (seen in the rig) */
+        this._mask = new RoundMask();
+        this.actor.add_effect(this._mask);
+        this._glass.add_effect(new Shell.BlurEffect({ mode: Shell.BlurMode.ACTOR, sigma: GLASS_SIGMA * s, brightness: 1 }));
+        this._bg = new Background.BackgroundManager({ container: this._glass, monitorIndex: monitor, controlPosition: false });
+        this._addSig = this._glass.connect('actor-added', () => this._wall());         /* (a new wallpaper's actor) */
+        if (inside) pane.insert_child_below(this.actor, null);
+        else {
+            pane.get_parent().insert_child_below(this.actor, pane);
+            this._binds = [pane.bind_property('translation-y', this.actor, 'translation-y', GObject.BindingFlags.SYNC_CREATE)];
+            const seen = () => { this.actor.opacity = pane.visible ? pane.opacity : 0; };
+            this._pane = pane;
+            this._paneSigs = [pane.connect('notify::visible', seen), pane.connect('notify::opacity', seen)];
+            seen();
+        }
+    }
+
+    place(x, y, w, h) {
+        const at = [x, y, w, h].map(Math.round), m = this._m;
+        if (this._at && at.every((v, i) => v === this._at[i])) return;     /* (unchanged: the kept blur stays) */
+        this._at = at;
+        /* (the holder is the whole blurred rectangle and the glass stands at its origin: the mask's picture is the
+           holder's own box, which leaves out a child at negative places; seen in the rig) */
+        if (this._inside) this.actor.set_position(-m, -m); else this.actor.set_position(at[0] - m, at[1] - m);
+        this.actor.set_size(at[2] + 2 * m, at[3] + 2 * m);
+        this._glass.set_size(at[2] + 2 * m, at[3] + 2 * m);
+        this._mask.shape(at[2] + 2 * m, at[3] + 2 * m, m, this._r);
+        this._wall();
+    }
+
+    /* the wallpaper sits where it is on the screen, seen through the glass's rectangle */
+    _wall() {
+        const mon = Main.layoutManager.monitors[this._mon];
+        if (!mon || !this._at) return;
+        for (const c of this._glass.get_children()) c.set_position(mon.x - this._at[0] + this._m, mon.y - this._at[1] + this._m);
+    }
+
+    destroy() {
+        if (this._binds) this._binds.forEach(b => b.unbind());
+        if (this._paneSigs) this._paneSigs.forEach(id => this._pane.disconnect(id));
+        this._binds = this._paneSigs = null;
+        this._glass.disconnect(this._addSig);
+        if (this._bg) { this._bg.destroy(); this._bg = null; }
+        this.actor.destroy();
     }
 };
