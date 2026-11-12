@@ -19,6 +19,8 @@
 #   silik session lock | logout | off             (the last two ask first)
 #   silik update
 #   silik secure status [--json] [--offline] | apply [--keep-ssh]
+#   silik doctor [--json] [--verbose] [AREA...]       is this workstation healthy, and what to do: system security
+#               graphics bench eda windows network (default: all); exit 0 all ok, 1 warn or unknown, 2 bad
 # Global: --dry-run prints the commands and runs nothing; -q hides the `$ ...` lines.
 # Python 3.9 (the base system's), standard library only. Every external command is printed as `$ ...` before it runs.
 # Installed as /usr/share/silikos/python/silik_main.py, which /usr/bin/silik (files/silik-launch) imports compiled.
@@ -162,7 +164,11 @@ def gpus(ctx):
 
 
 def boxes(ctx):
-    out = ctx.query(["podman", "ps", "-a", "--filter", "name=^" + BOX_PREFIX, "--format", "{{.Names}}\t{{.Image}}\t{{.Status}}"])
+    return parse_boxes(ctx.query(["podman", "ps", "-a", "--filter", "name=^" + BOX_PREFIX, "--format", "{{.Names}}\t{{.Image}}\t{{.Status}}"]))
+
+
+def parse_boxes(out):
+    """[{name, image, status}] from `podman ps --format '{{.Names}}\t{{.Image}}\t{{.Status}}'`"""
     res = []
     for l in out.splitlines():
         p = l.split("\t")
@@ -1990,14 +1996,13 @@ def sec_firewall():
         fw["installed"] = True
     if fw["active"] is None and root and sec_cmd(["firewall-cmd", "--state"]) == (0, "running"):
         fw["active"] = True    # systemd does not answer, the firewall itself does
-    if fw["active"]:           # ask the running firewall
-        rc, z = sec_cmd(["firewall-cmd", "--get-default-zone"])
+    if fw["active"]:           # ask the running firewall (three questions at once: each is a start of firewall-cmd)
+        (rc, z), (rcz, zs), (rc, az) = par([lambda q=q: sec_cmd(["firewall-cmd", q]) for q in
+                                            ("--get-default-zone", "--get-zones", "--get-active-zones")])
         if rc == 0 and z:
             fw["zone"] = z
-        rc, zs = sec_cmd(["firewall-cmd", "--get-zones"])
-        if rc == 0 and zs:
+        if rcz == 0 and zs:
             fw["zones"] = zs.split()
-        rc, az = sec_cmd(["firewall-cmd", "--get-active-zones"])
         if rc == 0:
             fw["also_active"] = [l.strip() for l in az.splitlines() if l and not l.startswith(" ") and l.strip() != fw["zone"]]
         if root:
@@ -2144,21 +2149,50 @@ def sec_weaker(cur, want, how):
     return cur is not None and (cur < want if how == "min" else cur > want)
 
 
-def sec_probe(pending=True, offline=False):
+def par(fns, timeout=None):
+    """runs the callables FNS at once, each in a thread (the slow parts of a check are other programs, which run side
+    by side); their results in order. One that raised gives its exception as its result; one still running after
+    TIMEOUT seconds gives None"""
+    import threading
+    res = [None] * len(fns)
+
+    def one(i, f):
+        try:
+            res[i] = f()
+        except Exception as e:      # (handed to the caller, who decides)
+            res[i] = e
+    ts = [threading.Thread(target=one, args=(i, f), daemon=True) for i, f in enumerate(fns)]
+    for t in ts:
+        t.start()
+    end = None if timeout is None else time.monotonic() + timeout
+    for t in ts:
+        t.join(None if end is None else max(0.0, end - time.monotonic()))
+    return res
+
+
+def sec_probe(pending=True, offline=False, parallel=False):
+    """what the audit reads; PARALLEL: its parts at once (silik doctor), else one after the other"""
     cont = sec_container()
     bw = shutil.which("bwrap")
     su = os.environ.get("SUDO_USER", "") if os.geteuid() == 0 else ""
     su = su if su != "root" and valid_name(su) else ""
     ns = read("/proc/sys/user/max_user_namespaces").strip()
+    parts = (("selinux", lambda: sec_selinux(cont)), ("firewall", sec_firewall),
+             ("sshd", lambda: {"unit": sec_unit("sshd.service"), "active": sec_active("sshd.service")}),
+             ("auto", sec_updates_auto), ("pending", lambda: sec_pending(offline) if pending else None), ("disk", sec_disk),
+             ("secureboot", lambda: sec_secureboot(cont)), ("lock", lambda: sec_lock(su)), ("autologin", sec_autologin),
+             ("sysctl", sec_sysctl), ("bwrap", lambda: (sec_cmd(["bwrap", "--version"])[1].split() or [""])[-1] if bw else ""))
+    vals = par([f for _, f in parts]) if parallel else [f() for _, f in parts]
+    for v in vals:
+        if isinstance(v, BaseException):
+            raise v
+    got = dict(zip([k for k, _ in parts], vals))
     return {
         "container": cont, "uid": os.geteuid(), "el": os.path.exists("/etc/redhat-release"),
-        "selinux": sec_selinux(cont), "firewall": sec_firewall(),
-        "sshd": {"unit": sec_unit("sshd.service"), "active": sec_active("sshd.service")},
-        "auto": sec_updates_auto(), "pending": sec_pending(offline) if pending else None, "disk": sec_disk(),
-        "secureboot": sec_secureboot(cont), "lock": sec_lock(su), "lock_user": su, "autologin": sec_autologin(), "sysctl": sec_sysctl(),
-        "sysctl_file": os.path.isfile(SEC_SYSCTL_FILE), "vsyscall": kernel_vsyscall(),
-        "bwrap": {"path": bw or "", "version": (sec_cmd(["bwrap", "--version"])[1].split() or [""])[-1] if bw else "",
-                  "userns": int(ns) if ns.isdigit() else None},
+        "selinux": got["selinux"], "firewall": got["firewall"], "sshd": got["sshd"], "auto": got["auto"],
+        "pending": got["pending"], "disk": got["disk"], "secureboot": got["secureboot"], "lock": got["lock"], "lock_user": su,
+        "autologin": got["autologin"], "sysctl": got["sysctl"], "sysctl_file": os.path.isfile(SEC_SYSCTL_FILE),
+        "vsyscall": kernel_vsyscall(), "bwrap": {"path": bw or "", "version": got["bwrap"], "userns": int(ns) if ns.isdigit() else None},
     }
 
 
@@ -2707,6 +2741,8 @@ def can_links(ctx):
         return []
     res = []
     for l in links:
+        if not l.get("ifname"):     # (iproute 6.17 of EL 9.8 prints {} for each link the type filter leaves out)
+            continue
         info = ((l.get("linkinfo") or {}).get("info_data") or {})
         res.append((l.get("ifname"), l.get("operstate", "?"), (info.get("bittiming") or {}).get("bitrate"),
                     (info.get("data_bittiming") or {}).get("bitrate")))
@@ -2716,7 +2752,18 @@ def can_links(ctx):
 def dev_can(ctx, a):
     if a.action in (None, "list"):
         links = can_links(ctx)
-        if not links:
+        # the CAN adapters SilikOS knows (hardware.tsv) that are plugged in without being a CAN interface: what to do
+        table, other = hw_known(), []
+        for u in usb_sysfs() or []:
+            r = hw_match(table, u["vid"], u["pid"], u["product"])
+            if r and r["kind"] in ("can", "can-slcan", "vm") and not u["nets"]:
+                vp = "%s:%s" % (u["vid"], u["pid"])
+                tty = "/dev/" + u["ttys"][0] if u["ttys"] else "TTY"
+                how = {"can": "no CAN interface: %s" % ("EL 9's %s does not know this product" % r["driver"] if r["el9"] == "no" else "sudo modprobe " + r["driver"]),
+                       "can-slcan": "slcan: sudo slcand -o -c -s6 %s can0 && sudo ip link set can0 up" % tty,
+                       "vm": "for the Windows VM: silik win vm usb attach " + vp}[r["kind"]]
+                other.append("%-8s %-6s %-22s %s [%s]: %s" % ("-", "-", "", u["product"] or r["name"], vp, how))
+        if not links and not other:
             print("no CAN interfaces: plug in an adapter (candleLight / CANable, PCAN-USB, slcan); `ip link` shows it as can0")
             return 1
         for name, state, rate, drate in links:
@@ -2724,7 +2771,9 @@ def dev_can(ctx, a):
             print("%-8s %-6s %-22s %s" % (name, state.lower(),
                                           ("%d bit/s" % rate if rate else "bit rate not set") + (", data %d" % drate if drate else ""),
                                           " ".join(x for x in (prod, "(%s)" % drv if drv else "") if x)))
-        return 0
+        for l in other:
+            print(l)
+        return 0 if links else 1
     if not a.iface or not valid_name(a.iface):
         die("silik dev can %s IFACE%s" % (a.action, " BITRATE" if a.action == "up" else ""), 2)
     ctx.run(["sudo", "ip", "link", "set", a.iface, "down"], check=a.action == "down")
@@ -3439,6 +3488,872 @@ def power_trim(ctx, a):
     return 0
 
 
+# ------------------------------------------------------------------ doctor
+# `silik doctor [AREA...]`: one read-only look at the whole workstation, area by area, with the judgement of `silik
+# secure status`: ok / warn / bad / unknown (unknown when the subject cannot be seen, never ok) and, on every row that
+# is not ok, the command that fixes it (on an unknown row: the one that lets it be seen). As there, doc_probe_*
+# read the system (the areas at once, in threads: the slow parts are other programs) and doc_check_* judge what was
+# read and run nothing, so the tests feed them made-up systems and command outputs. Nothing is changed; the read-only
+# commands it ran are listed with --verbose and in --json.
+DOCTOR_AREAS = ("system", "security", "graphics", "bench", "eda", "windows", "network")
+DOCTOR_ALIASES = {"sys": "system", "secure": "security", "gpu": "graphics", "dev": "bench", "can": "bench",
+                  "win": "windows", "net": "network"}
+# the SilikOS packages the kickstart installs
+SILIKOS_PKGS = ("silikos-branding", "silikos-desktop", "silikos-security", "silik-tools", "silik-command",
+                "silik-eda-compat", "silik-eda-open", "silik-dev", "silik-win", "silikos-power")
+DOC_RESTART = "/run/silikos/restart"          # written by silikos-security's restart-needed after an update
+DOC_UPDATE_UNITS = {"all": (SEC_FULL_TIMER, "silikos-update.service"), "security": (SEC_TIMER, "silikos-security-update.service")}
+DOC_SHOW = "Id,LoadState,UnitFileState,ActiveState,Result,ExecMainStatus,ExecMainExitTimestamp,LastTriggerUSec"
+DOC_UPDATE_AGE = 2 * 86400     # s: a daily update older than this is late (the timer catches up after a start)
+DOC_DNS_WAIT = 1.0             # s: a name of the update mirrors not resolved by then is said as unknown
+HARDWARE = "/usr/share/silikos/hardware.tsv"   # the USB devices SilikOS knows (silik-tools)
+# the device rules that give a kind of device to the user at the screen (uaccess), and the package that brings them
+DOC_RULES = {"probe": ("/usr/lib/udev/rules.d/60-openocd.rules", "openocd"),
+             "logic": ("/usr/lib/udev/rules.d/61-libsigrok-uaccess.rules", "sigrok"),
+             "serial": ("/usr/lib/udev/rules.d/70-silikos-serial.rules", "silik-dev"),
+             "can-slcan": ("/usr/lib/udev/rules.d/70-silikos-serial.rules", "silik-dev"),
+             "vm": ("/usr/lib/udev/rules.d/70-silikos-usb-vm.rules", "silik-dev")}
+GB = 1024 ** 3
+DOC_RAN = []                   # the read-only commands this run asked (--verbose, --json)
+
+
+def doc_cmd(argv, timeout=10):
+    """a read-only command of the doctor, noted for --verbose: (exit code or None, stdout) as sec_cmd"""
+    DOC_RAN.append(" ".join(shlex.quote(a.replace("\t", "\\t").replace("\n", "\\n")) for a in argv))   # (rpm reads \t \n itself)
+    return sec_cmd(argv, timeout=timeout)
+
+
+def doc_row(rows, area, i, name, state, value, fix=()):
+    rows.append({"area": area, "id": i, "name": name, "state": state, "value": value, "fix": list(fix) if state != "ok" else []})
+
+
+def ago(s):
+    """an age in words: 40 s, 12 min, 5 h, 3 days"""
+    s = max(0, int(s))
+    return "%d s" % s if s < 90 else "%d min" % (s // 60) if s < 5400 else "%d h" % (s // 3600) if s < 172800 else "%d days" % (s // 86400)
+
+
+def size(b):
+    return "%.1f GB" % (b / GB) if b >= GB else "%d MB" % (b // (1024 * 1024))
+
+
+def bitrate(n):
+    return "%g Mbit/s" % (n / 1e6) if n >= 1000000 else "%g kbit/s" % (n / 1e3)
+
+
+def rate_word(n):
+    """a bit rate as `silik dev can up` takes it: 500k, 1M"""
+    return "%gM" % (n / 1e6) if n >= 1000000 else "%gk" % (n / 1e3)
+
+
+def no_secret(url):
+    """a proxy's address without the user and password it may carry"""
+    return re.sub(r"//[^@/]*@", "//", url)
+
+
+def user_bus():
+    return os.path.exists(os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/nonexistent", "bus"))
+
+
+# ---- system
+def doc_probe_system():
+    disks = {}
+    for mp in ("/", "/home", "/var"):
+        try:
+            s = os.statvfs(mp)
+            disks[mp] = {"dev": os.stat(mp).st_dev, "size": s.f_blocks * s.f_frsize, "free": s.f_bavail * s.f_frsize,
+                         "files": s.f_files, "ffree": s.f_ffree}
+        except OSError:
+            disks[mp] = None
+    units = [u for pair in DOC_UPDATE_UNITS.values() for u in pair]
+    rpm, show, journal, failed, ufailed = par([
+        lambda: doc_cmd(["rpm", "-q", "--qf", "%{NAME}\t%{VERSION}-%{RELEASE}.%{ARCH}\t%{INSTALLTIME}\n", "kernel-core"] + list(SILIKOS_PKGS))
+        if shutil.which("rpm") else (None, ""),
+        lambda: doc_cmd(["systemctl", "show", "--timestamp=unix", "-p", DOC_SHOW] + units),
+        # (the job results of the update services, across starts; readable by root and the groups wheel and adm)
+        lambda: doc_cmd(["journalctl", "-q", "--no-pager", "-o", "json", "-n", "40"] + sum((["-u", u] for u in units if u.endswith(".service")), []), timeout=5),
+        lambda: doc_cmd(["systemctl", "list-units", "--failed", "--plain", "--no-legend", "--no-pager"]),
+        lambda: doc_cmd(["systemctl", "--user", "list-units", "--failed", "--plain", "--no-legend", "--no-pager"]) if user_bus() else (None, "")])
+    return {"os": os_release(), "silikos": os.path.exists("/etc/silikos-release"), "base": read("/etc/redhat-release").strip(),
+            "kernel": os.uname().release, "rpm": rpm, "show": show, "journal": journal, "failed": failed, "ufailed": ufailed,
+            "restart": read(DOC_RESTART, None), "disks": disks, "meminfo": read("/proc/meminfo"), "now": time.time(),
+            "container": sec_container()}
+
+
+def systemd_show(text):
+    """{unit: {property: value}} from `systemctl show -p ... UNIT...` (one block per unit)"""
+    out = {}
+    for block in text.split("\n\n"):
+        p = dict(l.partition("=")[::2] for l in block.splitlines() if "=" in l)
+        if p.get("Id"):
+            out[p["Id"]] = p
+    return out
+
+
+def unix_time(v):
+    """a time of `systemctl show --timestamp=unix` (@1731390723), or None"""
+    v = (v or "").strip()
+    return int(v[1:]) if v.startswith("@") and v[1:].isdigit() and int(v[1:]) > 0 else None
+
+
+def journal_jobs(text, unit):
+    """[(time, 'done' | 'failed' | ...)] of the start jobs of UNIT in `journalctl -o json` lines, oldest first"""
+    out = []
+    for l in text.splitlines():
+        try:
+            e = json.loads(l)
+        except ValueError:
+            continue
+        if e.get("UNIT") == unit and e.get("JOB_RESULT") and e.get("JOB_TYPE", "start") == "start":
+            t = e.get("__REALTIME_TIMESTAMP", "")
+            out.append((int(t) / 1e6 if str(t).isdigit() else None, e["JOB_RESULT"]))
+    return out
+
+
+def doc_updates(st, rows):
+    rc, text = st["show"]
+    if rc != 0:
+        doc_row(rows, "system", "updates", "automatic updates", "unknown", "systemd does not answer%s" % (" (inside a container)" if st["container"] else ""))
+        return
+    sh = systemd_show(text)
+    mode = next((k for k in ("all", "security") if sh.get(DOC_UPDATE_UNITS[k][0], {}).get("UnitFileState") == "enabled"), "")
+    if not mode:
+        if all(sh.get(DOC_UPDATE_UNITS[k][0], {}).get("LoadState") in (None, "not-found") for k in DOC_UPDATE_UNITS):
+            doc_row(rows, "system", "updates", "automatic updates", "warn", "off (the package silikos-security is not installed)",
+                    ["sudo dnf -y install silikos-security"])
+        else:
+            doc_row(rows, "system", "updates", "automatic updates", "warn", "off", ["silik update --auto all"])
+        return
+    timer, service = DOC_UPDATE_UNITS[mode]
+    what = {"all": "every update, daily", "security": "security advisories, daily"}[mode]
+    t, s = sh.get(timer, {}), sh.get(service, {})
+    if t.get("ActiveState") not in ("active", "activating", "reloading"):
+        doc_row(rows, "system", "updates", "automatic updates", "warn", "%s (%s): on from the next start, not running now" % (what, timer),
+                ["sudo systemctl start " + timer])
+        return
+    last = unix_time(t.get("LastTriggerUSec"))
+    seen = []                                      # (time, result) known
+    jobs = journal_jobs(st["journal"][1], service) if st["journal"][0] == 0 else []
+    if jobs and jobs[-1][0]:
+        seen.append((jobs[-1][0], "success" if jobs[-1][1] == "done" else jobs[-1][1]))
+    end = unix_time(s.get("ExecMainExitTimestamp"))
+    if end:                                        # (this start's run, as systemd keeps it)
+        res = s.get("Result", "")
+        seen.append((end, res if res != "exit-code" else "exit status %s" % s.get("ExecMainStatus", "?")))
+    if seen:
+        when, res = max(seen, key=lambda x: x[0])
+        age = st["now"] - when
+        if res != "success":
+            doc_row(rows, "system", "updates", "automatic updates", "bad", "%s; the last run (%s ago) failed: %s" % (what, ago(age), res),
+                    ["journalctl -u %s -n 50   # what dnf said (root, or a member of wheel)" % service, "silik update"])
+        elif age > DOC_UPDATE_AGE:
+            doc_row(rows, "system", "updates", "automatic updates", "warn", "%s; the last run was %s ago" % (what, ago(age)),
+                    ["silik update", "systemctl list-timers %s   # when it runs next" % timer])
+        else:
+            doc_row(rows, "system", "updates", "automatic updates", "ok", "%s; last run %s ago: done" % (what, ago(age)))
+    elif last:
+        doc_row(rows, "system", "updates", "automatic updates", "unknown", "%s; last run %s ago, its result is not readable here" % (what, ago(st["now"] - last)),
+                ["journalctl -u %s -n 50   # as root, or as a member of wheel" % service])
+    else:
+        doc_row(rows, "system", "updates", "automatic updates", "unknown", "%s; it has not run yet" % what, ["systemctl list-timers " + timer])
+
+
+def doc_check_system(st):
+    rows, osr, here = [], st["os"], " (inside a container)" if st["container"] else ""
+    shown = osr.get("PRETTY_NAME") if st["silikos"] else ""
+    if not st["base"]:
+        doc_row(rows, "system", "base", "base", "unknown", "no /etc/redhat-release: not an EL system (%s)" % (osr.get("PRETTY_NAME") or "unknown"))
+    elif osr.get("VERSION_ID", "").split(".")[0] != "9":
+        doc_row(rows, "system", "base", "base", "warn", "%s: SilikOS is made for EL 9" % st["base"])
+    else:
+        doc_row(rows, "system", "base", "base", "ok", "%s on %s, kernel %s" % (shown or "SilikOS packages", st["base"], st["kernel"]))
+
+    rc, out = st["rpm"]
+    have, kernels = {}, []
+    for l in out.splitlines():
+        p = l.split("\t")
+        if len(p) == 3:
+            if p[0] == "kernel-core":
+                kernels.append((int(p[2]) if p[2].isdigit() else 0, p[1]))
+            else:
+                have[p[0]] = p[1].rsplit(".", 1)[0].rsplit("-", 1)[0]
+    if rc is None:
+        doc_row(rows, "system", "packages", "SilikOS packages", "unknown", "rpm is not on this system")
+    else:
+        miss = [p for p in SILIKOS_PKGS if p not in have]
+        val = ", ".join("%s %s" % (p, have[p]) for p in SILIKOS_PKGS if p in have) or "none installed"
+        if have.get("silik-tools") and have["silik-tools"] != VERSION:
+            val += "; this silik is %s (not the installed one)" % VERSION
+        if miss:
+            doc_row(rows, "system", "packages", "SilikOS packages", "warn", "%d of %d: %s; missing: %s" % (len(have), len(SILIKOS_PKGS), val, " ".join(miss)),
+                    ["sudo dnf -y install " + " ".join(miss)])
+        else:
+            doc_row(rows, "system", "packages", "SilikOS packages", "ok", val)
+
+    newest = max(kernels)[1] if kernels else ""
+    if st["restart"] is not None:
+        doc_row(rows, "system", "restart", "restart", "warn", "an update waits for a restart%s" % (" (since %s)" % st["restart"].strip()[:16].replace("T", " ") if st["restart"].strip() else ""),
+                ["systemctl reboot"])
+    elif newest and newest != st["kernel"]:
+        doc_row(rows, "system", "restart", "restart", "warn", "kernel %s is installed; %s runs" % (newest, st["kernel"]), ["systemctl reboot"])
+    elif newest:
+        doc_row(rows, "system", "restart", "restart", "ok", "none waits: the newest installed kernel runs")
+    else:
+        doc_row(rows, "system", "restart", "restart", "unknown", "no restart note; the installed kernels are not known (no kernel-core package)" + here)
+
+    doc_updates(st, rows)
+
+    seen = {}
+    for mp in ("/", "/home", "/var"):
+        d = st["disks"].get(mp)
+        if d is None:
+            doc_row(rows, "system", "disk" + mp, "disk " + mp, "unknown", "not readable")
+            continue
+        if d["dev"] in seen:
+            seen[d["dev"]].append(mp)
+            continue
+        seen[d["dev"]] = [mp]
+    for dev, mps in seen.items():
+        d, mp = st["disks"][mps[0]], mps[0]
+        free = d["free"] / d["size"] if d["size"] else 0
+        iused = 1 - d["ffree"] / d["files"] if d["files"] else 0
+        val = "%s free of %s (%d %%)%s" % (size(d["free"]), size(d["size"]), round(free * 100),
+                                          ", inodes %d %% used" % round(iused * 100) if d["files"] else "")
+        val += " (with %s)" % ", ".join(mps[1:]) if len(mps) > 1 else ""
+        fix = (["du -xh -d1 ~ 2>/dev/null | sort -h | tail   # what takes the space"] if mp == "/home" else
+               ["sudo dnf clean all", "sudo journalctl --vacuum-size=500M", "sudo du -xh -d1 %s 2>/dev/null | sort -h | tail   # what takes the space" % mp])
+        if "/home" in mps and mp != "/home":
+            fix.insert(0, "du -xh -d1 ~ 2>/dev/null | sort -h | tail")
+        state = "bad" if free < 0.02 or d["free"] < GB // 2 or iused > 0.97 else "warn" if free < 0.05 or d["free"] < 2 * GB or iused > 0.9 else "ok"
+        doc_row(rows, "system", "disk" + mp, "disk " + mp, state, val, fix)
+
+    mi = {}
+    for l in st["meminfo"].splitlines():
+        k, _, v = l.partition(":")
+        if v.split() and v.split()[0].isdigit():
+            mi[k] = int(v.split()[0]) * 1024
+    if "MemTotal" not in mi or "MemAvailable" not in mi:
+        doc_row(rows, "system", "memory", "memory", "unknown", "/proc/meminfo is not readable")
+    else:
+        av = mi["MemAvailable"] / mi["MemTotal"]
+        sw, swf = mi.get("SwapTotal", 0), mi.get("SwapFree", 0)
+        val = "%s available of %s; %s" % (size(mi["MemAvailable"]), size(mi["MemTotal"]),
+                                         "swap %s of %s used" % (size(sw - swf), size(sw)) if sw else "no swap")
+        state = "bad" if av < 0.03 else "warn" if av < 0.1 or (sw and (sw - swf) / sw > 0.9) else "ok"
+        doc_row(rows, "system", "memory", "memory", state, val, ["top -o %MEM   # what holds it"])
+
+    rc, out = st["failed"]
+    if rc != 0:
+        doc_row(rows, "system", "units", "services", "unknown", "systemd does not answer" + here)
+    else:
+        units = [l.split()[0] for l in out.splitlines() if l.split()]
+        urc, uout = st["ufailed"]
+        uunits = [l.split()[0] for l in uout.splitlines() if l.split()] if urc == 0 else []
+        if units or uunits:
+            doc_row(rows, "system", "units", "services", "warn", "failed: %s" % ", ".join(units + ["%s (yours)" % u for u in uunits]),
+                    ["systemctl status " + u for u in units[:3]] + ["systemctl --user status " + u for u in uunits[:2]] +
+                    ["sudo systemctl reset-failed   # once understood"])
+        else:
+            doc_row(rows, "system", "units", "services", "ok", "no failed systemd unit" + ("" if urc == 0 else " (the system's; yours not seen: no session bus)"))
+    return rows
+
+
+# ---- security: the rows of `silik secure status`, the ones that are ok said in one line
+def doc_probe_security():
+    return sec_probe(pending=False, parallel=True)
+
+
+def doc_check_security(st):
+    rows, ok = [], []
+    for r in sec_checks(st):
+        if r["id"] in ("updates-pending", "updates-auto", "sandbox"):
+            continue                # (pending advisories need dnf and the network: silik secure status; the others are
+        if r["state"] == "ok":      # said by the areas system and windows)
+            ok.append(r["name"])
+        else:
+            doc_row(rows, "security", r["id"], r["name"], r["state"], r["value"], r["fix"])
+    if ok:
+        rows.insert(0, {"area": "security", "id": "secure", "name": "security", "state": "ok",
+                        "value": "ok: %s (every check, and the pending advisories: silik secure status)" % ", ".join(ok), "fix": []})
+    return rows
+
+
+# ---- graphics
+def doc_probe_graphics():
+    import glob
+    gpus_ = []
+    base = "/sys/bus/pci/devices"
+    for n in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+        d = os.path.join(base, n)
+        if not sys_read(os.path.join(d, "class")).startswith("0x03"):
+            continue
+        drv = os.path.join(d, "driver")
+        gpus_.append({"slot": n, "vendor": sys_read(os.path.join(d, "vendor"))[2:], "device": sys_read(os.path.join(d, "device"))[2:],
+                      "driver": os.path.basename(os.path.realpath(drv)) if os.path.exists(drv) else ""})
+    nv = any(g["vendor"] == "10de" for g in gpus_)
+    names = doc_cmd(["lspci", "-D", "-nn"])[1] if gpus_ and shutil.which("lspci") else ""
+    kernels = []
+    try:
+        kernels = sorted(k for k in os.listdir("/lib/modules") if os.path.exists(os.path.join("/lib/modules", k, "vmlinuz")))
+    except OSError:
+        pass
+    pats = ("extra/nvidia.ko*", "extra/nvidia/nvidia.ko*", "updates/dkms/nvidia.ko*", "kernel/drivers/video/nvidia.ko*")
+    return {"gpus": gpus_, "lspci": names, "nvidia_proc": read("/proc/driver/nvidia/version"),
+            "nvidia_module": doc_cmd(["modinfo", "-F", "version", "nvidia"])[1] if nv and shutil.which("modinfo") else "",
+            "kernels": kernels, "running": os.uname().release,
+            "nvidia_kernels": [k for k in kernels if any(glob.glob(os.path.join("/lib/modules", k, p)) for p in pats)] if nv else [],
+            "session": os.environ.get("XDG_SESSION_TYPE", ""), "container": sec_container()}
+
+
+def doc_check_graphics(st):
+    rows = []
+    names = {}
+    for l in st["lspci"].splitlines():
+        slot, _, rest = l.partition(" ")
+        names[slot] = rest.split(": ", 1)[-1]
+    loaded = re.search(r"Kernel Module(?: for [\w ]+)?\s+([\d.]+)", st["nvidia_proc"])
+    loaded = loaded.group(1) if loaded else ""
+    if not st["gpus"]:
+        doc_row(rows, "graphics", "gpu", "graphics card", "unknown", "no display device seen%s" % (" (inside a container)" if st["container"] else " (a virtual machine without one?)"))
+    for i, g in enumerate(st["gpus"]):
+        nm = "gpu" if len(st["gpus"]) == 1 else "gpu %d" % (i + 1)
+        what = "%s [%s:%s]" % (names.get(g["slot"], g["slot"]), g["vendor"], g["device"])
+        drv = g["driver"]
+        if g["vendor"] == "10de":
+            if drv == "nvidia":
+                mod = st["nvidia_module"].strip()
+                if loaded and mod and mod != loaded:
+                    doc_row(rows, "graphics", "gpu", nm, "warn", "%s: NVIDIA %s runs, %s is installed for this kernel" % (what, loaded, mod), ["systemctl reboot"])
+                else:
+                    doc_row(rows, "graphics", "gpu", nm, "ok", "%s: NVIDIA's driver%s" % (what, " " + loaded if loaded else ""))
+            elif drv == "nouveau":
+                doc_row(rows, "graphics", "gpu", nm, "warn", "%s: nouveau, the open driver (no CUDA, slower)" % what, ["silik hw nvidia install"])
+            else:
+                doc_row(rows, "graphics", "gpu", nm, "warn", "%s: %s" % (what, "driver " + drv if drv else "no driver in use"), ["silik hw nvidia install"])
+            missing = [k for k in st["kernels"] if k not in st["nvidia_kernels"]]
+            if st["nvidia_kernels"] and missing:
+                doc_row(rows, "graphics", "nvidia-kernels", "NVIDIA module", "warn", "none for kernel %s: started on it, the desktop has no NVIDIA driver" % ", ".join(missing),
+                        ["sudo dkms autoinstall -k " + k for k in missing])
+        elif drv:
+            doc_row(rows, "graphics", "gpu", nm, "ok", "%s: driver %s" % (what, drv))
+        else:
+            doc_row(rows, "graphics", "gpu", nm, "warn", "%s: no driver in use" % what, ["sudo dmesg | grep -iE 'drm|gpu|vga'   # why"])
+    s = st["session"]
+    if s == "x11":
+        doc_row(rows, "graphics", "session", "session", "ok", "X11 (the session Virtuoso and the tools of its age are tested on)")
+    elif s == "wayland":
+        doc_row(rows, "graphics", "session", "session", "warn", "Wayland: X11 programs run through Xwayland; X11 is the tested session for the EDA tools",
+                ["log out, and choose the X11 session at the login screen (the gear by the password)"])
+    else:
+        doc_row(rows, "graphics", "session", "session", "unknown", "no graphical session seen from here (%s)" % (s or "ssh, a text console or a container"))
+    return rows
+
+
+# ---- bench: CAN interfaces, USB adapters, probes, analysers, serial ports
+def hw_known(path=None):
+    """the USB devices SilikOS knows: hardware.tsv (silik-tools) as [{id, kind, name, driver, use, el9, verified, date,
+    source}]; [] when the file is absent"""
+    here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hardware.tsv")
+    for p in [path] if path else [os.environ.get("SILIK_HARDWARE"), HARDWARE, here]:
+        if not p or not os.path.isfile(p):
+            continue
+        rows, head = [], None
+        for l in read(p).splitlines():
+            if not l.strip() or l.startswith("#"):
+                continue
+            f = l.split("\t")
+            if head is None:
+                head = f
+            elif len(f) == len(head):
+                rows.append(dict(zip(head, f)))
+        return rows
+    return []
+
+
+def hw_match(table, vid, pid, product=""):
+    """the row of TABLE for a USB device: its VID:PID, else its vendor's VID:*, else a product name pattern; or None"""
+    import fnmatch
+    vp = "%s:%s" % (vid.lower(), pid.lower())
+    for want in (lambda r: r["id"] == vp, lambda r: r["id"] == vid.lower() + ":*",
+                 lambda r: r["id"].startswith("product=") and product and fnmatch.fnmatchcase(product, r["id"][8:])):
+        for r in table:
+            if want(r):
+                return r
+    return None
+
+
+def usb_sysfs(root="/sys/bus/usb/devices", dev="/dev/bus/usb"):
+    """the plugged USB devices, from sysfs (no lsusb): [{vid, pid, product, maker, node, access, drivers, nets, ttys}];
+    access: True / False for the device node as this user may open it (read and write), None when there is no node;
+    None when sysfs has no USB devices to read"""
+    try:
+        names = sorted(os.listdir(root))
+    except OSError:
+        return None
+    out = []
+    for n in names:
+        d = os.path.join(root, n)
+        vid = sys_read(os.path.join(d, "idVendor"))
+        if ":" in n or not vid or vid == "1d6b":          # (interfaces; the root hubs)
+            continue
+        bus, num = sys_read(os.path.join(d, "busnum")), sys_read(os.path.join(d, "devnum"))
+        node = "%s/%03d/%03d" % (dev, int(bus), int(num)) if bus.isdigit() and num.isdigit() else ""
+        drivers, nets, ttys = [], [], []
+        for f in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+            if not f.startswith(n + ":"):
+                continue
+            i = os.path.join(d, f)
+            if os.path.exists(os.path.join(i, "driver")):
+                drivers.append(os.path.basename(os.path.realpath(os.path.join(i, "driver"))))
+            for sub in ("net", "tty"):
+                try:
+                    (nets if sub == "net" else ttys).extend(sorted(os.listdir(os.path.join(i, sub))))
+                except OSError:
+                    pass
+            try:
+                ttys.extend(t for t in sorted(os.listdir(i)) if re.match(r"^tty(USB|ACM)\d+$", t) and t not in ttys)
+            except OSError:
+                pass
+        out.append({"vid": vid, "pid": sys_read(os.path.join(d, "idProduct")), "product": sys_read(os.path.join(d, "product")),
+                    "maker": sys_read(os.path.join(d, "manufacturer")), "node": node,
+                    "access": os.access(node, os.R_OK | os.W_OK) if node and os.path.exists(node) else None,
+                    "drivers": sorted(set(drivers)), "nets": nets, "ttys": ttys,
+                    "tty_access": {"/dev/" + t: os.access("/dev/" + t, os.R_OK | os.W_OK) if os.path.exists("/dev/" + t) else None for t in ttys}})
+    return out
+
+
+def can_parse(text):
+    """the CAN interfaces of `ip -details -statistics -json link show` (every link of type can: adapters, vcan,
+    slcan): [{name, kind, up, state, bitrate, dbitrate, berr, ctrl, xstats, rx_err, tx_err}]; None when it is not JSON"""
+    try:
+        links = json.loads(text) if text.strip() else []
+    except ValueError:
+        return None
+    out = []
+    for l in links if isinstance(links, list) else []:
+        if l.get("link_type") != "can":
+            continue
+        li = l.get("linkinfo") or {}
+        info, st64 = li.get("info_data") or {}, l.get("stats64") or {}
+        out.append({"name": l.get("ifname", "?"), "kind": li.get("info_kind", ""), "up": "UP" in (l.get("flags") or []),
+                    "state": info.get("state"), "bitrate": (info.get("bittiming") or {}).get("bitrate"),
+                    "dbitrate": (info.get("data_bittiming") or {}).get("bitrate"), "berr": info.get("berr_counter"),
+                    "ctrl": info.get("ctrlmode") or [], "xstats": li.get("info_xstats") or {},
+                    "rx_err": (st64.get("rx") or {}).get("errors"), "tx_err": (st64.get("tx") or {}).get("errors")})
+    return out
+
+
+def doc_probe_bench():
+    usb = usb_sysfs()
+    rc, ipj = doc_cmd(["ip", "-details", "-statistics", "-json", "link", "show"]) if shutil.which("ip") else (None, "")
+    whats = {}
+    for c in (can_parse(ipj) or []) if rc == 0 else []:
+        whats[c["name"]] = dev_what(os.path.join("/sys/class/net", c["name"], "device"))
+    ports = [{"dev": d, "by_id": b, "driver": dr, "product": p, "access": os.access(d, os.R_OK | os.W_OK) if os.path.exists(d) else None}
+             for d, b, dr, p in serial_ports()]
+    return {"table": hw_known(), "usb": usb, "ip": (rc, ipj), "whats": whats, "ports": ports, "uid": os.geteuid(),
+            "remote": remote_session(), "rules": {k: os.path.exists(p) for k, (p, _) in DOC_RULES.items()},
+            "slcand": shutil.which("slcand") is not None, "container": sec_container()}
+
+
+def doc_access_fix(st, kind, what):
+    """the commands that give a device to the user at the screen, when it is not theirs"""
+    path, pkg = DOC_RULES.get(kind, ("", ""))
+    if st["remote"]:
+        return ["a device is given to the user at the screen (uaccess): run this at the machine, not over ssh"]
+    if path and not st["rules"].get(kind):
+        return ["sudo dnf -y install %s   # its device rules (%s)" % (pkg, os.path.basename(path)), "then unplug %s and plug it in again" % what]
+    return ["unplug %s and plug it in again (its rule applies when it is plugged in)" % what, "getfacl NODE   # who may open it"]
+
+
+def doc_check_bench(st):
+    rows = []
+    rc, ipj = st["ip"]
+    links = can_parse(ipj) if rc == 0 else None
+    usb = st["usb"]
+    table = st["table"]
+    root = st["uid"] == 0
+    done_ttys = set()
+    if links is None:
+        doc_row(rows, "bench", "can", "CAN", "unknown", "`ip` gives no list of interfaces" if rc != 0 else "`ip -json` gave something else",
+                ["ip -details -statistics link show"])
+    for c in links or []:
+        drv, prod = st["whats"].get(c["name"], ("", ""))
+        who = " ".join(x for x in (prod, "(%s)" % drv if drv else "(%s)" % c["kind"] if c["kind"] else "") if x)
+        rate = c["bitrate"]
+        cnt = []
+        if c["berr"]:
+            cnt.append("error counters tx %s rx %s" % (c["berr"].get("tx", "?"), c["berr"].get("rx", "?")))
+        xs = c["xstats"]
+        if xs.get("bus_error") or xs.get("bus_off") or xs.get("restarts"):
+            cnt.append("since up: %s bus errors, %s bus-off, %s restarts" % (xs.get("bus_error", 0), xs.get("bus_off", 0), xs.get("restarts", 0)))
+        if c["rx_err"] or c["tx_err"]:
+            cnt.append("frames with errors rx %s tx %s" % (c["rx_err"] or 0, c["tx_err"] or 0))
+        head = "%s%s" % (who + ": " if who else "", ", ".join(x for x in (
+            bitrate(rate) if rate else "", "data " + bitrate(c["dbitrate"]) if c["dbitrate"] else "",
+            "listen only" if "LISTEN-ONLY" in c["ctrl"] else "") if x))
+        up = (["sudo ip link set %s up" % c["name"]] if c["kind"] in ("vcan", "") else
+              ["silik dev can up %s %s" % (c["name"], rate_word(rate) if rate else "500k")])
+        hint = "check: one bit rate on every node; 120 ohm at both ends of the bus (60 ohm across CAN_H and CAN_L, power off); another node that acknowledges"
+        errs = "candump -e %s,0~0,#FFFFFFFF   # the error frames" % c["name"]
+        state = (c["state"] or "").upper()
+        if not c["up"]:
+            doc_row(rows, "bench", "can", c["name"], "warn", "down%s" % ("; " + head if head else ""), up)
+        elif state == "BUS-OFF":
+            doc_row(rows, "bench", "can", c["name"], "bad", "bus-off: the adapter stopped sending; %s" % "; ".join([head] + cnt),
+                    [errs, hint, "sudo ip link set %s down && %s" % (c["name"], up[0])])
+        elif state in ("ERROR-WARNING", "ERROR-PASSIVE"):
+            doc_row(rows, "bench", "can", c["name"], "warn", "%s; %s" % (state.lower(), "; ".join([head] + cnt)), [errs, hint])
+        elif state in ("STOPPED", "SLEEPING"):
+            doc_row(rows, "bench", "can", c["name"], "warn", "%s; %s" % (state.lower(), head), up)
+        else:
+            doc_row(rows, "bench", "can", c["name"], "ok", "up%s; %s" % (", " + state.lower() if state else "", "; ".join([head] + cnt + ([] if state else ["no bus state from this driver"]))))
+    if usb is None:
+        doc_row(rows, "bench", "usb", "USB devices", "unknown", "/sys/bus/usb is not readable" + (" (inside a container)" if st["container"] else ""))
+        usb = []
+    for u in usb:
+        r = hw_match(table, u["vid"], u["pid"], u["product"])
+        if not r:
+            continue
+        vp = "%s:%s" % (u["vid"], u["pid"])
+        nm = (u["product"] or r["name"]) if r["id"].startswith("product=") or r["id"].endswith(":*") else r["name"]
+        label = "%s [%s]" % (nm, vp)
+        kind, drv = r["kind"], r["driver"]
+        done_ttys.update("/dev/" + t for t in u["ttys"])
+        if kind == "can":
+            if u["nets"]:
+                continue                    # (said with its interface above)
+            if drv in u["drivers"]:
+                doc_row(rows, "bench", "usb-" + vp, r["name"], "unknown", "%s: driver %s, no CAN interface seen" % (label, drv), ["ip -details link show"])
+            elif r.get("el9") == "no":
+                doc_row(rows, "bench", "usb-" + vp, r["name"], "bad", "%s: EL 9's %s does not know this product (it is in newer kernels: %s)" % (label, drv, r["source"]),
+                        ["no driver on SilikOS for it yet; another adapter, or Windows in the VM: silik win vm usb attach " + vp])
+            else:
+                doc_row(rows, "bench", "usb-" + vp, r["name"], "warn", "%s: the driver %s is not bound" % (label, drv), ["sudo modprobe " + drv])
+            continue
+        tty = "/dev/" + u["ttys"][0] if u["ttys"] else ""
+        if kind == "can-slcan":
+            if not tty:
+                doc_row(rows, "bench", "usb-" + vp, r["name"], "warn", "%s: no serial port (cdc_acm not bound)" % label, ["sudo modprobe cdc_acm"])
+            else:
+                fix = ([] if st["slcand"] else ["sudo dnf -y install can-utils   # slcand"]) + \
+                      ["sudo slcand -o -c -s6 %s can0 && sudo ip link set can0 up   # -s6: 500 kbit/s (s4 125k, s5 250k, s8 1M)" % tty,
+                       "or flash its candleLight firmware: then it is a gs_usb adapter, can0 at once"]
+                doc_row(rows, "bench", "usb-" + vp, r["name"], "warn", "%s on %s: a serial port, not yet a CAN interface (slcan)" % (label, tty), fix)
+            continue
+        if kind == "serial":
+            if not u["ttys"]:
+                doc_row(rows, "bench", "usb-" + vp, r["name"], "warn", "%s: no serial port (%s not bound)" % (label, drv), ["sudo modprobe " + drv])
+                continue
+            node, acc, how = tty, u["tty_access"].get(tty), r["use"].replace("TTY", tty)
+        else:
+            node, acc = u["node"], u["access"]
+            how = r["use"].replace("VID:PID", vp)
+            if tty:
+                how += "; its serial port: tio " + tty
+        if root:
+            doc_row(rows, "bench", "usb-" + vp, r["name"], "unknown", "%s: seen as root, the user's access is not checked" % label, ["silik doctor bench   # as the user"])
+        elif acc is None:
+            doc_row(rows, "bench", "usb-" + vp, r["name"], "unknown", "%s: no device node %s" % (label, node or "") , ["ls -l /dev/bus/usb/*/*"])
+        elif not acc:
+            doc_row(rows, "bench", "usb-" + vp, r["name"], "warn", "%s: %s is not yours" % (label, node),
+                    [f.replace("NODE", node) for f in doc_access_fix(st, kind, "it")])
+        else:
+            doc_row(rows, "bench", "usb-" + vp, r["name"], "ok", "%s: yours; %s" % (label, how))
+    for p in st["ports"]:
+        if p["dev"] in done_ttys or not re.match(r"^/dev/tty(USB|ACM)\d+$", p["dev"]):
+            continue
+        label = "%s (%s)" % (p["dev"], " ".join(x for x in (p["product"], p["driver"]) if x) or "serial port")
+        if root:
+            doc_row(rows, "bench", "tty-" + p["dev"], "serial", "unknown", "%s: seen as root, the user's access is not checked" % label, ["silik doctor bench   # as the user"])
+        elif p["access"] is False:
+            doc_row(rows, "bench", "tty-" + p["dev"], "serial", "warn", "%s is not yours" % label, [f.replace("NODE", p["dev"]) for f in doc_access_fix(st, "serial", "it")])
+        elif p["access"]:
+            doc_row(rows, "bench", "tty-" + p["dev"], "serial", "ok", "%s: yours; tio %s" % (label, p["dev"]))
+    if not rows and st["usb"] is not None and links is not None:
+        doc_row(rows, "bench", "bench", "bench", "ok", "no CAN interface; none of the %d USB devices SilikOS knows is plugged in" % len(table)
+                if table else "no CAN interface; the list of known devices (%s) is missing" % HARDWARE)
+    elif not table:
+        doc_row(rows, "bench", "hardware", "known devices", "unknown", "the list of known devices (%s) is missing" % HARDWARE, ["sudo dnf -y reinstall silik-tools"])
+    return rows
+
+
+# ---- eda
+def doc_probe_eda():
+    rc, out = doc_cmd(["podman", "ps", "-a", "--filter", "name=^" + BOX_PREFIX, "--format", "{{.Names}}\t{{.Image}}\t{{.Status}}"], timeout=8) \
+        if shutil.which("podman") else (None, "")
+    return {"podman": (rc, out), "has_podman": shutil.which("podman") is not None, "vsyscall": kernel_vsyscall(),
+            "tools": [(exe, pkg, tool_where(exe) is not None) for exe, pkg, _ in OPEN_TOOLS],
+            "ngspice": shutil.which("ngspice") is not None, "threads": ngspice_threads(), "cores": cpu_cores(),
+            "xhost": shutil.which("xhost") is not None}
+
+
+def doc_check_eda(st):
+    rows = []
+    rc, out = st["podman"]
+    if not st["has_podman"]:
+        doc_row(rows, "eda", "boxes", "EDA boxes", "warn", "podman is not installed: no EL6 / EL7 / EL8 boxes", ["sudo dnf -y install podman"])
+    elif rc != 0:
+        doc_row(rows, "eda", "boxes", "EDA boxes", "unknown", "podman does not answer (podman ps exited %s)" % rc, ["podman ps -a"])
+    else:
+        bs = parse_boxes(out)
+        el6 = [b["name"] for b in bs if "centos:6" in b["image"]]
+        if el6 and st["vsyscall"] == "none":
+            doc_row(rows, "eda", "boxes", "EDA boxes", "bad", "%s: EL6, and this kernel has no vsyscall page (its programs crash)" % ", ".join(el6),
+                    ["silik eda kernel-arg"])
+        elif el6 and not st["vsyscall"]:
+            doc_row(rows, "eda", "boxes", "EDA boxes", "unknown", "%s: EL6; the kernel's vsyscall mode is not readable" % ", ".join(el6), ["silik eda check"])
+        else:
+            doc_row(rows, "eda", "boxes", "EDA boxes", "ok", ", ".join("%s (%s, %s)" % (b["name"], b["image"].split("/")[-1], b["status"].lower()) for b in bs)
+                    or "none (silik eda create NAME --el 6 makes one)")
+        if not st["xhost"]:
+            doc_row(rows, "eda", "x11", "box windows", "warn", "xhost is missing: the boxes cannot open windows on this display",
+                    ["sudo dnf -y install xorg-x11-server-utils"])
+    have = [pkg for exe, pkg, ok in st["tools"] if ok]
+    miss = sorted(set(pkg for exe, pkg, ok in st["tools"] if not ok))
+    if miss:
+        doc_row(rows, "eda", "tools", "open tools", "warn", "%d of %d; missing: %s" % (len(have), len(st["tools"]), " ".join(miss)),
+                ["sudo dnf -y install " + " ".join(miss)])
+    else:
+        doc_row(rows, "eda", "tools", "open tools", "ok", "all %d (silik eda tools; silik eda try runs them)" % len(st["tools"]))
+    if st["ngspice"]:
+        n = st["threads"]
+        if n:
+            doc_row(rows, "eda", "ngspice", "ngspice threads", "ok", "%d (of %d cores; silik eda tune)" % (n, st["cores"]))
+        elif st["cores"] > 2:
+            doc_row(rows, "eda", "ngspice", "ngspice threads", "warn", "2, its default, on %d cores: transistor models evaluated on 2" % st["cores"],
+                    ["silik eda tune   # silik eda bench measures first"])
+        else:
+            doc_row(rows, "eda", "ngspice", "ngspice threads", "ok", "2, its default, on %d cores" % st["cores"])
+    return rows
+
+
+# ---- windows
+def libvirt_session_vms():
+    """{name: True running / False off} of the virtual machines of qemu:///session, from libvirt's files (virsh would
+    start libvirt's session daemon) [A: libvirt's paths of a session's configuration and run state]"""
+    home = os.path.expanduser("~")
+    conf = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.join(home, ".config"), "libvirt", "qemu")
+    run = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/nonexistent", "libvirt", "qemu", "run")
+    out = {}
+    try:
+        names = [f[:-4] for f in os.listdir(conf) if f.endswith(".xml")]
+    except OSError:
+        return out
+    for n in sorted(names):
+        pid = read(os.path.join(run, n + ".pid")).strip()
+        out[n] = pid.isdigit() and os.path.exists("/proc/" + pid)
+    return out
+
+
+def doc_probe_windows():
+    bw = bwrap_bin()
+    ns = read("/proc/sys/user/max_user_namespaces").strip()
+    return {"wine": shutil.which("wine") or "", "mono": wine_addon("mono"), "gecko": wine_addon("gecko"),
+            "prefixes": prefixes(), "programs": len(win_programs()), "bwrap": bw or "", "userns": int(ns) if ns.isdigit() else None,
+            "kvm": os.path.exists("/dev/kvm"), "kvm_access": os.access("/dev/kvm", os.R_OK | os.W_OK),
+            "virt": shutil.which("virt-install") is not None, "vms": libvirt_session_vms(), "rdp": shutil.which("xfreerdp") is not None,
+            "container": sec_container()}
+
+
+def doc_check_windows(st):
+    rows = []
+    if not st["wine"]:
+        doc_row(rows, "windows", "wine", "Wine", "warn", "not installed: Windows programs do not run", ["sudo dnf -y install silik-wine silik-wine-mono silik-wine-gecko"])
+    else:
+        miss = [p for p, k in (("silik-wine-mono", "mono"), ("silik-wine-gecko", "gecko")) if not st[k]]
+        if miss:
+            doc_row(rows, "windows", "wine", "Wine", "warn", "%s; without %s (.NET / HTML in programs)" % (st["wine"], " and ".join(m.split("-")[-1].title() for m in miss)),
+                    ["sudo dnf -y install " + " ".join(miss)])
+        else:
+            doc_row(rows, "windows", "wine", "Wine", "ok", "%s, with Mono and Gecko" % st["wine"])
+    ps = st["prefixes"]
+    doc_row(rows, "windows", "prefixes", "Wine prefixes", "ok", ("%s; %d program%s in the menu" % (", ".join(ps), st["programs"], "" if st["programs"] == 1 else "s"))
+            if ps else "none yet (an installer opened with silik win open SETUP.exe makes \"default\")")
+    if not st["bwrap"]:
+        doc_row(rows, "windows", "sandbox", "sandbox", "warn", "bubblewrap is not installed: Windows programs run unconfined", ["sudo dnf -y install bubblewrap"])
+    elif st["userns"] == 0:
+        doc_row(rows, "windows", "sandbox", "sandbox", "warn", "bubblewrap, but user namespaces are off (user.max_user_namespaces = 0)",
+                ["grep -rs max_user_namespaces /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d   # the file that turns them off"])
+    elif st["userns"] is None:
+        doc_row(rows, "windows", "sandbox", "sandbox", "unknown", "bubblewrap; user namespaces: not readable")
+    else:
+        doc_row(rows, "windows", "sandbox", "sandbox", "ok", "bubblewrap, user namespaces on")
+    vms = st["vms"]
+    vm_txt = ", ".join("%s (%s)" % (n, "running" if r else "off") for n, r in sorted(vms.items()))
+    if not st["kvm"]:
+        if st["container"]:
+            doc_row(rows, "windows", "vm", "Windows VM", "unknown", "no /dev/kvm (inside a container)")
+        else:
+            doc_row(rows, "windows", "vm", "Windows VM", "warn" if vms or st["virt"] else "ok",
+                    "no /dev/kvm: virtual machines cannot run%s" % ("; defined: " + vm_txt if vms else ""),
+                    ["turn on AMD-V / Intel VT-x in the firmware's setup; then lsmod | grep kvm"])
+    elif not st["kvm_access"]:
+        doc_row(rows, "windows", "vm", "Windows VM", "warn", "/dev/kvm is not yours%s" % ("; defined: " + vm_txt if vms else ""),
+                ["sudo usermod -aG kvm $USER   # then log in again"])
+    elif vms:
+        doc_row(rows, "windows", "vm", "Windows VM", "ok", vm_txt + ("" if st["rdp"] else "; xfreerdp missing (silik win vm app)"))
+    else:
+        doc_row(rows, "windows", "vm", "Windows VM", "ok", "KVM ready; none defined (silik win vm create --iso WIN.iso)")
+    return rows
+
+
+# ---- network
+def repo_hosts(d="/etc/yum.repos.d"):
+    """{host: [repository ids]} of the enabled repositories' baseurl, mirrorlist and metalink (hosts written with a
+    $variable are left out)"""
+    hosts = {}
+    try:
+        files = sorted(f for f in os.listdir(d) if f.endswith(".repo"))
+    except OSError:
+        return hosts
+    for fn in files:
+        sect, conf = None, {}
+        for l in read(os.path.join(d, fn)).splitlines() + ["[]"]:
+            l = l.strip()
+            if l.startswith("["):
+                if sect and conf.get("enabled", "1").lower() in ("1", "true", "yes"):
+                    for k in ("baseurl", "mirrorlist", "metalink"):
+                        for u in conf.get(k, "").replace(",", " ").split():
+                            m = re.match(r"^[a-z]+://(?:[^@/]*@)?([A-Za-z0-9.-]+)(?:[:/]|$)", u)
+                            if m:
+                                hosts.setdefault(m.group(1).lower(), []).append(sect)
+                sect, conf = l.strip("[]"), {}
+            elif "=" in l and sect:
+                k, _, v = l.partition("=")
+                conf[k.strip()] = v.strip()
+    return hosts
+
+
+def dnf_proxy(path="/etc/dnf/dnf.conf"):
+    sect = ""
+    for l in read(path).splitlines():
+        l = l.strip()
+        if l.startswith("["):
+            sect = l
+        elif sect == "[main]" and l.replace(" ", "").startswith("proxy="):
+            return l.split("=", 1)[1].strip()
+    return ""
+
+
+def default_route():
+    """True / False: a default route (IPv4 or IPv6); None when the routing tables are not readable"""
+    v4, v6 = read("/proc/net/route", None), read("/proc/net/ipv6_route", None)
+    if v4 is None and v6 is None:
+        return None
+    if any(l.split()[1:2] == ["00000000"] and len(l.split()) > 7 and l.split()[7] == "00000000" for l in (v4 or "").splitlines()[1:]):
+        return True
+    return any(l.split()[:2] == ["0" * 32, "00"] and l.split()[-1:] != ["lo"] for l in (v6 or "").splitlines())
+
+
+def doc_probe_network():
+    import socket
+    hosts = repo_hosts()
+    names = sorted(hosts)
+    t0 = time.monotonic()
+    res = par([lambda h=h: socket.getaddrinfo(h, 443, proto=socket.IPPROTO_TCP) for h in names], timeout=DOC_DNS_WAIT)
+    dns = {}
+    for h, r in zip(names, res):
+        dns[h] = "pending" if r is None else "fail: " + str(r) if isinstance(r, BaseException) else "ok"
+    env = {k: os.environ[k] for k in ("https_proxy", "HTTPS_PROXY", "http_proxy", "HTTP_PROXY", "all_proxy", "ALL_PROXY") if os.environ.get(k)}
+    gnome = doc_cmd(["gsettings", "get", "org.gnome.system.proxy", "mode"], timeout=3)[1].strip("'") if user_bus() and shutil.which("gsettings") else ""
+    return {"hosts": hosts, "dns": dns, "dns_ms": int((time.monotonic() - t0) * 1000), "env": env, "dnf": dnf_proxy(), "gnome": gnome,
+            "route": default_route()}
+
+
+def doc_check_network(st):
+    rows = []
+    r = st["route"]
+    if r is None:
+        doc_row(rows, "network", "route", "connection", "unknown", "the routing tables are not readable")
+    elif not r:
+        doc_row(rows, "network", "route", "connection", "bad", "no default route: not connected to a network", ["nmcli device   # the network devices and their state"])
+    else:
+        doc_row(rows, "network", "route", "connection", "ok", "a default route")
+    env = sorted(set(no_secret(v) for v in st["env"].values()))
+    dnf = no_secret(st["dnf"])
+    prox = dnf or (env[0] if env else "")
+    if not st["hosts"]:
+        doc_row(rows, "network", "dns", "mirrors", "unknown", "no enabled repository in /etc/yum.repos.d", ["dnf repolist"])
+    else:
+        bad = sorted(h for h, v in st["dns"].items() if v.startswith("fail"))
+        slow = sorted(h for h, v in st["dns"].items() if v == "pending")
+        okh = sorted(h for h, v in st["dns"].items() if v == "ok")
+        if bad:
+            doc_row(rows, "network", "dns", "mirrors", "warn" if prox else "bad",
+                    "%s do%s not resolve%s" % (", ".join(bad), "es" if len(bad) == 1 else "", " (the proxy %s may resolve them for dnf)" % prox if prox else ""),
+                    ["cat /etc/resolv.conf; nmcli device show | grep -i dns   # the name servers in use", "getent hosts " + bad[0]])
+        elif slow:
+            doc_row(rows, "network", "dns", "mirrors", "unknown", "no answer within %g s for %s" % (DOC_DNS_WAIT, ", ".join(slow)), ["getent hosts " + slow[0]])
+        else:
+            doc_row(rows, "network", "dns", "mirrors", "ok", "%s resolve (%d ms)" % (", ".join(okh), st["dns_ms"]))
+    if env and not dnf:
+        doc_row(rows, "network", "proxy", "proxy", "warn", "this session uses %s; dnf's configuration names none, so the automatic updates (a system service) go without it" % ", ".join(env),
+                ["sudo dnf config-manager --save --setopt=proxy=%s" % env[0]])
+    elif dnf or env:
+        doc_row(rows, "network", "proxy", "proxy", "ok", "dnf: %s%s" % (dnf or "none", "; this session: " + ", ".join(env) if env else ""))
+    else:
+        doc_row(rows, "network", "proxy", "proxy", "ok", "none (direct)%s" % ("; GNOME's setting: " + st["gnome"] if st["gnome"] not in ("", "none") else ""))
+    return rows
+
+
+DOCTOR = {"system": (doc_probe_system, doc_check_system), "security": (doc_probe_security, doc_check_security),
+          "graphics": (doc_probe_graphics, doc_check_graphics), "bench": (doc_probe_bench, doc_check_bench),
+          "eda": (doc_probe_eda, doc_check_eda), "windows": (doc_probe_windows, doc_check_windows),
+          "network": (doc_probe_network, doc_check_network)}
+
+
+def doctor_rows(areas):
+    """the rows of AREAS, read at once (one thread per area), judged in order"""
+    probes = par([DOCTOR[a][0] for a in areas])
+    rows = []
+    for a, st in zip(areas, probes):
+        if isinstance(st, BaseException):
+            doc_row(rows, a, "error", a, "unknown", "the check failed: %s: %s" % (type(st).__name__, st))
+            continue
+        try:
+            rows += DOCTOR[a][1](st)
+        except Exception as e:
+            doc_row(rows, a, "error", a, "unknown", "the check failed: %s: %s" % (type(e).__name__, e))
+    return rows
+
+
+def cmd_doctor(ctx, a):
+    t0 = time.monotonic()
+    areas = []
+    for w in a.areas or DOCTOR_AREAS:
+        w = DOCTOR_ALIASES.get(w, w)
+        if w not in DOCTOR:
+            die("silik doctor [AREA...]: the areas are %s" % " ".join(DOCTOR_AREAS), 2)
+        if w not in areas:
+            areas.append(w)
+    del DOC_RAN[:]
+    rows = doctor_rows(areas)
+    secs = time.monotonic() - t0
+    count = {k: sum(1 for r in rows if r["state"] == k) for k in ("ok", "warn", "bad", "unknown")}
+    rc = 2 if count["bad"] else 1 if count["warn"] or count["unknown"] else 0
+    if a.json:
+        print(json.dumps({"areas": areas, "checks": rows, "summary": count, "seconds": round(secs, 3), "commands": DOC_RAN}, indent=1))
+        return rc
+    lines, last = [], None
+    for r in rows:
+        if r["area"] != last:
+            lines.append(("" if last is None else "\n") + r["area"])
+            last = r["area"]
+        lines.append("%s %-8s %-18s %s" % (SEC_MARK[r["state"]], r["state"], r["name"], r["value"]))
+        lines += ["%-29s %s: %s" % ("", "see" if r["state"] == "unknown" else "fix", f) for f in r["fix"]]
+    if a.verbose:
+        lines.append("\nread with (nothing was changed):")
+        lines += ["$ " + c for c in DOC_RAN] + (["$ silik secure status (its read-only checks)"] if "security" in areas else [])
+    lines.append("\n%d ok, %d warn, %d bad, %d unknown (%.2f s)" % (count["ok"], count["warn"], count["bad"], count["unknown"], secs))
+    text = "\n".join(lines)
+    try:
+        print(text)
+    except UnicodeEncodeError:      # a terminal without the shapes: the words say the same
+        print(text.encode("ascii", "replace").decode("ascii"))
+    return rc
+
+
 # ------------------------------------------------------------------ command line
 def parser(only=None):
     """the command line. ONLY: the group typed (main reads it): the other groups get their name and help, which
@@ -3459,6 +4374,10 @@ def parser(only=None):
     x.add_argument("--accent", choices=[k for k, _ in ACCENTS], help="one colour for what is selected, focused, on or running (ink: none)")
     x.add_argument("--qt", action="store_true", help="Qt 5 programs take the accent in use (the shell runs it)")
     x.add_argument("--json", action="store_true"); x.set_defaults(fn=cmd_look)
+    x = s.add_parser("doctor", help="is this workstation healthy, and what to do: ok / warn / bad / unknown and the command that fixes each")
+    x.add_argument("areas", nargs="*", metavar="AREA", help="system security graphics bench eda windows network (default: all)")
+    x.add_argument("--json", action="store_true"); x.add_argument("--verbose", action="store_true", help="also the read-only commands it ran")
+    x.set_defaults(fn=cmd_doctor)
     x = s.add_parser("session", help="this session: lock | logout | off (the last two ask first)")
     x.add_argument("what", choices=sorted(SESSION)); x.set_defaults(fn=cmd_session)
 

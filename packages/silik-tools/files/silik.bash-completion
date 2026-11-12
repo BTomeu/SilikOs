@@ -7,8 +7,12 @@ _silik() {
     else COMPREPLY=($(compgen -W "silik bar island --accent --json" -- "$cur")); fi
     return
   fi
+  # doctor: its areas, in any number
+  if [ "$g" = doctor ] && [ "$COMP_CWORD" -ge 2 ]; then
+    COMPREPLY=($(compgen -W "system security graphics bench eda windows network --json --verbose" -- "$cur")); return
+  fi
   case $COMP_CWORD in
-    1) COMPREPLY=($(compgen -W "status update identity look session eda dev win power hw secure --dry-run --version" -- "$cur"));;
+    1) COMPREPLY=($(compgen -W "status update identity look session eda dev win power hw secure doctor --dry-run --version" -- "$cur"));;
     2) case $g in
          eda) COMPREPLY=($(compgen -W "list create setup enter run import-vm rm check kernel-arg tools try bench tune" -- "$cur"));;
          win) COMPREPLY=($(compgen -W "list open create run install stop rm sync apps vm" -- "$cur"));;

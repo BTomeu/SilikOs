@@ -82,7 +82,18 @@ silik eda try                    les eines de xips fan feines de veritat i diuen
 silik dev can up can0 500k       engega un lector CAN a 500 kbit/s
 silik win open programa.exe      obre un programa de Windows en una capsa tancada
 silik secure status              revisa la seguretat del sistema
+silik doctor                     diu si l'equip està bé i què cal fer
 ```
+
+**`silik doctor`** és la revisió de tot l'equip amb una sola ordre. Mira, a la vegada, set àrees: el sistema
+(paquets, reinici pendent, l'última actualització automàtica, disc, memòria, serveis caiguts), la seguretat (el
+resum de `silik secure status`), la gràfica (la targeta i el controlador; NVIDIA, Wayland o X11), el banc (els lectors
+CAN amb el seu estat i errors del bus, i els adaptadors USB que SilikOS coneix: si són teus i què has d'executar), les
+eines de xips, Windows (Wine, la capsa, la màquina virtual) i la xarxa (si es troben els servidors d'actualitzacions,
+el proxy). Cada línia diu **ok**, **avís**, **malament** o **desconegut** —desconegut quan no ho pot veure, mai ok— i
+l'ordre exacta que ho arregla. No canvia res. Tarda unes dècimes de segon (0,14–0,27 s en un EL 9 net). La llista
+d'adaptadors (`hardware.tsv`, 137 dispositius) surt de les taules dels controladors del nucli i de les regles dels
+projectes originals, amb la font a cada línia; cap no s'ha provat encara amb un aparell de veritat.
 
 ## 4. Què porta
 
@@ -119,7 +130,7 @@ portàtil de veritat (consum, hores de bateria).
 
 Tot està en un repositori de GitHub. Hi ha tres maneres de comprovar que funciona, de més ràpida a més real:
 
-1. **Proves automàtiques** (272 ara mateix): comproven el codi de `silik`, els fitxers de l'escriptori, les regles
+1. **Proves automàtiques** (323 ara mateix): comproven el codi de `silik`, els fitxers de l'escriptori, les regles
    de colors…, en segons.
 2. **El banc de proves**: un escriptori GNOME de veritat dins d'un contenidor, on s'instal·len els paquets i es fan
    fotos de pantalla. Totes les imatges dels colors, les icones, SavvyCAN o PulseView surten d'aquí.

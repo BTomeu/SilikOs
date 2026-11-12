@@ -1,0 +1,148 @@
+# SilikOS: the USB devices SilikOS knows (silik doctor bench, silik dev can list). One device per line, tab-separated.
+# id: VID:PID, VID:* (every product of the vendor) or product=GLOB (the USB product name, as udev's ATTRS{product})
+# kind: can (a CAN interface through a kernel driver), can-slcan (a serial port that slcand makes one), serial,
+#   probe (debug probe), logic (logic analyser), vm (no Linux driver: for the Windows VM)
+# driver: the kernel module that binds it, or the program that opens it through libusb
+# use: what to run; IFACE / TTY / PART / VID:PID are filled in by silik doctor
+# el9: yes = the ID is in the module's aliases of EL 9.8's kernel (kernel-modules{,-core,-extra} 5.14.0-687.66.2.el9_8, read 2026-11-12); class = the module binds by USB class (cdc_acm); - not a kernel driver
+# verified: yes when a real device was plugged into SilikOS and used; no = [A]: only read from the source
+# date: when the row was last checked against its source
+# source: where the ID was read (a kernel driver's table, an upstream project's udev rules or firmware)
+id	kind	name	driver	use	el9	verified	date	source
+1d50:606f	can	gs_usb / candleLight (CANable, candleLight boards)	gs_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/gs_usb.c
+1209:2323	can	candleLight (pid.codes)	gs_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/gs_usb.c
+1cd2:606f	can	CES CANext FD	gs_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/gs_usb.c
+16d0:10b8	can	ABE CANdebugger FD	gs_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/gs_usb.c
+16d0:0f30	can	Xylanta SAINT3	gs_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/gs_usb.c
+1209:ca01	can	CANnectivity (Zephyr gs_usb firmware)	gs_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux master (11/2026) drivers/net/can/usb/gs_usb.c
+0c72:000c	can	PEAK PCAN-USB	peak_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/peak_usb/pcan_usb_core.h
+0c72:000d	can	PEAK PCAN-USB Pro	peak_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/peak_usb/pcan_usb_core.h
+0c72:0011	can	PEAK PCAN-USB Pro FD	peak_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/peak_usb/pcan_usb_core.h
+0c72:0012	can	PEAK PCAN-USB FD	peak_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/peak_usb/pcan_usb_core.h
+0c72:0013	can	PEAK PCAN-Chip USB	peak_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/peak_usb/pcan_usb_core.h
+0c72:0014	can	PEAK PCAN-USB X6	peak_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/peak_usb/pcan_usb_core.h
+0bfd:000a	can	Kvaser Leaf Devel	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:000b	can	Kvaser Leaf Lite	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:000c	can	Kvaser Leaf Pro	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:000e	can	Kvaser Leaf SPro	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:000f	can	Kvaser Leaf Pro LS	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0010	can	Kvaser Leaf Pro SWC	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0011	can	Kvaser Leaf Pro LIN	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0012	can	Kvaser Leaf SPro LS	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0013	can	Kvaser Leaf SPro SWC	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0016	can	Kvaser Memorator II Devel	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0017	can	Kvaser Memorator II HS/HS	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0018	can	Kvaser UPro HS/HS	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0019	can	Kvaser Leaf Lite GI	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:001a	can	Kvaser Leaf Pro OBDII	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:001b	can	Kvaser Memorator II HS/LS	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:001c	can	Kvaser Leaf Lite CH	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:001d	can	Kvaser Blackbird SPro	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0022	can	Kvaser OEM Mercury	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0023	can	Kvaser OEM Leaf	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0027	can	Kvaser CAN R	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0120	can	Kvaser Leaf Lite v2	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0121	can	Kvaser Mini PCIe HS	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0122	can	Kvaser Leaf Light HS v2 OEM	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0123	can	Kvaser USBcan Light 2HS	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0124	can	Kvaser Mini PCIe 2HS	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0126	can	Kvaser USBcan R v2	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0127	can	Kvaser Leaf Light R v2	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0128	can	Kvaser Leaf Light HS v2 OEM2	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0002	can	Kvaser USBcan Rev B	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0003	can	Kvaser VCI2	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0004	can	Kvaser USBcan2	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0005	can	Kvaser Memorator	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0102	can	Kvaser Blackbird v2	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0104	can	Kvaser Memorator Pro 5HS	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0105	can	Kvaser USBcan Pro 5HS	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0106	can	Kvaser USBcan Light 4HS	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0107	can	Kvaser Leaf Pro HS v2	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0108	can	Kvaser USBcan Pro 2HS v2	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0109	can	Kvaser Memorator 2HS	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:010a	can	Kvaser Memorator Pro 2HS v2	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:010b	can	Kvaser Hybrid 2CAN/LIN	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:010c	can	Kvaser ATI USBcan Pro 2HS v2	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:010d	can	Kvaser ATI Memorator Pro 2HS v2	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:010e	can	Kvaser Hybrid Pro 2CAN/LIN	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0111	can	Kvaser U100	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0112	can	Kvaser U100P	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0113	can	Kvaser U100S	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0114	can	Kvaser USBcan Pro 4HS	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0115	can	Kvaser Hybrid CAN/LIN	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0116	can	Kvaser Hybrid Pro CAN/LIN	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0117	can	Kvaser Leaf v3	kvaser_usb	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:0119	can	Kvaser Vining 800	kvaser_usb	silik dev can up IFACE 500k	no	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:011a	can	Kvaser USBcan Pro 5xCAN	kvaser_usb	silik dev can up IFACE 500k	no	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0bfd:011b	can	Kvaser Mini PCIe 1xCAN	kvaser_usb	silik dev can up IFACE 500k	no	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
+0483:1234	can	8devices USB2CAN	usb_8dev	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/usb_8dev.c
+ad50:60c4	can-slcan	CANable (slcan firmware)	cdc_acm	sudo slcand -o -c -s6 TTY can0 && silik dev can up can0 500k (or flash candleLight: then gs_usb)	class	no	2026-11-12	canable-fw master src/usbd_desc.c (USBD_VID, USBD_PID_FS)
+1248:*	vm	Vector Informatik interface (VN1600 family...)	none (Windows driver only)	silik win vm usb attach VID:PID	-	no	2026-11-12	silik-dev 70-silikos-usb-vm.rules [A: vendor 1248 is not in usb.ids (systemd v256 hwdb); no primary source read]
+0403:6001	serial	FTDI FT232R / FT245 (8U232AM)	ftdi_sio	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/ftdi_sio_ids.h (also JTAG through OpenOCD)
+0403:6010	serial	FTDI FT2232	ftdi_sio	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/ftdi_sio_ids.h (also JTAG through OpenOCD)
+0403:6011	serial	FTDI FT4232H	ftdi_sio	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/ftdi_sio_ids.h (also JTAG through OpenOCD)
+0403:6014	serial	FTDI FT232H	ftdi_sio	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/ftdi_sio_ids.h (also JTAG through OpenOCD)
+0403:6015	serial	FTDI FT-X (FT230X, FT231X...)	ftdi_sio	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/ftdi_sio_ids.h (also JTAG through OpenOCD)
+1a86:5523	serial	WCH CH340 / CH341	ch341	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/ch341.c
+1a86:7522	serial	WCH CH340 / CH341	ch341	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/ch341.c
+1a86:7523	serial	WCH CH340 / CH341	ch341	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/ch341.c
+2184:0057	serial	WCH CH340 / CH341	ch341	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/ch341.c
+4348:5523	serial	WCH CH340 / CH341	ch341	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/ch341.c
+9986:7523	serial	WCH CH340 / CH341	ch341	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/ch341.c
+10c4:ea60	serial	Silicon Labs CP210x (factory default)	cp210x	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/cp210x.c
+10c4:ea61	serial	Silicon Labs CP210x (factory default)	cp210x	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/cp210x.c
+10c4:ea63	serial	Silicon Labs CP210x (Windows Update ID)	cp210x	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/cp210x.c
+10c4:ea70	serial	Silicon Labs CP2105 (factory default)	cp210x	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/cp210x.c
+10c4:ea7a	serial	Silicon Labs CP2105 (Windows Update ID)	cp210x	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/cp210x.c
+10c4:ea7b	serial	Silicon Labs CP2108 (Windows Update ID)	cp210x	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/cp210x.c
+067b:2303	serial	Prolific PL2303	pl2303	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/pl2303.h
+067b:23a3	serial	Prolific PL2303GC	pl2303	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/pl2303.h
+067b:23b3	serial	Prolific PL2303GB	pl2303	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/pl2303.h
+067b:23c3	serial	Prolific PL2303GT	pl2303	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/pl2303.h
+067b:23d3	serial	Prolific PL2303GL	pl2303	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/pl2303.h
+067b:23e3	serial	Prolific PL2303GE	pl2303	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/pl2303.h
+067b:23f3	serial	Prolific PL2303GS	pl2303	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/pl2303.h
+0483:3744	probe	ST-LINK V1	libusb (openocd, stlink)	openocd -f interface/stlink.cfg -f target/PART.cfg; st-info --probe	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+0483:3748	probe	ST-LINK/V2	libusb (openocd, stlink)	openocd -f interface/stlink.cfg -f target/PART.cfg; st-info --probe	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+0483:374b	probe	ST-LINK/V2.1	libusb (openocd, stlink)	openocd -f interface/stlink.cfg -f target/PART.cfg; st-info --probe	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+0483:3752	probe	ST-LINK/V2.1	libusb (openocd, stlink)	openocd -f interface/stlink.cfg -f target/PART.cfg; st-info --probe	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+0483:374d	probe	STLINK-V3	libusb (openocd, stlink)	openocd -f interface/stlink.cfg -f target/PART.cfg; st-info --probe	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+0483:374e	probe	STLINK-V3	libusb (openocd, stlink)	openocd -f interface/stlink.cfg -f target/PART.cfg; st-info --probe	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+0483:374f	probe	STLINK-V3	libusb (openocd, stlink)	openocd -f interface/stlink.cfg -f target/PART.cfg; st-info --probe	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+0483:3753	probe	STLINK-V3	libusb (openocd, stlink)	openocd -f interface/stlink.cfg -f target/PART.cfg; st-info --probe	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+0483:3754	probe	STLINK-V3	libusb (openocd, stlink)	openocd -f interface/stlink.cfg -f target/PART.cfg; st-info --probe	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+1366:0101	probe	SEGGER J-Link	libusb (SEGGER's software)	SEGGER's J-Link software (OpenOCD here is built without J-Link)	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+1366:0102	probe	SEGGER J-Link	libusb (SEGGER's software)	SEGGER's J-Link software (OpenOCD here is built without J-Link)	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+1366:0103	probe	SEGGER J-Link	libusb (SEGGER's software)	SEGGER's J-Link software (OpenOCD here is built without J-Link)	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+1366:0104	probe	SEGGER J-Link	libusb (SEGGER's software)	SEGGER's J-Link software (OpenOCD here is built without J-Link)	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+1366:0105	probe	SEGGER J-Link	libusb (SEGGER's software)	SEGGER's J-Link software (OpenOCD here is built without J-Link)	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+1366:0107	probe	SEGGER J-Link	libusb (SEGGER's software)	SEGGER's J-Link software (OpenOCD here is built without J-Link)	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+1366:0108	probe	SEGGER J-Link	libusb (SEGGER's software)	SEGGER's J-Link software (OpenOCD here is built without J-Link)	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+1366:1010	probe	SEGGER J-Link	libusb (SEGGER's software)	SEGGER's J-Link software (OpenOCD here is built without J-Link)	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+1366:1011	probe	SEGGER J-Link	libusb (SEGGER's software)	SEGGER's J-Link software (OpenOCD here is built without J-Link)	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+1366:1012	probe	SEGGER J-Link	libusb (SEGGER's software)	SEGGER's J-Link software (OpenOCD here is built without J-Link)	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+1366:1013	probe	SEGGER J-Link	libusb (SEGGER's software)	SEGGER's J-Link software (OpenOCD here is built without J-Link)	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+1366:1014	probe	SEGGER J-Link	libusb (SEGGER's software)	SEGGER's J-Link software (OpenOCD here is built without J-Link)	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+1366:1015	probe	SEGGER J-Link	libusb (SEGGER's software)	SEGGER's J-Link software (OpenOCD here is built without J-Link)	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+1366:1016	probe	SEGGER J-Link	libusb (SEGGER's software)	SEGGER's J-Link software (OpenOCD here is built without J-Link)	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+1366:1017	probe	SEGGER J-Link	libusb (SEGGER's software)	SEGGER's J-Link software (OpenOCD here is built without J-Link)	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+1366:1018	probe	SEGGER J-Link	libusb (SEGGER's software)	SEGGER's J-Link software (OpenOCD here is built without J-Link)	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+1366:1020	probe	SEGGER J-Link	libusb (SEGGER's software)	SEGGER's J-Link software (OpenOCD here is built without J-Link)	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+1366:1051	probe	SEGGER J-Link	libusb (SEGGER's software)	SEGGER's J-Link software (OpenOCD here is built without J-Link)	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+1366:1055	probe	SEGGER J-Link	libusb (SEGGER's software)	SEGGER's J-Link software (OpenOCD here is built without J-Link)	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+1366:1061	probe	SEGGER J-Link	libusb (SEGGER's software)	SEGGER's J-Link software (OpenOCD here is built without J-Link)	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+0451:bef3	probe	TI XDS110	libusb (openocd)	openocd -f interface/xds110.cfg -f target/PART.cfg	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+0451:bef4	probe	TI XDS110	libusb (openocd)	openocd -f interface/xds110.cfg -f target/PART.cfg	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+1cbe:02a5	probe	TI XDS110	libusb (openocd)	openocd -f interface/xds110.cfg -f target/PART.cfg	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+04b4:f138	probe	Cypress KitProg (CMSIS-DAP)	libusb (openocd)	openocd -f interface/cmsis-dap.cfg -f target/PART.cfg	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules
+product=*CMSIS-DAP*	probe	CMSIS-DAP probe (DAPLink, picoprobe...)	libusb / hidraw (openocd)	openocd -f interface/cmsis-dap.cfg -f target/PART.cfg	-	no	2026-11-12	openocd v0.12.0 contrib/60-openocd.rules (matched by product name)
+08a9:0014	logic	CWAV USBee AX (FX2)	libusb (libsigrok)	pulseview; sigrok-cli -d fx2lafw --scan	-	no	2026-11-12	libsigrok 0bc24877 src/hardware/fx2lafw/api.c
+08a9:0015	logic	CWAV USBee DX (FX2)	libusb (libsigrok)	pulseview; sigrok-cli -d fx2lafw --scan	-	no	2026-11-12	libsigrok 0bc24877 src/hardware/fx2lafw/api.c
+08a9:0009	logic	CWAV USBee SX (FX2)	libusb (libsigrok)	pulseview; sigrok-cli -d fx2lafw --scan	-	no	2026-11-12	libsigrok 0bc24877 src/hardware/fx2lafw/api.c
+08a9:0005	logic	CWAV USBee ZX (FX2)	libusb (libsigrok)	pulseview; sigrok-cli -d fx2lafw --scan	-	no	2026-11-12	libsigrok 0bc24877 src/hardware/fx2lafw/api.c
+0925:3881	logic	Saleae Logic (FX2)	libusb (libsigrok)	pulseview; sigrok-cli -d fx2lafw --scan	-	no	2026-11-12	libsigrok 0bc24877 src/hardware/fx2lafw/api.c
+04b4:8613	logic	Cypress FX2	libusb (libsigrok)	pulseview; sigrok-cli -d fx2lafw --scan	-	no	2026-11-12	libsigrok 0bc24877 src/hardware/fx2lafw/api.c
+16d0:0498	logic	Braintechnology USB-LPS (FX2)	libusb (libsigrok)	pulseview; sigrok-cli -d fx2lafw --scan	-	no	2026-11-12	libsigrok 0bc24877 src/hardware/fx2lafw/api.c
+1d50:608c	logic	sigrok FX2 LA (8ch)	libusb (libsigrok)	pulseview; sigrok-cli -d fx2lafw --scan	-	no	2026-11-12	libsigrok 0bc24877 src/hardware/fx2lafw/api.c
+1d50:608d	logic	sigrok FX2 LA (16ch)	libusb (libsigrok)	pulseview; sigrok-cli -d fx2lafw --scan	-	no	2026-11-12	libsigrok 0bc24877 src/hardware/fx2lafw/api.c
+1d50:608f	logic	sigrok usb-c-grok (FX2)	libusb (libsigrok)	pulseview; sigrok-cli -d fx2lafw --scan	-	no	2026-11-12	libsigrok 0bc24877 src/hardware/fx2lafw/api.c
