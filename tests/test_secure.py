@@ -59,7 +59,8 @@ def good():
                      "open": ["dhcpv6-client"], "icmp": ["neighbour-solicitation"], "packaged": None,
                      "zones": ["drop", "public", "silikos"], "also_active": [], "zone_file": True},
         "sshd": {"unit": "disabled", "active": False},
-        "auto": {"silikos": "enabled", "silikos_active": True, "dnf_install": "disabled", "dnf_install_active": False,
+        "auto": {"full": "enabled", "full_active": True, "silikos": "disabled", "silikos_active": False,
+                 "dnf_install": "disabled", "dnf_install_active": False,
                  "dnf": "disabled", "dnf_active": False, "dnf_applies": False},
         "pending": {"advisories": 0, "packages": 0, "worst": ""},
         "disk": {"/": {"source": "/dev/mapper/almalinux-root", "encrypted": True},
@@ -94,7 +95,7 @@ def weak():
     st["firewall"].update({"active": False, "unit": "disabled", "zone": "public", "target": "default",
                            "open": ["ssh", "dhcpv6-client", "cockpit"], "icmp": []})
     st["sshd"] = {"unit": "enabled", "active": True}
-    st["auto"].update({"silikos": "disabled", "silikos_active": False})
+    st["auto"].update({"full": "disabled", "full_active": False, "silikos": "disabled", "silikos_active": False})
     st["pending"] = {"advisories": 2, "packages": 3, "worst": "Important"}
     st["disk"] = {"/": {"source": "/dev/nvme0n1p3", "encrypted": False}, "/home": {"source": "/dev/nvme0n1p3", "encrypted": False}}
     st["secureboot"] = "disabled"
@@ -243,6 +244,10 @@ class Judge(unittest.TestCase):
 
     def test_automatic_updates(self):
         st = good()
+        self.assertEqual(states(st)["updates-auto"], "ok")              # every update (the default since 0.2.0)
+        st["auto"].update({"full": "enabled", "full_active": False})
+        self.assertEqual(states(st)["updates-auto"], "warn")
+        st["auto"].update({"full": "disabled", "full_active": False})   # the security-only timer instead
         st["auto"].update({"silikos": "enabled", "silikos_active": None})
         self.assertEqual(states(st)["updates-auto"], "unknown")
         st["auto"].update({"silikos": "enabled", "silikos_active": False})
@@ -663,6 +668,24 @@ class Package(unittest.TestCase):
             self.assertNotRegex(l, r"bootloader.*--(boot-drive|driveorder|location)")
             self.assertNotIn("--encrypted", l)
             self.assertNotIn("/dev/", l)
+
+
+
+class UpdateTimers(unittest.TestCase):
+    """either automatic-update timer running is enough; apply turns on every update only when neither runs"""
+
+    def test_either_timer_is_enough(self):
+        for full, sec in (("enabled", "disabled"), ("disabled", "enabled")):
+            st = good()
+            st["auto"].update({"full": full, "full_active": full == "enabled", "silikos": sec, "silikos_active": sec == "enabled"})
+            cmds, _ = silik.sec_plan(st)
+            self.assertFalse([c for c in flat(cmds) if "systemctl enable" in c and "update" in c], (full, sec))
+
+    def test_none_running_turns_on_every_update(self):
+        st = good()
+        st["auto"].update({"full": "disabled", "full_active": False, "silikos": "disabled", "silikos_active": False})
+        cmds, _ = silik.sec_plan(st)
+        self.assertIn("sudo systemctl enable --now silikos-update.timer", flat(cmds))
 
 
 if __name__ == "__main__":

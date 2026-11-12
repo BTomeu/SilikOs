@@ -9,6 +9,7 @@ Summary:        The bench's Python tools for SilikOS: python-can, cantools (DBC,
 License:        LGPL-3.0-only AND MIT AND GPL-2.0-or-later AND BSD-3-Clause AND BSD-2-Clause AND PSF-2.0
 URL:            https://github.com/BTomeu/SilikOs
 Source0:        pylab-requirements.txt
+Source1:        pylab-build-requirements.txt
 ExclusiveArch:  x86_64
 BuildRequires:  python3.12-devel python3.12-pip python3.12-setuptools python3.12-wheel gcc
 Requires:       python3.12 python3.12-cryptography python3.12-pyyaml python3.12-packaging
@@ -21,13 +22,17 @@ pinned with its sha256 (dev/pylab-requirements.txt), unmodified, built on EL 9 b
 system's Python (%{site}); the commands are in /usr/bin, and `silik-python` is Python 3.12 that imports them.
 
 %prep
-cp -p %{SOURCE0} .
+cp -p %{SOURCE0} %{SOURCE1} .
 
 %build
 
 %install
-python3.12 -m pip install --no-deps --require-hashes --no-binary %{ours} --no-compile --disable-pip-version-check \
-  --target %{buildroot}%{site} -r pylab-requirements.txt
+# the build backends first (pinned by sha256 too), then the tools built with them and nothing else: pip fetches no
+# unpinned build requirement (no build isolation)
+python3.12 -m pip install --no-deps --require-hashes --only-binary :all: --disable-pip-version-check \
+  --target %{_builddir}/buildtools -r pylab-build-requirements.txt
+PYTHONPATH=%{_builddir}/buildtools python3.12 -m pip install --no-deps --require-hashes --no-binary %{ours} \
+  --no-build-isolation --no-compile --disable-pip-version-check --target %{buildroot}%{site} -r pylab-requirements.txt
 rm -rf %{buildroot}%{site}/bin
 python3.12 -m compileall -q -s %{buildroot} -p / %{buildroot}%{site}
 mkdir -p %{buildroot}%{_bindir}

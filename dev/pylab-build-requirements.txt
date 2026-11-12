@@ -1,0 +1,9 @@
+# silik-pylab's build tools: the build backends of dev/pylab-requirements.txt's source archives, installed first and
+# used with --no-build-isolation, so pip fetches nothing unpinned during the build. Each pinned by its sha256. EL 9's
+# own python3.12-setuptools (68) is too old for some archives' pyproject.toml (an SPDX licence string).
+setuptools==84.2.1 --hash=sha256:ca140b45d5325a9478f880e351484f62fef15f336462e449ca0c03c873d589c2
+setuptools_scm==10.3.4 --hash=sha256:82f34c3e3084fc2b57d397200637cc13f2338004052d2fee47baa5f0e902464e
+flit_core==4.2.0 --hash=sha256:2bee22dc8ba89c2e35b4e1ad575e596aac945c85672dd8f3cad21b629036e044
+wheel==0.48.0 --hash=sha256:3217dcc807155e45db462d7ef2431f5ddda0d7273b700d05a67b271ceb1287ab
+packaging==26.3 --hash=sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c
+vcs-versioning==2.6.0 --hash=sha256:f8bebd1302ebc12e67ceb30fc7dd698ec969414b6fa43b30c3f14ac9b1e72c41

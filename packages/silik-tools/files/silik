@@ -28,7 +28,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.6.12"
+VERSION = "0.6.13"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -1426,15 +1426,20 @@ def win_adopt(dry):
                 continue
             for sz, icon in win_icons(data_home(), e.get("Icon", "\0")):
                 isrc = os.path.join(data_home(), "icons", "hicolor", sz, "apps", icon)
-                if keep and _linkfree(os.path.join(WINE_ROOT, name), os.path.join(mine, "icons", "hicolor", sz, "apps")):
-                    os.makedirs(os.path.join(mine, "icons", "hicolor", sz, "apps"), exist_ok=True)
-                    shutil.move(isrc, os.path.join(mine, "icons", "hicolor", sz, "apps", icon))
+                idst = os.path.join(mine, "icons", "hicolor", sz, "apps", icon)
+                if keep and _linkfree(os.path.join(WINE_ROOT, name), os.path.dirname(idst)) and not os.path.islink(idst):
+                    os.makedirs(os.path.dirname(idst), exist_ok=True)
+                    shutil.move(isrc, idst)
                 else:
                     os.unlink(isrc)
             if keep:
                 dst = os.path.join(mine, "applications", "wine", os.path.relpath(src, real))
                 os.makedirs(os.path.dirname(dst), exist_ok=True)
-                shutil.move(src, dst)
+                if os.path.islink(dst):
+                    # (a link planted where the entry goes: shutil.move would follow it, e.g. into ~/.config/autostart)
+                    os.unlink(src)
+                else:
+                    shutil.move(src, dst)
             else:
                 os.unlink(src)
         if not dry:
@@ -1706,7 +1711,9 @@ def hw_nvidia(ctx, a):
         die("the NVIDIA repository used here is for x86_64")
     # NVIDIA's own EL9 repository, DKMS flavour: the module is rebuilt for each kernel of the base system
     # (the headers of the running kernel: the newest kernel-devel may be of a kernel not booted yet)
-    ctx.run(["sudo", "dnf", "-y", "install", "epel-release", "kernel-devel-" + os.uname().release, "kernel-headers", "dkms"])
+    # (the headers of the running kernel, and of the newest installed one: an automatic update may have put a kernel
+    # in place that boots next, and DKMS builds the module for each kernel whose headers are there)
+    ctx.run(["sudo", "dnf", "-y", "install", "epel-release", "kernel-devel-" + os.uname().release, "kernel-devel", "kernel-headers", "dkms"])
     ctx.run(["sudo", "dnf", "config-manager", "--add-repo", NVIDIA_REPO])
     ctx.run(["sudo", "dnf", "-y", "module", "install", "nvidia-driver:latest-dkms"])
     print("reboot; with Secure Boot on, enrol the DKMS key first (mokutil --import /var/lib/dkms/mok.pub)")
@@ -2199,7 +2206,8 @@ def sec_checks(st):
         row("updates-auto", "automatic updates", "warn", "off (the package silikos-security is not installed)",
             ["sudo dnf -y install silikos-security", apply_])
     else:
-        row("updates-auto", "automatic updates", "warn", "off (%s is %s)" % (SEC_TIMER, au["silikos"] or "in an unknown state"), start)
+        row("updates-auto", "automatic updates", "warn", "off (%s is %s, %s is %s)" % (SEC_FULL_TIMER, au.get("full") or "in an unknown state",
+                                                                                 SEC_TIMER, au["silikos"] or "in an unknown state"), start)
 
     pe = st["pending"]
     if pe is None:
@@ -2369,7 +2377,8 @@ def sec_plan(st, keep_ssh=False, dry=False):
         notes.append("dnf-automatic-install.timer already installs every update: kept")
     elif au["silikos"] == "not-found":
         notes.append("automatic security updates: the package silikos-security is not installed")
-    elif au["silikos"] != "enabled" or au["silikos_active"] is not True:
+    elif not any(au.get(k) == "enabled" and au.get(k + "_active") is True for k in ("full", "silikos")):
+        # (every update or the security advisories: either one running is the protection; none: every update)
         cmds.append(["sudo", "systemctl", "enable", "--now", SEC_FULL_TIMER])     # only turns a protection on
 
     weak = ["%s=%d" % (x[0], x[2]) for x in st["sysctl"] if sec_weaker(x[1], x[2], x[3])]
@@ -3116,8 +3125,14 @@ def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     # the global switches are taken anywhere before a "--" (`silik secure apply --dry-run` as `silik --dry-run ...`)
     cut = argv.index("--") if "--" in argv else len(argv)
-    head = [x for x in argv[:cut] if x not in ("--dry-run", "-q", "--quiet")]
-    glob_ = [x for x in argv[:cut] if x in ("--dry-run", "-q", "--quiet")]
+    # (after `win open FILE` / `win run PREFIX` / `win install PREFIX SETUP` the words are the Windows program's own:
+    # its -q or --dry-run are not silik's)
+    gcut = cut
+    words = [x for x in argv[:cut] if not x.startswith("-")]
+    if len(words) >= 3 and words[0] == "win" and words[1] in ("open", "run", "install"):
+        gcut = argv.index(words[2], argv.index(words[1]) + 1)
+    head = [x for x in argv[:gcut] if x not in ("--dry-run", "-q", "--quiet")] + argv[gcut:cut]
+    glob_ = [x for x in argv[:gcut] if x in ("--dry-run", "-q", "--quiet")]
     a = p.parse_args(glob_ + head + argv[cut:])
     if not getattr(a, "fn", None):
         # a group without its command: that group's help (silik eda, silik win vm)

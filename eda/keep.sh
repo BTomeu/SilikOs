@@ -26,10 +26,12 @@ fi
 set -e
 gh release view $rel --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || gh release create $rel --repo "$GITHUB_REPOSITORY" --title "$title" --prerelease --notes "$notes"
 for f in dist/*.rpm; do
-  # the new package first, then an older build of the same tool goes (kicad- is not kicad-symbols-): the release is
-  # never without one
+  # the new package first, then an older build of the same PACKAGE goes: its name from the file's (NAME-VERSION-
+  # RELEASE.ARCH.rpm), so opencascade-devel's upload never removes the opencascade just uploaded, and kicad- is not
+  # kicad-symbols-; the release is never without one
+  n=$(basename "$f" | sed -E 's/-[^-]+-[^-]+\.[^.]+\.rpm$//')
   gh release upload $rel "$f" --repo "$GITHUB_REPOSITORY" --clobber
-  gh release view $rel --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | { grep -E "^$tool-[0-9]" || true; } | while read -r old; do
+  gh release view $rel --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | { grep -E "^$n-[0-9]" || true; } | while read -r old; do
     [ "$old" = "$(basename "$f")" ] || gh release delete-asset $rel "$old" --repo "$GITHUB_REPOSITORY" -y
   done
 done

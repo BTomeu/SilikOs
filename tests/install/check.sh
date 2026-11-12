@@ -284,7 +284,7 @@ fi
 for p in openocd dfu-util; do      # (ours, from the release dev-tools: on the ISO)
   if v=$(rpm -q $p 2>&1); then say package.$p ok "$v"; else say package.$p FAIL "$v"; fi
 done
-say dev.tools info "$(runuser -u tester -- silik dev tools 2>&1 | grep -c '^●') of 9 embedded tools on the system; the probes' rules: $(ls /usr/lib/udev/rules.d/ 2> /dev/null | grep -E 'openocd|stlink' | tr '\n' ' ')"
+say dev.tools info "$(runuser -u tester -- silik dev tools 2>&1 | grep -c '^●') of $(runuser -u tester -- silik dev tools --json 2>/dev/null | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["tools"]))' 2>/dev/null || echo '?') embedded and bench tools on the system; the probes' rules: $(ls /usr/lib/udev/rules.d/ 2> /dev/null | grep -E 'openocd|stlink' | tr '\n' ' ')"
 # memory: what is left with the session and the tests' programs, and whether the kernel had to kill for lack of it
 say system.memory info "$(free -m | awk '/^Mem:/ { printf "%d MB, %d MB available; ", $2, $7 } /^Swap:/ { printf "swap %d of %d MB used", $3, $2 }')"
 n=$(journalctl -b --no-pager -o cat 2> /dev/null | grep -ciE 'out of memory: killed|oom-kill')

@@ -212,6 +212,14 @@ class ReviewFindings(unittest.TestCase):
         rc, o = run("win", "open", "--no-net", "x.exe", "--", "--no-net")      # after "--": the program's own
         self.assertEqual(rc, 0)
 
+    def test_the_programs_own_switches_stay_its_own(self):
+        """`silik win open setup.exe -q` gives -q to setup.exe, not to silik"""
+        import contextlib, io
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            silik.main(["--dry-run", "win", "open", "x.exe", "-q", "/S"])
+        self.assertRegex(out.getvalue(), r"wine \S*x\.exe -q /S")
+
     def test_global_switches_after_the_command(self):
         rc, o = run("look", "bar")
         rc2, o2 = (lambda: silik.main(["look", "bar", "--dry-run"]))(), None
@@ -224,6 +232,11 @@ class ReviewFindings(unittest.TestCase):
             try:
                 apps = os.path.join(h, "p", "home", ".local", "share", "applications", "wine")
                 os.makedirs(apps)
+                # (the program the good entry runs is in the prefix: drive C: is dosdevices/c: -> drive_c)
+                os.makedirs(os.path.join(h, "p", "drive_c", "Program Files", "T"))
+                open(os.path.join(h, "p", "drive_c", "Program Files", "T", "t.exe"), "w").close()
+                os.makedirs(os.path.join(h, "p", "dosdevices"))
+                os.symlink("../drive_c", os.path.join(h, "p", "dosdevices", "c:"))
                 for n, ex in (("ok", 'wine "C:\\\\Program Files\\\\T\\\\t.exe"'), ("bad", "wine /home/u/Documents/NDA/chip.gds"),
                               ("tilde", "wine ~/.ssh/id_ed25519")):
                     with open(os.path.join(apps, n + ".desktop"), "w") as f:
@@ -231,8 +244,34 @@ class ReviewFindings(unittest.TestCase):
                 names = [e["Name"] for _, e, _ in silik.win_menu("p")]
             finally:
                 silik.WINE_ROOT = old
+        self.assertIn("ok", names)                  # (the check keeps what it must keep)
         self.assertNotIn("bad", names)
         self.assertNotIn("tilde", names)
+
+    def test_an_adopted_entry_never_goes_through_a_planted_link(self):
+        """a link planted in the prefix where Wine's entry would go (e.g. to ~/.config/autostart) is not followed"""
+        with tempfile.TemporaryDirectory() as h:
+            old, oldhome = silik.WINE_ROOT, os.environ.get("XDG_DATA_HOME")
+            silik.WINE_ROOT = os.path.join(h, "wine")
+            os.environ["XDG_DATA_HOME"] = os.path.join(h, "data")
+            try:
+                auto = os.path.join(h, "autostart"); os.makedirs(auto)
+                mine = os.path.join(h, "wine", "p", "home", ".local", "share", "applications", "wine", "Programs")
+                os.makedirs(os.path.dirname(mine))
+                os.symlink(auto, mine)                                  # planted from inside the sandbox
+                real = os.path.join(h, "data", "applications", "wine", "Programs")
+                os.makedirs(real)
+                with open(os.path.join(real, "Tool.desktop"), "w") as f:
+                    f.write("[Desktop Entry]\nType=Application\nName=Tool\nExec=env WINEPREFIX=%s wine C:\\\\t.exe\n" % os.path.join(h, "wine", "p"))
+                silik.win_adopt(False)
+                self.assertEqual(os.listdir(auto), [])                  # nothing reached the link's target
+                self.assertFalse(os.path.exists(os.path.join(real, "Tool.desktop")))
+            finally:
+                silik.WINE_ROOT = old
+                if oldhome is None:
+                    os.environ.pop("XDG_DATA_HOME", None)
+                else:
+                    os.environ["XDG_DATA_HOME"] = oldhome
 
     def test_linkfree(self):
         with tempfile.TemporaryDirectory() as h:

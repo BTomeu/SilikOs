@@ -341,6 +341,9 @@ class Recipes(unittest.TestCase):
             self.assertRegex(l, r"^[A-Za-z0-9_.-]+==[0-9][0-9A-Za-z.]* --hash=sha256:[0-9a-f]{64}$")
         spec = text("dev/silik-pylab.spec")
         self.assertIn("--require-hashes", spec)
+        self.assertIn("--no-build-isolation", spec)          # (no unpinned build requirement fetched)
+        for l in [l for l in text("dev/pylab-build-requirements.txt").splitlines() if l and not l.startswith("#")]:
+            self.assertRegex(l, r"^[A-Za-z0-9_.-]+==[0-9][0-9A-Za-z.]* --hash=sha256:[0-9a-f]{64}$")
         ours = spec.split("%global ours ")[1].split("\n")[0].split(",")
         self.assertEqual(sorted(x.lower().replace("_", "-") for x in ours),
                          sorted(l.split("==")[0].lower().replace("_", "-") for l in lines))   # every one built from its source
@@ -353,7 +356,7 @@ class Recipes(unittest.TestCase):
     def test_no_vendor_software_in_the_repository(self):
         for d, _, files in os.walk(os.path.join(ROOT, "dev")):
             for f in files:
-                self.assertTrue(f.endswith((".spec", ".sh")) or f in ("versions", "pylab-requirements.txt"), f)
+                self.assertTrue(f.endswith((".spec", ".sh")) or f in ("versions", "pylab-requirements.txt", "pylab-build-requirements.txt"), f)
 
 
 class BarEntries(unittest.TestCase):

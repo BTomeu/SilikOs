@@ -31,7 +31,7 @@ if [ "$url" = multi ]; then   # several upstream repositories: the spec's "# sou
     tar -C "$top/src" -czf "$top/SOURCES/$sname-$stag.tar.gz" "$sname-$stag"
   done
 elif [ "$url" = pypi ]; then   # a set of PyPI's source archives: the pinned list is the source, pip fetches and checks them
-  cp "$root/dev/pylab-requirements.txt" "$top/SOURCES/"
+  cp "$root/dev/pylab-requirements.txt" "$root/dev/pylab-build-requirements.txt" "$top/SOURCES/"
   echo "source: PyPI, $(grep -c -- '--hash=sha256:' "$root/dev/pylab-requirements.txt") archives pinned with their sha256"
 elif [ -n "$archive" ]; then   # upstream's release archive of that version
   curl -fL --retry 3 -o "$top/SOURCES/$name-$ver.tar.gz" "${archive//\{ver\}/$ver}"

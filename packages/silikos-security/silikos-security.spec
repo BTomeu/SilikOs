@@ -1,5 +1,5 @@
 Name:           silikos-security
-Version:        0.2.1
+Version:        0.2.2
 Release:        1%{?dist}
 Summary:        SilikOS security defaults: firewall zone, kernel settings, automatic security updates, screen lock
 License:        LicenseRef-SilikVolt
@@ -22,8 +22,10 @@ Requires(preun): systemd
 %description
 The defaults of a personal engineering workstation, as files on top of the base:
 the firewalld zone "silikos" (incoming dropped except DHCPv6 and IPv6 neighbour discovery; outgoing free; loopback
-untouched), a sysctl file (kernel log for root, tracing of own child processes only, no ICMP redirects), a daily timer
-that installs security advisories with the base's dnf-automatic and a configuration of its own, and the screen lock
+untouched), a sysctl file (kernel log for root, tracing of own child processes only, no ICMP redirects), daily automatic
+updates with the base's dnf-automatic and a configuration of its own (every update on a new installation; the
+security advisories only after `silik update --auto security`; an upgrade from 0.1 keeps the timer it had), a note
+for the desktop when an update waits for a restart, and the screen lock
 defaults of the desktop. `silik secure status` audits the system, `silik secure apply` sets the defaults.
 SELinux stays as the base has it (enforcing). Disk encryption and Secure Boot are chosen by the owner.
 

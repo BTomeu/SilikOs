@@ -7,7 +7,7 @@ BuildArch:      noarch
 Requires:       python3
 Requires:       python3-gobject
 Requires:       gtk3
-# look/ink, look/cobalt, look/pcb, look/silicon run `silik look --accent`
+# look/ink, look/cobalt, look/cobalt-vivid ... run `silik look --accent`
 Requires:       silik-tools >= 0.6.9
 Recommends:     gnome-terminal
 Recommends:     xdg-utils
