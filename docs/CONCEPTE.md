@@ -41,7 +41,7 @@ existeix.**
 └──────────────────────────────────────────────────────────────┘
 ```
 
-**AlmaLinux 9** és una còpia gratuïta i exacta, binari a binari, de Red Hat Enterprise Linux 9. Un programa fet
+**AlmaLinux 9** és un sistema gratuït que busca la compatibilitat binària (ABI) amb Red Hat Enterprise Linux 9. Un programa fet
 per a Red Hat 9 hi funciona tal qual. Per això **no toquem mai la base**: ni el nucli, ni les biblioteques, ni els
 fitxers que els instal·ladors comproven. Si la toquéssim, perdríem la compatibilitat, que és tot el valor.
 
