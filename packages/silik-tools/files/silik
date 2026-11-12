@@ -26,7 +26,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.6.6"
+VERSION = "0.6.7"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -2792,6 +2792,7 @@ def cmd_look(ctx, a):
             die("the look is still %s: run it as the user, in the desktop session (gsettings could not change the setting)" % (look_now(ctx) or "unknown"))
     if a.accent is not None:
         theme = accent_theme(a.accent)
+        before = accent_now(ctx)
         ctx.run(["gsettings", "set", LOOK_SCHEMA, "accent", a.accent])
         ctx.run(["gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", theme])
         ctx.run(["gsettings", "set", USER_THEME, "name", theme])
@@ -2800,6 +2801,9 @@ def cmd_look(ctx, a):
         ctx.run(["gsettings", "set", "org.gnome.desktop.interface", "icon-theme", icons])
         if not ctx.dry and accent_now(ctx) != a.accent:
             die("the accent is still %s: run it as the user, in the desktop session (gsettings could not change the setting)" % (accent_now(ctx) or "unknown"))
+        if (before or "ink").endswith("-vivid") != a.accent.endswith("-vivid") and before:
+            # (mutter redraws the frames of X11 windows only at the first change of theme of a session: seen 12/11/2026)
+            print("silik: the title bars of X11 programs (xterm, Magic, Xschem, Wine) take the new colour at the next login")
     return 0
 
 

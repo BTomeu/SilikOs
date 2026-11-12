@@ -238,6 +238,45 @@ class Look(unittest.TestCase):
             silik.main(["--dry-run", "look", "--accent", "orange"])
 
 
+    def test_the_frames_note_when_the_title_bars_change(self):
+        """mutter redraws X11 frames only at the first change of theme in a session: going to or from a vivid level
+        says they follow at the next login; a change between plain accents says nothing"""
+        import contextlib
+        import io
+        with tempfile.TemporaryDirectory() as d:
+            store = os.path.join(d, "store")
+            os.makedirs(store)
+            exe = os.path.join(d, "gsettings")
+            with open(exe, "w") as f:
+                f.write('#!/bin/sh\nk="$2.$3"\nif [ "$1" = set ]; then echo "\'$4\'" > "%s/$k"; exit 0; fi\n'
+                        'cat "%s/$k" 2>/dev/null || echo "\'silik\'"\n' % (store, store))
+            os.chmod(exe, 0o755)
+            with open(os.path.join(store, "com.silikvolt.silikos.shell.accent"), "w") as f:
+                f.write("'volt'\n")
+            for t in ("SilikOS-volt", "SilikOS-volt-vivid", "SilikOS-cobalt"):
+                for sub in ("gtk-3.0/gtk.css", "gnome-shell/gnome-shell.css"):
+                    os.makedirs(os.path.dirname(os.path.join(d, "themes", t, sub)), exist_ok=True)
+                    open(os.path.join(d, "themes", t, sub), "w").close()
+            old, oldpath = silik.THEMES, os.environ["PATH"]
+            silik.THEMES, os.environ["PATH"] = os.path.join(d, "themes"), d + os.pathsep + oldpath
+            try:
+                outs = []
+                for accent in ("volt-vivid", "cobalt"):
+                    o = io.StringIO()
+                    with contextlib.redirect_stdout(o):
+                        self.assertEqual(silik.main(["-q", "look", "--accent", accent]), 0)
+                    outs.append(o.getvalue())
+                o = io.StringIO()
+                with contextlib.redirect_stdout(o):
+                    silik.main(["-q", "look", "--accent", "volt"])
+                outs.append(o.getvalue())
+            finally:
+                silik.THEMES, os.environ["PATH"] = old, oldpath
+        self.assertIn("next login", outs[0])            # volt -> volt-vivid
+        self.assertIn("next login", outs[1])            # volt-vivid -> cobalt
+        self.assertNotIn("next login", outs[2])         # cobalt -> volt
+
+
 def run_dry(*argv):
     from test_silik import run
     return run(*argv)
