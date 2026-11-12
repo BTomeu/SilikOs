@@ -181,6 +181,16 @@ class Extension(unittest.TestCase):
         self.assertEqual(meta["shell-version"], ["40"])
 
 
+class StartSpeed(unittest.TestCase):
+    def test_the_rows_are_made_once_per_opening(self):
+        """a key typed in Start shows or hides rows; it does not destroy and make them again (measured: docs/STATUS.md)"""
+        ext = text(os.path.join(EXT, "extension.js"))
+        fill = ext.split("    _fill() {")[1].split("\n    }\n")[0]
+        self.assertIn("list._silikApps !== this._apps", fill)
+        self.assertEqual(fill.count("destroy_all_children"), 1)          # only when the applications changed
+        self.assertIn("b.visible = shown.has(a)", fill)
+
+
 class ReviewFindings(unittest.TestCase):
     """the defects found in review (11/11/2026), each seen in the rig before its fix and gone after (docs/STATUS.md);
     these hold the fixes in the code"""

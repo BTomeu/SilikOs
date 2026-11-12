@@ -871,21 +871,36 @@ class SilikShell {
             (this._cat === 'all' || (this._cat === 'fav' ? this._favIds.includes(a.app.get_id()) : a.cat === this._cat)) &&
             (!q || a.name.toLowerCase().includes(q) || a.desc.toLowerCase().includes(q)));
         if (this._sel >= this._shown.length) this._sel = Math.max(0, this._shown.length - 1);
-        this._list.destroy_all_children();
-        this._rows = [];
-        this._shown.forEach((a, i) => {
-            const b = new St.Button({ style_class: 'silik-start-row', reactive: true, track_hover: true, x_expand: true });
-            const box = new St.BoxLayout({ x_expand: true });
-            box.add_child(icon(a.app, 16));
-            box.add_child(new St.Label({ text: a.name, style_class: 'silik-start-name', y_align: Clutter.ActorAlign.CENTER }));
-            box.add_child(new St.Label({ text: a.desc, style_class: 'silik-start-desc', x_expand: true, y_align: Clutter.ActorAlign.CENTER }));
-            b.set_child(box);
-            if (i === this._sel) b.add_style_class_name('silik-on');
-            b.connect('clicked', () => this._launch(a.app));
-            this._list.add_child(b);
-            this._rows.push(b);
-        });
-        if (!this._shown.length) this._list.add_child(new St.Label({ text: this._t.none, style_class: 'silik-start-none' }));
+        /* the rows are made once for the applications of this opening (in their order, which the filter keeps), then
+           only shown or hidden: a key typed no longer makes and lays out every row again (measured in the rig,
+           12/11/2026, with 150 applications: 30 ms of the shell's time per key before, see docs/STATUS.md) */
+        const list = this._list;
+        if (list._silikApps !== this._apps) {
+            list.destroy_all_children();
+            list._silikRow = new Map();
+            for (const a of this._apps) {
+                const b = new St.Button({ style_class: 'silik-start-row', reactive: true, track_hover: true, x_expand: true });
+                const box = new St.BoxLayout({ x_expand: true });
+                box.add_child(icon(a.app, 16));
+                box.add_child(new St.Label({ text: a.name, style_class: 'silik-start-name', y_align: Clutter.ActorAlign.CENTER }));
+                box.add_child(new St.Label({ text: a.desc, style_class: 'silik-start-desc', x_expand: true, y_align: Clutter.ActorAlign.CENTER }));
+                b.set_child(box);
+                b.connect('clicked', () => this._launch(a.app));
+                list.add_child(b);
+                list._silikRow.set(a, b);
+            }
+            list._silikNone = new St.Label({ text: this._t.none, style_class: 'silik-start-none' });
+            list.add_child(list._silikNone);
+            list._silikApps = this._apps;
+        }
+        const shown = new Set(this._shown);
+        for (const [a, b] of list._silikRow) {
+            b.visible = shown.has(a);
+            b.remove_style_class_name('silik-on');
+        }
+        this._rows = this._shown.map(a => list._silikRow.get(a));
+        if (this._rows[this._sel]) this._rows[this._sel].add_style_class_name('silik-on');
+        list._silikNone.visible = !this._shown.length;
     }
 
     _move(d) {
