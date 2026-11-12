@@ -47,12 +47,13 @@ be used.
    a secret of a protected publishing environment that runs only with the owner's approval. The package repository
    is static files (metadata on GitHub Pages, packages on GitHub Releases) behind a host name of the owner's, so that
    it can move without touching installed systems. Open: the host name; where an ISO larger than 2 GB goes.
-11. **Colour as an accent, chosen by the user** (owner, 11/11/2026: "give the system colour, with taste"; which
-   accent is open). One colour for what is selected, focused, on or running; text, frames, title bars and the mark stay
-   ink on paper. `silik look --accent ink | cobalt | pcb | silicon` (`look/…` in the COMMAND bar) sets the key of the
-   extension and the GTK and shell themes `SilikOS-<accent>`, made on the system like `SilikOS`. The shades come from
-   the accent by rule (`tools/gen_accents.py`: mixes with ink and paper; text on it at 4.5:1 or more). The default is
-   the ink until the owner picks one.
+11. **Colour as an accent, chosen by the user** (owner, 11-12/11/2026: "give the system colour, with taste"; "the
+   original black and white always present"; green rejected). The ink is the default and is always there. An accent
+   colours what is selected, focused, on or running; its vivid level also the title bars, in a deep tone of it (large
+   surfaces calm, the bright colour on small active things). Text, frames and the mark stay ink on paper.
+   `silik look --accent NAME` (`look/…` in the COMMAND bar) sets the extension's key and the GTK and shell themes
+   `SilikOS-NAME`, made on the system like `SilikOS`. The shades come from the accent by rule (`tools/gen_accents.py`:
+   mixes with ink and paper; text on colour at 4.5:1 or more, title bars at 10.5:1). Which accents stay is open.
 
 ## Phases
 

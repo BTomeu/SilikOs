@@ -1,5 +1,5 @@
 # SilikOS accent silicon (tools/gen_accents.py; do not edit): before gtk-theme.sed, Adwaita's accent blues take the
-# accent's shades; silik-gtk3.css's silik_accent and silik_accent2 become the accent and its hover
+# accent's shades; silik-gtk3.css's silik_accent* definitions (and silik_chrome*: the title bar) its colours
 s/#15539e/#4338b8/g
 s/#185fb4/#4338b8/g
 s/#1961b9/#4338b8/g
@@ -34,5 +34,8 @@ s/rgba(27, 106, 203,/rgba(67, 56, 184,/g
 s/rgba(24, 95, 180,/rgba(67, 56, 184,/g
 s/rgba(134, 181, 239,/rgba(148, 142, 211,/g
 s/rgba(154, 194, 242,/rgba(148, 142, 211,/g
-s|^@define-color silik_accent  @silik_ink;.*|@define-color silik_accent  #4338b8;   /* the accent silicon */|
-s|^@define-color silik_accent2 @silik_ink2;.*|@define-color silik_accent2 #3a3296;   /* hover on it */|
+s|^@define-color silik_accent  *@[a-z0-9_]*;.*|@define-color silik_accent #4338b8;   /* silicon */|
+s|^@define-color silik_accent2  *@[a-z0-9_]*;.*|@define-color silik_accent2 #3a3296;   /* silicon */|
+s|^@define-color silik_onaccent  *@[a-z0-9_]*;.*|@define-color silik_onaccent #f7f6f3;   /* silicon */|
+s|^@define-color silik_accentmu  *@[a-z0-9_]*;.*|@define-color silik_accentmu #c1bde1;   /* silicon */|
+s|^@define-color silik_accentline  *@[a-z0-9_]*;.*|@define-color silik_accentline #4338b8;   /* silicon */|

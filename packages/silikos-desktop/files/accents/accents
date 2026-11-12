@@ -1,6 +1,12 @@
-# The accents of the SilikOS desktop (tools/gen_accents.py; do not edit). ink: the look without an accent.
-# id accent hover mid tint muted-on-it
-ink #1a1b1e #2c2e32 #b9b8b3 #ecebe7 #b9b8b3
-cobalt #2a4fc0 #26449c #869ad7 #dee2ed #cad1e8
-pcb #1d6b45 #1c593c #7faa93 #dde5de #d0ddd4
-silicon #4338b8 #3a3296 #948ed3 #e1dfec #c1bde1
+# The accents of the SilikOS desktop (tools/gen_accents.py; do not edit). ink: the look without an accent;
+# NAME-vivid: the same accent with its title bar. name accent hover mid tint on-it muted-on-it line title-bar
+ink #1a1b1e #2c2e32 #b9b8b3 #ecebe7 #f7f6f3 #b9b8b3 #1a1b1e -
+steel #3e5c76 #364e63 #91a1ae #e1e4e4 #f7f6f3 #cbd1d5 #3e5c76 -
+steel-vivid #3e5c76 #364e63 #91a1ae #e1e4e4 #f7f6f3 #cbd1d5 #3e5c76 #2a3846
+cobalt #2f5fe0 #2a50b5 #89a3e9 #dfe4f1 #f7f6f3 #e7eaf1 #2f5fe0 -
+cobalt-vivid #2f5fe0 #2a50b5 #89a3e9 #dfe4f1 #f7f6f3 #e7eaf1 #2f5fe0 #22366c
+silicon #4338b8 #3a3296 #948ed3 #e1dfec #f7f6f3 #c1bde1 #4338b8 -
+silicon-vivid #4338b8 #3a3296 #948ed3 #e1dfec #f7f6f3 #c1bde1 #4338b8 #332c7a
+volt #6d28d9 #5b25b0 #ab85e5 #e6ddf0 #f7f6f3 #d9c9ed #6d28d9 -
+volt-vivid #6d28d9 #5b25b0 #ab85e5 #e6ddf0 #f7f6f3 #d9c9ed #6d28d9 #482285
+spark #f2c230 #c29d2c #f4d988 #f6f0dc #1a1b1e #615224 #1a1b1e -

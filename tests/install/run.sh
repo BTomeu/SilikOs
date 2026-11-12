@@ -173,9 +173,10 @@ if kill -0 $qpid 2> /dev/null; then
   look island; shot look-island || true
   key meta_l || true; sleep 4; shot look-island-start || true; key esc || true; sleep 2
   look silik; shot look-silik || true
-  # an accent from the COMMAND bar (look/pcb): the Silik look in PCB green, Start in it; then the ink again (look/ink)
-  look pcb; shot accent-pcb || true
-  key meta_l || true; sleep 4; typ "te" || true; sleep 2; shot accent-pcb-start || true; key esc || true; sleep 2
+  # an accent from the COMMAND bar (look/volt-vivid): the Silik look in volt violet with its title bars, Start in it;
+  # then the ink again (look/ink)
+  look volt-vivid; shot accent-volt-vivid || true
+  key meta_l || true; sleep 4; typ "te" || true; sleep 2; shot accent-volt-vivid-start || true; key esc || true; sleep 2
   look ink
   key alt-f4 || true; sleep 3
   key meta_l-l || true; sleep 6                            # Super+L: locked, and the screen goes dark

@@ -70,7 +70,7 @@ class Look(unittest.TestCase):
             self.assertTrue([r for r in rows if r.startswith("● island")])
             rc, o, _ = call("look", "--json")
             self.assertEqual(json.loads(o), {"look": "island", "looks": ["silik", "bar", "island"],
-                                             "accent": None, "accents": ["ink", "cobalt", "pcb", "silicon"]})
+                                             "accent": None, "accents": [k for k, _ in silik.ACCENTS]})
 
     def test_set_runs_gsettings(self):
         with fake_gsettings("bar") as log:
@@ -146,14 +146,14 @@ class BarEntries(unittest.TestCase):
 
     def test_typing_look_lists_the_looks_and_the_accents(self):
         t = bar.TEXT["en"]
-        self.assertEqual([i.address for i in bar.match(bar.system_items(t), "look", t)],
-                         ["look/bar", "look/cobalt", "look/ink", "look/island", "look/pcb", "look/silicon", "look/silik"])
+        self.assertEqual([i.address for i in bar.match(bar.system_items(t), "look", t, limit=50)],
+                         sorted(["look/bar", "look/island", "look/silik"] + ["look/" + k for k, _ in silik.ACCENTS]))
 
     def test_completion_and_usage(self):
         comp = text("packages/silik-tools/files/silik.bash-completion")
         self.assertIn('else COMPREPLY=($(compgen -W "silik bar island --accent --json"', comp)
         self.assertIn('= --accent ]; then COMPREPLY=($(compgen -W "%s"' % " ".join(k for k, _ in silik.ACCENTS), comp)
-        self.assertIn("silik look  [LOOK] --accent %s" % "|".join(k for k, _ in silik.ACCENTS), text("packages/silik-tools/files/silik"))
+        self.assertIn("silik look  [LOOK] --accent NAME", text("packages/silik-tools/files/silik"))
         self.assertIn('session) COMPREPLY=($(compgen -W "lock logout off"', comp)
         self.assertIn("silik look  [silik | bar | island]", text("packages/silik-tools/files/silik"))
 

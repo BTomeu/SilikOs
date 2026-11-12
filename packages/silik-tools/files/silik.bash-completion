@@ -3,7 +3,7 @@ _silik() {
   local cur=${COMP_WORDS[COMP_CWORD]} g=${COMP_WORDS[1]}
   # look: a look, --accent and its accents, at any place after the word look
   if [ "$g" = look ] && [ "$COMP_CWORD" -ge 2 ]; then
-    if [ "${COMP_WORDS[COMP_CWORD-1]}" = --accent ]; then COMPREPLY=($(compgen -W "ink cobalt pcb silicon" -- "$cur"))
+    if [ "${COMP_WORDS[COMP_CWORD-1]}" = --accent ]; then COMPREPLY=($(compgen -W "ink steel steel-vivid cobalt cobalt-vivid silicon silicon-vivid volt volt-vivid spark" -- "$cur"))
     else COMPREPLY=($(compgen -W "silik bar island --accent --json" -- "$cur")); fi
     return
   fi

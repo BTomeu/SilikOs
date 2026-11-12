@@ -31,8 +31,9 @@ default of the login screen: the EDA tools this system is for are X11 programs. 
 the desktop in three looks, chosen by the key "look" of the settings com.silikvolt.silikos.shell (`silik look`):
 silik (the title bar is the command line, a text rail of keys, a status bar), bar (one bar across the bottom, the
 applications as icons) and island (one floating piece centred at the bottom). The key "accent" (`silik look --accent`)
-gives one colour to what is selected, focused, on or running: ink (none, the default), cobalt, pcb or silicon; the
-GTK and shell themes of each, SilikOS-ACCENT, are made on the system beside SilikOS.
+gives one colour to what is selected, focused, on or running: ink (none, the default), steel, cobalt, silicon, volt
+or spark; NAME-vivid also gives the title bars a deep tone of it. The GTK and shell themes of each, SilikOS-NAME, are
+made on the system beside SilikOS.
 
 %install
 install -Dm0644 %{_sourcedir}/00-silikos %{buildroot}%{_sysconfdir}/dconf/db/local.d/00-silikos
@@ -116,15 +117,33 @@ dconf update >/dev/null 2>&1 || :
 %ghost %{_datadir}/themes/SilikOS/gnome-shell/gnome-shell.css
 %ghost %{_datadir}/themes/SilikOS/gtk-3.0/gtk.css
 # the accents' themes (one per accent of files/accents: tests/test_accents.py holds this list to them)
+%{_datadir}/themes/SilikOS-steel/
+%ghost %{_datadir}/themes/SilikOS-steel/gnome-shell/gnome-shell.css
+%ghost %{_datadir}/themes/SilikOS-steel/gtk-3.0/gtk.css
+%{_datadir}/themes/SilikOS-steel-vivid/
+%ghost %{_datadir}/themes/SilikOS-steel-vivid/gnome-shell/gnome-shell.css
+%ghost %{_datadir}/themes/SilikOS-steel-vivid/gtk-3.0/gtk.css
 %{_datadir}/themes/SilikOS-cobalt/
 %ghost %{_datadir}/themes/SilikOS-cobalt/gnome-shell/gnome-shell.css
 %ghost %{_datadir}/themes/SilikOS-cobalt/gtk-3.0/gtk.css
-%{_datadir}/themes/SilikOS-pcb/
-%ghost %{_datadir}/themes/SilikOS-pcb/gnome-shell/gnome-shell.css
-%ghost %{_datadir}/themes/SilikOS-pcb/gtk-3.0/gtk.css
+%{_datadir}/themes/SilikOS-cobalt-vivid/
+%ghost %{_datadir}/themes/SilikOS-cobalt-vivid/gnome-shell/gnome-shell.css
+%ghost %{_datadir}/themes/SilikOS-cobalt-vivid/gtk-3.0/gtk.css
 %{_datadir}/themes/SilikOS-silicon/
 %ghost %{_datadir}/themes/SilikOS-silicon/gnome-shell/gnome-shell.css
 %ghost %{_datadir}/themes/SilikOS-silicon/gtk-3.0/gtk.css
+%{_datadir}/themes/SilikOS-silicon-vivid/
+%ghost %{_datadir}/themes/SilikOS-silicon-vivid/gnome-shell/gnome-shell.css
+%ghost %{_datadir}/themes/SilikOS-silicon-vivid/gtk-3.0/gtk.css
+%{_datadir}/themes/SilikOS-volt/
+%ghost %{_datadir}/themes/SilikOS-volt/gnome-shell/gnome-shell.css
+%ghost %{_datadir}/themes/SilikOS-volt/gtk-3.0/gtk.css
+%{_datadir}/themes/SilikOS-volt-vivid/
+%ghost %{_datadir}/themes/SilikOS-volt-vivid/gnome-shell/gnome-shell.css
+%ghost %{_datadir}/themes/SilikOS-volt-vivid/gtk-3.0/gtk.css
+%{_datadir}/themes/SilikOS-spark/
+%ghost %{_datadir}/themes/SilikOS-spark/gnome-shell/gnome-shell.css
+%ghost %{_datadir}/themes/SilikOS-spark/gtk-3.0/gtk.css
 %{_libexecdir}/silikos/shell-theme
 %{_libexecdir}/silikos/gtk-theme
 %{_libexecdir}/silikos/resource-extract

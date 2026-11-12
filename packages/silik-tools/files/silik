@@ -11,7 +11,7 @@
 #   silik hw    probe | nvidia install | nvidia status
 #   silik identity show | silikos | base
 #   silik look  [silik | bar | island] [--json]     the desktop's look; no argument: which one is in use
-#   silik look  [LOOK] --accent ink|cobalt|pcb|silicon   its accent: one colour for what is selected, focused, on
+#   silik look  [LOOK] --accent NAME [--json]       its accent: one colour for what is selected, focused, on
 #   silik session lock | logout | off             (the last two ask first)
 #   silik update
 #   silik secure status [--json] [--offline] | apply [--keep-ssh]
@@ -2612,14 +2612,20 @@ LOOKS = (
 
 
 # The accent (key "accent", silikos-desktop 0.13): one colour for what is selected, focused, on or running; text,
-# frames and title bars stay ink on paper. Its colours are silikos-desktop's (tools/gen_accents.py); the extension
+# frames and the mark stay ink on paper; NAME-vivid also gives the title bars a deep tone of it. Its colours are silikos-desktop's (tools/gen_accents.py); the extension
 # follows the key, GTK programs and the shell's own parts follow the themes SilikOS-<accent> (gtk-theme and
 # shell-theme make them on the system), which this sets with the key. "ink" is the look without an accent: SilikOS.
 ACCENTS = (
-    ("ink", "one ink on paper"),
-    ("cobalt", "cobalt blue #2a4fc0"),
-    ("pcb", "PCB green #1d6b45"),
+    ("ink", "one ink on paper, the original"),
+    ("steel", "steel #3e5c76"),
+    ("steel-vivid", "steel #3e5c76, the title bars in #2a3846"),
+    ("cobalt", "cobalt #2f5fe0"),
+    ("cobalt-vivid", "cobalt #2f5fe0, the title bars in #22366c"),
     ("silicon", "silicon indigo #4338b8"),
+    ("silicon-vivid", "silicon indigo #4338b8, the title bars in #332c7a"),
+    ("volt", "volt violet #6d28d9"),
+    ("volt-vivid", "volt violet #6d28d9, the title bars in #482285"),
+    ("spark", "spark yellow #f2c230"),
 )
 THEMES = "/usr/share/themes"
 USER_THEME = "org.gnome.shell.extensions.user-theme"

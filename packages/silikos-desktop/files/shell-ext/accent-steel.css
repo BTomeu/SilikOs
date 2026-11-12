@@ -1,0 +1,28 @@
+/* SilikOS accent steel (tools/gen_accents.py; do not edit): the extension's rules that take the accent, one
+ * class more specific than its own stylesheet; loaded by the extension when the key "accent" is steel */
+.silik-key.silik-key:hover, .silik-key.silik-key:focus { background-color: #e1e4e4; }
+.silik-key.silik-run .silik-key-edge.silik-key-edge { background-color: #3e5c76; }
+.silik-key.silik-key.silik-on { background-color: #3e5c76; }
+.silik-key.silik-on .silik-key-n.silik-key-n { color: #cbd1d5; }
+.silik-win.silik-win:hover, .silik-win.silik-win:focus { background-color: #e1e4e4; }
+.silik-ws-cell.silik-ws-cell:hover { background-color: #e1e4e4; }
+.silik-ws-cell.silik-ws-cell.silik-on { background-color: #3e5c76; border-color: #3e5c76; }
+.silik-start-entry.silik-start-entry { selection-background-color: #3e5c76; }
+.silik-start-cat.silik-start-cat:hover { background-color: #e1e4e4; }
+.silik-start-cat.silik-start-cat.silik-on { background-color: #3e5c76; }
+.silik-start-row.silik-start-row:hover { background-color: #e1e4e4; }
+.silik-start-row.silik-start-row.silik-on { background-color: #3e5c76; }
+.silik-start-row.silik-on .silik-start-desc.silik-start-desc { color: #cbd1d5; }
+.silik-ak.silik-ak:hover, .silik-ak.silik-ak:focus { background-color: #e1e4e4; }
+.silik-ak-plate.silik-ak-plate { background-color: #3e5c76; }
+.silik-ak.silik-run .silik-ak-line.silik-ak-line { background-color: #3e5c76; }
+.silik-tray .panel-button.panel-button:hover { background-color: #e1e4e4; }
+.silik-tray .panel-button.panel-button:active, .silik-tray .panel-button.panel-button:focus, .silik-tray .panel-button.panel-button:checked { background-color: #3e5c76; }
+.silik-tray .panel-button:active .silik-clock-d.silik-clock-d, .silik-tray .panel-button:focus .silik-clock-d.silik-clock-d { color: #cbd1d5; }
+.silik-pin.silik-pin:hover { background-color: #e1e4e4; }
+.silik-pin.silik-pin.silik-on { background-color: #3e5c76; }
+.silik-pin.silik-on .silik-pin-n.silik-pin-n { color: #cbd1d5; }
+.silik-rec.silik-rec:hover { background-color: #e1e4e4; }
+.silik-rec.silik-rec.silik-on { background-color: #3e5c76; }
+.silik-rec.silik-on .silik-rec-dir.silik-rec-dir { color: #cbd1d5; }
+.silik-start-sk.silik-start-sk:hover, .silik-start-sk.silik-start-sk:focus { background-color: #3e5c76; }

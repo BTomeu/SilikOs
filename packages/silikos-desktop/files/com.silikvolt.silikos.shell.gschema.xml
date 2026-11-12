@@ -16,13 +16,19 @@
     <key name="accent" type="s">
       <choices>
         <choice value="ink"/>
+        <choice value="steel"/>
+        <choice value="steel-vivid"/>
         <choice value="cobalt"/>
-        <choice value="pcb"/>
+        <choice value="cobalt-vivid"/>
         <choice value="silicon"/>
+        <choice value="silicon-vivid"/>
+        <choice value="volt"/>
+        <choice value="volt-vivid"/>
+        <choice value="spark"/>
       </choices>
       <default>'ink'</default>
       <summary>The accent of the desktop</summary>
-      <description>ink: one ink on paper. cobalt, pcb (PCB green), silicon (silicon indigo): what is selected, focused, on or running takes that colour; text, frames and title bars stay ink on paper. `silik look --accent` sets this key and the GTK and shell themes SilikOS-ACCENT with it.</description>
+      <description>ink: one ink on paper, the look as it was. steel, cobalt, silicon (silicon indigo), volt (volt violet), spark (spark yellow): what is selected, focused, on or running takes that colour; text, frames and the mark stay ink on paper. NAME-vivid: the title bars too, in a deep tone of it. `silik look --accent` sets this key and the GTK and shell themes SilikOS-NAME with it.</description>
     </key>
   </schema>
 </schemalist>

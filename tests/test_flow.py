@@ -36,7 +36,8 @@ class Schema(unittest.TestCase):
         keys = schemas[0].findall("key")
         self.assertEqual([(k.get("name"), k.get("type")) for k in keys], [("look", "s"), ("accent", "s")])
         self.assertEqual([c.get("value") for c in keys[0].find("choices")], LOOKS)
-        self.assertEqual([c.get("value") for c in keys[1].find("choices")], ["ink", "cobalt", "pcb", "silicon"])
+        accents = [c.get("value") for c in keys[1].find("choices")]
+        self.assertEqual(accents[0], "ink")                                   # (the list itself: tests/test_accents.py)
         self.assertEqual(keys[1].find("default").text.strip(), "'ink'")     # one ink on paper until one is chosen
 
     def test_the_default_is_the_silik_look(self):
@@ -60,7 +61,7 @@ class Extension(unittest.TestCase):
         words = line.group(1).split()
         # (the accents' files by their pattern: $(cd %{_sourcedir}/shell-ext && ls accent-*.css))
         self.assertEqual(" ".join(words[-5:]), "$(cd %{_sourcedir}/shell-ext && ls accent-*.css)")
-        named = words[:-5] + sorted(f for f in os.listdir(EXT) if re.match(r"^accent-[a-z]+\.css$", f))
+        named = words[:-5] + sorted(f for f in os.listdir(EXT) if re.match(r"^accent-[a-z-]+\.css$", f))
         self.assertEqual(sorted(named), sorted(os.listdir(EXT)))
 
     def test_it_reads_the_key_and_follows_it(self):

@@ -1,0 +1,34 @@
+/* SilikOS accent silicon-vivid (tools/gen_accents.py; do not edit): the extension's rules that take the accent, one
+ * class more specific than its own stylesheet; loaded by the extension when the key "accent" is silicon-vivid */
+#panel { background-color: #332c7a; }
+.silik-mk.silik-mk:hover, .silik-mk.silik-mk:focus { background-color: #4b4489; }
+.silik-cmd.silik-cmd { background-color: #4b4489; }
+.silik-cmd.silik-cmd:hover, .silik-cmd.silik-cmd:focus { background-color: #5a5492; }
+.silik-cmd-cur.silik-cmd-cur { border: 1px solid #bcb9cf; }
+.silik-cmd-hint.silik-cmd-hint { color: #bcb9cf; }
+.silik-key.silik-key:hover, .silik-key.silik-key:focus { background-color: #e1dfec; }
+.silik-key.silik-run .silik-key-edge.silik-key-edge { background-color: #4338b8; }
+.silik-key.silik-key.silik-on { background-color: #4338b8; }
+.silik-key.silik-on .silik-key-n.silik-key-n { color: #c1bde1; }
+.silik-win.silik-win:hover, .silik-win.silik-win:focus { background-color: #e1dfec; }
+.silik-ws-cell.silik-ws-cell:hover { background-color: #e1dfec; }
+.silik-ws-cell.silik-ws-cell.silik-on { background-color: #4338b8; border-color: #4338b8; }
+.silik-start-entry.silik-start-entry { selection-background-color: #4338b8; }
+.silik-start-cat.silik-start-cat:hover { background-color: #e1dfec; }
+.silik-start-cat.silik-start-cat.silik-on { background-color: #4338b8; }
+.silik-start-row.silik-start-row:hover { background-color: #e1dfec; }
+.silik-start-row.silik-start-row.silik-on { background-color: #4338b8; }
+.silik-start-row.silik-on .silik-start-desc.silik-start-desc { color: #c1bde1; }
+.silik-ak.silik-ak:hover, .silik-ak.silik-ak:focus { background-color: #e1dfec; }
+.silik-ak-plate.silik-ak-plate { background-color: #4338b8; }
+.silik-ak.silik-run .silik-ak-line.silik-ak-line { background-color: #4338b8; }
+.silik-tray .panel-button.panel-button:hover { background-color: #e1dfec; }
+.silik-tray .panel-button.panel-button:active, .silik-tray .panel-button.panel-button:focus, .silik-tray .panel-button.panel-button:checked { background-color: #4338b8; }
+.silik-tray .panel-button:active .silik-clock-d.silik-clock-d, .silik-tray .panel-button:focus .silik-clock-d.silik-clock-d { color: #c1bde1; }
+.silik-pin.silik-pin:hover { background-color: #e1dfec; }
+.silik-pin.silik-pin.silik-on { background-color: #4338b8; }
+.silik-pin.silik-on .silik-pin-n.silik-pin-n { color: #c1bde1; }
+.silik-rec.silik-rec:hover { background-color: #e1dfec; }
+.silik-rec.silik-rec.silik-on { background-color: #4338b8; }
+.silik-rec.silik-on .silik-rec-dir.silik-rec-dir { color: #c1bde1; }
+.silik-start-sk.silik-start-sk:hover, .silik-start-sk.silik-start-sk:focus { background-color: #4338b8; }
