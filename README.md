@@ -54,7 +54,7 @@ bash tools/build_iso.sh           # the network installer ISO (needs repo.almali
 ```
 
 Read `docs/PLAN.md` (decisions and phases), `docs/STATUS.md` (verified / not verified), `docs/HARDWARE.md`
-(Ryzen 7 5800HS + RTX 3050, Snapdragon X), `docs/BUILD.md`.
+(Ryzen 7 5800HS + RTX 3050, Snapdragon X, SilikOS on ARM / aarch64), `docs/BUILD.md`.
 
 No vendor software is in this repository or in the system: EDA tools, Windows and Windows programs are the user's own
 licences.

@@ -7,7 +7,7 @@ Summary:        OpenOCD, on-chip debugging and flashing through a debug probe (u
 License:        GPL-2.0-or-later
 URL:            https://openocd.org
 Source0:        openocd-%{version}.tar.gz
-ExclusiveArch:  x86_64
+ExclusiveArch:  x86_64 aarch64
 BuildRequires:  gcc make autoconf automake libtool texinfo pkgconf-pkg-config which
 BuildRequires:  libusbx-devel hidapi-devel libftdi-devel jimtcl-devel capstone-devel
 Requires:       jimtcl hidapi libftdi

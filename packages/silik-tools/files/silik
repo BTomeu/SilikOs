@@ -138,6 +138,26 @@ def valid_name(n):
 
 
 # ------------------------------------------------------------------ status
+def host_arch():
+    """the machine's architecture as rpm and dnf name it: x86_64, aarch64 ($SILIK_ARCH stands in for it in tests)"""
+    return os.environ.get("SILIK_ARCH") or os.uname().machine
+
+
+def x86():
+    return host_arch() == "x86_64"
+
+
+# x86_64 programs on ARM: the kernel hands them to an emulator registered with binfmt_misc (qemu-user-static)
+BINFMT_X86 = "/proc/sys/fs/binfmt_misc/qemu-x86_64"
+BINFMT_HOW = "EL 9 does not ship qemu-user-static: an x86_64 emulator has to be installed and registered by hand"
+# what does not exist on ARM (aarch64), said instead of failing further on
+ARM_EDA = ("the vendors' EDA tools (Virtuoso, Sentaurus...) and the EL6 / EL7 userlands of the boxes are x86_64 programs, "
+           "and this machine is %s")
+ARM_WINE = ("Wine is not available for %s in SilikOS: silik-wine is built for x86_64 only (Windows programs for x86). "
+            "On a Windows on ARM computer run the program in Windows itself; on a machine with KVM, in a Windows virtual "
+            "machine (`silik win vm create`)")
+
+
 def kernel_vsyscall():
     """'emulate' / 'xonly' / 'none' as the running kernel was started, '' when unknown"""
     for a in read("/proc/cmdline").split():
@@ -189,8 +209,9 @@ def cmd_status(ctx, a):
     rel = (osr.get("PRETTY_NAME") if os.path.exists("/etc/silikos-release") else "") or "SilikOS (not installed as a system: running from a checkout)"
     base = read("/etc/redhat-release").strip() or "-"
     st = {
-        "silikos": rel, "base": base, "silik": VERSION, "kernel": os.uname().release, "arch": os.uname().machine,
-        "vsyscall": kernel_vsyscall(), "session": os.environ.get("XDG_SESSION_TYPE", "-"), "gpus": gpus(ctx),
+        "silikos": rel, "base": base, "silik": VERSION, "kernel": os.uname().release, "arch": host_arch(),
+        # (the vsyscall page is an x86_64 thing: on ARM there is none to have)
+        "vsyscall": kernel_vsyscall() if x86() else "n/a", "session": os.environ.get("XDG_SESSION_TYPE", "-"), "gpus": gpus(ctx),
         "eda_boxes": boxes(ctx), "wine_prefixes": prefixes(),
     }
     if a.json:
@@ -198,7 +219,8 @@ def cmd_status(ctx, a):
         return 0
     print("%-14s %s" % ("system", st["silikos"]))
     print("%-14s %s" % ("base", st["base"]))
-    print("%-14s %s (%s)" % ("kernel", st["kernel"], st["arch"]))
+    print("%-14s %s" % ("arch", st["arch"]))
+    print("%-14s %s" % ("kernel", st["kernel"]))
     print("%-14s %s" % ("vsyscall", st["vsyscall"] or "unknown"))
     print("%-14s %s" % ("session", st["session"]))
     for g in st["gpus"] or ["-"]:
@@ -225,7 +247,15 @@ def eda_create(ctx, a):
     image = a.image or el["image"]
     home = os.path.expanduser("~")
     host = os.uname().nodename
-    argv = ["podman", "create", "--name", name, "--label", "silik.eda.el=" + a.el,
+    emulate = []
+    if not x86():
+        if a.arch != "amd64":
+            die((ARM_EDA + ": a box runs them only under emulation (slow; no vendor supports it). `--arch amd64` makes "
+                 "one, with an x86_64 emulator registered on this system (binfmt_misc: qemu-user-static)") % host_arch(), 2)
+        if not os.path.exists(BINFMT_X86) and not ctx.dry:
+            die("no x86_64 emulator is registered (%s): an x86_64 box cannot start on %s. %s" % (BINFMT_X86, host_arch(), BINFMT_HOW))
+        emulate = ["--arch", "amd64"]
+    argv = ["podman", "create"] + emulate + ["--name", name, "--label", "silik.eda.el=" + a.el,
             "--hostname", host, "--network", "host", "--ipc", "host", "--userns", "keep-id",
             "--security-opt", "label=disable", "--init",
             "-e", "DISPLAY", "-e", "XAUTHORITY", "-e", "LM_LICENSE_FILE", "-e", "CDS_LIC_FILE", "-e", "SNPSLMD_LICENSE_FILE",
@@ -237,7 +267,7 @@ def eda_create(ctx, a):
         argv += ["-v", xa + ":" + xa + ":ro"]
     argv += [image, "sleep", "infinity"]
     ctx.run(argv)
-    if el["vsyscall"] and kernel_vsyscall() == "none" and not ctx.dry:
+    if el["vsyscall"] and x86() and kernel_vsyscall() == "none" and not ctx.dry:
         print("silik: an EL6 userland calls the vsyscall page and this kernel has it off: run `silik eda kernel-arg` and reboot", file=sys.stderr)
     print("box %s created; `silik eda setup %s` installs what EDA tools ask for, `silik eda enter %s` opens a shell" % (a.name, a.name, a.name))
     return 0
@@ -334,11 +364,16 @@ def eda_list(ctx, a):
 
 def eda_check(ctx, a):
     ok = True
-    v = kernel_vsyscall()
-    need6 = any("centos:6" in b["image"] or box_el(ctx, BOX_PREFIX + b["name"]) == "6" for b in boxes(ctx))
-    # glibc 2.12 (EL6) executes the vsyscall page: "emulate" and "xonly" both serve it, "none" kills the program
-    print("kernel vsyscall: %s%s" % (v or "unknown", "" if v != "none" or not need6 else "  <- EL6 boxes need the vsyscall page (silik eda kernel-arg)"))
-    ok = ok and (v != "none" or not need6)
+    if x86():
+        v = kernel_vsyscall()
+        need6 = any("centos:6" in b["image"] or box_el(ctx, BOX_PREFIX + b["name"]) == "6" for b in boxes(ctx))
+        # glibc 2.12 (EL6) executes the vsyscall page: "emulate" and "xonly" both serve it, "none" kills the program
+        print("kernel vsyscall: %s%s" % (v or "unknown", "" if v != "none" or not need6 else "  <- EL6 boxes need the vsyscall page (silik eda kernel-arg)"))
+        ok = ok and (v != "none" or not need6)
+    else:   # (an emulated x86_64 box gets its vsyscall page from the emulator, not from this kernel)
+        emu = os.path.exists(BINFMT_X86)
+        print("arch: %s  <- %s; x86_64 boxes only under emulation (`silik eda create NAME --arch amd64`)" % (host_arch(), ARM_EDA % host_arch()))
+        print("x86_64 emulator: %s" % ("registered (%s)" % BINFMT_X86 if emu else "missing  <- " + BINFMT_HOW))
     for exe, why in (("podman", "the boxes"), ("xhost", "X11 access of the boxes"), ("virt-tar-out", "import-vm (libguestfs-tools)")):
         have = shutil.which(exe) is not None
         print("%-13s %s%s" % (exe, "found" if have else "missing", "" if have else "  <- " + why))
@@ -349,6 +384,9 @@ def eda_check(ctx, a):
 
 
 def eda_kernel_arg(ctx, a):
+    if not x86():
+        die("the vsyscall page is a feature of x86_64 kernels: there is nothing to set on %s (an emulated x86_64 box "
+            "gets it from the emulator)" % host_arch(), 2)
     ctx.run(["sudo", "grubby", "--update-kernel=ALL", "--args=vsyscall=emulate"])
     print("reboot to apply; `silik status` then shows vsyscall emulate")
     return 0
@@ -1139,6 +1177,8 @@ def win_prepare(ctx, name, a=None, create=False, arch="win64"):
     d, shared = prefix_dir(name), win_shared()
     new = not os.path.isdir(d)
     if not ctx.dry and not shutil.which("wine"):
+        if not x86():
+            win_die(ctx, ARM_WINE % host_arch(), 127)
         win_die(ctx, "Wine is not installed (the package silik-wine: `sudo dnf install silik-wine`): Windows programs cannot run here yet", 127)
     if new and not create:
         if ctx.dry:
@@ -1629,11 +1669,38 @@ def vm_create(ctx, a):
         die("no such ISO: " + a.iso)
     if not valid_name(a.name):
         die("VM name: letters, digits, - _ .", 2)
+    if a.drivers and not os.path.isfile(a.drivers) and not ctx.dry:
+        die("no such ISO: " + a.drivers)
+    if not os.path.exists("/dev/kvm") and not ctx.dry:
+        die("no KVM on this machine (/dev/kvm is missing): virtualisation is off in the firmware's setup, or this system "
+            "is itself a virtual machine without nested virtualisation (SilikOS in Hyper-V on a Windows on ARM laptop: "
+            "there, Windows is the host and runs its programs itself)")
     argv = ["virt-install", "--connect", "qemu:///session", "--name", a.name, "--memory", str(a.ram * 1024), "--vcpus", str(a.cpus),
-            "--cpu", "host-passthrough", "--machine", "q35", "--boot", "uefi", "--tpm", "backend.type=emulator,backend.version=2.0,model=tpm-crb",
-            "--disk", "size=%d,format=qcow2,bus=sata" % a.disk, "--cdrom", a.iso, "--os-variant", a.os_variant,
-            "--network", "passt,model=e1000e,portForward=127.0.0.1:3389:3389", "--graphics", "spice", "--video", "qxl", "--sound", "ich9", "--noautoconsole"]
-    ctx.run(argv)
+            "--cpu", "host-passthrough"]
+    # EL 9's qemu-kvm has no SPICE and no QXL (`qemu-kvm -spice` is an invalid option there; no QXL device), and no
+    # NVMe device: the screen is VNC (virt-viewer shows it), until Remote Desktop is on
+    if x86():
+        argv += ["--machine", "q35", "--boot", "uefi", "--tpm", "backend.type=emulator,backend.version=2.0,model=tpm-crb",
+                 "--disk", "size=%d,format=qcow2,bus=sata" % a.disk, "--cdrom", a.iso, "--os-variant", a.os_variant,
+                 "--network", "passt,model=e1000e,portForward=127.0.0.1:3389:3389", "--graphics", "vnc", "--video", "vga", "--sound", "ich9"]
+        if a.drivers:
+            argv += ["--disk", "path=%s,device=cdrom,bus=sata,readonly=on" % a.drivers]
+    else:
+        # Windows 11 for ARM on the `virt` machine with AAVMF (UEFI: edk2-aarch64) and a TPM 2.0 of libvirt's default
+        # model for the architecture. Windows Setup installs to no USB disk and has no driver for virtio: the disk and
+        # the network are virtio, with the ARM64 drivers of virtio-win (--drivers ISO, "Load driver" in Setup); the
+        # installation disc is USB (it boots first), the screen a RAM framebuffer (UEFI's, which Windows keeps)
+        argv += ["--machine", "virt", "--boot", "uefi", "--tpm", "backend.type=emulator,backend.version=2.0",
+                 "--disk", "path=%s,device=cdrom,bus=usb,readonly=on,boot.order=1" % a.iso,
+                 "--disk", "size=%d,format=qcow2,bus=virtio,boot.order=2" % a.disk]
+        if a.drivers:
+            argv += ["--disk", "path=%s,device=cdrom,bus=usb,readonly=on" % a.drivers]
+        argv += ["--import", "--os-variant", a.os_variant, "--network", "passt,model=virtio,portForward=127.0.0.1:3389:3389",
+                 "--graphics", "vnc", "--video", "ramfb", "--sound", "none"]
+    ctx.run(argv + ["--noautoconsole"])
+    if not x86() and not a.drivers:
+        print("silik: Windows Setup for ARM sees the virtio disk only with virtio-win's ARM64 drivers: give their ISO "
+              "with --drivers (or load them from another medium in Setup)", file=sys.stderr)
     print("install Windows in the window that `virt-viewer --connect qemu:///session %s` opens; then enable Remote Desktop in it" % a.name)
     return 0
 
@@ -1708,9 +1775,19 @@ def vm_app(ctx, a):
 
 
 # ------------------------------------------------------------------ hw
-def hw_probe(ctx, a):
+def cpu_name(ctx):
+    """the processor's name: /proc/cpuinfo's "model name" (x86_64); an ARM kernel has none there, lscpu names it from
+    the processor's implementer and part numbers ("Vendor ID", "Model name"); else the architecture"""
     cpu = [l.split(":", 1)[1].strip() for l in read("/proc/cpuinfo").splitlines() if l.startswith("model name")]
-    info = {"cpu": cpu[0] if cpu else os.uname().machine, "cores": os.cpu_count(), "arch": os.uname().machine, "gpus": gpus(ctx),
+    if cpu:
+        return cpu[0]
+    f = dict((k.strip(), v.strip()) for k, _, v in (l.partition(":") for l in ctx.query(["lscpu"]).splitlines()))
+    name = " ".join(x for x in (f.get("Vendor ID", ""), f.get("Model name", "")) if x and x != "-")
+    return name or host_arch()
+
+
+def hw_probe(ctx, a):
+    info = {"cpu": cpu_name(ctx), "cores": os.cpu_count(), "arch": host_arch(), "gpus": gpus(ctx),
             "nvidia_driver": read("/proc/driver/nvidia/version").splitlines()[0] if os.path.exists("/proc/driver/nvidia/version") else "",
             "kvm": os.path.exists("/dev/kvm")}
     if a.json:
@@ -1731,8 +1808,10 @@ def hw_nvidia(ctx, a):
         v = read("/proc/driver/nvidia/version")
         print(v.strip() or "the NVIDIA kernel module is not loaded")
         return 0 if v else 1
-    if os.uname().machine != "x86_64" and not ctx.dry:
-        die("the NVIDIA repository used here is for x86_64")
+    if not x86():
+        # (NVIDIA has an EL 9 repository for ARM servers with its cards, "sbsa": not set up or tried by silik; a
+        # Snapdragon laptop, or a virtual machine on one, has no NVIDIA graphics)
+        die("the NVIDIA driver set up here is NVIDIA's EL 9 repository for x86_64; this machine is %s" % host_arch(), 2)
     # NVIDIA's own EL9 repository, DKMS flavour: the module is rebuilt for each kernel of the base system
     # (the headers of the running kernel: the newest kernel-devel may be of a kernel not booted yet)
     # (the headers of the running kernel, and of the newest installed one: an automatic update may have put a kernel
@@ -2124,7 +2203,7 @@ def sec_probe(pending=True, offline=False):
         "sshd": {"unit": sec_unit("sshd.service"), "active": sec_active("sshd.service")},
         "auto": sec_updates_auto(), "pending": sec_pending(offline) if pending else None, "disk": sec_disk(),
         "secureboot": sec_secureboot(cont), "lock": sec_lock(su), "lock_user": su, "autologin": sec_autologin(), "sysctl": sec_sysctl(),
-        "sysctl_file": os.path.isfile(SEC_SYSCTL_FILE), "vsyscall": kernel_vsyscall(),
+        "sysctl_file": os.path.isfile(SEC_SYSCTL_FILE), "vsyscall": kernel_vsyscall() if x86() else "n/a",
         "bwrap": {"path": bw or "", "version": (sec_cmd(["bwrap", "--version"])[1].split() or [""])[-1] if bw else "",
                   "userns": int(ns) if ns.isdigit() else None},
     }
@@ -2313,7 +2392,9 @@ def sec_checks(st):
         row("sysctl", "kernel settings", "ok", "%d of %d as SilikOS sets them or stricter" % (len(sy), len(sy)))
 
     vs = st["vsyscall"]
-    if vs == "none":
+    if vs == "n/a":       # (ARM: the page is a feature of x86_64 kernels)
+        row("vsyscall", "vsyscall page", "ok", "none: this kernel's architecture (%s) has no such page" % host_arch())
+    elif vs == "none":
         row("vsyscall", "vsyscall page", "ok", "none (an EL6 box does not run on this kernel: silik eda kernel-arg)")
     elif vs == "xonly":   # a trade-off, said as one: the page stays for glibc 2.12, at a fixed address, execute-only
         row("vsyscall", "vsyscall page", "ok", "xonly: a trade-off. The page stays, execute-only, for EL6 boxes; `none` is stricter and stops them")
@@ -3146,7 +3227,8 @@ def parser(only=None):
     e = s.add_parser("eda", help="EDA: EL6 / EL7 / EL8 boxes for the vendors' tools, and the open tools").add_subparsers(dest="cmd")
     if only in (None, "eda"):
         x = e.add_parser("list"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=eda_list)
-        x = e.add_parser("create"); x.add_argument("name"); x.add_argument("--el", default="7"); x.add_argument("--image"); x.set_defaults(fn=eda_create)
+        x = e.add_parser("create"); x.add_argument("name"); x.add_argument("--el", default="7"); x.add_argument("--image")
+        x.add_argument("--arch", choices=["amd64"], help="on ARM: an x86_64 box, under emulation"); x.set_defaults(fn=eda_create)
         x = e.add_parser("setup"); x.add_argument("name"); x.add_argument("--el"); x.set_defaults(fn=eda_setup)
         x = e.add_parser("enter"); x.add_argument("name"); x.add_argument("--shell", default="/bin/bash"); x.set_defaults(fn=eda_enter)
         x = e.add_parser("run"); x.add_argument("name"); x.add_argument("cmd", nargs=argparse.REMAINDER); x.set_defaults(fn=eda_run)
@@ -3198,7 +3280,9 @@ def parser(only=None):
         v = w.add_parser("vm").add_subparsers(dest="vmcmd")
         x = v.add_parser("create"); x.add_argument("--iso", required=True); x.add_argument("--name", default="windows")
         x.add_argument("--ram", type=int, default=8); x.add_argument("--disk", type=int, default=80); x.add_argument("--cpus", type=int, default=4)
-        x.add_argument("--os-variant", default="win11"); x.set_defaults(fn=vm_create)
+        x.add_argument("--os-variant", default="win11")
+        x.add_argument("--drivers", help="a drivers disc (ISO) for Windows Setup: virtio-win's, whose ARM64 drivers Windows for ARM needs")
+        x.set_defaults(fn=vm_create)
         x = v.add_parser("start"); x.add_argument("name", nargs="?", default="windows"); x.set_defaults(fn=vm_start)
         x = v.add_parser("stop"); x.add_argument("name", nargs="?", default="windows"); x.set_defaults(fn=vm_stop)
         x = v.add_parser("usb", help="USB devices for the VM: list; attach VID:PID; detach VID:PID (e.g. a Vector VN1630, whose driver is Windows-only)")

@@ -24,7 +24,7 @@ TEXT = {
            "terminal": "terminal", "files": "files", "lock": "lock the screen", "logout": "log out", "eda_check": "check the EDA setup", "eda_tools": "the open EDA tools on this system", "eda_try": "the open EDA tools do their small jobs",
            "hw": "hardware", "enter_box": "shell in the box", "run_in_box": "run in the box", "prefix": "Wine prefix: its C: drive",
            "run_in_prefix": "run in the prefix", "open": "open", "log": "session log", "winvm": "start the Windows machine",
-           "win_program": "Windows program", "win_open": "run with Wine, in the sandbox", "off": "power off or restart",
+           "win_program": "Windows program", "win_open": "run with Wine, in the sandbox", "win_open_arm": "Windows program: no Wine for ARM here (silik win open says what can run it)", "off": "power off or restart",
            "look_silik": "look: Silik (the command line on top, a rail, a status bar)", "look_bar": "look: bar (one bar at the bottom)",
            "look_island": "look: island (one floating piece at the bottom)",
            "accent_ink": "accent: none, one ink on paper (the original)",
@@ -43,7 +43,7 @@ TEXT = {
            "terminal": "terminal", "files": "fitxers", "lock": "bloqueja la pantalla", "logout": "tanca la sessió", "eda_check": "comprova l'entorn EDA", "eda_tools": "les eines EDA obertes d'aquest sistema", "eda_try": "les eines EDA obertes fan les seves feines de prova",
            "hw": "maquinari", "enter_box": "shell a la caixa", "run_in_box": "executa a la caixa", "prefix": "prefix de Wine: la seva unitat C:",
            "run_in_prefix": "executa al prefix", "open": "obre", "log": "registre de la sessió", "winvm": "engega la màquina Windows",
-           "win_program": "programa de Windows", "win_open": "executa amb Wine, dins l'entorn aïllat", "off": "apaga o reinicia",
+           "win_program": "programa de Windows", "win_open": "executa amb Wine, dins l'entorn aïllat", "win_open_arm": "programa de Windows: aquí no hi ha Wine per a ARM (silik win open diu què el pot executar)", "off": "apaga o reinicia",
            "look_silik": "aspecte: Silik (la línia d'ordres a dalt, un rail, una barra d'estat)", "look_bar": "aspecte: barra (una barra a baix)",
            "look_island": "aspecte: illa (una peça flotant a baix)",
            "accent_ink": "accent: cap, una tinta sobre paper (l'original)",
@@ -62,7 +62,7 @@ TEXT = {
            "terminal": "terminal", "files": "archivos", "lock": "bloquea la pantalla", "logout": "cierra la sesión", "eda_check": "comprueba el entorno EDA", "eda_tools": "las herramientas EDA abiertas de este sistema", "eda_try": "las herramientas EDA abiertas hacen sus trabajos de prueba",
            "hw": "hardware", "enter_box": "shell en la caja", "run_in_box": "ejecuta en la caja", "prefix": "prefijo de Wine: su unidad C:",
            "run_in_prefix": "ejecuta en el prefijo", "open": "abre", "log": "registro de la sesión", "winvm": "arranca la máquina Windows",
-           "win_program": "programa de Windows", "win_open": "ejecuta con Wine, en el entorno aislado", "off": "apaga o reinicia",
+           "win_program": "programa de Windows", "win_open": "ejecuta con Wine, en el entorno aislado", "win_open_arm": "programa de Windows: aquí no hay Wine para ARM (silik win open dice qué puede ejecutarlo)", "off": "apaga o reinicia",
            "look_silik": "aspecto: Silik (la línea de órdenes arriba, un rail, una barra de estado)", "look_bar": "aspecto: barra (una barra abajo)",
            "look_island": "aspecto: isla (una pieza flotante abajo)",
            "accent_ink": "acento: ninguno, una tinta sobre papel (el original)",
@@ -89,6 +89,14 @@ def lang_of(env=None):
 
 
 WIN_FILES = (".exe", ".msi", ".bat", ".cmd", ".lnk")    # what `silik win open` takes
+
+
+def wine_here():
+    """False on ARM (aarch64) without a Wine: SilikOS builds its Wine for x86_64 only. (On x86_64 the entry is
+    offered either way: `silik win open` then says which package to install.) $SILIK_ARCH stands in for the machine"""
+    if (os.environ.get("SILIK_ARCH") or os.uname().machine) == "x86_64":
+        return True
+    return any(os.access(os.path.join(d, "wine"), os.X_OK) for d in (os.environ.get("PATH") or "").split(":") if d)
 
 
 class Item:
@@ -271,7 +279,7 @@ def match(items, query, t, limit=9):
     if q[0] in "/~":
         def opens(shown, full):     # a Windows file opens the way a double-click on it does
             if full.lower().endswith(WIN_FILES) and os.path.isfile(full):
-                return Item(shown, t["win_open"], [SILIK, "win", "open", full])
+                return Item(shown, t["win_open" if wine_here() else "win_open_arm"], [SILIK, "win", "open", full])
             return Item(shown, t["open"], ["xdg-open", full])
         p = os.path.expanduser(q)
         out = [opens(q, p)] if os.path.exists(p) else []

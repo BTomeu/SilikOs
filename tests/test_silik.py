@@ -32,6 +32,17 @@ def run(*argv):
 
 
 class Silik(unittest.TestCase):
+    # these are the x86_64 command lines, whatever machine runs the tests (ARM's: tests/test_arm.py)
+    def setUp(self):
+        self.arch = os.environ.get("SILIK_ARCH")
+        os.environ["SILIK_ARCH"] = "x86_64"
+
+    def tearDown(self):
+        if self.arch is None:
+            os.environ.pop("SILIK_ARCH", None)
+        else:
+            os.environ["SILIK_ARCH"] = self.arch
+
     def test_eda_create_el6(self):
         rc, o = run("eda", "create", "ic616", "--el", "6")
         self.assertEqual(rc, 0)

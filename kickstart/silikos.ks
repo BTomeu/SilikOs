@@ -1,4 +1,5 @@
-# SilikOS — kickstart for the installer (the EL9 base's Anaconda), x86_64.
+# SilikOS — kickstart for the installer (the EL9 base's Anaconda), x86_64. For aarch64, tools/build_iso.sh puts a
+# copy on the ISO with the repositories' architecture changed and without the x86_64 kernel argument (vsyscall).
 # What it fixes: the package sources, the package set and the post-install setup. What it leaves to the installer's
 # screens, on purpose: language, keyboard, time zone, the disk (never chosen or erased from here: a machine may hold
 # another system), the user and the root password.
