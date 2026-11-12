@@ -225,10 +225,11 @@ class Look(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(o.splitlines(), ["$ gsettings set com.silikvolt.silikos.shell accent volt-vivid",
                                           "$ gsettings set org.gnome.desktop.interface gtk-theme SilikOS-volt-vivid",
-                                          "$ gsettings set org.gnome.shell.extensions.user-theme name SilikOS-volt-vivid"])
+                                          "$ gsettings set org.gnome.shell.extensions.user-theme name SilikOS-volt-vivid",
+                                          "$ gsettings set org.gnome.desktop.interface icon-theme SilikOS-Colour"])
         rc, o = run_dry("look", "bar", "--accent", "ink")
         self.assertEqual(o.splitlines()[0], "$ gsettings set com.silikvolt.silikos.shell look bar")
-        self.assertEqual(o.splitlines()[-1], "$ gsettings set org.gnome.shell.extensions.user-theme name SilikOS")
+        self.assertEqual(o.splitlines()[-1], "$ gsettings set org.gnome.desktop.interface icon-theme SilikOS")
 
     def test_an_unknown_accent_is_refused(self):
         import contextlib

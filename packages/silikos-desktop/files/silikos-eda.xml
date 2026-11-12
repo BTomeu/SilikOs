@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SilikOS (silikos-desktop): engineering file types that shared-mime-info does not know. Each has a generic-icon of the
+     standard set, so it reads sensibly in any icon theme; the SilikOS theme draws the specific name. Type names marked
+     [A] are our choice (no registry name found); KiCad's own types come from KiCad's package and are not repeated. -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-gdsii"><!-- [A] -->
+    <comment>GDSII layout</comment><comment xml:lang="ca">disseny físic GDSII</comment><comment xml:lang="es">diseño físico GDSII</comment>
+    <generic-icon name="x-office-drawing"/>
+    <magic priority="60"><match type="string" offset="0" value="\x00\x06\x00\x02"/></magic>
+    <glob pattern="*.gds"/><glob pattern="*.gds2"/><glob pattern="*.gdsii"/>
+  </mime-type>
+  <mime-type type="application/x-oasis-layout"><!-- [A] -->
+    <comment>OASIS layout</comment><comment xml:lang="ca">disseny físic OASIS</comment><comment xml:lang="es">diseño físico OASIS</comment>
+    <generic-icon name="x-office-drawing"/>
+    <magic priority="60"><match type="string" offset="0" value="%SEMI-OASIS"/></magic>
+    <glob pattern="*.oas"/><glob pattern="*.oasis"/>
+  </mime-type>
+  <mime-type type="application/x-magic-layout"><!-- [A] -->
+    <comment>Magic layout</comment><comment xml:lang="ca">disseny físic de Magic</comment><comment xml:lang="es">diseño físico de Magic</comment>
+    <sub-class-of type="text/plain"/><generic-icon name="x-office-drawing"/>
+    <magic priority="60"><match type="string" offset="0" value="magic\n"/></magic>
+    <glob pattern="*.mag"/>
+  </mime-type>
+  <mime-type type="text/x-lef"><!-- [A] -->
+    <comment>LEF library</comment><comment xml:lang="ca">biblioteca LEF</comment><comment xml:lang="es">biblioteca LEF</comment>
+    <sub-class-of type="text/plain"/><generic-icon name="x-office-drawing"/>
+    <glob pattern="*.lef"/>
+  </mime-type>
+  <mime-type type="text/x-spice"><!-- [A] -->
+    <comment>SPICE netlist</comment><comment xml:lang="ca">netlist SPICE</comment><comment xml:lang="es">netlist SPICE</comment>
+    <sub-class-of type="text/plain"/><generic-icon name="text-x-generic"/>
+    <glob pattern="*.sp"/><glob pattern="*.spice"/><glob pattern="*.cir"/><glob pattern="*.ckt"/><glob pattern="*.cdl"/>
+  </mime-type>
+  <mime-type type="application/x-xschem-schematic"><!-- [A] -->
+    <comment>Xschem schematic</comment><comment xml:lang="ca">esquema d'Xschem</comment><comment xml:lang="es">esquema de Xschem</comment>
+    <sub-class-of type="text/plain"/><generic-icon name="x-office-drawing"/>
+    <magic priority="60"><match type="string" offset="0" value="v {xschem version="/></magic>
+    <!-- no glob: *.sch is also KiCad 5's and gschem's; the content tells -->
+  </mime-type>
+  <mime-type type="text/x-vcd"><!-- [A] -->
+    <comment>value change dump</comment><comment xml:lang="ca">bolcat de canvis de valor (VCD)</comment><comment xml:lang="es">volcado de cambios de valor (VCD)</comment>
+    <sub-class-of type="text/plain"/><generic-icon name="x-office-spreadsheet"/>
+    <glob pattern="*.vcd"/>
+  </mime-type>
+  <mime-type type="text/x-verilog">
+    <glob pattern="*.vh"/>
+  </mime-type>
+  <mime-type type="text/x-asm"><!-- [A] -->
+    <comment>assembly source</comment><comment xml:lang="ca">codi font en assemblador</comment><comment xml:lang="es">código fuente en ensamblador</comment>
+    <sub-class-of type="text/plain"/><generic-icon name="text-x-generic"/>
+    <glob pattern="*.s" case-sensitive="true"/><glob pattern="*.S" case-sensitive="true"/><glob pattern="*.asm"/>
+  </mime-type>
+  <mime-type type="text/x-linker-script"><!-- [A] -->
+    <comment>linker script</comment><comment xml:lang="ca">script de l'enllaçador</comment><comment xml:lang="es">script del enlazador</comment>
+    <sub-class-of type="text/plain"/><generic-icon name="text-x-generic"/>
+    <glob pattern="*.ld"/><glob pattern="*.lds"/>
+  </mime-type>
+  <mime-type type="text/x-ihex"><!-- [A] -->
+    <comment>Intel HEX image</comment><comment xml:lang="ca">imatge Intel HEX</comment><comment xml:lang="es">imagen Intel HEX</comment>
+    <sub-class-of type="text/plain"/><generic-icon name="application-x-executable"/>
+    <glob pattern="*.hex"/><glob pattern="*.ihex"/>
+  </mime-type>
+  <mime-type type="application/x-stm32cubemx"><!-- [A] -->
+    <comment>STM32CubeMX project</comment><comment xml:lang="ca">projecte d'STM32CubeMX</comment><comment xml:lang="es">proyecto de STM32CubeMX</comment>
+    <sub-class-of type="text/plain"/><generic-icon name="text-x-generic"/>
+    <glob pattern="*.ioc"/>
+  </mime-type>
+  <mime-type type="application/x-mdf"><!-- [A] -->
+    <comment>MDF measurement</comment><comment xml:lang="ca">mesura MDF</comment><comment xml:lang="es">medida MDF</comment>
+    <generic-icon name="x-office-spreadsheet"/>
+    <magic priority="60"><match type="string" offset="0" value="MDF     "/></magic>
+    <glob pattern="*.mf4"/>
+  </mime-type>
+  <mime-type type="model/step"><!-- [A]: IANA registration of this name not checked here -->
+    <comment>STEP 3-D model</comment><comment xml:lang="ca">model 3D STEP</comment><comment xml:lang="es">modelo 3D STEP</comment>
+    <sub-class-of type="text/plain"/><generic-icon name="x-office-drawing"/>
+    <magic priority="60"><match type="string" offset="0" value="ISO-10303-21;"/></magic>
+    <glob pattern="*.step"/><glob pattern="*.stp"/>
+  </mime-type>
+</mime-info>

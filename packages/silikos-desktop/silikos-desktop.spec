@@ -1,5 +1,5 @@
 Name:           silikos-desktop
-Version:        0.13.1
+Version:        0.14.0
 Release:        1%{?dist}
 Summary:        The SilikOS desktop: the Silik layout and the Flow looks (bar, island), its accents, GTK and shell themes, Cascadia Mono
 License:        LicenseRef-SilikVolt AND OFL-1.1
@@ -12,6 +12,8 @@ Requires:       gnome-shell
 Requires:       gnome-shell-extension-user-theme
 Requires:       gdm
 Requires:       glib2
+# (its file trigger compiles the engineering file types of silikos-eda.xml)
+Requires:       shared-mime-info
 Requires:       gtk3
 # the theme makers read the installed stylesheets through GObject introspection (resource-extract)
 Requires:       python3-gobject
@@ -71,9 +73,13 @@ for f in metadata.json extension.js flow.js stylesheet.css $(cd %{_sourcedir}/sh
   install -Dm0644 %{_sourcedir}/shell-ext/$f %{buildroot}%{_datadir}/gnome-shell/extensions/silik-shell@silikvolt.com/$f
 done
 install -Dm0644 %{_sourcedir}/com.silikvolt.silikos.shell.gschema.xml %{buildroot}%{_datadir}/glib-2.0/schemas/com.silikvolt.silikos.shell.gschema.xml
-# the icon theme: Adwaita with the Silik folders and file types (tools/gen_icons.py)
-(cd %{_sourcedir}/icons && find . -type f \( -name '*.svg' -o -name index.theme \) | while read -r f; do
-  install -Dm0644 "$f" "%{buildroot}%{_datadir}/icons/SilikOS/$f"; done)
+# the icon themes: Adwaita with the Silik folders and file types, in ink (SilikOS) and with a band of colour per kind
+# (SilikOS-Colour, taken with an accent) (tools/gen_icons.py); the engineering file types they draw (silikos-eda.xml)
+for t in SilikOS SilikOS-Colour; do
+  (cd %{_sourcedir}/icons/$t && find . -type f \( -name '*.svg' -o -name index.theme \) | while read -r f; do
+    install -Dm0644 "$f" "%{buildroot}%{_datadir}/icons/$t/$f"; done)
+done
+install -Dm0644 %{_sourcedir}/silikos-eda.xml %{buildroot}%{_datadir}/mime/packages/silikos-eda.xml
 install -Dm0644 %{_sourcedir}/CascadiaMono.ttf %{buildroot}%{_datadir}/fonts/silikos/CascadiaMono.ttf
 install -Dm0644 %{_sourcedir}/CascadiaMono-LICENSE.txt %{buildroot}%{_datadir}/licenses/%{name}/CascadiaMono-LICENSE.txt
 
@@ -83,7 +89,7 @@ fc-cache -f %{_datadir}/fonts/silikos >/dev/null 2>&1 || :
 %{_libexecdir}/silikos/shell-theme || :
 %{_libexecdir}/silikos/gtk-theme >/dev/null || :
 systemctl enable silikos-themes.service >/dev/null 2>&1 || :
-gtk-update-icon-cache -q -f %{_datadir}/icons/SilikOS >/dev/null 2>&1 || :
+for t in SilikOS SilikOS-Colour; do gtk-update-icon-cache -q -f %{_datadir}/icons/$t >/dev/null 2>&1 || :; done
 # the login screen starts X11 sessions (Xorg is part of the EL9 base)
 if [ -f %{_sysconfdir}/gdm/custom.conf ]; then
   if grep -q '^#\?WaylandEnable=' %{_sysconfdir}/gdm/custom.conf; then
@@ -114,6 +120,9 @@ dconf update >/dev/null 2>&1 || :
 %{_datadir}/themes/SilikOS/
 %{_datadir}/icons/SilikOS/
 %ghost %{_datadir}/icons/SilikOS/icon-theme.cache
+%{_datadir}/icons/SilikOS-Colour/
+%ghost %{_datadir}/icons/SilikOS-Colour/icon-theme.cache
+%{_datadir}/mime/packages/silikos-eda.xml
 %ghost %{_datadir}/themes/SilikOS/gnome-shell/gnome-shell.css
 %ghost %{_datadir}/themes/SilikOS/gtk-3.0/gtk.css
 # the accents' themes (one per accent of files/accents: tests/test_accents.py holds this list to them)

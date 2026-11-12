@@ -1,5 +1,5 @@
 Name:           silik-win
-Version:        0.4.1
+Version:        0.4.2
 Release:        1%{?dist}
 Summary:        Windows programs on SilikOS: a double-click runs them with Wine in a sandbox; a Windows virtual machine for the rest
 License:        LicenseRef-SilikVolt

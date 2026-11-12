@@ -16,6 +16,7 @@
     <comment xml:lang="ca">fitxer per lots de Windows</comment>
     <comment xml:lang="es">archivo por lotes de Windows</comment>
     <sub-class-of type="text/plain"/>
+    <generic-icon name="text-x-script"/>
     <glob pattern="*.bat"/>
     <glob pattern="*.cmd"/>
   </mime-type>

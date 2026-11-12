@@ -1,0 +1,27 @@
+[Icon Theme]
+Name=SilikOS-Colour
+Comment=SilikOS with colour: a band of each kind's colour at the foot of folders and files
+Inherits=Adwaita,hicolor
+Example=folder
+Directories=scalable/places,scalable/mimetypes,scalable/status
+
+[scalable/places]
+Context=Places
+Size=64
+MinSize=8
+MaxSize=512
+Type=Scalable
+
+[scalable/mimetypes]
+Context=MimeTypes
+Size=64
+MinSize=8
+MaxSize=512
+Type=Scalable
+
+[scalable/status]
+Context=Status
+Size=64
+MinSize=8
+MaxSize=512
+Type=Scalable

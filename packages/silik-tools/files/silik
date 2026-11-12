@@ -26,7 +26,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.6.4"
+VERSION = "0.6.5"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -2681,6 +2681,7 @@ ACCENTS = (
     ("spark", "spark yellow #f2c230"),
 )
 THEMES = "/usr/share/themes"
+ICONS = "/usr/share/icons"
 USER_THEME = "org.gnome.shell.extensions.user-theme"
 
 
@@ -2739,6 +2740,9 @@ def cmd_look(ctx, a):
         ctx.run(["gsettings", "set", LOOK_SCHEMA, "accent", a.accent])
         ctx.run(["gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", theme])
         ctx.run(["gsettings", "set", USER_THEME, "name", theme])
+        # the icons: in ink with the ink, with a band of colour per kind of file with an accent (tools/gen_icons.py)
+        icons = "SilikOS" if a.accent == "ink" or (not ctx.dry and not os.path.isdir(os.path.join(ICONS, "SilikOS-Colour"))) else "SilikOS-Colour"
+        ctx.run(["gsettings", "set", "org.gnome.desktop.interface", "icon-theme", icons])
         if not ctx.dry and accent_now(ctx) != a.accent:
             die("the accent is still %s: run it as the user, in the desktop session (gsettings could not change the setting)" % (accent_now(ctx) or "unknown"))
     return 0
