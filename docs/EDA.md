@@ -79,7 +79,8 @@ EL 9 (`eda/trial.sh`: each must do a small real job) and keeps the package in th
 tools"). `tools/build_iso.sh` puts whatever packages are in `build/extra/` into the ISO. The package
 `silik-eda-open` (in the kickstart) asks for all of them, EPEL's included, and carries the files of `silik eda try`.
 The ISO also installs every package of the release `eda-tools` (`tools/build_iso.sh` adds their names to the
-kickstart's list), Open CASCADE's -devel requirements with it.
+kickstart's list), but not a -devel package: Open CASCADE's headers and CMake files are `opencascade-devel`, for
+KiCad's build only (their requirements add some 175 MB that an installed system does not use).
 Each tool keeps its own licence, installed with its package. No PDK is shipped: the layout jobs use the `scmos`
 technology that comes with Magic, and simple transistor models written for the exercise (their delays are the
 exercise's, not a process's). `docs/STATUS.md` says which of this

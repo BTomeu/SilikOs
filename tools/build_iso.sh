@@ -60,7 +60,8 @@ if ls "$root"/build/extra/*.rpm > /dev/null 2>&1; then
   cp "$root"/build/repo/*.rpm "$root"/build/extra/*.rpm "$repo/"
   createrepo_c --quiet "$repo"
   ksfile=$work/x/silikos.ks
-  names=$(for f in "$root"/build/extra/*.rpm; do rpm -qp --qf '%{NAME}\n' "$f"; done)
+  # (a -devel package is for building against a library: in the repository, not installed)
+  names=$(for f in "$root"/build/extra/*.rpm; do rpm -qp --qf '%{NAME}\n' "$f"; done | grep -v -- '-devel$')
   awk -v add="$names" '/^%packages/ { inp = 1 } inp && /^%end/ { print add; inp = 0 } { print }' "$root/kickstart/silikos.ks" > "$ksfile"
   echo "extra packages in the ISO: $(echo $names)"
 fi

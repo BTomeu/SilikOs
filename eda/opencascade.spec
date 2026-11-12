@@ -9,13 +9,11 @@ Source0:        opencascade-%{version}.tar.gz
 ExclusiveArch:  x86_64
 BuildRequires:  cmake gcc gcc-c++ make ninja-build
 BuildRequires:  freetype-devel fontconfig-devel mesa-libGL-devel mesa-libEGL-devel libX11-devel libXext-devel libXmu-devel libXi-devel
-# the headers ask for the same when another program is built against them
-Requires:       freetype-devel fontconfig-devel mesa-libGL-devel libX11-devel
 
 %description
 Open CASCADE Technology %{version}: the libraries (foundation classes, modelling data and algorithms, visualisation,
-application framework, data exchange: STEP, IGES, STL, VRML, glTF) with their headers and CMake files, without the
-Draw test harness. KiCad reads and writes STEP models through it. Upstream's source, unmodified, built on EL 9 by
+application framework, data exchange: STEP, IGES, STL, VRML, glTF), without the Draw test harness. KiCad reads and
+writes STEP models through it. Its headers and CMake files are opencascade-devel: only a build needs them. Upstream's source, unmodified, built on EL 9 by
 SilikVolt (eda/opencascade.spec); not in the base's repositories or in EPEL 9.
 
 %prep
@@ -43,8 +41,26 @@ test -e %{buildroot}%{_libdir}/libTKDESTEP.so && test -e %{buildroot}%{_libdir}/
 %licences
 for f in LICENSE_LGPL_21.txt OCCT_LGPL_EXCEPTION.txt; do [ -f "$f" ] && cp -p "$f" %{buildroot}%{_datadir}/licenses/%{name}/; done
 %filelist
+# what a build against it needs (headers, CMake files, the unversioned library names) apart: their requirements, the
+# -devel packages of freetype, fontconfig, Mesa and X11, add some 175 MB to an installed system (measured in a clean
+# EL 9 with the libraries themselves present, 12/11/2026) that only a compiler uses
+grep -E '^"?%{_includedir}/|/cmake/|\.so"?$' %{_builddir}/%{name}-files.list > %{_builddir}/%{name}-devel.list
+grep -vE '^"?%{_includedir}/|/cmake/|\.so"?$' %{_builddir}/%{name}-files.list > %{_builddir}/%{name}-runtime.list
+test -s %{_builddir}/%{name}-devel.list && grep -q 'libTKernel\.so\.' %{_builddir}/%{name}-runtime.list
+
+%package devel
+Summary:        Open CASCADE Technology's headers and CMake files, to build programs against it (KiCad)
+Requires:       %{name} = %{version}-%{release}
+# the headers ask for the same when another program is built against them
+Requires:       freetype-devel fontconfig-devel mesa-libGL-devel libX11-devel
+
+%description devel
+The headers, CMake files and unversioned library names of Open CASCADE Technology %{version}, for building a program
+against it (KiCad's build); an installed system does not need them.
+
+%files devel -f %{_builddir}/%{name}-devel.list
 
 %post -p /sbin/ldconfig
 %postun -p /sbin/ldconfig
 
-%files -f %{_builddir}/%{name}-files.list
+%files -f %{_builddir}/%{name}-runtime.list

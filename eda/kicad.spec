@@ -1,7 +1,7 @@
 %include %{_specdir_eda}/common.inc
 %global __brp_python_bytecompile %{nil}
 # needs: epel   (wxWidgets 3.2, wxPython, libgit2 1.7, libspnav are in EPEL 9: the package needs EPEL too)
-# uses: opencascade nng ngspice
+# uses: opencascade opencascade-devel nng ngspice
 Name:           kicad
 Version:        %{upver}
 Release:        1.silik%{?dist}
@@ -18,7 +18,7 @@ BuildRequires:  mesa-libGL-devel mesa-libGLU-devel mesa-libEGL-devel wayland-dev
 BuildRequires:  libgit2-devel unixODBC-devel protobuf-devel protobuf-compiler poppler-glib-devel poppler-devel libspnav-devel
 # ours (eda/opencascade.spec, eda/nng.spec, eda/ngspice.spec): the STEP kernel, the messaging library of its
 # programming interface, and the simulator as a shared library
-BuildRequires:  opencascade nng ngspice
+BuildRequires:  opencascade-devel nng ngspice
 Requires:       python3-wxpython4
 # its simulator: our ngspice's shared library, loaded at run time (rpm cannot see that by itself)
 Requires:       libngspice.so.0()(64bit)
