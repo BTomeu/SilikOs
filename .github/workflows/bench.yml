@@ -7,6 +7,9 @@ on:
     branches: [main]
     paths: ['tools/bench_ngspice_flags.sh', '.github/workflows/bench.yml']
   workflow_dispatch:
+# read-only (the job runs upstream's build code)
+permissions:
+  contents: read
 jobs:
   ngspice-flags:
     runs-on: ubuntu-24.04
@@ -16,6 +19,7 @@ jobs:
       - name: Tools
         run: dnf -y -q install git tar gzip findutils
       - uses: actions/checkout@v4
+        with: { persist-credentials: false }
       - name: ngspice built with four sets of flags, each timed
         shell: bash
         run: bash tools/bench_ngspice_flags.sh

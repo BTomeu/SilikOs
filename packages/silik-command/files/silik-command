@@ -9,6 +9,7 @@
 import configparser
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -265,9 +266,15 @@ def match(items, query, t, limit=9):
     head, _, rest = q.partition(" ")
     fixed = set(i.address for i in items if not i.takes)     # eda/check, win/vm, an installed program: no command inside
     if rest and head.startswith("eda/") and head not in fixed:
-        return [Item(head, t["run_in_box"] + ": " + rest, [SILIK, "eda", "run", head[4:], "--"] + shlex.split(rest))]
+        try:
+            words = shlex.split(rest)
+        except ValueError:              # (a quote not closed yet, while typing)
+            return []
+        return [Item(head, t["run_in_box"] + ": " + rest, [SILIK, "eda", "run", head[4:], "--"] + words)]
     if rest and head.startswith("win/") and head not in fixed:
-        return [Item(head, t["run_in_prefix"] + ": " + rest, [SILIK, "win", "run", head[4:], "--"] + shlex.split(rest))]
+        # a Windows path keeps its backslashes (C:\windows\notepad.exe); double quotes group words
+        words = [w[1:-1] if len(w) > 1 and w[0] == w[-1] == '"' else w for w in re.findall(r'"[^"]*"?|\S+', rest)]
+        return [Item(head, t["run_in_prefix"] + ": " + rest, [SILIK, "win", "run", head[4:], "--"] + words)]
     if q[0] in "/~":
         def opens(shown, full):     # a Windows file opens the way a double-click on it does
             if full.lower().endswith(WIN_FILES) and os.path.isfile(full):

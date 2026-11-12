@@ -315,8 +315,26 @@ def eda_import_vm(ctx, a):
     return 0
 
 
+def confirm(ctx, a, what):
+    """a removal that cannot be undone goes ahead with --yes, or when the person at a terminal says yes"""
+    if ctx.dry or getattr(a, "yes", False):
+        return
+    if not sys.stdin.isatty():
+        die("%s cannot be undone: add --yes" % what, 2)
+    try:
+        ok = input("silik: %s cannot be undone. Remove it? [y/N] " % what).strip().lower() in ("y", "yes", "s", "si", "sí")
+    except EOFError:
+        ok = False
+    if not ok:
+        die("nothing removed", 1)
+
+
 def eda_rm(ctx, a):
-    ctx.run(["podman", "rm", "-f", box_name(a.name)])
+    name = box_name(a.name)
+    if not ctx.dry and not any(b["name"] == a.name for b in boxes(ctx)):
+        die("no box %s (silik eda list)" % a.name)
+    confirm(ctx, a, "the box %s, with whatever was installed in it outside /opt/eda and your home folder," % a.name)
+    ctx.run(["podman", "rm", "-f", name])
     return 0
 
 
@@ -1308,6 +1326,10 @@ def win_stop(ctx, a):
 
 def win_rm(ctx, a):
     d = prefix_dir(a.prefix)
+    if not ctx.dry and not os.path.isdir(d):
+        die("no prefix %s (silik win list)" % a.prefix)
+    # (a program's Documents and Desktop are inside the prefix: they go with it)
+    confirm(ctx, a, "the prefix %s (%s), with its programs and the files they saved inside it," % (a.prefix, d))
     if win_session_info(a.prefix) or (not ctx.dry and win_outside(d)):      # its programs end first
         win_stop(ctx, a)
     ctx.run(["rm", "-rf", "--", d, win_runtime(a.prefix)])
@@ -1389,6 +1411,9 @@ def exec_line(argv):
     """an Exec= value for these arguments (Desktop Entry Specification: quoting, then the string escapes)"""
     out = []
     for a in argv:
+        if any(ord(c) < 0x20 or ord(c) == 0x7f for c in a):
+            # (a line break would end the value: the rest would be a key of its own, e.g. a second Exec=)
+            raise ValueError("a control character in a command-line argument: %r" % a)
         if a and all(c.isalnum() or c in "-_./:=@,+" for c in a):
             out.append(a)
         else:
@@ -1505,6 +1530,10 @@ def win_menu(name):
             # inside the sandbox, where that folder is writable) would make `silik win run` show its folder to the
             # sandbox: such an entry is not offered
             if run[0].startswith(("/", "~")) or "/" in run[0].split(":", 1)[0]:
+                continue
+            # an argument with a control character (an escaped line break, written from inside the sandbox) would
+            # give the entry a second Exec= of the program's choosing, run outside the sandbox: not offered
+            if any(ord(c) < 0x20 or ord(c) == 0x7f for x in run for c in x):
                 continue
             slug = base = win_slug(e.get("Name") or fn[:-8])
             n = 2
@@ -1769,7 +1798,8 @@ def update_auto_now(ctx):
     """which automatic updates are on: all, security, off; '' when systemd cannot say"""
     st = {}
     for unit in (SEC_FULL_TIMER, SEC_TIMER):
-        st[unit] = ctx.query(["systemctl", "is-enabled", unit]).strip()
+        # (sec_unit keeps the answer: `systemctl is-enabled` says "disabled" with exit code 1)
+        st[unit] = "" if ctx.dry else (sec_unit(unit) or "")
     if not any(st.values()):
         return ""
     return "all" if st[SEC_FULL_TIMER] == "enabled" else "security" if st[SEC_TIMER] == "enabled" else "off"
@@ -3151,7 +3181,7 @@ def parser(only=None):
         x = e.add_parser("enter"); x.add_argument("name"); x.add_argument("--shell", default="/bin/bash"); x.set_defaults(fn=eda_enter)
         x = e.add_parser("run"); x.add_argument("name"); x.add_argument("cmd", nargs=argparse.REMAINDER); x.set_defaults(fn=eda_run)
         x = e.add_parser("import-vm"); x.add_argument("disk"); x.add_argument("--name", required=True); x.add_argument("--el", default="6"); x.add_argument("--tmp"); x.set_defaults(fn=eda_import_vm)
-        x = e.add_parser("rm"); x.add_argument("name"); x.set_defaults(fn=eda_rm)
+        x = e.add_parser("rm"); x.add_argument("name"); x.add_argument("--yes", action="store_true"); x.set_defaults(fn=eda_rm)
         x = e.add_parser("check"); x.set_defaults(fn=eda_check)
         x = e.add_parser("kernel-arg"); x.set_defaults(fn=eda_kernel_arg)
         x = e.add_parser("tools", help="the open EDA tools on this system"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=eda_tools)
@@ -3192,7 +3222,7 @@ def parser(only=None):
         x = box(w.add_parser("run")); x.add_argument("prefix"); x.add_argument("cmd", nargs=argparse.REMAINDER); x.set_defaults(fn=win_run)
         x = box(w.add_parser("install")); x.add_argument("prefix"); x.add_argument("setup"); x.add_argument("args", nargs=argparse.REMAINDER); x.set_defaults(fn=win_install)
         x = w.add_parser("stop", help="end every program of the prefix"); x.add_argument("prefix"); x.set_defaults(fn=win_stop)
-        x = w.add_parser("rm"); x.add_argument("prefix"); x.set_defaults(fn=win_rm)
+        x = w.add_parser("rm"); x.add_argument("prefix"); x.add_argument("--yes", action="store_true"); x.set_defaults(fn=win_rm)
         x = w.add_parser("sync", help="installed Windows programs become applications of the desktop"); x.set_defaults(fn=win_sync)
         x = w.add_parser("apps", help="the installed Windows programs"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=win_apps)
         v = w.add_parser("vm").add_subparsers(dest="vmcmd")

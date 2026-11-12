@@ -2,4 +2,9 @@
 # CP210x, CH340, CDC ACM devices) belong to the person at the screen, as the debug probes do (60-openocd.rules):
 # without this they are root:dialout and picocom or pyserial fail for the user. uaccess gives access to the user of
 # the active local session only, and takes it back when that session ends (systemd-logind; before 73-seat-late).
+# Not the ports of a built-in mobile-broadband modem (the kernel's WWAN serial drivers option, qcserial, sierra): they
+# stay with ModemManager. (ModemManager's own ID_MM_CANDIDATE is set later, in 80-mm-candidate.rules, and marks every
+# ttyACM: it cannot tell a modem from a Nucleo here.)
+SUBSYSTEM=="tty", DRIVERS=="option|qcserial|sierra", GOTO="silikos_serial_end"
 SUBSYSTEM=="tty", KERNEL=="ttyACM[0-9]*|ttyUSB[0-9]*", TAG+="uaccess"
+LABEL="silikos_serial_end"

@@ -170,6 +170,13 @@ class Bar(unittest.TestCase):
         m = bar.match(self.items, "win/altium X2.exe", self.t)
         self.assertEqual(m[0].argv[1:], ["win", "run", "altium", "--", "X2.exe"])
 
+    def test_a_windows_path_keeps_its_backslashes(self):
+        m = bar.match(self.items, 'win/altium C:\\windows\\notepad.exe "C:\\My Files\\a b.txt"', self.t)
+        self.assertEqual(m[0].argv[1:], ["win", "run", "altium", "--", "C:\\windows\\notepad.exe", "C:\\My Files\\a b.txt"])
+
+    def test_a_quote_not_closed_yet_is_not_an_error(self):
+        self.assertEqual(bar.match(self.items, 'eda/ic616 virtuoso "-replay', self.t), [])
+
     def test_twin_reads_as_typed(self):
         self.assertEqual(bar.Item("sys/status", "", [bar.SILIK, "status"]).twin, "silik status")
 
@@ -262,6 +269,45 @@ class ReviewFindings(unittest.TestCase):
         self.assertIn("ok", names)                  # (the check keeps what it must keep)
         self.assertNotIn("bad", names)
         self.assertNotIn("tilde", names)
+
+    def test_removing_a_prefix_asks_and_a_missing_one_is_an_error(self):
+        import contextlib, io
+        with tempfile.TemporaryDirectory() as h:
+            old = silik.WINE_ROOT
+            silik.WINE_ROOT = h
+            try:
+                for argv, code in ((["win", "rm", "nope"], 1),          # no such prefix: an error, not a silent 0
+                                   (["win", "rm", "p"], 2)):            # not a terminal, no --yes: refused
+                    os.makedirs(os.path.join(h, "p"), exist_ok=True)
+                    with self.assertRaises(SystemExit) as c, contextlib.redirect_stderr(io.StringIO()), \
+                            contextlib.redirect_stdout(io.StringIO()):
+                        silik.main(argv)
+                    self.assertEqual(c.exception.code, code, argv)
+                self.assertTrue(os.path.isdir(os.path.join(h, "p")))   # nothing removed
+            finally:
+                silik.WINE_ROOT = old
+
+    def test_a_menu_entry_cannot_add_a_line_to_ours(self):
+        """an escaped line break in the prefix's Exec= (written from inside the sandbox) would become a second
+        Exec= of our entry, run outside the sandbox (audit 12/11/2026): such an entry is not offered"""
+        with tempfile.TemporaryDirectory() as h:
+            old = silik.WINE_ROOT
+            silik.WINE_ROOT = h
+            try:
+                apps = os.path.join(h, "p", "home", ".local", "share", "applications", "wine")
+                os.makedirs(apps)
+                for n, ex in (("ok", "wine notepad"), ("evil", 'wine notepad "x\\nExec=sh -c \'touch /tmp/pwn\' #"'),
+                              ("evil2", "wine notepad x\\rExec=sh")):
+                    with open(os.path.join(apps, n + ".desktop"), "w") as f:
+                        f.write("[Desktop Entry]\nType=Application\nName=%s\nExec=env WINEPREFIX=%s/p %s\n" % (n, h, ex))
+                menu = silik.win_menu("p")
+            finally:
+                silik.WINE_ROOT = old
+        self.assertEqual([e["Name"] for _, e, _ in menu], ["ok"])
+        for _, e, _ in menu:
+            self.assertNotIn("\n", e["Exec"])
+        with self.assertRaises(ValueError):
+            silik.exec_line(["silik", "a\nExec=sh"])
 
     def test_an_adopted_entry_never_goes_through_a_planted_link(self):
         """a link planted in the prefix where Wine's entry would go (e.g. to ~/.config/autostart) is not followed"""

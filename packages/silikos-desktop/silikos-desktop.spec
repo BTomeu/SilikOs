@@ -99,8 +99,9 @@ fc-cache -f %{_datadir}/fonts/silikos >/dev/null 2>&1 || :
 %{_libexecdir}/silikos/gtk-theme >/dev/null || :
 systemctl enable silikos-themes.service >/dev/null 2>&1 || :
 for t in SilikOS SilikOS-Colour; do gtk-update-icon-cache -q -f %{_datadir}/icons/$t >/dev/null 2>&1 || :; done
-# the login screen starts X11 sessions (Xorg is part of the EL9 base)
-if [ -f %{_sysconfdir}/gdm/custom.conf ]; then
+# the login screen starts X11 sessions (Xorg is part of the EL9 base); on the first installation only: a person's own
+# change to Wayland stays through upgrades
+if [ $1 -eq 1 ] && [ -f %{_sysconfdir}/gdm/custom.conf ]; then
   if grep -q '^#\?WaylandEnable=' %{_sysconfdir}/gdm/custom.conf; then
     sed -i 's/^#\?WaylandEnable=.*/WaylandEnable=false/' %{_sysconfdir}/gdm/custom.conf
   else

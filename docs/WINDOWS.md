@@ -110,8 +110,10 @@ Consequences to know:
 
 **What the sandbox does not do:**
 
-- **The display.** X11 does not separate its clients: a program with the display can read the keyboard and the
-  screen and send keys to other windows. The sandbox protects files and processes, not the screen.
+- **The display, and through it the files.** X11 does not separate its clients: a program with the display can read
+  the keyboard and the screen and send keys to other windows, e.g. type a command into an open terminal. So under
+  X11 (the desktop's session) the sandbox keeps honest programs from reaching your files by mistake, but it does not
+  stop a hostile one: for a program you do not trust, the Windows VM (`silik win vm`).
 - Sound: a program can play and record.
 - Network (unless `--no-net`): it is this machine's network, with what listens on `localhost`.
 - The programs of one prefix are not protected from each other (they can read each other's memory through the
