@@ -70,7 +70,7 @@ be used.
 | 0e | Altium: Wine try, then the Windows virtual machine | owner's licences |
 | 1 | Hosted package repository, updates, signed packages | after phase 0 |
 | 2 | Desktop: own shell pieces (panel, window rules, settings), first-run setup | the looks bar and island: done (`docs/STATUS.md`); the rest after phase 0 |
-| 3 | ARM image (as a virtual machine first) | started 12/11/2026: packages, `silik`, the aarch64 ISO script and three embedded tools tried on emulated aarch64 (`docs/HARDWARE.md`); not installed or booted on ARM hardware |
+| 3 | ARM image (as a virtual machine first) | started 12/11/2026: packages, `silik`, the aarch64 ISO script three embedded tools and ngspice tried on emulated aarch64 (`docs/HARDWARE.md`); not installed or booted on ARM hardware |
 
 ## Risks
 

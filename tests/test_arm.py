@@ -251,6 +251,17 @@ class Packages(unittest.TestCase):
         # the x86_64 job's pruning keeps the other architecture's build of a package
         self.assertIn('grep -E "^$n-[0-9].*\\.$a\\.rpm$"', wf)
 
+    def test_the_eda_arm_builds_are_the_recipes_that_say_aarch64(self):
+        arm = sorted(r.split("/")[1] for r, a in self.recipes().items() if "aarch64" in a and r.startswith("eda/"))
+        self.assertEqual(arm, ["ngspice"])                                    # (built and tried under emulation)
+        wf = text(".github/workflows/eda.yml")
+        for job in ("build-arm", "keep-arm"):
+            m = re.search(r"\n  %s:.*?tool: \[([^\]]+)\]" % job, wf, re.S)
+            self.assertEqual(sorted(x.strip() for x in m.group(1).split(",")), arm, job)
+        # a release of their own: the x86_64 jobs and the CI read eda-tools by patterns blind to the architecture
+        self.assertIn("rel=eda-tools-aarch64", wf)
+        self.assertNotIn("eda-tools-aarch64", text("eda/keep.sh"))
+
     def test_the_x86_64_iso_leaves_the_arm_builds_out(self):
         ci = text(".github/workflows/ci.yml")
         self.assertIn("rm -f build/extra/*.aarch64.rpm", ci)

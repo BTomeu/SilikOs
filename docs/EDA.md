@@ -42,6 +42,15 @@ glibc 2.12 (EL6) calls the legacy vsyscall page for `time()` and `gettimeofday()
 yum) runs on a 6.18 kernel whose vsyscall page is execute-only (`xonly`). The kickstart sets `vsyscall=xonly`
 explicitly; `silik eda kernel-arg` sets `emulate` (readable too) for a program that reads the page.
 
+## On ARM (aarch64)
+
+The vendors' tools and the EL6 / EL7 userlands are x86_64 programs. On an aarch64 system `silik eda create` refuses
+with that reason; `silik eda create NAME --el 7 --arch amd64` makes the box under emulation (`podman create --arch
+amd64`), which needs an x86_64 emulator registered with binfmt_misc: EL 9 and EPEL 9 have no qemu-user-static for
+aarch64, so it is installed by hand, slow, and no vendor supports it (not run). There is no vsyscall page on ARM:
+`silik eda kernel-arg` has nothing to set. Of the open tools, ngspice builds and does its trial on aarch64 (emulated,
+12/11/2026); the other recipes are still x86_64 only (`docs/HARDWARE.md`).
+
 ## What an installer sees
 
 `/etc/redhat-release` reads `AlmaLinux release 9.x`, and `os-release` keeps `ID="almalinux"`, `ID_LIKE="rhel centos

@@ -6,7 +6,7 @@ Summary:        ngspice, the circuit simulator, with XSPICE and CIDER (upstream'
 License:        BSD-3-Clause AND LGPL-2.1-or-later AND LicenseRef-Upstream
 URL:            https://ngspice.sourceforge.io
 Source0:        ngspice-%{version}.tar.gz
-ExclusiveArch:  x86_64
+ExclusiveArch:  x86_64 aarch64
 BuildRequires:  gcc gcc-c++ make autoconf automake libtool bison flex readline-devel ncurses-devel
 BuildRequires:  libX11-devel libXaw-devel libXmu-devel libXext-devel libXft-devel fontconfig-devel freetype-devel fftw-devel
 

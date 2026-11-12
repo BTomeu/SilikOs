@@ -153,7 +153,7 @@ sense haver-ho executat de veritat. Les suposicions es marquen amb [A].
 - Els paquets de SilikOS són els mateixos per a les dues arquitectures: es construeixen i s'instal·len sobre AlmaLinux 9
   ARM, `silik` funciona i diu l'arquitectura, i les proves passen amb el Python 3.9 d'ARM.
 - L'escriptori, el compilador ARM, gdb, stlink i les eines de banc d'EPEL existeixen per a ARM; dfu-util, stm32flash i
-  OpenOCD es compilen per a ARM amb les nostres receptes.
+  OpenOCD es compilen per a ARM amb les nostres receptes, i també el simulador ngspice.
 - El que no existeix a ARM, `silik` ho diu en lloc de fallar: Wine (al portàtil Snapdragon els programes de Windows
   van al seu propi Windows), les eines dels fabricants d'EDA (són x86_64), el controlador NVIDIA.
 - La ISO ARM: `SILIK_ARCH=aarch64 bash tools/build_iso.sh`. Provada amb una còpia petita del disc d'AlmaLinux: el
