@@ -83,8 +83,26 @@ port...) and stable name (`/dev/serial/by-id/...`); USB-RS485 adapters switch di
 tio, minicom, picocom, screen; Modbus RTU: libmodbus, pyserial; a port over the network: ser2net, socat.
 
 The bench (silik-dev recommends them; all from EL 9 and EPEL 9): can-utils, Wireshark (SocketCAN captures), tio,
-minicom, screen, setserial, ser2net, socat, lrzsz, libmodbus, avrdude, i2c-tools, usbutils. Not in EL 9 or EPEL 9,
-to be built here like the EDA tools: python-can, cantools, SavvyCAN, sigrok / PulseView, stm32flash, esptool.
+minicom, screen, setserial, ser2net, socat, lrzsz, libmodbus, avrdude, i2c-tools, usbutils.
+
+Built here (dev/, workflow "Dev tools", release `dev-tools`; none is in EL 9 or EPEL 9):
+
+| Package | What |
+|---|---|
+| `savvycan` | SavvyCAN V220 (MIT): a CAN analyser window: capture from can0, DBC decoding, graphs, sending, replay, log formats |
+| `silik-pylab` | python-can 4.6.1, cantools 45.1.2 (DBC, ARXML, KCD), esptool 4.8.1, pymodbus 3.16.2 and what they need, from PyPI's source archives pinned by sha256 (`dev/pylab-requirements.txt`), on EL 9's Python 3.12 and apart from the system's Python: the commands `cantools`, `can_logger`, `can_player`, `can_viewer`, `esptool`; `silik-python script.py` imports them |
+| `stm32flash` | stm32flash 0.7: an STM32 written through its serial bootloader with a USB-serial adapter |
+
+```
+candump can0 | cantools decode car.dbc          frames of a bus decoded with its database, live
+cantools dump car.dbc / cantools plot car.dbc   the database; signals over time
+can_logger -i socketcan -c can0 -f run.blf      a log (BLF, ASC, CSV...); can_player replays it
+silik-python my_test.py                         `import can, cantools` in your own scripts
+```
+
+Tried in a clean EL 9 (dev/trial.sh, 12/11/2026): cantools decoded a DBC frame (399.6 V, -20 A, 90 %), python-can
+carried it across its virtual bus, pymodbus framed a Modbus RTU request, esptool and stm32flash started, SavvyCAN
+started and stayed up; the system's Python does not see them.
 
 Not run: a real adapter on a bus; the Windows VM with a USB device [A: libvirt's hostdev for qemu:///session].
 

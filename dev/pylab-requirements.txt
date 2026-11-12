@@ -1,0 +1,19 @@
+# silik-pylab (dev/silik-pylab.spec): the Python tools of the bench, from their source archives on PyPI, each pinned
+# with its sha256 (pip --require-hashes). EL 9 gives the rest: python3.12, python3.12-cryptography, -pyyaml, -packaging.
+#   python-can (LGPL-3.0), cantools (MIT), esptool (GPL-2.0+), pymodbus (BSD-3), and what they need
+python-can==4.6.1 --hash=sha256:290fea135d04b8504ebff33889cc6d301e2181a54099116609f940825ffe5005
+wrapt==1.17.3 --hash=sha256:f66eb08feaa410fe4eebd17f2a2c8e2e46d3476e9f8c783daa8e09e0faa666d0
+typing_extensions==4.16.0 --hash=sha256:dc983d19a509c94dba722ee6abd33940f7c05a89e243c47e907eb4db6f1a43e5
+cantools==45.1.2 --hash=sha256:c9f9059ae9028902065d5fc4478728749e27815f5548e6b249f963350d812e8e
+bitstruct==8.24.0 --hash=sha256:c72d8bd3b1762a5bcc9fde16bfa4d52800a4bc8d79f81bc7ee0e0bca5b5e901e
+textparser==0.26.2 --hash=sha256:859825876a9c38f7c313ee1cf991a59d6b56232a9f67be6dcc0a758d84654fba
+argparse_addons==0.12.0 --hash=sha256:6322a0dcd706887e76308d23136d5b86da0eab75a282dc6496701d1210b460af
+crccheck==1.3.1 --hash=sha256:1544c0110bf0a697d875d4f29dc40d7079f9d4d402a9317383f55f90ca72563a
+esptool==4.8.1 --hash=sha256:dc4ef26b659e1a8dcb019147c0ea6d94980b34de99fbe09121c7941c8b254531
+bitstring==3.1.9 --hash=sha256:a5848a3f63111785224dca8bb4c0a75b62ecdef56a042c8d6be74b16f7e860e7
+ecdsa==0.19.2 --hash=sha256:62635b0ac1ca2e027f82122b5b81cb706edc38cd91c63dda28e4f3455a2bf930
+six==1.17.0 --hash=sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81
+pyserial==3.5 --hash=sha256:3c77e014170dfffbd816e6ffc205e9842efb10be9f58ec16d3e8675b4925cddb
+reedsolo==1.7.0 --hash=sha256:c1359f02742751afe0f1c0de9f0772cc113835aa2855d2db420ea24393c87732
+intelhex==2.3.0 --hash=sha256:892b7361a719f4945237da8ccf754e9513db32f5628852785aea108dcd250093
+pymodbus==3.16.2 --hash=sha256:64057981fac117ed4b75ea8ef6035369f6ae803247700a5efdf75d76a2be8aef

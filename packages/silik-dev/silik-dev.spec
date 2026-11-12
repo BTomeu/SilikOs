@@ -1,5 +1,5 @@
 Name:           silik-dev
-Version:        0.2.0
+Version:        0.3.0
 Release:        1%{?dist}
 Summary:        Embedded development and the lab bench on SilikOS: ARM compiler, debugger, flashing, CAN, serial / RS-485, buses
 License:        LicenseRef-SilikVolt
@@ -17,6 +17,11 @@ Recommends:     gdb
 # not in EL 9 or EPEL 9: SilikOS builds them (dev/, workflow "Dev tools") and the ISO carries them
 Recommends:     openocd
 Recommends:     dfu-util
+# also built by SilikOS (dev/): flashing over an STM32's serial bootloader; a CAN analyser window; the Python tools of
+# the bench (python-can, cantools for DBC files, esptool, pymodbus) on Python 3.12, apart from the system's Python
+Recommends:     stm32flash
+Recommends:     savvycan
+Recommends:     silik-pylab
 # around them
 Recommends:     make
 Recommends:     cmake

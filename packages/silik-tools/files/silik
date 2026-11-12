@@ -28,7 +28,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.6.9"
+VERSION = "0.6.10"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -2483,6 +2483,11 @@ DEV_TOOLS = (   # command, package, what it is for
     ("wireshark", "wireshark", "captures: SocketCAN, USB, network"),
     ("avrdude", "avrdude", "AVR flashing"),
     ("i2cdetect", "i2c-tools", "I2C buses: detect, read, write"),
+    ("stm32flash", "stm32flash", "STM32 flashing through its serial (UART) bootloader"),
+    ("SavvyCAN", "savvycan", "CAN analyser: capture, DBC decoding, graphs, sending, replay"),
+    ("cantools", "silik-pylab", "CAN databases (DBC, ARXML, KCD): decode, encode, dump, plot"),
+    ("can_logger", "silik-pylab", "python-can: log, replay, view a bus; silik-python imports can"),
+    ("esptool", "silik-pylab", "Espressif (ESP32) flashing"),
 )
 # a vendor's IDE: its key, its name, the program to look for, the folders it may be under, how its downloaded file
 # is recognised and which script inside an archive is its installer (regular expressions on the lower-case file

@@ -3,3 +3,6 @@
 #   name      upstream git repository                    tag     a fourth field: the release archive to build from ({ver} = the version)
 openocd   https://github.com/openocd-org/openocd     v0.12.0
 dfu-util  https://git.code.sf.net/p/dfu-util/dfu-util  v0.11   https://dfu-util.sourceforge.net/releases/dfu-util-{ver}.tar.gz
+stm32flash  https://sourceforge.net/projects/stm32flash/  v0.7  https://downloads.sourceforge.net/project/stm32flash/stm32flash-{ver}.tar.gz
+silik-pylab  pypi  1.0
+savvycan  https://github.com/collin80/SavvyCAN  V220

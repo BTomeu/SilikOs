@@ -321,12 +321,29 @@ class Install(unittest.TestCase):
 class Recipes(unittest.TestCase):
     def test_versions_and_specs(self):
         names = [l.split()[0] for l in text("dev/versions").splitlines() if l and not l.startswith("#")]
-        self.assertEqual(names, ["openocd", "dfu-util"])
+        self.assertEqual(names, ["openocd", "dfu-util", "stm32flash", "silik-pylab", "savvycan"])
+        wf, trial = text(".github/workflows/dev.yml"), text("dev/trial.sh")
         for n in names:
             spec = text("dev/%s.spec" % n)
             self.assertIn("Name:           " + n, spec)
-            self.assertIn("License:        GPL-2.0-or-later", spec)
-            self.assertIn("%licences", spec)
+            self.assertRegex(spec, r"(?m)^License: +\S")
+            self.assertIn("%filelist", spec)
+            if n != "silik-pylab":                     # (its licences are in each package's dist-info)
+                self.assertIn("%licences", spec)
+            self.assertIn("  %s)" % n, trial)            # a real job in a clean EL 9
+            self.assertIn(n, wf.split("tool: [")[1].split("]")[0])
+            self.assertIn("Recommends:     " + n, text("packages/silik-dev/silik-dev.spec"))
+
+    def test_the_python_tools_are_pinned_by_their_hashes(self):
+        lines = [l for l in text("dev/pylab-requirements.txt").splitlines() if l and not l.startswith("#")]
+        self.assertGreater(len(lines), 10)
+        for l in lines:
+            self.assertRegex(l, r"^[A-Za-z0-9_.-]+==[0-9][0-9A-Za-z.]* --hash=sha256:[0-9a-f]{64}$")
+        spec = text("dev/silik-pylab.spec")
+        self.assertIn("--require-hashes", spec)
+        ours = spec.split("%global ours ")[1].split("\n")[0].split(",")
+        self.assertEqual(sorted(x.lower().replace("_", "-") for x in ours),
+                         sorted(l.split("==")[0].lower().replace("_", "-") for l in lines))   # every one built from its source
 
     def test_openocd_probes_are_for_the_person_at_the_screen(self):
         spec = text("dev/openocd.spec")
@@ -336,7 +353,7 @@ class Recipes(unittest.TestCase):
     def test_no_vendor_software_in_the_repository(self):
         for d, _, files in os.walk(os.path.join(ROOT, "dev")):
             for f in files:
-                self.assertTrue(f.endswith((".spec", ".sh")) or f == "versions", f)
+                self.assertTrue(f.endswith((".spec", ".sh")) or f in ("versions", "pylab-requirements.txt"), f)
 
 
 class BarEntries(unittest.TestCase):

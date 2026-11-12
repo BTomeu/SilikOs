@@ -6,7 +6,7 @@
 # tools/build_iso.sh puts every build/extra/*.rpm into the ISO.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
-name=${1:?usage: tools/build_dev.sh openocd|dfu-util}
+name=${1:?usage: tools/build_dev.sh NAME (a line of dev/versions)}
 line=$(grep -E "^$name[[:space:]]" "$root/dev/versions") || { echo "error: $name is not in dev/versions" >&2; exit 2; }
 url=$(echo "$line" | awk '{print $2}'); tag=$(echo "$line" | awk '{print $3}'); archive=$(echo "$line" | awk '{print $4}')
 grep -q 'platform:el9' /etc/os-release || { echo "error: this builds on EL 9 only (binary compatibility with the base)" >&2; exit 2; }
@@ -14,10 +14,13 @@ sudo=""; [ "$(id -u)" = 0 ] || sudo=sudo
 $sudo dnf -y -q install dnf-plugins-core rpm-build git tar gzip findutils
 $sudo dnf config-manager --set-enabled crb
 if grep -q '^# needs: epel' "$root/dev/$name.spec"; then $sudo dnf -y -q install epel-release; fi
-ver=${tag#v}
+ver=${tag#[vV]}
 top=$root/build/dev-rpm/$name
 rm -rf "$top"; mkdir -p "$top/SOURCES" "$top/src" "$root/build/extra"
-if [ -n "$archive" ]; then   # upstream's release archive of that version
+if [ "$url" = pypi ]; then   # a set of PyPI's source archives: the pinned list is the source, pip fetches and checks them
+  cp "$root/dev/pylab-requirements.txt" "$top/SOURCES/"
+  echo "source: PyPI, $(grep -c -- '--hash=sha256:' "$root/dev/pylab-requirements.txt") archives pinned with their sha256"
+elif [ -n "$archive" ]; then   # upstream's release archive of that version
   curl -fL --retry 3 -o "$top/SOURCES/$name-$ver.tar.gz" "${archive//\{ver\}/$ver}"
   echo "source: ${archive//\{ver\}/$ver}  sha256 $(sha256sum "$top/SOURCES/$name-$ver.tar.gz" | cut -d' ' -f1)"
 else
@@ -30,5 +33,5 @@ rm -rf "$top/src"
 defs=(--define "upver $ver" --define "_specdir_eda $root/eda")
 $sudo dnf -y -q builddep "${defs[@]}" "$root/dev/$name.spec"
 rpmbuild -bb --define "_topdir $top" --define "dist .el9" "${defs[@]}" "$root/dev/$name.spec"
-cp "$top"/RPMS/x86_64/"$name"-*.rpm "$root/build/extra/"
+cp "$top"/RPMS/*/"$name"-*.rpm "$root/build/extra/"
 ls -la "$root"/build/extra/"$name"-*.rpm
