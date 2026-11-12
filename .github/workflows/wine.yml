@@ -16,8 +16,13 @@ on:
       version:
         description: Wine release to build (empty = the one of wine/silik-wine.spec)
         default: ''
+# read-only by default: the build jobs run upstream's build code (Wine's configure and make, the add-ons' archives) as
+# root in their container; only the release job may write, and no checkout keeps the token in .git/config
 permissions:
-  contents: write
+  contents: read
+concurrency:
+  group: wine-release
+  cancel-in-progress: false
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -29,6 +34,7 @@ jobs:
       - name: Tools
         run: dnf -y -q install git tar gzip findutils zstd
       - uses: actions/checkout@v4
+        with: { persist-credentials: false }
       - uses: actions/cache@v4
         id: cache
         with:
@@ -36,7 +42,13 @@ jobs:
           key: silik-wine-${{ inputs.version }}-${{ hashFiles('wine/silik-wine.spec', 'tools/build_wine.sh') }}
       - name: Build silik-wine
         if: steps.cache.outputs.cache-hit != 'true'
-        run: bash tools/build_wine.sh ${{ inputs.version }}
+        env:
+          V: ${{ inputs.version }}
+        # (the version typed by hand reaches the shell as data, and only as a release number)
+        run: |
+          case "$V" in ''|[0-9]*) ;; *) echo "::error title=version::not a Wine release number: $V"; exit 1;; esac
+          case "$V" in *[!0-9.]*) echo "::error title=version::not a Wine release number: $V"; exit 1;; esac
+          bash tools/build_wine.sh $V
       - name: Version
         id: ver
         run: |
@@ -58,6 +70,7 @@ jobs:
       - name: Tools
         run: dnf -y -q install git tar gzip xz findutils rpm-build binutils cpio
       - uses: actions/checkout@v4
+        with: { persist-credentials: false }
       - uses: actions/download-artifact@v4
         with:
           name: silik-wine
@@ -93,6 +106,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with: { persist-credentials: false }
       - uses: actions/download-artifact@v4
         with:
           name: silik-wine
@@ -142,6 +156,8 @@ jobs:
   release:
     needs: [build, trial]
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write        # (the release wine-<version>)
     steps:
       - uses: actions/download-artifact@v4
         with:

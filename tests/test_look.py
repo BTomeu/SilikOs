@@ -139,6 +139,18 @@ class BarEntries(unittest.TestCase):
             self.assertEqual(items["sys/off"].argv[1:], ["session", "off"])
             self.assertIn("look/", bar.TEXT[lang]["placeholder"])
 
+    def test_a_terminal_entry_stays_open_with_its_exit_status(self):
+        """GNOME Terminal closes its window when the command ends: the answer of sys/status, a sudo prompt's outcome
+        or an error would vanish. The command runs, its exit status is said in the language of the bar, Enter closes"""
+        import subprocess
+        for lang in ("en", "ca", "es"):
+            argv = bar.held(["sh", "-c", "echo hi; exit 3"], bar.TEXT[lang])
+            self.assertEqual(argv[:2], [bar.TERMINAL, "--"])
+            p = subprocess.run(argv[2:], input="\n", stdout=subprocess.PIPE, universal_newlines=True)
+            self.assertEqual(p.returncode, 0)
+            self.assertTrue(p.stdout.startswith("hi\n\n"), p.stdout)
+            self.assertIn(bar.TEXT[lang]["held"] % 3, p.stdout)
+
     def test_the_twin_is_the_silik_line(self):
         items = {i.address: i for i in bar.system_items(bar.TEXT["en"])}
         self.assertEqual(items["look/island"].twin, "silik look island")

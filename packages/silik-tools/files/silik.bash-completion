@@ -19,8 +19,8 @@ _silik() {
          secure) COMPREPLY=($(compgen -W "status apply" -- "$cur"));;
        esac;;
     3) case "$g ${COMP_WORDS[2]}" in
-         "eda setup"|"eda enter"|"eda run"|"eda rm") COMPREPLY=($(compgen -W "$(silik -q eda list 2>/dev/null | awk '{print $1}')" -- "$cur"));;
-         "win run"|"win install"|"win stop"|"win rm") COMPREPLY=($(compgen -W "$(silik -q win list 2>/dev/null) --no-net --no-sandbox" -- "$cur"));;
+         "eda setup"|"eda enter"|"eda run"|"eda rm") COMPREPLY=($(compgen -W "$(silik -q eda list 2>/dev/null | awk '$1 != "no" {print $1}')" -- "$cur"));;
+         "win run"|"win install"|"win stop"|"win rm") COMPREPLY=($(compgen -W "$(silik -q win list 2>/dev/null | grep -v '^no ') --no-net --no-sandbox" -- "$cur"));;
          "win open") COMPREPLY=($(compgen -W "--prefix --no-net --no-sandbox" -- "$cur") $(compgen -f -- "$cur"));;
          "win vm") COMPREPLY=($(compgen -W "create start stop app" -- "$cur"));;
          "hw nvidia") COMPREPLY=($(compgen -W "install status" -- "$cur"));;

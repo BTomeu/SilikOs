@@ -177,8 +177,6 @@ jobs:
   # KiCad's 3D models: several gigabytes, asked for by nothing. Built and tried in one job, kept in the release
   # eda-optional (the ISO takes eda-tools only)
   models:
-    permissions:
-      contents: write        # (keeps the tried package in the release)
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     steps:
@@ -210,9 +208,28 @@ jobs:
           key: ${{ steps.cache.outputs.cache-primary-key }}
       - name: What was built
         run: echo "::notice title=kicad-packages3d built::$(cd build/extra && ls -la kicad-packages3d-*.rpm | awk '{print $5, $9}')"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eda-kicad-packages3d
+          path: build/extra/kicad-packages3d-*.rpm
+          compression-level: 0
+
+  # tried and kept by a job of its own: the build above ran upstream's build code in a container that could write its
+  # workspace (eda/keep.sh included), so the token that writes the release never meets that workspace
+  models-keep:
+    needs: models
+    permissions:
+      contents: write        # (keeps the tried package in the release)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/download-artifact@v4
+        with: { name: eda-kicad-packages3d, path: dist }
       - name: Try it in a clean EL 9, then keep it in the release eda-optional
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p dist && cp build/extra/kicad-packages3d-*.rpm dist/
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL; df -h . | tail -1
           bash eda/keep.sh kicad-packages3d

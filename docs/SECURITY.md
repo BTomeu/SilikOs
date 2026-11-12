@@ -24,7 +24,7 @@ files, design data (often under an NDA: PDKs, schematics, layouts), keys and pas
 |---|---|---|
 | The laptop is lost or stolen | Disk encryption (the owner's choice at installation), the screen lock, no automatic login | Without disk encryption everything on the disk is readable: `status` says bad |
 | Untrusted networks (a cafe, a conference, a university network) | Firewall: incoming dropped; no listening service (sshd off); ICMP redirects ignored | What the owner sends over the network: use the tools' own encryption, a VPN |
-| An untrusted Windows `.exe` | A Windows virtual machine (`silik win vm`) is a real boundary. Under Wine a program runs as the user: `kernel.yama.ptrace_scope = 1` stops it reading other programs' memory, the sandbox (bubblewrap, `silik win`) limits the files it sees | Wine itself is not a sandbox: outside the sandbox, a program under Wine can read and write everything the user can |
+| An untrusted Windows `.exe` | A Windows virtual machine (`silik win vm`) is a real boundary: it sees the shared folder `~/Windows` and the clipboard, nothing else of the home folder; its RDP port listens on 127.0.0.1 only. Under Wine a program runs as the user: `kernel.yama.ptrace_scope = 1` stops it reading other programs' memory, the sandbox (bubblewrap, `silik win`) limits the files it sees | Wine itself is not a sandbox: outside the sandbox, a program under Wine can read and write everything the user can |
 | Known flaws in the base's packages | Security advisories installed every day | A new kernel is used only after a restart |
 | A USB stick left to be plugged in | Nothing on it starts by itself | A device that pretends to be a keyboard (USBGuard is not set up) |
 | Vendor tools and their installers | Nothing: they run as the user (some installers as root), unconfined, as on RHEL | — |
@@ -125,14 +125,11 @@ Not run, and why:
 
 - **IPv6 through the zone** (neighbour discovery, router advertisements, DHCPv6): the build machine's kernel has no
   IPv6. The four rules are in the ruleset firewalld generated; no IPv6 packet went through them.
-- **The kernel settings applied**: nothing was written to `/proc/sys` there. The file is read by systemd in the right
-  order (`systemd-analyze cat-config`). Wine, gdb, podman rootless and EDA tools under `ptrace_scope = 1`: [A].
-- **A complete installation from the ISO**: `selinux --enforcing`, `firewall --enabled --remove-service=ssh` and
-  `services --disabled=sshd` pass `ksvalidator`, and the installer's source (anaconda 34.25.7.14) was read to see
-  what it runs; the `%post` line was run on a container's files. No installation was done.
-- **SELinux**: the container has no SELinux; reading the mode and `setenforce` were not run.
+- **On the installed system** (the CI's unattended installation, docs/STATUS.md): SELinux Enforcing, firewalld with
+  the default zone `silikos`, sshd not enabled, the security update timer active, `kernel.yama.ptrace_scope` 1 and
+  `kernel.dmesg_restrict` 1 applied, `vsyscall=xonly` on the kernel line. Not seen there: Wine, gdb, podman rootless
+  and the EDA tools under `ptrace_scope = 1` [A]; the timer's service running at its hour.
 - **LUKS and Secure Boot detection**: no encrypted disk and no UEFI firmware there.
-- **The timer under systemd**: the unit files pass `systemd-analyze verify`; no systemd ran them.
 - **`silik secure apply` by a normal user with a real `sudo`**, and `sudo silik secure status` from a desktop
   session: run as root in a container, with `sudo` replaced by a pass-through.
 - **The screen locking by suspend or the lid**: only the settings were read and written. Locking by idle was seen on

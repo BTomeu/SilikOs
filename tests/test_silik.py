@@ -5,6 +5,7 @@ import importlib.machinery
 import importlib.util
 import io
 import os
+import re
 import tempfile
 import unittest
 
@@ -105,12 +106,14 @@ class Silik(unittest.TestCase):
     def test_win_vm_app(self):
         rc, o = run("win", "vm", "app", "--exe", "C:\\AD\\X2.EXE", "--user", "u")
         self.assertIn("$ xfreerdp /v:127.0.0.1:3389 /u:u", o)
-        self.assertIn("/app:program:C:\\AD\\X2.EXE", o)
+        self.assertIn("/app:C:\\AD\\X2.EXE", o)                   # (FreeRDP 2, EL 9's)
+        self.assertIn("/drive:Windows,", o)
+        self.assertNotRegex(o, r"/drive:[^ ]*," + re.escape(os.path.expanduser("~")) + r"( |$)")   # never the whole home folder
 
     def test_win_vm_create(self):
         rc, o = run("win", "vm", "create", "--iso", "/x/Win11.iso", "--ram", "12")
         self.assertIn("--memory 12288", o)
-        self.assertIn("portForward=3389:3389", o)
+        self.assertIn("portForward=127.0.0.1:3389:3389", o)       # the RDP port on this machine only
         self.assertIn("--tpm", o)
 
     def test_nvidia(self):
@@ -192,6 +195,52 @@ class Bar(unittest.TestCase):
     def test_language(self):
         self.assertEqual(bar.lang_of({"LANG": "ca_ES.UTF-8"}), "ca")
         self.assertEqual(bar.lang_of({"LANG": "de_DE.UTF-8"}), "en")
+
+
+
+class ReviewFindings(unittest.TestCase):
+    """found in the security and product review of 12/11/2026"""
+
+    def test_switches_after_the_file_are_refused(self):
+        """`silik win open FILE --no-net` would give --no-net to the program and run it with the network"""
+        import contextlib, io
+        for argv in (["win", "open", "x.exe", "--no-net"], ["win", "open", "x.exe", "a", "--prefix=p"],
+                     ["win", "run", "p", "--no-net", "--", "x.exe"]):
+            with self.assertRaises(SystemExit) as c, contextlib.redirect_stderr(io.StringIO()):
+                silik.main(["--dry-run"] + argv)
+            self.assertEqual(c.exception.code, 2, argv)
+        rc, o = run("win", "open", "--no-net", "x.exe", "--", "--no-net")      # after "--": the program's own
+        self.assertEqual(rc, 0)
+
+    def test_global_switches_after_the_command(self):
+        rc, o = run("look", "bar")
+        rc2, o2 = (lambda: silik.main(["look", "bar", "--dry-run"]))(), None
+        self.assertEqual(rc2, 0)
+
+    def test_a_menu_entry_naming_a_host_file_is_not_offered(self):
+        with tempfile.TemporaryDirectory() as h:
+            old = silik.WINE_ROOT
+            silik.WINE_ROOT = h
+            try:
+                apps = os.path.join(h, "p", "home", ".local", "share", "applications", "wine")
+                os.makedirs(apps)
+                for n, ex in (("ok", 'wine "C:\\\\Program Files\\\\T\\\\t.exe"'), ("bad", "wine /home/u/Documents/NDA/chip.gds"),
+                              ("tilde", "wine ~/.ssh/id_ed25519")):
+                    with open(os.path.join(apps, n + ".desktop"), "w") as f:
+                        f.write("[Desktop Entry]\nType=Application\nName=%s\nExec=env WINEPREFIX=%s/p %s\n" % (n, h, ex))
+                names = [e["Name"] for _, e, _ in silik.win_menu("p")]
+            finally:
+                silik.WINE_ROOT = old
+        self.assertNotIn("bad", names)
+        self.assertNotIn("tilde", names)
+
+    def test_linkfree(self):
+        with tempfile.TemporaryDirectory() as h:
+            os.makedirs(os.path.join(h, "p", "a"))
+            os.makedirs(os.path.join(h, "out"))
+            os.symlink(os.path.join(h, "out"), os.path.join(h, "p", "a", "link"))
+            self.assertTrue(silik._linkfree(os.path.join(h, "p"), os.path.join(h, "p", "a", "new", "deeper")))
+            self.assertFalse(silik._linkfree(os.path.join(h, "p"), os.path.join(h, "p", "a", "link", "x")))
 
 
 if __name__ == "__main__":

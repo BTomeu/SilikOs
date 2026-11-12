@@ -159,7 +159,8 @@ that have the prefix's runtime folder mounted).
 
 - A user session KVM guest (UEFI, TPM 2.0 emulated, 8 GB / 4 CPUs / 80 GB by default) with the guest's RDP port
   forwarded to `127.0.0.1:3389`. Enable Remote Desktop in Windows; `silik win vm app` then opens one program as a
-  window of this desktop (RDP RemoteApp, FreeRDP), with the home folder as a drive.
+  window of this desktop (RDP RemoteApp, FreeRDP), with the shared folder `~/Windows` as a drive (never the whole
+  home folder: a program in the VM could otherwise write ~/.bashrc or an autostart entry), the clipboard shared.
 - Windows and the programs need their own licences.
 
 ## Altium Designer

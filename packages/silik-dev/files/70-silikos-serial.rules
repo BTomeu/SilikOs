@@ -1,0 +1,5 @@
+# SilikOS (silik-dev): the serial ports of USB adapters and boards (an ST-LINK's or a Nucleo's virtual COM port, FTDI,
+# CP210x, CH340, CDC ACM devices) belong to the person at the screen, as the debug probes do (60-openocd.rules):
+# without this they are root:dialout and picocom or pyserial fail for the user. uaccess gives access to the user of
+# the active local session only, and takes it back when that session ends (systemd-logind; before 73-seat-late).
+SUBSYSTEM=="tty", KERNEL=="ttyACM[0-9]*|ttyUSB[0-9]*", TAG+="uaccess"

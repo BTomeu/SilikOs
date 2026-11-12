@@ -48,7 +48,7 @@ The desktop as run on 10/11/2026 (GNOME Shell 40.10 in an AlmaLinux 9.8 containe
 `docs/STATUS.md` for what has and has not been run). The installer: `docs/img/installer.png`.
 
 ```bash
-bash tools/build_rpms.sh          # the six packages + repository metadata in build/repo (rpmbuild, createrepo_c)
+bash tools/build_rpms.sh          # every package of packages/ + repository metadata in build/repo (rpmbuild, createrepo_c)
 python3 -m unittest discover -s tests
 bash tools/build_iso.sh           # the network installer ISO (needs repo.almalinux.org)
 ```

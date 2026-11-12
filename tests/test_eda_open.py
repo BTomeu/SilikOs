@@ -168,7 +168,9 @@ class Bench(Case):
         self.assertNotRegex(c, r"(?i)\.(lib|include)")        # no model file: the simulator's own defaults
 
     def test_times_each_thread_count_with_a_spiceinit_of_its_own(self):
-        self.tool("ngspice", 'cat "$HOME/.spiceinit" >> "$OLDPWD/../seen" 2>/dev/null; cat .spiceinit >> ../seen; echo "length(v(r0_0)) = 8.0e+02"')
+        # (what each run's own .spiceinit said, written into the test's home: never into the working tree)
+        seen = os.path.join(self.tmp, "seen")
+        self.tool("ngspice", 'cat .spiceinit >> "%s"; echo "length(v(r0_0)) = 8.0e+02"' % seen)
         cores = silik.cpu_cores
         silik.cpu_cores = lambda: 4
         try:
@@ -180,6 +182,7 @@ class Bench(Case):
         self.assertRegex(o, r"(?m)^ 2 threads .*\(ngspice's default\)")
         self.assertRegex(o, r"(?m)^ 4 threads ")
         self.assertFalse(os.path.exists(os.path.join(os.environ["HOME"], ".spiceinit")))   # the user's file is not touched
+        self.assertEqual(text(seen).split(), ["set", "num_threads=1", "set", "num_threads=2", "set", "num_threads=4"])
 
     def test_a_simulator_that_fails_is_an_error(self):
         self.tool("ngspice", "echo 'Error: no such model'; exit 1")

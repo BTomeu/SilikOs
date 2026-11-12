@@ -41,6 +41,12 @@ welcome-dialog-last-shown-version='4294967295'
 enabled-extensions=['user-theme@gnome-shell-extensions.gcampax.github.com', 'silik-shell@silikvolt.com']
 favorite-apps=['com.silikvolt.SilikStudio.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Terminal.desktop', 'firefox.desktop', 'org.gnome.gedit.desktop', 'virt-manager.desktop', 'gnome-control-center.desktop']
 
+[org/virt-manager/virt-manager/connections]
+# the Windows virtual machine of `silik win vm` is the user's (qemu:///session): Virtual Machine Manager, pinned in the
+# rail, shows it ([A] the keys of virt-manager 4 / 5 as known; not seen on the installed system yet)
+uris=['qemu:///session']
+autoconnect=['qemu:///session']
+
 [org/gnome/settings-daemon/plugins/media-keys]
 custom-keybindings=['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/silik-command/']
 

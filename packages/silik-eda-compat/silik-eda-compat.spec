@@ -1,5 +1,5 @@
 Name:           silik-eda-compat
-Version:        0.2.0
+Version:        0.2.1
 Release:        1%{?dist}
 Summary:        What EDA tools (Cadence, Synopsys) ask of an EL9 system, and the tools for EL6 / EL7 boxes
 License:        LicenseRef-SilikVolt
@@ -54,7 +54,8 @@ if [ -e /usr/lib64/ld-linux-x86-64.so.2 ] && [ ! -e /usr/lib64/ld-lsb-x86-64.so.
 fi
 
 %postun
-if [ "$1" = 0 ] && [ -L /usr/lib64/ld-lsb-x86-64.so.3 ]; then rm -f /usr/lib64/ld-lsb-x86-64.so.3 || :; fi
+# (only the link this package made: one that points elsewhere is someone else's)
+if [ "$1" = 0 ] && [ "$(readlink /usr/lib64/ld-lsb-x86-64.so.3 2> /dev/null)" = ld-linux-x86-64.so.2 ]; then rm -f /usr/lib64/ld-lsb-x86-64.so.3 || :; fi
 
 %files
 %dir /opt/eda

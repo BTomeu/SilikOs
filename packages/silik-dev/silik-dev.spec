@@ -1,5 +1,5 @@
 Name:           silik-dev
-Version:        0.1.0
+Version:        0.1.1
 Release:        1%{?dist}
 Summary:        Embedded development on SilikOS: ARM compiler, debugger, flashing; recipes for the vendors' IDEs
 License:        LicenseRef-SilikVolt
@@ -30,7 +30,8 @@ Brings an embedded-development stack to a SilikOS system (each tool keeps its ow
 for the same processor; OpenOCD's descriptions of probes and parts; the DFU and ST-LINK tools. `silik dev tools`
 lists what is on the system, the vendors' IDEs included. `silik dev install FILE` runs the installer of STM32CubeIDE
 (ST) or Code Composer Studio (TI) that the user downloaded: those are their vendors' programs under their vendors'
-licences and are not part of SilikOS, of its packages or of its ISO.
+licences and are not part of SilikOS, of its packages or of its ISO. The serial ports of USB adapters and boards
+belong to the user at the screen (70-silikos-serial.rules), as the debug probes do.
 
 %install
 install -d -m0755 %{buildroot}%{_datadir}/silikos/dev/try
@@ -38,7 +39,15 @@ for f in startup.c main.c hello.c sum.cpp cortex-m.ld; do
   install -m0644 %{_sourcedir}/$f %{buildroot}%{_datadir}/silikos/dev/try/$f
 done
 
+# serial ports for the user at the screen (uaccess), as OpenOCD's rules do for the probes
+install -Dm0644 %{_sourcedir}/70-silikos-serial.rules %{buildroot}%{_prefix}/lib/udev/rules.d/70-silikos-serial.rules
+
+%post
+# (the rules of a device already plugged in are applied when it is plugged again; reloading changes nothing running)
+udevadm control --reload > /dev/null 2>&1 || :
+
 %files
+%{_prefix}/lib/udev/rules.d/70-silikos-serial.rules
 %dir %{_datadir}/silikos
 %dir %{_datadir}/silikos/dev
 %{_datadir}/silikos/dev/try
