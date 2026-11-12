@@ -64,6 +64,14 @@ Per defecte és **tinta sobre paper**: blanc i negre, net, sense colors decorati
 les icones de les carpetes i els fitxers portin color segons el que contenen: codi, disseny, físic, dades… La tinta
 original sempre hi és.
 
+Les peces que floten (l'illa o la barra, l'Inici i el COMMAND bar) són de **vidre**: paper una mica translúcid
+(86 %) sobre el fons de pantalla desenfocat, amb el seu marc fi de tinta i una ombra suau. Es veu el fons, no les
+finestres de darrere: així el que hi ha sota el text és sempre el mateix i es llegeix bé sigui quin sigui el fons (el
+text gris s'ha enfosquit una mica perquè ho compleixi fins i tot sobre negre), i no gasta res mentre res no canvia: el
+desenfocament es fa un cop i es guarda. Es treu amb `silik look --glass off` (o `look/glass-off` al COMMAND bar) i
+torna amb `--glass on`. Mesurat al banc, sense targeta gràfica: obrir l'Inici triga uns 3 ms més a pintar-se, i el
+COMMAND bar té un fotograma més lent quan apareix.
+
 ### El COMMAND bar
 
 Amb **Super+Espai** s'obre una barra on s'escriu el que es vol: el nom d'una aplicació o una adreça com `eda/try`,
@@ -159,6 +167,7 @@ sense haver-ho executat de veritat. Les suposicions es marquen amb [A].
 - SDCC i el firmware fx2lafw (sense cap analitzador real connectat).
 - Els programes Qt (SavvyCAN, PulseView, KLayout) amb l'aspecte i l'accent de SilikOS.
 - La secció Banc a l'Inici, i l'Inici que s'obre més ràpid (de 64–76 ms a 15–17 ms amb 152 aplicacions).
+- El vidre de l'illa, l'Inici i el COMMAND bar (encès per defecte), amb fons clars, foscos i fotos, a 1x i a 2x.
 
 **Aturat per decisions o coses del propietari:**
 - **GitHub no executa feines** per un problema de facturació del compte. Fins que s'arregli, no es pot construir la

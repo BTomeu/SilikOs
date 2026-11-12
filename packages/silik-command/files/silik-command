@@ -28,6 +28,7 @@ TEXT = {
            "win_program": "Windows program", "win_open": "run with Wine, in the sandbox", "off": "power off or restart",
            "look_silik": "look: Silik (the command line on top, a rail, a status bar)", "look_bar": "look: bar (one bar at the bottom)",
            "look_island": "look: island (one floating piece at the bottom)",
+           "glass_on": "look: glass (the floating panes over the blurred wallpaper)", "glass_off": "look: solid paper (no glass)",
            "accent_ink": "accent: none, one ink on paper (the original)",
            "accent_steel": "accent: steel (what is selected, focused, on)",
            "accent_steel_vivid": "accent: steel (what is selected, focused, on, with the title bars)",
@@ -51,6 +52,7 @@ TEXT = {
            "win_program": "programa de Windows", "win_open": "executa amb Wine, dins l'entorn aïllat", "off": "apaga o reinicia",
            "look_silik": "aspecte: Silik (la línia d'ordres a dalt, un rail, una barra d'estat)", "look_bar": "aspecte: barra (una barra a baix)",
            "look_island": "aspecte: illa (una peça flotant a baix)",
+           "glass_on": "aspecte: vidre (les peces flotants sobre el fons de pantalla desenfocat)", "glass_off": "aspecte: paper opac (sense vidre)",
            "accent_ink": "accent: cap, una tinta sobre paper (l'original)",
            "accent_steel": "accent: acer (el que és triat, enfocat, encès)",
            "accent_steel_vivid": "accent: acer (el que és triat, enfocat, encès, amb les barres de títol)",
@@ -74,6 +76,7 @@ TEXT = {
            "win_program": "programa de Windows", "win_open": "ejecuta con Wine, en el entorno aislado", "off": "apaga o reinicia",
            "look_silik": "aspecto: Silik (la línea de órdenes arriba, un rail, una barra de estado)", "look_bar": "aspecto: barra (una barra abajo)",
            "look_island": "aspecto: isla (una pieza flotante abajo)",
+           "glass_on": "aspecto: vidrio (las piezas flotantes sobre el fondo de pantalla desenfocado)", "glass_off": "aspecto: papel opaco (sin vidrio)",
            "accent_ink": "acento: ninguno, una tinta sobre papel (el original)",
            "accent_steel": "acento: acero (lo seleccionado, enfocado, encendido)",
            "accent_steel_vivid": "acento: acero (lo seleccionado, enfocado, encendido, con las barras de título)",
@@ -227,6 +230,8 @@ def system_items(t, boxes=(), prefixes=(), programs=()):
         Item("look/silik", t["look_silik"], [SILIK, "look", "silik"]),
         Item("look/bar", t["look_bar"], [SILIK, "look", "bar"]),
         Item("look/island", t["look_island"], [SILIK, "look", "island"]),
+        Item("look/glass", t["glass_on"], [SILIK, "look", "--glass", "on"]),
+        Item("look/glass-off", t["glass_off"], [SILIK, "look", "--glass", "off"]),
         Item("look/ink", t["accent_ink"], [SILIK, "look", "--accent", "ink"]),
         Item("look/steel", t["accent_steel"], [SILIK, "look", "--accent", "steel"]),
         Item("look/steel-vivid", t["accent_steel_vivid"], [SILIK, "look", "--accent", "steel-vivid"]),
@@ -351,20 +356,22 @@ def all_items(lang, started=None):
 
 
 # ------------------------------------------------------------------ window
+# One radius for the floating panes (the island, Start, this bar: 6 px; the shell's glass is cut to it, extension.js
+# CMD_R), the inner one (the foot, inside the 1 px frame) one less, the rows the keys' 4 px.
 CSS = """
-window.silik { background: %(paper)s; border: 1px solid %(frame)s; border-radius: %(radius)s; }
+window.silik { background: %(bg)s; border: 1px solid %(frame)s; border-radius: %(radius)s; }
 .silik * { font-family: "Cascadia Mono", "DejaVu Sans Mono", monospace; font-size: 11pt; color: %(ink)s; }
 .silik .prompt { font-weight: 600; padding: 0 2px 0 14px; }
 .silik entry { background: transparent; border: none; box-shadow: none; padding: 12px 8px; caret-color: %(ink)s; }
 .silik entry:focus { box-shadow: none; }
 .silik .rule { background: %(rule)s; min-height: 1px; }
 .silik list { background: transparent; padding: 4px; }
-.silik row { padding: 5px 10px; border-radius: 6px; }
+.silik row { padding: 5px 10px; border-radius: %(rowr)s; }
 .silik row:selected { background: %(ink)s; }
 .silik row:selected label { color: %(paper)s; }
 .silik row:selected label.meta { color: %(selmu)s; }
 .silik label.meta { color: %(muted)s; }
-.silik .foot { background: %(paper2)s; border-radius: 0 0 %(radius)s %(radius)s; padding: 6px 14px; }
+.silik .foot { background: %(bg2)s; border-radius: 0 0 %(inner)s %(inner)s; padding: 6px 14px; }
 .silik .foot label { font-size: 9.5pt; color: %(muted)s; }
 .silik .foot label.twin { color: %(ink)s; }
 """
@@ -372,6 +379,36 @@ THEMES = {
     "light": {"paper": "#f7f6f3", "paper2": "#eeede9", "ink": "#1a1b1e", "muted": "#6b6d72", "rule": "#dcdad5", "frame": "#1a1b1e", "selmu": "#b9b8b3"},
     "dark": {"paper": "#17181b", "paper2": "#1f2024", "ink": "#ecebe7", "muted": "#9a9b9f", "rule": "#33353a", "frame": "#ecebe7", "selmu": "#5c5e63"},
 }
+# Glass (the key "glass" of com.silikvolt.silikos.shell, `silik look --glass on|off`): the window's paper at 0.86, the
+# foot a breath of ink, the muted text the grey that reads at 4.5:1 with black (dark: white) behind the paper; the
+# shell puts the blurred wallpaper under the window (extension.js). From tools/gen_accents.py's glass(): the tests
+# hold them equal.
+GLASS = {
+    "light": {"bg": "rgba(247, 246, 243, 0.86)", "bg2": "rgba(26, 27, 30, 0.04)", "muted": "#54565a"},
+    "dark": {"bg": "rgba(23, 24, 27, 0.86)", "bg2": "rgba(236, 235, 231, 0.04)", "muted": "#a1a1a5"},
+}
+RADIUS = 6
+
+
+def glass_on():
+    """the key "glass" of the desktop's settings (False when the schema or the key is not on this system)"""
+    try:
+        from gi.repository import Gio
+        src = Gio.SettingsSchemaSource.get_default()
+        schema = src.lookup("com.silikvolt.silikos.shell", True) if src else None
+        return bool(schema and schema.has_key("glass") and Gio.Settings.new("com.silikvolt.silikos.shell").get_boolean("glass"))
+    except Exception:       # (no GLib bindings, no settings service: solid paper)
+        return False
+
+
+def css_values(theme, composited, glass):
+    """the stylesheet's values: rounded corners need a compositing window manager (GNOME has one), square without it;
+    glass too (a translucent window without one is drawn over black)"""
+    v = dict(THEMES[theme], bg=THEMES[theme]["paper"], bg2=THEMES[theme]["paper2"])
+    v.update(radius="%dpx" % RADIUS if composited else "0", inner="%dpx" % (RADIUS - 1) if composited else "0", rowr="4px")
+    if glass and composited:
+        v.update(GLASS[theme])
+    return v
 
 
 def run_window(query, theme, lang, started=None):
@@ -383,8 +420,7 @@ def run_window(query, theme, lang, started=None):
     t = TEXT[lang]
     items = all_items(lang, started)
     css = Gtk.CssProvider()
-    # rounded corners need a compositing window manager (GNOME has one); square without it
-    vals = dict(THEMES[theme], radius="10px" if Gdk.Screen.get_default().is_composited() else "0")
+    vals = css_values(theme, Gdk.Screen.get_default().is_composited(), glass_on())
     css.load_from_data((CSS % vals).encode())
     Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 

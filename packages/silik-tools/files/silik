@@ -16,6 +16,7 @@
 #   silik identity show | silikos | base
 #   silik look  [silik | bar | island] [--json]     the desktop's look; no argument: which one is in use
 #   silik look  [LOOK] --accent NAME [--json]       its accent: one colour for what is selected, focused, on
+#   silik look  [LOOK] --glass on|off               the floating panes over the blurred wallpaper, or solid paper
 #   silik session lock | logout | off             (the last two ask first)
 #   silik update
 #   silik secure status [--json] [--offline] | apply [--keep-ssh]
@@ -3201,6 +3202,18 @@ def qt_accent(ctx, accent, icons):
         die("could not write %s: %s" % (path, e.strerror or e))
 
 
+# Glass (key "glass" of silikos-desktop): the island (or the bar), Start and the COMMAND bar are paper at 0.86 over
+# the wallpaper under them, blurred; their muted text darker, so that it reads at 4.5:1 whatever the wallpaper. Off:
+# solid paper. The extension and the COMMAND bar follow the key.
+GLASS = (("on", "the floating panes over the blurred wallpaper"), ("off", "solid paper"))
+
+
+def glass_now(ctx):
+    """'on', 'off', or '' when the key is not on this system (a silikos-desktop without it)"""
+    v = ctx.query(["gsettings", "get", LOOK_SCHEMA, "glass"]).strip()
+    return {"true": "on", "false": "off"}.get(v, "")
+
+
 def look_now(ctx):
     """the look in use, or '' when the setting is not on this system (silikos-desktop older than 0.11, or no desktop)"""
     v = ctx.query(["gsettings", "get", LOOK_SCHEMA, "look"]).strip().strip("'")
@@ -3230,17 +3243,22 @@ def cmd_look(ctx, a):
         qt_accent(ctx, acc, accent_icons(ctx, acc))
         return 0
     now = look_now(ctx)
-    if a.which is None and a.accent is None:
+    if a.which is None and a.accent is None and a.glass is None:
         acc = accent_now(ctx) if now else ""
+        gl = glass_now(ctx) if now else ""
         if a.json:
             print(json.dumps({"look": now or None, "looks": [k for k, _ in LOOKS],
-                              "accent": acc or None, "accents": [k for k, _ in ACCENTS]}))
+                              "accent": acc or None, "accents": [k for k, _ in ACCENTS],
+                              "glass": {"on": True, "off": False}.get(gl)}))
             return 0 if now else 1
         for k, what in LOOKS:
             print("%s %-7s %s" % ("●" if k == now else " ", k, what))
         if acc:
             for k, what in ACCENTS:
                 print("%s %-7s accent: %s" % ("●" if k == acc else " ", k, what))
+        if gl:
+            for k, what in GLASS:
+                print("%s %-7s glass: %s" % ("●" if k == gl else " ", k, what))
         if not now:
             print("silik: no setting %s on this system: the looks come with silikos-desktop 0.11" % LOOK_SCHEMA, file=sys.stderr)
             return 1
@@ -3256,6 +3274,8 @@ def cmd_look(ctx, a):
         if missing:
             die("the theme %s is not made on this system (%s): sudo /usr/libexec/silikos/gtk-theme; sudo /usr/libexec/silikos/shell-theme"
                 % (theme, ", ".join(missing)))
+    if a.glass is not None and not ctx.dry and not glass_now(ctx):
+        die("no glass on this system: this silikos-desktop has no key glass")
     if a.which is not None:
         ctx.run(["gsettings", "set", LOOK_SCHEMA, "look", a.which])
         if not ctx.dry and look_now(ctx) != a.which:
@@ -3276,6 +3296,10 @@ def cmd_look(ctx, a):
         if (before or "ink").endswith("-vivid") != a.accent.endswith("-vivid") and before:
             # (mutter redraws the frames of X11 windows only at the first change of theme of a session: seen 12/11/2026)
             print("silik: the title bars of X11 programs (xterm, Magic, Xschem, Wine) take the new colour at the next login")
+    if a.glass is not None:
+        ctx.run(["gsettings", "set", LOOK_SCHEMA, "glass", "true" if a.glass == "on" else "false"])
+        if not ctx.dry and glass_now(ctx) != a.glass:
+            die("the glass is still %s: run it as the user, in the desktop session (gsettings could not change the setting)" % (glass_now(ctx) or "unknown"))
     return 0
 
 
@@ -4437,9 +4461,10 @@ def parser(only=None):
     x.set_defaults(fn=cmd_update)
     x = s.add_parser("identity", help="the names the system shows: silikos | base | show")
     x.add_argument("which", nargs="?", default="show", choices=["show", "silikos", "base"]); x.set_defaults(fn=cmd_identity)
-    x = s.add_parser("look", help="the desktop's look: silik | bar | island, and its accent (no argument: which are in use)")
+    x = s.add_parser("look", help="the desktop's look: silik | bar | island, its accent and its glass (no argument: which are in use)")
     x.add_argument("which", nargs="?", choices=[k for k, _ in LOOKS])
     x.add_argument("--accent", choices=[k for k, _ in ACCENTS], help="one colour for what is selected, focused, on or running (ink: none)")
+    x.add_argument("--glass", choices=[k for k, _ in GLASS], help="on: the floating panes over the blurred wallpaper; off: solid paper")
     x.add_argument("--qt", action="store_true", help="Qt 5 programs take the accent in use (the shell runs it)")
     x.add_argument("--json", action="store_true"); x.set_defaults(fn=cmd_look)
     x = s.add_parser("doctor", help="is this workstation healthy, and what to do: ok / warn / bad / unknown and the command that fixes each")

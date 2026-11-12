@@ -29,12 +29,12 @@ class Schema(unittest.TestCase):
         self.path = os.path.join(DESK, "files", SCHEMA + ".gschema.xml")
         self.root = ET.parse(self.path).getroot()
 
-    def test_two_keys_the_three_looks_and_the_accents(self):
+    def test_three_keys_the_three_looks_the_accents_and_the_glass(self):
         schemas = self.root.findall("schema")
         self.assertEqual([s.get("id") for s in schemas], [SCHEMA])
         self.assertEqual(schemas[0].get("path"), "/com/silikvolt/silikos/shell/")
         keys = schemas[0].findall("key")
-        self.assertEqual([(k.get("name"), k.get("type")) for k in keys], [("look", "s"), ("accent", "s")])
+        self.assertEqual([(k.get("name"), k.get("type")) for k in keys], [("look", "s"), ("accent", "s"), ("glass", "b")])
         self.assertEqual([c.get("value") for c in keys[0].find("choices")], LOOKS)
         accents = [c.get("value") for c in keys[1].find("choices")]
         self.assertEqual(accents[0], "ink")                                   # (the list itself: tests/test_accents.py)

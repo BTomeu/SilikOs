@@ -269,6 +269,33 @@ function programOf(app) {
     return null;
 }
 
+/* the COMMAND bar's window (silik-command; GTK names its class after the program) */
+function isCommand(w) {
+    return !!w && w.get_wm_class_instance() === 'silik-command';
+}
+
+/* its glass: the window actor's lowest child, cut to the window's corners (silik-command's CSS: CMD_R), kept where the
+   window is; it goes with the window */
+const CMD_R = 6;
+
+function commandGlass(w, on) {
+    const a = w.get_compositor_private();
+    if (!a) return;
+    if (!on) { if (a._silikGlass) a._silikGlass(); return; }
+    if (a._silikGlass) return;
+    const mica = new Flow.Mica(a, w.get_monitor(), true, CMD_R);
+    const place = () => { const r = w.get_buffer_rect(); mica.place(r.x, r.y, r.width, r.height); };
+    const sigs = [w.connect('position-changed', place), w.connect('size-changed', place)];
+    const gone = a.connect('destroy', () => { if (a._silikGlass) a._silikGlass(); });
+    a._silikGlass = () => {
+        a._silikGlass = null;
+        for (const id of sigs) try { w.disconnect(id); } catch (e) { /* the window has gone */ }
+        try { a.disconnect(gone); } catch (e) { /* the actor is going */ }
+        mica.destroy();
+    };
+    place();
+}
+
 /* the look asked for: the key of the settings, "island" (the default) when the schema is not on this system */
 function lookSettings() {
     try {
@@ -283,19 +310,24 @@ class SilikShell {
         if (this._settings) this._lookSig = this._settings.connect('changed::look', () => this._switch());
         if (this._settings && this._settings.settings_schema.has_key('accent'))
             this._accentSig = this._settings.connect('changed::accent', () => { this._accent(); this._qt(); });
+        if (this._settings && this._settings.settings_schema.has_key('glass'))
+            this._glassSig = this._settings.connect('changed::glass', () => this._glass());
         this._accent();
         this._qt();
         this._up();
+        this._glass();
     }
 
     disable() {
         this._switching = false;                             /* a change of look on its way is dropped: the stock shell, now */
         this._down();
         this._accent(true);
+        this._glass(true);
         if (this._settings) {
             this._settings.disconnect(this._lookSig);
             if (this._accentSig) this._settings.disconnect(this._accentSig);
-            this._accentSig = 0;
+            if (this._glassSig) this._settings.disconnect(this._glassSig);
+            this._accentSig = this._glassSig = 0;
             this._settings = null;
         }
     }
@@ -314,6 +346,39 @@ class SilikShell {
         const f = Me.dir.get_child('accent-' + id + '.css');
         if (id === 'ink' || !f.query_exists(null)) return;
         try { theme.load_stylesheet(f); this._accentFile = f; } catch (e) { logError(e, 'silik-shell: accent ' + id); }
+    }
+
+    /* glass (key "glass"; `silik look --glass on|off`): glass.css (tools/gen_accents.py: the panes' paper at 0.86, the
+       muted text that reads on it) and the glass under the island or the bar, Start and the COMMAND bar's window
+       (flow.js: Mica, the wallpaper under the pane, blurred once). The Silik look's title bar, rail and status bar stay
+       solid: they are the window's frame, not a pane on it. */
+    _glassOn() {
+        return !!this._glassSig && this._settings.get_boolean('glass');
+    }
+
+    _glass(off) {
+        const theme = St.ThemeContext.get_for_stage(global.stage).get_theme();
+        const on = !off && this._glassOn(), f = Me.dir.get_child('glass.css');
+        if (this._glassFile && !on) {
+            try { theme.unload_stylesheet(this._glassFile); } catch (e) { /* it was not loaded */ }
+            this._glassFile = null;
+        }
+        if (on && !this._glassFile)
+            try { theme.load_stylesheet(f); this._glassFile = f; } catch (e) { logError(e, 'silik-shell: glass'); }
+        this._micas(on);
+    }
+
+    _micas(on) {
+        if (this._flow) this._flow.glass(on);
+        if (on && !this._startMica && this._startBox) {
+            this._startMica = new Flow.Mica(this._startBox, Main.layoutManager.primaryIndex, false,
+                                            this._flow && this._flow.kind === 'island' ? Flow.ISL_R : 0);
+            this._layout();
+        } else if (!on && this._startMica) {
+            this._startMica.destroy();
+            this._startMica = null;
+        }
+        for (const a of global.get_window_actors()) if (isCommand(a.meta_window)) commandGlass(a.meta_window, on);
     }
 
     /* what of the look is on the screen: the Silik look's title bar is the shell's own panel */
@@ -377,6 +442,15 @@ class SilikShell {
         on(global.workspace_manager, 'active-workspace-changed', () => this._syncWs());
         on(global.workspace_manager, 'notify::n-workspaces', () => this._syncWs());
         on(Main.overview, 'showing', () => this._closeStart());
+        /* the COMMAND bar's window: translucent paper of its own (silik-command reads the key), its glass here */
+        on(global.display, 'window-created', (d, w) => {
+            if (!this._glassOn() || !isCommand(w)) return;
+            if (w.get_compositor_private()) commandGlass(w, true);
+            else Meta.later_add(Meta.LaterType.BEFORE_REDRAW, () => {
+                if (this._glassOn()) commandGlass(w, true);
+                return GLib.SOURCE_REMOVE;
+            });
+        });
         /* the session opens on the desktop, not on the overview */
         if (Main.layoutManager._startingUp) {
             this._hadOverview = Main.sessionMode.hasOverview;
@@ -404,6 +478,7 @@ class SilikShell {
         this._syncWs();
         this._syncMsg();
         this._warmStart();
+        if (this._glassFile) this._micas(true);              /* (a new look's panes; the stylesheet stays loaded) */
     }
 
     _down() {
@@ -425,6 +500,7 @@ class SilikShell {
         this._pwMons = null;
         this._pw = null;
         if (this._dash) { this._dash.set_height(-1); this._dash.show(); this._dash = null; }
+        if (this._startMica) { this._startMica.destroy(); this._startMica = null; }
         if (this._hadOverview !== undefined) Main.sessionMode.hasOverview = this._hadOverview;
         for (const a of [this._catcher, this._startBox]) { Main.layoutManager.removeChrome(a); a.destroy(); }
         this._startBox = null;
@@ -845,9 +921,11 @@ class SilikShell {
         this._entry.set_text('');
         this._fillCats();
         this._fill();
-        this._layout();
         this._catcher.show();
         this._startBox.show();
+        /* measured once shown: a part hidden while Start was hidden (the list of everything, on the first page) kept
+           its height in the pane's measure, and the first opening of a session stood 12 px too tall (seen in the rig) */
+        this._layout();
         this._markOn(true);
         if (!Main.pushModal(this._startBox, { actionMode: Shell.ActionMode.POPUP })) {
             this._catcher.hide(); this._startBox.hide(); this._markOn(false);
@@ -1178,6 +1256,7 @@ class SilikShell {
             const [x, y, w, h] = this._flow.startPlace(FLOW_W * s, fh);
             this._startBox.set_position(x, y);
             this._startBox.set_size(w, h);
+            if (this._startMica) this._startMica.place(x, y, w, h);
             return;
         }
         const ph = Main.layoutManager.panelBox.height, sb = SB_H * s, rw = RAIL_W * s;
@@ -1185,8 +1264,10 @@ class SilikShell {
         this._sb.set_size(m.width, sb);
         this._railBox.set_position(m.x, m.y + ph);
         this._railBox.set_size(rw, m.height - ph - sb);
-        this._startBox.set_position(m.x + rw - s, m.y + ph);
-        this._startBox.set_size(Math.min(START_W * s, m.width - rw), Math.min(START_H * s, m.height - ph - sb));
+        const at = [m.x + rw - s, m.y + ph, Math.min(START_W * s, m.width - rw), Math.min(START_H * s, m.height - ph - sb)];
+        this._startBox.set_position(at[0], at[1]);
+        this._startBox.set_size(at[2], at[3]);
+        if (this._startMica) this._startMica.place(...at);
     }
 }
 

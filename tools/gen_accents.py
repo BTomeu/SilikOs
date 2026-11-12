@@ -184,10 +184,10 @@ def shell_sed(sh, name):
 def bump(selector):
     """one class more specific: the first class of the last compound part written twice"""
     head, _, last = selector.strip().rpartition(" ")
-    m = re.match(r"^(\.[\w-]+)", last)
+    m = re.match(r"^([\w-]*)(\.[\w-]+)", last)
     if not m:
         raise SystemExit("gen_accents: a selector whose last part has no class: %s" % selector)
-    return ((head + " ") if head else "") + m.group(1) + last
+    return ((head + " ") if head else "") + m.group(1) + m.group(2) + last[len(m.group(1)):]
 
 
 # the extension's colours on the title bar (the Silik look's top bar: the Start key, the command line)
@@ -273,6 +273,67 @@ def qt_scheme(sh, name):
     return "\n".join(out) + "\n"
 
 
+# Glass (the key "glass", `silik look --glass on|off`): the island, the bar of the bar look, Start and the COMMAND bar
+# are paper at GLASS_ALPHA over a blur of what is behind them (the shell's own Shell.BlurEffect; extension.js). Start's
+# inner bands lose their own paper (head, foot) or keep a breath of ink (the categories, the Silik look's foot), so the
+# pane is one sheet. Text must read on it whatever is behind: the worst case is black behind the paper (light text
+# only sits on solid plates: inverse video, the accent), so every grey that is text on glass becomes the least ink,
+# from the grey itself, that reads at 4.5:1 there. The dark COMMAND bar (a dark GTK theme) is the twin, white behind.
+GLASS_ALPHA = 0.86
+GLASS_TINT = 0.04                    # ink over the glass: Start's categories and the Silik look's foot
+DARK_PAPER, DARK_MUTED = "#17181b", "#9a9b9f"
+# what of the extension's stylesheet is glass: the surfaces (paper -> glass), the bands inside them (clear or tint)
+GLASS_BG = ((".silik-flow", "paper"), (".silik-start", "paper"), (".silik-start-head", "clear"),
+            (".silik-start-cats", "tint"), (".silik-start-foot", "tint"), (".silik-start-flow .silik-start-foot", "clear"))
+# the classes of the glass pieces: a grey that is text in one of their rules (not on a plate) reads on glass
+GLASS_SCOPE = ("silik-start", "silik-home", "silik-pin", "silik-rec", "silik-flow", "silik-island", "silik-bar", "silik-fmk",
+               "silik-fcmd", "silik-ak", "silik-fws", "silik-tray", "silik-clock")
+GREYS = ("#6b6d72", "#8a8b8f")       # the muted text and the hints of the stylesheet
+
+
+def over(c, alpha, under):
+    """C at ALPHA over UNDER (sRGB, per channel, as the compositor blends)"""
+    C, U = rgb(c), rgb(under)
+    return hexs([C[i] * alpha + U[i] * (1 - alpha) for i in range(3)])
+
+
+def rgba(c, alpha):
+    return "rgba(%s, %s)" % (", ".join(str(x) for x in rgb(c)), ("%.2f" % alpha).rstrip("0").rstrip("."))
+
+
+def glass():
+    """the glass's colours: the paper and the tint as rgba, the darkest the glass can be (black behind, the tint on
+    it), the muted text that reads there; the same for the dark COMMAND bar (white behind)"""
+    worst = mix(over(PAPER, GLASS_ALPHA, "#000000"), INK, GLASS_TINT)
+    dworst = over(DARK_PAPER, GLASS_ALPHA, "#ffffff")
+    return {"paper": rgba(PAPER, GLASS_ALPHA), "tint": rgba(INK, GLASS_TINT), "clear": "transparent", "worst": worst,
+            "muted": least(GREYS[0], INK, 0.0, worst), "dpaper": rgba(DARK_PAPER, GLASS_ALPHA), "dtint": rgba("#ecebe7", GLASS_TINT),
+            "dworst": dworst, "dmuted": least(DARK_MUTED, "#ecebe7", 0.0, dworst)}
+
+
+def glass_css():
+    """the extension's glass.css: its rules one class more specific than stylesheet.css, loaded while the key is on"""
+    g = glass()
+    src = re.sub(r"/\*.*?\*/", "", read(os.path.join(EXT, "stylesheet.css")), flags=re.S)
+    rules = [(" ".join(s.split()), b) for s, b in re.findall(r"([^{}]+)\{([^{}]*)\}", src)]
+    out = ["/* SilikOS glass (tools/gen_accents.py; do not edit): paper at %s over a blur of what is behind (extension.js)," % GLASS_ALPHA,
+           " * one class more specific than stylesheet.css; loaded by the extension while the key \"glass\" is on. Text reads at",
+           " * 4.5:1 or more with black behind the paper: muted text %s (%.1f:1 on %s) */" % (g["muted"], contrast(g["muted"], g["worst"]), g["worst"])]
+    sels = [s for s, _ in rules for s in (x.strip() for x in s.split(","))]
+    for sel, what in GLASS_BG:
+        if sel not in sels:
+            raise SystemExit("gen_accents: stylesheet.css has no rule for %s (GLASS_BG)" % sel)
+        out.append("%s { background-color: %s; }" % (bump(sel), g[what]))
+    for sel, body in rules:
+        parts = [x.strip() for x in sel.split(",")]
+        keep = [x for x in parts if any(re.search(r"\.%s(?![\w-])" % c + "|\\.%s-" % c, x) for c in GLASS_SCOPE)
+                and not re.search(r"silik-on|:active|:checked|:hover|:focus", x)]
+        greys = [d for d in (d.strip() for d in body.split(";")) if re.match(r"^color:\s*(%s)$" % "|".join(GREYS), d)]
+        if keep and greys:
+            out.append("%s { color: %s; }" % (", ".join(bump(x) for x in keep), g["muted"]))
+    return "\n".join(out) + "\n"
+
+
 def table():
     out = ["# The accents of the SilikOS desktop (tools/gen_accents.py; do not edit). ink: the look without an accent;",
            "# NAME-vivid: the same accent with its title bar. name accent hover mid tint on-it muted-on-it line title-bar",
@@ -289,6 +350,7 @@ def outputs():
         files[os.path.join(OUT, name + ".gtk.sed")] = gtk_sed(sh, ch, name)
         files[os.path.join(OUT, name + ".shell.sed")] = shell_sed(sh, name)
         files[os.path.join(EXT, "accent-%s.css" % name)] = ext_css(sh, ch, name)
+    files[os.path.join(EXT, "glass.css")] = glass_css()
     for name, sh in [("ink", INK_SHADES)] + [(n, sh) for n, sh, _ in variants()]:
         files[os.path.join(QT, name + ".conf")] = qt_scheme(sh, name)
     return files
@@ -310,6 +372,9 @@ def main():
               % (name, sh["accent"], contrast(sh["on"], sh["accent"]), contrast(sh["muted"], sh["accent"]),
                  contrast(sh["line"], PAPER), ", title bar %s: paper on it %.1f:1, muted %.1f:1" % (
                      ch["chrome"], contrast(PAPER, ch["chrome"]), contrast(ch["onchmu"], ch["chrome"])) if ch else ""))
+    g = glass()
+    print("glass           paper %s; muted %s: %.1f:1 on %s (black behind); dark: muted %s: %.1f:1 on %s (white behind)"
+          % (g["paper"], g["muted"], contrast(g["muted"], g["worst"]), g["worst"], g["dmuted"], contrast(g["dmuted"], g["dworst"]), g["dworst"]))
 
 
 if __name__ == "__main__":

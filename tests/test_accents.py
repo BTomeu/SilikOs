@@ -36,7 +36,7 @@ class Generated(unittest.TestCase):
             return sorted(os.path.basename(p) for p in gen.outputs() if os.path.dirname(p) == os.path.join(FILES, d))
         self.assertEqual(sorted(os.listdir(os.path.join(FILES, "accents"))), made("accents"))
         self.assertEqual(sorted(os.listdir(os.path.join(FILES, "qt"))), made("qt"))
-        self.assertEqual(sorted(f for f in os.listdir(os.path.join(FILES, "shell-ext")) if f.startswith("accent-")),
+        self.assertEqual(sorted(f for f in os.listdir(os.path.join(FILES, "shell-ext")) if f.startswith("accent-") or f == "glass.css"),
                          made("shell-ext"))
 
     def test_ink_first_and_no_file_for_it(self):
