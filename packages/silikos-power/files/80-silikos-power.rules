@@ -1,0 +1,3 @@
+# silik power auto: a mains supply (or a USB-C one) plugged or unplugged runs the automatic choice again, when it is
+# on (try-restart does nothing to a service that is not running). A battery's own changes (its level) are not acted on.
+SUBSYSTEM=="power_supply", ACTION=="change", ATTR{type}=="Mains|USB", RUN+="/usr/bin/systemctl --no-block try-restart silikos-power-auto.service"

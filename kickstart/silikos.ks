@@ -18,9 +18,11 @@ network --bootproto=dhcp --device=link --activate --onboot=yes
 graphical
 xconfig --startxonboot
 firstboot --enable
+# fstrim.timer: the SSD is told weekly which blocks are free (util-linux's timer, off on EL 9.8 by default).
+# silikos-power-auto: performance on mains power, balanced on battery (`silik power`; docs/POWER.md).
 # sshd is in the base and on by default: a personal workstation does not need it (to have it: `sudo systemctl
 # enable --now sshd`, then `silik secure apply --keep-ssh`)
-services --enabled=NetworkManager,gdm --disabled=sshd
+services --enabled=NetworkManager,gdm,fstrim.timer,silikos-power-auto --disabled=sshd
 # Security, stated (docs/SECURITY.md). SELinux stays as the base has it. The firewall is on; the installer opens ssh
 # in the default zone unless told not to. Disk encryption is not set here: the disk and "Encrypt my data" are chosen
 # in the installer's Installation Destination screen, like everything about the disk.
@@ -41,6 +43,7 @@ silik-eda-open
 silik-dev
 silik-win
 silikos-security
+silikos-power
 %end
 
 %post --log=/root/silikos-post.log

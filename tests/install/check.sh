@@ -22,7 +22,7 @@ has name.pretty "$PRETTY_NAME" "SilikOS"
 is name.id "$ID" almalinux
 has name.redhat-release "$(cat /etc/redhat-release)" "AlmaLinux"
 has name.boot-entries "$(grep -h '^title' /boot/loader/entries/*.conf | head -3)" "SilikOS"
-for p in silik-tools silik-command silikos-branding silikos-desktop silikos-security silik-eda-compat silik-eda-open silik-dev silik-win; do
+for p in silik-tools silik-command silikos-branding silikos-desktop silikos-security silikos-power silik-eda-compat silik-eda-open silik-dev silik-win; do
   if v=$(rpm -q $p 2>&1); then say package.$p ok "$v"; else say package.$p FAIL "$v"; fi
 done
 is security.selinux "$(getenforce 2>&1)" Enforcing
@@ -31,6 +31,11 @@ is security.zone "$(firewall-cmd --get-default-zone 2>&1)" silikos
 case "$(systemctl is-enabled sshd 2>&1)" in enabled) say security.sshd FAIL "sshd is enabled";; *) say security.sshd ok "not enabled";; esac
 is security.update-timer "$(systemctl is-active silikos-update.timer 2>&1) $(systemctl is-enabled silikos-security-update.timer 2>&1)" "active disabled"   # every update, daily (the security-only timer is the other choice)
 is update.auto "$(asuser silik update --auto | grep "^●" | awk "{print \$2}")" all
+# power: the automatic choice on, the SSD trimmed weekly; a virtual machine on mains power: performance
+is power.auto "$(systemctl is-enabled silikos-power-auto 2>&1) $(systemctl is-active silikos-power-auto 2>&1)" "enabled active"
+is power.trim "$(systemctl is-enabled fstrim.timer 2>&1)" enabled
+is power.profile "$(silik power --json 2>/dev/null | python3 -c 'import json, sys; print(json.load(sys.stdin)["profile"])' 2>&1)" performance
+say power.tuned info "$(tuned-adm active 2>&1)"
 is security.ptrace_scope "$(sysctl -n kernel.yama.ptrace_scope 2>&1)" 1
 is security.dmesg_restrict "$(sysctl -n kernel.dmesg_restrict 2>&1)" 1
 has kernel.vsyscall "$(cat /proc/cmdline)" "vsyscall=xonly"

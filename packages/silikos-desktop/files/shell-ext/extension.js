@@ -7,7 +7,7 @@
  *   Start       a pane that hangs from the mark (click, or the Super key): categories, the applications as rows,
  *               a filter as you type; Enter opens, Esc closes
  *   status bar  the one message channel (the last command `silik` ran, read from $XDG_RUNTIME_DIR/silik-last), then
- *               "key value" fields: workspace, base, kernel, host
+ *               "key value" fields: workspace, base, kernel, host, power (the profile of `silik power`: tuned's)
  * That is the look "silik". The key `look` of the settings com.silikvolt.silikos.shell (`silik look`) chooses it or
  * one of the Flow looks, "bar" and "island" (flow.js): one piece at the bottom of the screen, the applications as
  * icons. The icons and Start are shared; in a Flow look Start opens from the piece: the applications of the rail as a
@@ -30,21 +30,29 @@ const RAIL_W = 152, SB_H = 22, START_W = 660, START_H = 520;
 const FLOW_W = 640, FLOW_H = 548, PIN_COLS = 4, RECENT_N = 5;      /* Start in a Flow look */
 const SCHEMA = 'com.silikvolt.silikos.shell';                      /* key "look": silik | bar | island */
 const COMMAND_ID = 'org.silikvolt.Command.desktop';   /* the COMMAND bar is the title bar's command line, not a rail key */
+/* the power field: tuned's profile in `silik power`'s words (packages/silik-tools: POWER_WORD) */
+const TUNED_ACTIVE = '/etc/tuned/active_profile';
+const PPD_DAEMON = '/usr/libexec/power-profiles-daemon';   /* that one instead of tuned: tuned's file would be stale */
+const POWER_AUTO_LINK = '/etc/systemd/system/multi-user.target.wants/silikos-power-auto.service';
+const POWER_WORD = { 'throughput-performance': 'performance', 'balanced': 'balanced', 'balanced-battery': 'balanced', 'powersave': 'saver' };
 
 const TEXT = {
     en: { ready: 'ready', upd: 'update', restart: 'restart to finish', ws: 'workspace', base: 'base', kernel: 'kernel', host: 'host', open: 'open', windows: 'Windows',
+          power: 'power', pw: { performance: 'performance', balanced: 'balanced', saver: 'saver', auto: 'auto' },
           filter: 'type to filter', kOpen: 'open', kMove: 'move', kCat: 'category', kClose: 'close', none: 'nothing matches',
           hint: 'Super+Space', search: 'type to search the applications', pinned: 'pinned', recent: 'recent', all: 'all applications',
           lock: 'lock', logout: 'log out', off: 'power off',
           cats: { all: 'All', fav: 'Rail', eda: 'Engineering', bench: 'Bench', win: 'Windows programs', dev: 'Development', office: 'Office',
                   graphics: 'Graphics', net: 'Internet', media: 'Sound and video', tools: 'Tools', system: 'System', other: 'Other' } },
     ca: { ready: 'a punt', upd: 'actualització', restart: 'reinicia per acabar', ws: 'espai', base: 'base', kernel: 'nucli', host: 'equip', open: 'obertes', windows: 'Finestres',
+          power: 'energia', pw: { performance: 'rendiment', balanced: 'equilibrat', saver: 'estalvi', auto: 'auto' },
           filter: 'escriu per filtrar', kOpen: 'obre', kMove: 'mou', kCat: 'categoria', kClose: 'tanca', none: 'no hi ha res que coincideixi',
           hint: 'Super+Espai', search: 'escriu per cercar les aplicacions', pinned: 'ancorades', recent: 'recents', all: 'totes les aplicacions',
           lock: 'bloqueja', logout: 'tanca la sessió', off: 'apaga',
           cats: { all: 'Totes', fav: 'Rail', eda: 'Enginyeria', bench: 'Banc', win: 'Programes de Windows', dev: 'Desenvolupament', office: 'Oficina',
                   graphics: 'Gràfics', net: 'Internet', media: 'So i vídeo', tools: 'Eines', system: 'Sistema', other: 'Altres' } },
     es: { ready: 'listo', upd: 'actualización', restart: 'reinicia para terminar', ws: 'espacio', base: 'base', kernel: 'núcleo', host: 'equipo', open: 'abiertas', windows: 'Ventanas',
+          power: 'energía', pw: { performance: 'rendimiento', balanced: 'equilibrado', saver: 'ahorro', auto: 'auto' },
           filter: 'escribe para filtrar', kOpen: 'abre', kMove: 'mueve', kCat: 'categoría', kClose: 'cierra', none: 'nada coincide',
           hint: 'Super+Espacio', search: 'escribe para buscar las aplicaciones', pinned: 'ancladas', recent: 'recientes', all: 'todas las aplicaciones',
           lock: 'bloquea', logout: 'cierra la sesión', off: 'apaga',
@@ -354,6 +362,7 @@ class SilikShell {
         else { this._title(); this._rail(); this._status(); }
         this._watchLast();
         this._watchRestart();
+        this._watchPower();
         this._start();
         const on = (o, s, f) => this._sigs.push([o, o.connect(s, f)]);
         on(Main.layoutManager, 'monitors-changed', () => this._layout());
@@ -412,6 +421,9 @@ class SilikShell {
         if (this._mon) { this._mon.cancel(); this._mon = null; }
         if (this._updMon) { this._updMon.cancel(); this._updMon = null; }
         this._upd = null;
+        for (const m of this._pwMons || []) m.cancel();
+        this._pwMons = null;
+        this._pw = null;
         if (this._dash) { this._dash.set_height(-1); this._dash.show(); this._dash = null; }
         if (this._hadOverview !== undefined) Main.sessionMode.hasOverview = this._hadOverview;
         for (const a of [this._catcher, this._startBox]) { Main.layoutManager.removeChrome(a); a.destroy(); }
@@ -1081,7 +1093,34 @@ class SilikShell {
            gone at the next boot): a field of its own, shown only then */
         this._upd = field(t.upd, t.restart).get_parent();
         this._upd.visible = false;
+        /* the power profile (`silik power`): tuned's, read from its file; shown when tuned has one */
+        this._pw = field(t.power, '');
+        this._pw.get_parent().visible = false;
         Main.layoutManager.addChrome(this._sb, { affectsStruts: true, trackFullscreen: true });
+    }
+
+    /* the status bar's power field follows tuned's profile file (tuned writes it at each change, whoever asked: `silik
+       power`, the system menu, tuned-ppd on battery) and whether `silik power auto` is on (its service's link). No
+       command is run for it */
+    _watchPower() {
+        if (!this._pw) return;
+        const sync = () => {
+            if (!this._pw) return;
+            const p = GLib.file_test(PPD_DAEMON, GLib.FileTest.EXISTS) ? '' : readText(TUNED_ACTIVE);
+            const word = POWER_WORD[p];
+            const auto = GLib.file_test(POWER_AUTO_LINK, GLib.FileTest.EXISTS);
+            this._pw.text = (auto ? this._t.pw.auto + ' ' : '') + (word ? this._t.pw[word] : p);
+            this._pw.get_parent().visible = p !== '';
+        };
+        this._pwMons = [];
+        for (const d of [GLib.path_get_dirname(TUNED_ACTIVE), GLib.path_get_dirname(POWER_AUTO_LINK)]) {
+            try {
+                const m = Gio.File.new_for_path(d).monitor_directory(Gio.FileMonitorFlags.NONE, null);
+                m.connect('changed', sync);
+                this._pwMons.push(m);
+            } catch (e) { /* no folder: the field shows what was read at the start */ }
+        }
+        sync();
     }
 
     /* in every look: a notification once when an update starts to wait for a restart; in the Silik look also the

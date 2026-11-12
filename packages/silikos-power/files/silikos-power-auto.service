@@ -1,0 +1,16 @@
+# silik power auto: one power profile on mains power, another on battery (/etc/silikos/power.conf). Enabled by
+# `silik power auto` (and by the SilikOS kickstart on a new installation), disabled by a profile chosen by hand. It
+# runs at boot and again when 80-silikos-power.rules sees the mains plugged or unplugged (try-restart: only while it
+# is on). `silik power apply` prints what it sets: journalctl -u silikos-power-auto
+[Unit]
+Description=SilikOS power profile for the power source (silik power auto)
+After=dbus.service tuned.service tuned-ppd.service upower.service
+ConditionPathExists=/usr/bin/silik
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/silik power apply
+
+[Install]
+WantedBy=multi-user.target

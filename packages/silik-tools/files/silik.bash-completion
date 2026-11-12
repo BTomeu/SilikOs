@@ -8,12 +8,13 @@ _silik() {
     return
   fi
   case $COMP_CWORD in
-    1) COMPREPLY=($(compgen -W "status update identity look session eda dev win hw secure --dry-run --version" -- "$cur"));;
+    1) COMPREPLY=($(compgen -W "status update identity look session eda dev win power hw secure --dry-run --version" -- "$cur"));;
     2) case $g in
          eda) COMPREPLY=($(compgen -W "list create setup enter run import-vm rm check kernel-arg tools try bench tune" -- "$cur"));;
          win) COMPREPLY=($(compgen -W "list open create run install stop rm sync apps vm" -- "$cur"));;
          hw)  COMPREPLY=($(compgen -W "probe nvidia" -- "$cur"));;
-         dev) COMPREPLY=($(compgen -W "tools try install can serial" -- "$cur"));;
+         dev) COMPREPLY=($(compgen -W "tools try install can serial ccache" -- "$cur"));;
+         power) COMPREPLY=($(compgen -W "show performance balanced saver auto apply zram trim --json" -- "$cur"));;
          identity) COMPREPLY=($(compgen -W "show silikos base" -- "$cur"));;
          session) COMPREPLY=($(compgen -W "lock logout off" -- "$cur"));;
          secure) COMPREPLY=($(compgen -W "status apply" -- "$cur"));;
@@ -29,6 +30,8 @@ _silik() {
          "dev try") COMPREPLY=($(compgen -W "all build libc cxx debug probe dfu stlink" -- "$cur"));;
          "dev install") COMPREPLY=($(compgen -f -- "$cur"));;
          "dev can") COMPREPLY=($(compgen -W "list up down --fd --listen" -- "$cur"));;
+         "dev ccache"|"power zram"|"power trim") COMPREPLY=($(compgen -W "on off" -- "$cur"));;
+         "power auto") COMPREPLY=($(compgen -W "--ac --battery" -- "$cur"));;
        esac;;
   esac
 }

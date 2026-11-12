@@ -14,7 +14,8 @@ Recommends:     pciutils
 %description
 `silik status`, `silik eda ...` (EL6 / EL7 / EL8 userlands for EDA tools, as podman containers that show their windows
 on this desktop), `silik win ...` (Windows programs: a double-click runs them with Wine in a sandbox; a Windows
-virtual machine for the rest), `silik dev ...` (embedded development), `silik hw ...`, `silik look` (the desktop's
+virtual machine for the rest), `silik dev ...` (embedded development), `silik power ...` (the power profile:
+performance, balanced, saver, auto), `silik hw ...`, `silik look` (the desktop's
 look: silik, bar, island), `silik session`,
 `silik update`.
 Every action prints the commands it runs; --dry-run runs nothing.
