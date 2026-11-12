@@ -1,0 +1,6 @@
+# SilikOS (silik-dev): USB devices whose only driver is for Windows, used from the Windows virtual machine
+# (`silik win vm usb attach VID:PID`). The user's VM (qemu:///session) opens the device itself, so the device belongs to
+# the user at the screen (uaccess: the active local session only).
+#   Vector Informatik (USB vendor 1248): the VN1600 family (VN1610, VN1611, VN1630, VN1630A, VN1640, VN1640A) and the
+#   other Vector interfaces: the Vector Driver Package and CANoe / CANalyzer run inside the VM, under the user's licence
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="1248", TAG+="uaccess"

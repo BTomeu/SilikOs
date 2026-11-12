@@ -350,7 +350,7 @@ class BarEntries(unittest.TestCase):
 
     def test_completion_and_usage(self):
         comp = text("packages/silik-tools/files/silik.bash-completion")
-        self.assertIn('dev) COMPREPLY=($(compgen -W "tools try install can"', comp)
+        self.assertIn('dev) COMPREPLY=($(compgen -W "tools try install can serial"', comp)
         self.assertIn("silik dev   tools [--json] | try [JOB] | install FILE", text("packages/silik-tools/files/silik"))
 
 
@@ -358,7 +358,8 @@ class Can(unittest.TestCase):
     def test_up_sets_the_bit_rate_then_brings_it_up(self):
         rc, o = run("dev", "can", "up", "can0", "500k")
         self.assertEqual(rc, 0)
-        self.assertEqual(o.splitlines()[:3], ["$ sudo ip link set can0 down", "$ sudo ip link set can0 type can bitrate 500000",
+        self.assertEqual(o.splitlines()[:3], ["$ sudo ip link set can0 down",
+                                              "$ sudo ip link set can0 type can bitrate 500000 restart-ms 100",
                                               "$ sudo ip link set can0 up"])
         rc, o = run("dev", "can", "down", "can0")
         self.assertEqual(o.strip(), "$ sudo ip link set can0 down")
@@ -380,7 +381,43 @@ class Can(unittest.TestCase):
             def query(self, argv):
                 return json.dumps([{"ifname": "can0", "operstate": "UP", "linkinfo": {"info_data": {"bittiming": {"bitrate": 500000}}}},
                                    {"ifname": "can1", "operstate": "DOWN", "linkinfo": {"info_data": {}}}])
-        self.assertEqual(silik.can_links(Q(True, True)), [("can0", "UP", 500000), ("can1", "DOWN", None)])
+        self.assertEqual(silik.can_links(Q(True, True)), [("can0", "UP", 500000, None), ("can1", "DOWN", None, None)])
+
+    def test_can_fd_and_listen_only(self):
+        rc, o = run("dev", "can", "up", "can0", "500k", "--fd", "2M", "--listen")
+        self.assertEqual(rc, 0)
+        self.assertIn("$ sudo ip link set can0 type can bitrate 500000 dbitrate 2000000 fd on listen-only on restart-ms 100", o)
+        with self.assertRaises(Exception):
+            silik.can_fd_rate("3M")
+
+
+class VmUsb(unittest.TestCase):
+    """a USB device whose driver is Windows-only (Vector's VN1600 family) handed to the Windows VM"""
+
+    def test_attach_and_detach(self):
+        rc, o = run("win", "vm", "usb", "attach", "1248:1060")
+        self.assertEqual(rc, 0)
+        self.assertRegex(o, r"^\$ virsh --connect qemu:///session attach-device windows \S+\.xml --live$")
+        rc, o = run("win", "vm", "usb", "detach", "1248:1060", "--name", "w11")
+        self.assertIn("detach-device w11 ", o)
+
+    def test_an_id_is_checked(self):
+        for bad in ("1248", "1248:10600", "x;y:z"):
+            with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                silik.main(["--dry-run", "win", "vm", "usb", "attach", bad])
+
+    def test_the_list_reads_lsusb(self):
+        class Q(silik.Ctx):
+            def query(self, argv):
+                return ("Bus 001 Device 004: ID 1248:1060 Vector Informatik GmbH VN1630\n"
+                        "Bus 002 Device 003: ID 0c72:0012 PEAK System PCAN-USB FD\n")
+        self.assertEqual(silik.usb_devices(Q(True, True)), [("1248:1060", "001", "004", "Vector Informatik GmbH VN1630"),
+                                                           ("0c72:0012", "002", "003", "PEAK System PCAN-USB FD")])
+
+    def test_the_rule_gives_vectors_devices_to_the_user(self):
+        r = text("packages/silik-dev/files/70-silikos-usb-vm.rules")
+        self.assertIn('ATTR{idVendor}=="1248", TAG+="uaccess"', r)
+        self.assertIn("70-silikos-usb-vm.rules", text("packages/silik-dev/silik-dev.spec"))
 
 
 if __name__ == "__main__":

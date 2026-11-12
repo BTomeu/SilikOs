@@ -62,7 +62,31 @@ silik dev can down can0
 candump can0 / cansend can0 123#DEADBEEF / canplayer      (can-utils, EPEL 9, recommended by silik-dev)
 ```
 
-Not run: a real adapter on a bus [A: the drivers' names are the kernel package's; no adapter here].
+`silik dev can up can0 500k --fd 2M` is CAN FD (data phase 2 Mbit/s); `--listen` never sends, not even an
+acknowledgement (to watch a car's bus). The list names each adapter and its driver.
+
+| Adapter | On SilikOS |
+|---|---|
+| PEAK PCAN-USB family (PCAN-USB, PCAN-USB FD, PCAN-USB Pro FD, PCAN-USB X6) | the kernel's `peak_usb`: can0 at once |
+| PEAK PCAN-PCIe FD / miniPCIe FD / M.2 | the kernel's `peak_pciefd` |
+| Kvaser USB (Leaf, U100, Memorator...) | the kernel's `kvaser_usb` |
+| candleLight, CANable, other gs_usb boards | the kernel's `gs_usb` |
+| 8devices USB2CAN | the kernel's `usb_8dev` |
+| MCP2515 / MCP2518FD on SPI | the kernel's `mcp251x` / `mcp251xfd` (a board's device tree) |
+| **Vector VN1600 family** (VN1610, VN1611, VN1630, VN1630A, VN1640, VN1640A) | **no Linux driver**: Vector's driver is for Windows (Vector Driver Package). The device goes to the Windows virtual machine whole: `silik win vm usb attach 1248:1060` (the ID `silik win vm usb` lists); inside it, Vector's driver and CANoe / CANalyzer under your licence. `70-silikos-usb-vm.rules` makes Vector's devices (USB vendor 1248) the user's, so the user's VM can open them |
+
+(The drivers were read from EL 9's kernel package list, 12/11/2026; the PEAK and Kvaser model names are the
+drivers' own families [A]. Vector's IDs from a driver catalogue: verify with `lsusb`.)
+
+Serial and RS-485: `silik dev serial` lists the ports with their adapter (FTDI, CP210x, CH340, an ST-LINK's COM
+port...) and stable name (`/dev/serial/by-id/...`); USB-RS485 adapters switch direction by themselves. Terminals:
+tio, minicom, picocom, screen; Modbus RTU: libmodbus, pyserial; a port over the network: ser2net, socat.
+
+The bench (silik-dev recommends them; all from EL 9 and EPEL 9): can-utils, Wireshark (SocketCAN captures), tio,
+minicom, screen, setserial, ser2net, socat, lrzsz, libmodbus, avrdude, i2c-tools, usbutils. Not in EL 9 or EPEL 9,
+to be built here like the EDA tools: python-can, cantools, SavvyCAN, sigrok / PulseView, stm32flash, esptool.
+
+Not run: a real adapter on a bus; the Windows VM with a USB device [A: libvirt's hostdev for qemu:///session].
 
 ## The vendors' IDEs
 

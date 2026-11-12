@@ -13,7 +13,7 @@ _silik() {
          eda) COMPREPLY=($(compgen -W "list create setup enter run import-vm rm check kernel-arg tools try bench tune" -- "$cur"));;
          win) COMPREPLY=($(compgen -W "list open create run install stop rm sync apps vm" -- "$cur"));;
          hw)  COMPREPLY=($(compgen -W "probe nvidia" -- "$cur"));;
-         dev) COMPREPLY=($(compgen -W "tools try install can" -- "$cur"));;
+         dev) COMPREPLY=($(compgen -W "tools try install can serial" -- "$cur"));;
          identity) COMPREPLY=($(compgen -W "show silikos base" -- "$cur"));;
          session) COMPREPLY=($(compgen -W "lock logout off" -- "$cur"));;
          secure) COMPREPLY=($(compgen -W "status apply" -- "$cur"));;
@@ -22,13 +22,13 @@ _silik() {
          "eda setup"|"eda enter"|"eda run"|"eda rm") COMPREPLY=($(compgen -W "$(silik -q eda list 2>/dev/null | awk '$1 != "no" {print $1}')" -- "$cur"));;
          "win run"|"win install"|"win stop"|"win rm") COMPREPLY=($(compgen -W "$(silik -q win list 2>/dev/null | grep -v '^no ') --no-net --no-sandbox" -- "$cur"));;
          "win open") COMPREPLY=($(compgen -W "--prefix --no-net --no-sandbox" -- "$cur") $(compgen -f -- "$cur"));;
-         "win vm") COMPREPLY=($(compgen -W "create start stop app" -- "$cur"));;
+         "win vm") COMPREPLY=($(compgen -W "create start stop app usb" -- "$cur"));;
          "hw nvidia") COMPREPLY=($(compgen -W "install status" -- "$cur"));;
          "eda try") COMPREPLY=($(compgen -W "all sim schematic layout postlayout gds digital waves gates verilate vhdl lint synth device" -- "$cur"));;
          "eda tune") COMPREPLY=($(compgen -W "--threads --undo" -- "$cur"));;
          "dev try") COMPREPLY=($(compgen -W "all build libc cxx debug probe dfu stlink" -- "$cur"));;
          "dev install") COMPREPLY=($(compgen -f -- "$cur"));;
-         "dev can") COMPREPLY=($(compgen -W "list up down" -- "$cur"));;
+         "dev can") COMPREPLY=($(compgen -W "list up down --fd --listen" -- "$cur"));;
        esac;;
   esac
 }

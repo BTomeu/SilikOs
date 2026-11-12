@@ -1,7 +1,7 @@
 Name:           silik-dev
-Version:        0.1.2
+Version:        0.2.0
 Release:        1%{?dist}
-Summary:        Embedded development on SilikOS: ARM compiler, debugger, flashing; recipes for the vendors' IDEs
+Summary:        Embedded development and the lab bench on SilikOS: ARM compiler, debugger, flashing, CAN, serial / RS-485, buses
 License:        LicenseRef-SilikVolt
 BuildArch:      noarch
 Requires:       silik-tools >= 0.6.0
@@ -24,6 +24,21 @@ Recommends:     picocom
 Recommends:     python3-pyserial
 # CAN bus tools (EPEL 9): candump, cansend, canplayer; the kernel has the adapters' drivers (`silik dev can`)
 Recommends:     can-utils
+# the lab bench (EL 9 and EPEL 9; each checked in their repositories, 12/11/2026): Wireshark reads SocketCAN, USB and
+# serial captures; serial and RS-485 terminals; Modbus (libmodbus); AVR flashing; I2C; USB listing; file transfer
+Recommends:     wireshark
+Recommends:     wireshark-cli
+Recommends:     tio
+Recommends:     minicom
+Recommends:     screen
+Recommends:     setserial
+Recommends:     ser2net
+Recommends:     socat
+Recommends:     lrzsz
+Recommends:     libmodbus
+Recommends:     avrdude
+Recommends:     i2c-tools
+Recommends:     usbutils
 Recommends:     unzip
 
 %description
@@ -41,8 +56,10 @@ for f in startup.c main.c hello.c sum.cpp cortex-m.ld; do
   install -m0644 %{_sourcedir}/$f %{buildroot}%{_datadir}/silikos/dev/try/$f
 done
 
-# serial ports for the user at the screen (uaccess), as OpenOCD's rules do for the probes
+# serial ports for the user at the screen (uaccess), as OpenOCD's rules do for the probes; USB devices whose driver is
+# Windows-only (Vector's interfaces) for the user's Windows VM
 install -Dm0644 %{_sourcedir}/70-silikos-serial.rules %{buildroot}%{_prefix}/lib/udev/rules.d/70-silikos-serial.rules
+install -Dm0644 %{_sourcedir}/70-silikos-usb-vm.rules %{buildroot}%{_prefix}/lib/udev/rules.d/70-silikos-usb-vm.rules
 
 %post
 # (the rules of a device already plugged in are applied when it is plugged again; reloading changes nothing running)
@@ -50,6 +67,7 @@ udevadm control --reload > /dev/null 2>&1 || :
 
 %files
 %{_prefix}/lib/udev/rules.d/70-silikos-serial.rules
+%{_prefix}/lib/udev/rules.d/70-silikos-usb-vm.rules
 %dir %{_datadir}/silikos
 %dir %{_datadir}/silikos/dev
 %{_datadir}/silikos/dev/try

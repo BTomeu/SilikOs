@@ -7,8 +7,9 @@
 #   silik win   open [--prefix P --no-net --no-sandbox] FILE [ARGS] | apps | sync | stop [PREFIX]
 #               | list | create PREFIX | run [--no-net --no-sandbox] PREFIX -- PROG.exe [ARGS] | install PREFIX SETUP.exe | rm PREFIX
 #               | vm create --iso WIN.iso [--name N --ram GB --disk GB --cpus N] | vm start [N] | vm stop [N]
-#               | vm app --exe 'C:\path\app.exe' --user U
-#   silik dev   tools [--json] | try [JOB] | install FILE | can [up IFACE BITRATE | down IFACE]   embedded development
+#               | vm app --exe 'C:\path\app.exe' --user U | vm usb [attach|detach VID:PID] [--name N]
+#   silik dev   tools [--json] | try [JOB] | install FILE | can [up IFACE BITRATE [--fd RATE] [--listen] | down IFACE]
+#               | serial [--json]                       embedded development, buses
 #   silik hw    probe | nvidia install | nvidia status
 #   silik identity show | silikos | base
 #   silik look  [silik | bar | island] [--json]     the desktop's look; no argument: which one is in use
@@ -27,7 +28,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.6.8"
+VERSION = "0.6.9"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -1619,6 +1620,54 @@ def vm_stop(ctx, a):
     return 0
 
 
+# A USB device for the Windows VM: hardware whose driver exists only for Windows (Vector's VN1600 family: the Vector
+# Driver Package, then CANoe / CANalyzer under the user's licence, all inside the VM) goes to the VM whole, through
+# libvirt (qemu:///session). The user's VM opens the device node, so it must be the user's: Vector's devices are by
+# 70-silikos-usb-vm.rules (silik-dev); for another, the message says so.
+def usb_devices(ctx):
+    """[(vid:pid, bus, dev, name)] from lsusb"""
+    out = []
+    for l in ctx.query(["lsusb"]).splitlines():
+        m = re.match(r"^Bus (\d+) Device (\d+): ID ([0-9a-f]{4}:[0-9a-f]{4}) ?(.*)$", l.strip())
+        if m:
+            out.append((m.group(3), m.group(1), m.group(2), m.group(4)))
+    return out
+
+
+def vm_usb(ctx, a):
+    devs = usb_devices(ctx)
+    if not a.action:
+        for vp, bus, dev, name in devs:
+            print("%s  %s%s" % (vp, name or "-", "   (Vector: for the VM)" if vp.startswith("1248:") else ""))
+        if not devs:
+            print("no USB devices seen (lsusb: the package usbutils)")
+        return 0 if devs else 1
+    if not re.match(r"^[0-9a-f]{4}:[0-9a-f]{4}$", a.id or ""):
+        die("silik win vm usb %s VID:PID [--name N] (the ID that `silik win vm usb` lists, e.g. 1248:1060)" % a.action, 2)
+    vid, pid = a.id.split(":")
+    if a.action == "attach" and not ctx.dry:
+        hit = [d for d in devs if d[0] == a.id]
+        if not hit:
+            die("no USB device %s is plugged in (`silik win vm usb` lists them)" % a.id)
+        node = "/dev/bus/usb/%s/%s" % (hit[0][1], hit[0][2])
+        if not os.access(node, os.R_OK | os.W_OK):
+            die("%s (%s) is not yours: the VM runs as you and cannot open it. A udev rule with TAG+=\"uaccess\" for "
+                "ATTR{idVendor}==\"%s\" gives it to the user at the screen (Vector's devices have one: silik-dev)" % (node, a.id, vid))
+    xml = ("<hostdev mode='subsystem' type='usb' managed='yes'><source><vendor id='0x%s'/><product id='0x%s'/></source></hostdev>\n"
+           % (vid, pid))
+    f = os.path.join(tempfile.mkdtemp(prefix="silik-usb-"), "dev.xml") if not ctx.dry else "/tmp/silik-usb-%s.xml" % a.id.replace(":", "-")
+    if not ctx.dry:
+        with open(f, "w") as h:
+            h.write(xml)
+    rc, _ = ctx.run(["virsh", "--connect", "qemu:///session", "attach-device" if a.action == "attach" else "detach-device",
+                     a.name, f, "--live"], check=False)
+    if not ctx.dry:
+        shutil.rmtree(os.path.dirname(f), ignore_errors=True)
+    if rc == 0 and a.action == "attach" and not ctx.dry:
+        print("%s is the VM's now (Windows sees it plugged in); `silik win vm usb detach %s` gives it back" % (a.id, a.id))
+    return rc
+
+
 def vm_app(ctx, a):
     """one Windows program of the VM as a window of this desktop (RDP RemoteApp). The VM sees one folder of this
     system, the shared one (~/Windows, drive W: of the Wine prefixes too), never the whole home folder: a program in
@@ -2429,6 +2478,11 @@ DEV_TOOLS = (   # command, package, what it is for
     ("cmake", "cmake", "builds"),
     ("picocom", "picocom", "serial terminal"),
     ("candump", "can-utils", "CAN bus: candump, cansend, canplayer, cansniffer"),
+    ("tio", "tio", "serial / RS-485 terminal (reconnects when the adapter comes back)"),
+    ("minicom", "minicom", "serial terminal"),
+    ("wireshark", "wireshark", "captures: SocketCAN, USB, network"),
+    ("avrdude", "avrdude", "AVR flashing"),
+    ("i2cdetect", "i2c-tools", "I2C buses: detect, read, write"),
 )
 # a vendor's IDE: its key, its name, the program to look for, the folders it may be under, how its downloaded file
 # is recognised and which script inside an archive is its installer (regular expressions on the lower-case file
@@ -2492,6 +2546,82 @@ def can_rate(v):
     return n
 
 
+def sys_read(path):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def dev_what(devdir):
+    """(driver, product) of a device of /sys (a network interface's or a tty's "device"): the USB product's name when
+    it is a USB device"""
+    drv = os.path.basename(os.path.realpath(os.path.join(devdir, "driver"))) if os.path.exists(os.path.join(devdir, "driver")) else ""
+    prod = ""
+    d = os.path.realpath(devdir)
+    for _ in range(4):                              # the USB device is a parent of its interface
+        prod = sys_read(os.path.join(d, "product"))
+        if prod:
+            maker = sys_read(os.path.join(d, "manufacturer"))
+            prod = (maker + " " + prod).strip() if maker and maker.split()[0].lower() not in prod.lower() else prod
+            break
+        d = os.path.dirname(d)
+    return drv, prod
+
+
+CAN_FD_RATES = (1000000, 2000000, 4000000, 5000000, 8000000)
+
+
+def can_fd_rate(v):
+    t = v.strip().lower()
+    mult = 1000 if t.endswith("k") else 1000000 if t.endswith("m") else 1
+    try:
+        n = int(float(t.rstrip("km")) * mult)
+    except ValueError:
+        raise argparse.ArgumentTypeError("not a bit rate: %s (e.g. 2M)" % v)
+    if n not in CAN_FD_RATES:
+        raise argparse.ArgumentTypeError("%s: CAN FD data bit rates here are 1M, 2M, 4M, 5M, 8M" % v)
+    return n
+
+
+def serial_ports():
+    """[(device, stable name or '', driver, product)] of the serial ports that have a device behind them: USB adapters
+    (ttyUSB: FTDI, CP210x, CH340, PL2303; RS-232 or RS-485), boards' virtual COM ports (ttyACM: ST-LINK, Nucleo, CDC
+    ACM), and the machine's own UARTs that answer (ttyS with a driver other than the placeholder)"""
+    byid = {}
+    for d in ("/dev/serial/by-id",):
+        for f in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+            byid[os.path.realpath(os.path.join(d, f))] = os.path.join(d, f)
+    out = []
+    for name in sorted(os.listdir("/sys/class/tty")) if os.path.isdir("/sys/class/tty") else []:
+        if not re.match(r"^tty(USB|ACM|S|AMA|THS)\d+$", name):
+            continue
+        devdir = os.path.join("/sys/class/tty", name, "device")
+        if not os.path.exists(devdir):
+            continue
+        drv, prod = dev_what(devdir)
+        if name.startswith("ttyS") and sys_read(os.path.join("/sys/class/tty", name, "type")) in ("", "0"):
+            continue                                # (the 8250 driver's placeholders: no UART behind them, type 0)
+        dev = "/dev/" + name
+        out.append((dev, byid.get(dev, ""), drv, prod))
+    return out
+
+
+def dev_serial(ctx, a):
+    ports = serial_ports()
+    if a.json:
+        print(json.dumps([{"device": d, "by_id": b or None, "driver": dr or None, "product": p or None} for d, b, dr, p in ports]))
+        return 0 if ports else 1
+    if not ports:
+        print("no serial ports: plug in an adapter or a board (they appear as /dev/ttyUSB* or /dev/ttyACM*)")
+        return 1
+    for dev, byid, drv, prod in ports:
+        print("%-14s %-30s %s" % (dev, prod or "-", "(%s)%s" % (drv, "  " + byid if byid else "") if drv else byid))
+    print("open one: tio %s  (or picocom -b 115200, minicom -D); Modbus RTU over RS-485: libmodbus, pyserial" % ports[0][0])
+    return 0
+
+
 def can_links(ctx):
     """[(name, state, bitrate or None)] of the CAN interfaces of this system"""
     out = ctx.query(["ip", "-details", "-json", "link", "show", "type", "can"])
@@ -2502,7 +2632,8 @@ def can_links(ctx):
     res = []
     for l in links:
         info = ((l.get("linkinfo") or {}).get("info_data") or {})
-        res.append((l.get("ifname"), l.get("operstate", "?"), (info.get("bittiming") or {}).get("bitrate")))
+        res.append((l.get("ifname"), l.get("operstate", "?"), (info.get("bittiming") or {}).get("bitrate"),
+                    (info.get("data_bittiming") or {}).get("bitrate")))
     return res
 
 
@@ -2512,8 +2643,11 @@ def dev_can(ctx, a):
         if not links:
             print("no CAN interfaces: plug in an adapter (candleLight / CANable, PCAN-USB, slcan); `ip link` shows it as can0")
             return 1
-        for name, state, rate in links:
-            print("%-8s %-6s %s" % (name, state.lower(), "%d bit/s" % rate if rate else "bit rate not set"))
+        for name, state, rate, drate in links:
+            drv, prod = dev_what(os.path.join("/sys/class/net", name, "device"))
+            print("%-8s %-6s %-22s %s" % (name, state.lower(),
+                                          ("%d bit/s" % rate if rate else "bit rate not set") + (", data %d" % drate if drate else ""),
+                                          " ".join(x for x in (prod, "(%s)" % drv if drv else "") if x)))
         return 0
     if not a.iface or not valid_name(a.iface):
         die("silik dev can %s IFACE%s" % (a.action, " BITRATE" if a.action == "up" else ""), 2)
@@ -2521,9 +2655,17 @@ def dev_can(ctx, a):
     if a.action == "up":
         if not a.bitrate:
             die("silik dev can up IFACE BITRATE (e.g. 500k, 1M)", 2)
-        ctx.run(["sudo", "ip", "link", "set", a.iface, "type", "can", "bitrate", str(a.bitrate)])
+        argv = ["sudo", "ip", "link", "set", a.iface, "type", "can", "bitrate", str(a.bitrate)]
+        if a.fd:                                    # CAN FD: the data phase's bit rate (PCAN-USB FD, Kvaser, gs_usb FD...)
+            argv += ["dbitrate", str(a.fd), "fd", "on"]
+        if a.listen:                                # listen only: the adapter never sends, not even an acknowledgement
+            argv += ["listen-only", "on"]
+        argv += ["restart-ms", "100"]               # (back from bus-off by itself)
+        ctx.run(argv)
         ctx.run(["sudo", "ip", "link", "set", a.iface, "up"])
-        print("%s up at %d bit/s: `candump %s` shows its frames, `cansend %s 123#DEADBEEF` sends one" % (a.iface, a.bitrate, a.iface, a.iface))
+        print("%s up at %d bit/s%s%s: `candump %s` shows its frames, `cansend %s 123#DEADBEEF` sends one%s"
+              % (a.iface, a.bitrate, ", data %d bit/s (FD)" % a.fd if a.fd else "", ", listening only" if a.listen else "",
+                 a.iface, a.iface, " (an FD frame: 123##1DEADBEEF)" if a.fd else ""))
     return 0
 
 
@@ -2908,7 +3050,12 @@ def parser():
     x.add_argument("job", nargs="?", default="all"); x.set_defaults(fn=dev_try)
     x = d.add_parser("can", help="CAN interfaces: list them; up IFACE BITRATE; down IFACE")
     x.add_argument("action", nargs="?", choices=["list", "up", "down"]); x.add_argument("iface", nargs="?")
-    x.add_argument("bitrate", nargs="?", type=can_rate); x.set_defaults(fn=dev_can)
+    x.add_argument("bitrate", nargs="?", type=can_rate)
+    x.add_argument("--fd", type=can_fd_rate, help="CAN FD: the data phase's bit rate (1M, 2M, 4M, 5M, 8M)")
+    x.add_argument("--listen", action="store_true", help="listen only: never send, not even an acknowledgement")
+    x.set_defaults(fn=dev_can)
+    x = d.add_parser("serial", help="the serial ports (USB adapters, RS-232 / RS-485, boards' virtual COM ports) and what they are")
+    x.add_argument("--json", action="store_true"); x.set_defaults(fn=dev_serial)
     x = d.add_parser("install", help="runs the installer of STM32CubeIDE or Code Composer Studio that you downloaded (FILE: .zip, .sh or .run)")
     x.add_argument("file"); x.set_defaults(fn=dev_install)
     w = s.add_parser("win", help="Windows programs: Wine prefixes and a Windows virtual machine").add_subparsers(dest="cmd")
@@ -2932,6 +3079,9 @@ def parser():
     x.add_argument("--os-variant", default="win11"); x.set_defaults(fn=vm_create)
     x = v.add_parser("start"); x.add_argument("name", nargs="?", default="windows"); x.set_defaults(fn=vm_start)
     x = v.add_parser("stop"); x.add_argument("name", nargs="?", default="windows"); x.set_defaults(fn=vm_stop)
+    x = v.add_parser("usb", help="USB devices for the VM: list; attach VID:PID; detach VID:PID (e.g. a Vector VN1630, whose driver is Windows-only)")
+    x.add_argument("action", nargs="?", choices=["attach", "detach"]); x.add_argument("id", nargs="?")
+    x.add_argument("--name", default="windows"); x.set_defaults(fn=vm_usb)
     x = v.add_parser("app"); x.add_argument("--exe", required=True); x.add_argument("--user", required=True)
     x.add_argument("--host", default="127.0.0.1:3389"); x.set_defaults(fn=vm_app)
 
