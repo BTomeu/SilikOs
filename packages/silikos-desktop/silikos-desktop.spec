@@ -1,5 +1,5 @@
 Name:           silikos-desktop
-Version:        0.14.3
+Version:        0.15.0
 Release:        1%{?dist}
 Summary:        The SilikOS desktop: the Silik layout and the Flow looks (bar, island), its accents, GTK and shell themes, Cascadia Mono
 License:        LicenseRef-SilikVolt AND OFL-1.1
@@ -21,6 +21,9 @@ Requires(post): python3-gobject
 Requires(post): gtk3
 # the clock's colon (U+2236) and other signs Cascadia Mono does not carry fall back to DejaVu
 Requires:       dejavu-sans-fonts
+# Qt 5 programs take the accent's palette through qt5ct (EPEL; 61-silikos-qt.conf). Recommended, not required: EPEL's
+# build asks for exactly the base's qt5-qtbase (5.15.9), and without it Qt 5 programs fall back to Qt's GTK theme
+Recommends:     qt5ct
 # /etc/dconf/profile/user (user-db:user, system-db:local) is the dconf package's own file on EL9
 Requires:       dconf
 Requires(post): dconf
@@ -35,7 +38,8 @@ silik (the title bar is the command line, a text rail of keys, a status bar), ba
 applications as icons) and island (one floating piece centred at the bottom, the default). The key "accent" (`silik look --accent`)
 gives one colour to what is selected, focused, on or running: ink (none, the default), steel, cobalt, silicon, volt
 or spark; NAME-vivid also gives the title bars a deep tone of it. The GTK and shell themes of each, SilikOS-NAME, are
-made on the system beside SilikOS.
+made on the system beside SilikOS. Qt 5 programs take the accent's palette through qt5ct, Qt 6 programs through
+Qt's own GTK theme.
 
 %install
 install -Dm0644 %{_sourcedir}/00-silikos %{buildroot}%{_sysconfdir}/dconf/db/local.d/00-silikos
@@ -46,6 +50,11 @@ install -Dm0755 %{_sourcedir}/resource-extract %{buildroot}%{_libexecdir}/siliko
 install -Dm0644 %{_sourcedir}/silikos-themes.service %{buildroot}%{_prefix}/lib/systemd/system/silikos-themes.service
 # the shell's default stylesheet is ours also on the lock and login screens (environment of every session manager)
 install -Dm0644 %{_sourcedir}/60-silikos-shell.conf %{buildroot}%{_prefix}/lib/environment.d/60-silikos-shell.conf
+# Qt 5 programs: qt5ct as their platform theme, its starting configuration (qt5ct copies it to a user's
+# ~/.config/qt5ct/ the first time), and the palette of each accent (tools/gen_accents.py: qt/<accent>.conf)
+install -Dm0644 %{_sourcedir}/61-silikos-qt.conf %{buildroot}%{_prefix}/lib/environment.d/61-silikos-qt.conf
+install -Dm0644 %{_sourcedir}/qt5ct.conf %{buildroot}%{_sysconfdir}/xdg/qt5ct/qt5ct.conf
+for f in %{_sourcedir}/qt/*.conf; do install -Dm0644 "$f" %{buildroot}%{_datadir}/silikos/qt/${f##*/}; done
 install -Dm0644 %{_sourcedir}/gtk-theme.sed %{buildroot}%{_datadir}/silikos/gtk-theme.sed
 install -Dm0644 %{_sourcedir}/silik-gtk3.css %{buildroot}%{_datadir}/silikos/silik-gtk3.css
 printf '[Desktop Entry]\nType=X-GNOME-Metatheme\nName=SilikOS\nComment=One ink on paper\nEncoding=UTF-8\n\n[X-GNOME-Metatheme]\nGtkTheme=SilikOS\n' > %{buildroot}%{_datadir}/themes/SilikOS/index.theme
@@ -158,6 +167,9 @@ dconf update >/dev/null 2>&1 || :
 %{_libexecdir}/silikos/resource-extract
 %{_prefix}/lib/systemd/system/silikos-themes.service
 %{_prefix}/lib/environment.d/60-silikos-shell.conf
+%{_prefix}/lib/environment.d/61-silikos-qt.conf
+%dir %{_sysconfdir}/xdg/qt5ct
+%config(noreplace) %{_sysconfdir}/xdg/qt5ct/qt5ct.conf
 %{_datadir}/silikos/
 %{_datadir}/gnome-shell/extensions/silik-shell@silikvolt.com/
 %{_datadir}/glib-2.0/schemas/com.silikvolt.silikos.shell.gschema.xml

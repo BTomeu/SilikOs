@@ -32,14 +32,18 @@ class Generated(unittest.TestCase):
         for path, body in gen.outputs().items():
             self.assertTrue(os.path.exists(path), path)
             self.assertEqual(text(path), body, "%s is not what tools/gen_accents.py makes" % os.path.relpath(path, ROOT))
-        made = {os.path.basename(p) for p in gen.outputs()}
-        self.assertEqual(sorted(os.listdir(os.path.join(FILES, "accents"))), sorted(m for m in made if not m.startswith("accent-")))
+        def made(d):
+            return sorted(os.path.basename(p) for p in gen.outputs() if os.path.dirname(p) == os.path.join(FILES, d))
+        self.assertEqual(sorted(os.listdir(os.path.join(FILES, "accents"))), made("accents"))
+        self.assertEqual(sorted(os.listdir(os.path.join(FILES, "qt"))), made("qt"))
         self.assertEqual(sorted(f for f in os.listdir(os.path.join(FILES, "shell-ext")) if f.startswith("accent-")),
-                         sorted(m for m in made if m.startswith("accent-")))
+                         made("shell-ext"))
 
     def test_ink_first_and_no_file_for_it(self):
+        """(but Qt's palette: Qt 5 has no SilikOS of its own to fall back on, the ink is a scheme like the others)"""
         self.assertEqual(gen.ACCENTS[0][0], "ink")
-        self.assertFalse([p for p in gen.outputs() if "ink." in os.path.basename(p) or "-ink." in p])
+        self.assertFalse([p for p in gen.outputs() if ("ink." in os.path.basename(p) or "-ink." in p) and os.path.dirname(p) != gen.QT])
+        self.assertEqual(sorted(os.path.basename(p)[:-5] for p in gen.outputs() if os.path.dirname(p) == gen.QT), sorted(IDS))
 
     def test_a_vivid_level_for_each_accent_that_takes_paper_text(self):
         for ident, a, vivid, _ in gen.ACCENTS[1:]:
@@ -275,6 +279,122 @@ class Look(unittest.TestCase):
         self.assertIn("next login", outs[0])            # volt -> volt-vivid
         self.assertIn("next login", outs[1])            # volt-vivid -> cobalt
         self.assertNotIn("next login", outs[2])         # cobalt -> volt
+
+
+def qt_lists(path):
+    """{group: [colour per role]} of a qt5ct colour scheme"""
+    out = {}
+    for line in text(path).splitlines():
+        m = re.match(r"^(active|disabled|inactive)_colors=(.*)$", line)
+        if m:
+            out[m.group(1)] = [c.strip() for c in m.group(2).split(",")]
+    return out
+
+
+class Qt(unittest.TestCase):
+    """Qt 5 programs: qt5ct with the accent's palette (Qt 5's GTK theme reads no colours); Qt 6 programs: Qt 6's GTK
+    theme, which reads the GTK theme's. What they look like was seen in the rig (docs/STATUS.md)"""
+
+    def test_a_scheme_per_accent_with_the_accent_as_the_selection(self):
+        role = {r: i for i, r in enumerate(gen.QT_ROLES)}
+        self.assertEqual(len(gen.QT_ROLES), 21)
+        shades = dict([("ink", gen.INK_SHADES)] + [(n, sh) for n, sh, _ in gen.variants()])
+        for ident in IDS:
+            lists = qt_lists(os.path.join(FILES, "qt", ident + ".conf"))
+            self.assertEqual(sorted(lists), ["active", "disabled", "inactive"], ident)
+            for g, cs in lists.items():
+                self.assertEqual(len(cs), 21, (ident, g))
+                self.assertTrue(all(re.match(r"^#[0-9a-f]{6}$", c) for c in cs), (ident, g))
+            a = lists["active"]
+            self.assertEqual(a[role["Highlight"]], shades[ident]["accent"], ident)
+            self.assertEqual(a[role["Window"]], gen.PAPER)
+            # what is read: text on the field and on paper, text on the selection, links on paper, tooltips
+            for fg, bg in (("Text", "Base"), ("WindowText", "Window"), ("ButtonText", "Button"), ("HighlightedText", "Highlight"),
+                           ("Link", "Window"), ("ToolTipText", "ToolTipBase")):
+                self.assertGreaterEqual(gen.contrast(a[role[fg]], a[role[bg]]), 4.5, (ident, fg, bg))
+        self.assertEqual(qt_lists(os.path.join(FILES, "qt", "ink.conf"))["active"][role["Highlight"]], gen.INK)
+
+    def test_the_starting_configuration(self):
+        conf = text(os.path.join(FILES, "qt5ct.conf"))
+        self.assertIn("\ncolor_scheme_path=/usr/share/silikos/qt/ink.conf\n", conf)
+        self.assertIn("\ncustom_palette=true\n", conf)
+        self.assertIn("\nicon_theme=SilikOS\n", conf)
+        self.assertIn("\nstandard_dialogs=gtk3\n", conf)          # GTK's file dialogs, as Qt's GTK theme gave them
+        self.assertIn('\ngeneral="Cascadia Mono,10,', conf)          # the desktop's font (00-silikos)
+        self.assertIn("font-name='Cascadia Mono 10'", text(os.path.join(FILES, "00-silikos")))
+        self.assertEqual(silik.QT_SCHEMES, "/usr/share/silikos/qt")
+        self.assertEqual(silik.QT5CT_GLOBAL, "/etc/xdg/qt5ct/qt5ct.conf")
+
+    def test_the_session_and_the_package(self):
+        env = text(os.path.join(FILES, "61-silikos-qt.conf"))
+        self.assertEqual([l for l in env.splitlines() if l and not l.startswith("#")], ["QT_QPA_PLATFORMTHEME=qt5ct"])
+        spec = text(os.path.join(ROOT, "packages", "silikos-desktop", "silikos-desktop.spec"))
+        self.assertIn("\nRecommends:     qt5ct\n", spec)
+        self.assertIn("%{_prefix}/lib/environment.d/61-silikos-qt.conf\n", spec)
+        self.assertIn("%config(noreplace) %{_sysconfdir}/xdg/qt5ct/qt5ct.conf\n", spec)
+        self.assertIn("%{_sourcedir}/qt/*.conf", spec)
+
+    def test_the_users_file_changes_only_its_appearance(self):
+        before = "; a note\n[Appearance]\nstyle=kvantum\ncolor_scheme_path=/x.conf\n\n[Fonts]\ngeneral=\"A,9\"\n"
+        after = silik.qt5ct_conf(before, {"custom_palette": "true", "color_scheme_path": "/y.conf"})
+        self.assertEqual(after, "; a note\n[Appearance]\nstyle=kvantum\ncolor_scheme_path=/y.conf\ncustom_palette=true\n\n"
+                                "[Fonts]\ngeneral=\"A,9\"\n")
+        self.assertEqual(silik.qt5ct_conf("", {"icon_theme": "SilikOS"}), "[Appearance]\nicon_theme=SilikOS\n")
+        self.assertEqual(silik.qt5ct_conf("[Fonts]\nfixed=x\n", {"icon_theme": "S"}), "[Fonts]\nfixed=x\n\n[Appearance]\nicon_theme=S\n")
+
+    def test_look_writes_the_users_file(self):
+        """made from the starting configuration the first time, then only its palette and icons change; renamed into
+        place (qt5ct watches the folder); nothing when the accent's scheme is not on the system"""
+        import contextlib
+        import io
+        with tempfile.TemporaryDirectory() as d:
+            store = os.path.join(d, "store")
+            os.makedirs(store)
+            exe = os.path.join(d, "gsettings")
+            with open(exe, "w") as f:
+                f.write('#!/bin/sh\nk="$2.$3"\nif [ "$1" = set ]; then echo "\'$4\'" > "%s/$k"; exit 0; fi\n'
+                        'cat "%s/$k" 2>/dev/null || echo "\'island\'"\n' % (store, store))
+            os.chmod(exe, 0o755)
+            with open(os.path.join(store, "com.silikvolt.silikos.shell.accent"), "w") as f:
+                f.write("'ink'\n")
+            for t in ("SilikOS", "SilikOS-cobalt"):
+                for sub in ("gtk-3.0/gtk.css", "gnome-shell/gnome-shell.css"):
+                    os.makedirs(os.path.dirname(os.path.join(d, "themes", t, sub)), exist_ok=True)
+                    open(os.path.join(d, "themes", t, sub), "w").close()
+            os.makedirs(os.path.join(d, "icons", "SilikOS-Colour"))
+            saved = (silik.THEMES, silik.ICONS, silik.QT_SCHEMES, silik.QT5CT_GLOBAL, os.environ["PATH"], os.environ.get("XDG_CONFIG_HOME"))
+            silik.THEMES, silik.ICONS = os.path.join(d, "themes"), os.path.join(d, "icons")
+            silik.QT_SCHEMES, silik.QT5CT_GLOBAL = os.path.join(FILES, "qt"), os.path.join(FILES, "qt5ct.conf")
+            os.environ["PATH"], os.environ["XDG_CONFIG_HOME"] = d + os.pathsep + saved[4], os.path.join(d, "cfg")
+            user = os.path.join(d, "cfg", "qt5ct", "qt5ct.conf")
+
+            def look(accent):
+                o = io.StringIO()
+                with contextlib.redirect_stdout(o):
+                    self.assertEqual(silik.main(["look", "--accent", accent]), 0)
+                return [l for l in o.getvalue().splitlines() if not l.startswith("$ ")]
+            try:
+                self.assertEqual(look("cobalt"), ["+ %s  (Qt 5 programs: color_scheme_path=%s icon_theme=SilikOS-Colour)"
+                                                  % (user, os.path.join(FILES, "qt", "cobalt.conf"))])
+                self.assertEqual(text(user), text(os.path.join(FILES, "qt5ct.conf"))
+                                 .replace("/usr/share/silikos/qt/ink.conf", os.path.join(FILES, "qt", "cobalt.conf"))
+                                 .replace("icon_theme=SilikOS\n", "icon_theme=SilikOS-Colour\n"))
+                with open(user, "a") as f:
+                    f.write("\n[Interface]\nmenus_have_icons=false\n")        # (the user's own, kept)
+                self.assertEqual(look("ink")[0][:2], "~ ")
+                self.assertIn("color_scheme_path=%s\n" % os.path.join(FILES, "qt", "ink.conf"), text(user))
+                self.assertIn("icon_theme=SilikOS\n", text(user))
+                self.assertIn("\n[Interface]\nmenus_have_icons=false\n", text(user))
+                self.assertEqual(look("ink"), [])                                # (as it is: not written again)
+                self.assertEqual(os.listdir(os.path.dirname(user)), ["qt5ct.conf"])
+                silik.QT_SCHEMES = os.path.join(d, "none")
+                self.assertEqual(look("cobalt"), [])
+            finally:
+                silik.THEMES, silik.ICONS, silik.QT_SCHEMES, silik.QT5CT_GLOBAL, os.environ["PATH"] = saved[:5]
+                if saved[5] is None:
+                    os.environ.pop("XDG_CONFIG_HOME")
+                else:
+                    os.environ["XDG_CONFIG_HOME"] = saved[5]
 
 
 def run_dry(*argv):

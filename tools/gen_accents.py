@@ -27,7 +27,9 @@ From the table below this writes, for each accent but the ink, and for each vivi
                            than the extension's own (seen in GNOME Shell 40, 11/11/2026: a stylesheet loaded later does
                            not win over an earlier one at the same specificity; one class more does); for a vivid level
                            also the top bar
-and accents/accents, the table. gtk-theme and shell-theme make the themes SilikOS-<id> on the system from the
+and accents/accents, the table; and for every accent, the ink too, qt/<id>.conf: the palette of Qt 5 programs (a
+qt5ct colour scheme, Fusion's roles from the GTK sheet's colours; Qt 5's GTK platform theme reads fonts and icons from
+GTK, never its colours). gtk-theme and shell-theme make the themes SilikOS-<id> on the system from the
 installed stylesheets; `silik look --accent ID` chooses one.
 
     python3 tools/gen_accents.py          (Python 3 standard library)
@@ -38,6 +40,7 @@ import re
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FILES = os.path.join(ROOT, "packages", "silikos-desktop", "files")
 OUT = os.path.join(FILES, "accents")
+QT = os.path.join(FILES, "qt")
 EXT = os.path.join(FILES, "shell-ext")
 PAPER, INK = "#f7f6f3", "#1a1b1e"
 
@@ -237,6 +240,39 @@ def ext_css(sh, ch, name):
     return "\n".join(out) + "\n"
 
 
+# silik-gtk3.css's surfaces (Qt draws them through these roles): field (inputs, lists), paper2 (bars, read-only,
+# disabled), control borders, hairlines, muted text
+FIELD, PAPER2, CTL, RULE, MUTED = "#fcfbf9", "#eeede9", "#8a8b8f", "#dcdad5", "#6b6d72"
+# QPalette's colour roles in Qt's order, which a qt5ct scheme's lists follow
+QT_ROLES = ("WindowText", "Button", "Light", "Midlight", "Dark", "Mid", "Text", "BrightText", "ButtonText", "Base", "Window",
+            "Shadow", "Highlight", "HighlightedText", "Link", "LinkVisited", "AlternateBase", "NoRole", "ToolTipBase",
+            "ToolTipText", "PlaceholderText")
+# the ink look's shades (the table's first row)
+INK_SHADES = {"accent": INK, "hover": "#2c2e32", "mid": "#b9b8b3", "tint": "#ecebe7", "on": PAPER, "muted": "#b9b8b3", "line": INK}
+
+
+def qt_palette(sh):
+    """{group: {role: colour}}: the GTK sheet's colours in Qt's roles. The selection is the accent with its text (in
+    ink: inverse video), links the accent as a line; buttons are paper keys with a control edge, lists the field,
+    tooltips ink"""
+    active = {"WindowText": INK, "Button": PAPER, "Light": "#ffffff", "Midlight": FIELD, "Dark": CTL, "Mid": RULE,
+              "Text": INK, "BrightText": "#ffffff", "ButtonText": INK, "Base": FIELD, "Window": PAPER, "Shadow": MUTED,
+              "Highlight": sh["accent"], "HighlightedText": sh["on"], "Link": sh["line"], "LinkVisited": sh["line"],
+              "AlternateBase": PAPER, "NoRole": "#000000", "ToolTipBase": INK, "ToolTipText": PAPER, "PlaceholderText": MUTED}
+    disabled = dict(active, WindowText=MUTED, Text=MUTED, ButtonText=MUTED, Button=PAPER2, Base=PAPER2, Highlight=sh["mid"],
+                    Link=MUTED, LinkVisited=MUTED)
+    return {"active": active, "inactive": dict(active), "disabled": disabled}
+
+
+def qt_scheme(sh, name):
+    pal = qt_palette(sh)
+    out = ["# SilikOS accent %s for Qt 5 programs (tools/gen_accents.py; do not edit): a qt5ct colour scheme, the roles in" % name,
+           "# Qt's order: %s" % ", ".join(QT_ROLES), "[ColorScheme]"]
+    for g in ("active", "disabled", "inactive"):
+        out.append("%s_colors=%s" % (g, ", ".join(pal[g][r] for r in QT_ROLES)))
+    return "\n".join(out) + "\n"
+
+
 def table():
     out = ["# The accents of the SilikOS desktop (tools/gen_accents.py; do not edit). ink: the look without an accent;",
            "# NAME-vivid: the same accent with its title bar. name accent hover mid tint on-it muted-on-it line title-bar",
@@ -253,13 +289,16 @@ def outputs():
         files[os.path.join(OUT, name + ".gtk.sed")] = gtk_sed(sh, ch, name)
         files[os.path.join(OUT, name + ".shell.sed")] = shell_sed(sh, name)
         files[os.path.join(EXT, "accent-%s.css" % name)] = ext_css(sh, ch, name)
+    for name, sh in [("ink", INK_SHADES)] + [(n, sh) for n, sh, _ in variants()]:
+        files[os.path.join(QT, name + ".conf")] = qt_scheme(sh, name)
     return files
 
 
 def main():
-    os.makedirs(OUT, exist_ok=True)
-    for f in os.listdir(OUT):                       # (an accent that left the table leaves no file behind)
-        os.remove(os.path.join(OUT, f))
+    for d in (OUT, QT):
+        os.makedirs(d, exist_ok=True)
+        for f in os.listdir(d):                     # (an accent that left the table leaves no file behind)
+            os.remove(os.path.join(d, f))
     for f in os.listdir(EXT):
         if f.startswith("accent-"):
             os.remove(os.path.join(EXT, f))
