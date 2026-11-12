@@ -91,9 +91,9 @@ class Extension(unittest.TestCase):
     def test_the_session_keys_are_commands_of_silik(self):
         self.assertIn("'silik session ' + what", self.ext)
         self.assertIn("for (const k of ['lock', 'logout', 'off'])", self.ext)
-        for js in (self.ext, self.flow):                             # nothing else is started but the COMMAND bar
+        for js in (self.ext, self.flow):                             # nothing else is started but the COMMAND bar and silik
             for cmd in re.findall(r"spawn_command_line_async\(([^)]*)\)", js):
-                self.assertIn(cmd, ("'silik-command'", "'silik session ' + what"))
+                self.assertIn(cmd, ("'silik-command'", "'silik session ' + what", "'silik look --qt -q'"))
             self.assertNotIn("systemctl", js)
             self.assertNotIn("gnome-session-quit", js)
 

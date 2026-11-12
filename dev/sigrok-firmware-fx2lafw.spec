@@ -43,3 +43,4 @@ test -f %{buildroot}%{_datadir}/sigrok-firmware/fx2lafw-cypress-fx2.fw
 %filelist
 
 %files -f %{_builddir}/%{name}-files.list
+%dir %{_datadir}/sigrok-firmware

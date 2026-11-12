@@ -3,14 +3,15 @@
 # built from upstream's source at the tag written there (dev/NAME.spec), the way tools/build_eda.sh builds the EDA
 # tools. Run ON EL 9 (or in an `almalinux:9` container) as root or with sudo: it installs the build dependencies with
 # dnf (CRB enabled; EPEL when the recipe says "# needs: epel"; packages of ours when it says "# uses: A B ...":
-# from build/deps/ or build/extra/, else from the release dev-tools). A recipe's "# archive: URL SHA256" lines are
-# further release archives it builds with, checked by their sha256. Nothing of the sources is kept in this repository.
+# built first, at the version of dev/versions: from build/extra/ or build/deps/). A release archive is checked against
+# the sha256 written in dev/versions; a recipe's "# archive: URL SHA256" lines are further release archives it builds
+# with, checked by their sha256 too. Nothing of the sources is kept in this repository.
 # tools/build_iso.sh puts every build/extra/*.rpm into the ISO.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 name=${1:?usage: tools/build_dev.sh NAME (a line of dev/versions)}
 line=$(grep -E "^$name[[:space:]]" "$root/dev/versions") || { echo "error: $name is not in dev/versions" >&2; exit 2; }
-url=$(echo "$line" | awk '{print $2}'); tag=$(echo "$line" | awk '{print $3}'); archive=$(echo "$line" | awk '{print $4}')
+url=$(echo "$line" | awk '{print $2}'); tag=$(echo "$line" | awk '{print $3}'); archive=$(echo "$line" | awk '{print $4}'); asha=$(echo "$line" | awk '{print $5}')
 grep -q 'platform:el9' /etc/os-release || { echo "error: this builds on EL 9 only (binary compatibility with the base)" >&2; exit 2; }
 sudo=""; [ "$(id -u)" = 0 ] || sudo=sudo
 $sudo dnf -y -q install dnf-plugins-core rpm-build git tar gzip findutils
@@ -37,8 +38,10 @@ elif [ "$url" = pypi ]; then   # a set of PyPI's source archives: the pinned lis
   echo "source: PyPI, $(grep -c -- '--hash=sha256:' "$root/dev/pylab-requirements.txt") archives pinned with their sha256"
 elif [ -n "$archive" ]; then   # upstream's release archive of that version (kept as NAME-VER.tar.gz, .tar.bz2, .tar.xz)
   ext=tar.gz; case $archive in *.tar.bz2) ext=tar.bz2 ;; *.tar.xz) ext=tar.xz ;; esac
+  [[ "$asha" =~ ^[0-9a-f]{64}$ ]] || { echo "error: dev/versions gives no sha256 for $name's archive (a fifth field)" >&2; exit 2; }
   curl -fL --retry 3 -o "$top/SOURCES/$name-$ver.$ext" "${archive//\{ver\}/$ver}"
-  echo "source: ${archive//\{ver\}/$ver}  sha256 $(sha256sum "$top/SOURCES/$name-$ver.$ext" | cut -d' ' -f1)"
+  echo "$asha  $top/SOURCES/$name-$ver.$ext" | sha256sum -c --quiet - || { echo "error: ${archive//\{ver\}/$ver} is not the archive of sha256 $asha" >&2; exit 1; }
+  echo "source: ${archive//\{ver\}/$ver}  sha256 $asha"
 else
   git clone -q --depth 1 -b "$tag" "$url" "$top/src/$name-$ver"
   echo "source: $url at $tag ($(git -C "$top/src/$name-$ver" rev-parse HEAD))"
@@ -56,16 +59,13 @@ rm -rf "$top/src"
 done
 defs=(--define "upver $ver" --define "_specdir_eda $root/eda")
 uses=$(sed -n 's/^# uses: *//p' "$root/dev/$name.spec")
-if [ -n "$uses" ]; then   # packages of ours the build needs (dev/A.spec ...): the ones of this run, else the release's
-  mkdir -p "$root/build/deps"; got=()
+if [ -n "$uses" ]; then   # packages of ours the build needs (dev/A.spec ...), built first at dev/versions' version:
+  got=()                  # this machine's build/extra, else build/deps (where the workflow puts the build job's)
   for u in $uses; do
-    f=$(ls "$root"/build/deps/"$u"-[0-9]*.rpm "$root"/build/extra/"$u"-[0-9]*.rpm 2> /dev/null | head -1 || true)
-    if [ -z "$f" ]; then
-      rel=${SILIK_DEV_REPO:-BTomeu/SilikOs}
-      asset=$(curl -fsSL --retry 3 "https://api.github.com/repos/$rel/releases/tags/dev-tools" | grep -o "\"browser_download_url\": *\"[^\"]*/$u-[0-9][^\"]*\\.rpm\"" | sed 's/.*"\(https[^"]*\)"/\1/' | head -1)
-      [ -n "$asset" ] || { echo "error: $name needs our package $u: not in build/deps, build/extra or the release dev-tools of $rel" >&2; exit 1; }
-      f=$root/build/deps/$(basename "$asset"); curl -fL --retry 3 -o "$f" "$asset"
-    fi
+    uver=$(grep -E "^$u[[:space:]]" "$root/dev/versions" | awk '{print $3}'); uver=${uver#[vV]}
+    [ -n "$uver" ] || { echo "error: $name uses $u, which is not in dev/versions" >&2; exit 2; }
+    f=$(ls "$root"/build/extra/"$u-$uver"-*.rpm "$root"/build/deps/"$u-$uver"-*.rpm 2> /dev/null | head -1 || true)
+    [ -n "$f" ] || { echo "error: $name needs our package $u $uver: build it first (tools/build_dev.sh $u)" >&2; exit 1; }
     echo "uses: $(basename "$f")"; got+=("$f")
   done
   $sudo dnf -y -q install "${got[@]}"

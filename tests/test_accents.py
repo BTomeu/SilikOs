@@ -362,8 +362,12 @@ class Qt(unittest.TestCase):
                     os.makedirs(os.path.dirname(os.path.join(d, "themes", t, sub)), exist_ok=True)
                     open(os.path.join(d, "themes", t, sub), "w").close()
             os.makedirs(os.path.join(d, "icons", "SilikOS-Colour"))
-            saved = (silik.THEMES, silik.ICONS, silik.QT_SCHEMES, silik.QT5CT_GLOBAL, os.environ["PATH"], os.environ.get("XDG_CONFIG_HOME"))
+            saved = (silik.THEMES, silik.ICONS, silik.QT_SCHEMES, silik.QT5CT_GLOBAL, os.environ["PATH"], os.environ.get("XDG_CONFIG_HOME"),
+                     silik.QT5CT_PLUGIN_DIRS)
             silik.THEMES, silik.ICONS = os.path.join(d, "themes"), os.path.join(d, "icons")
+            silik.QT5CT_PLUGIN_DIRS = (os.path.join(d, "plugins"),)
+            os.makedirs(os.path.join(d, "plugins"))
+            open(os.path.join(d, "plugins", "libqt5ct.so"), "w").close()
             silik.QT_SCHEMES, silik.QT5CT_GLOBAL = os.path.join(FILES, "qt"), os.path.join(FILES, "qt5ct.conf")
             os.environ["PATH"], os.environ["XDG_CONFIG_HOME"] = d + os.pathsep + saved[4], os.path.join(d, "cfg")
             user = os.path.join(d, "cfg", "qt5ct", "qt5ct.conf")
@@ -387,10 +391,35 @@ class Qt(unittest.TestCase):
                 self.assertIn("\n[Interface]\nmenus_have_icons=false\n", text(user))
                 self.assertEqual(look("ink"), [])                                # (as it is: not written again)
                 self.assertEqual(os.listdir(os.path.dirname(user)), ["qt5ct.conf"])
-                silik.QT_SCHEMES = os.path.join(d, "none")
+                with open(os.path.join(store, "com.silikvolt.silikos.shell.accent"), "w") as f:
+                    f.write("'volt'\n")                                      # set with gsettings, not through silik
+                o = io.StringIO()
+                with contextlib.redirect_stdout(o):
+                    self.assertEqual(silik.main(["look", "--qt"]), 0)          # (the shell runs it: login, each change)
+                self.assertIn("color_scheme_path=%s\n" % os.path.join(FILES, "qt", "volt.conf"), text(user))
+                self.assertIn("icon_theme=SilikOS-Colour\n", text(user))
+                with contextlib.redirect_stdout(io.StringIO()) as o2:
+                    silik.main(["look", "--qt"])
+                self.assertEqual(o2.getvalue(), "")                            # (in line: nothing written)
+                with open(os.path.join(store, "com.silikvolt.silikos.shell.accent"), "w") as f:
+                    f.write("'ink'\n")
+                self.assertEqual(look("ink")[0][:2], "~ ")
+                os.unlink(os.path.join(d, "plugins", "libqt5ct.so"))          # qt5ct removed: nothing reads the file
                 self.assertEqual(look("cobalt"), [])
+                open(os.path.join(d, "plugins", "libqt5ct.so"), "w").close()
+                real = os.path.join(d, "dotfiles", "qt5ct.conf")                 # a dotfiles link stays a link
+                os.makedirs(os.path.dirname(real))
+                os.replace(user, real)
+                os.symlink(real, user)
+                self.assertEqual(look("cobalt")[0][:2], "~ ")
+                self.assertTrue(os.path.islink(user))
+                self.assertIn(os.path.join(FILES, "qt", "cobalt.conf"), text(real))
+                self.assertEqual(sorted(os.listdir(os.path.dirname(real))), ["qt5ct.conf"])
+                silik.QT_SCHEMES = os.path.join(d, "none")
+                self.assertEqual(look("ink"), [])
             finally:
                 silik.THEMES, silik.ICONS, silik.QT_SCHEMES, silik.QT5CT_GLOBAL, os.environ["PATH"] = saved[:5]
+                silik.QT5CT_PLUGIN_DIRS = saved[6]
                 if saved[5] is None:
                     os.environ.pop("XDG_CONFIG_HOME")
                 else:

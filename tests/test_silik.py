@@ -220,6 +220,21 @@ class ReviewFindings(unittest.TestCase):
             silik.main(["--dry-run", "win", "open", "x.exe", "-q", "/S"])
         self.assertRegex(out.getvalue(), r"wine \S*x\.exe -q /S")
 
+    def test_a_prefix_value_is_not_the_program(self):
+        """`win open --prefix foo --dry-run x.exe`: foo is the prefix, --dry-run is silik's; an installer keeps its -q"""
+        import contextlib, io
+        for argv, want in ((["win", "open", "--prefix", "foo", "--dry-run", "x.exe"], r"wine \S*x\.exe$"),
+                           (["win", "open", "--prefix", "foo", "--dry-run", "x.exe", "-q"], r"wine \S*x\.exe -q$"),
+                           (["--dry-run", "win", "install", "foo", "setup.exe", "-q", "/S"], r"wine \S*setup\.exe -q /S$"),
+                           (["win", "install", "foo", "--dry-run", "setup.exe", "/S", "-q"], r"wine \S*setup\.exe /S -q$")):
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+                self.assertEqual(silik.main(argv), 0, argv)
+            self.assertRegex(out.getvalue().rstrip().splitlines()[-1], want, argv)
+        with self.assertRaises(SystemExit) as c, contextlib.redirect_stderr(io.StringIO()):
+            silik.main(["--dry-run", "win", "install", "foo", "setup.exe", "--no-net"])   # silik's switch, too late
+        self.assertEqual(c.exception.code, 2)
+
     def test_global_switches_after_the_command(self):
         rc, o = run("look", "bar")
         rc2, o2 = (lambda: silik.main(["look", "bar", "--dry-run"]))(), None

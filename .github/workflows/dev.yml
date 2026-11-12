@@ -52,7 +52,6 @@ jobs:
   # release's when one was not made). fx2lafw's firmware is compiled with our SDCC
   build-uses:
     needs: build
-    if: ${{ !cancelled() }}
     strategy:
       fail-fast: false
       matrix:
@@ -65,8 +64,7 @@ jobs:
         run: dnf -y -q install git tar gzip findutils
       - uses: actions/checkout@v4
         with: { persist-credentials: false }
-      - uses: actions/download-artifact@v4
-        continue-on-error: true
+      - uses: actions/download-artifact@v4      # (the SDCC of this run: build_dev.sh takes no other)
         with: { name: dev-sdcc, path: build/deps }
       - name: Build ${{ matrix.tool }}
         shell: bash

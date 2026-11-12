@@ -2939,6 +2939,7 @@ USER_THEME = "org.gnome.shell.extensions.user-theme"
 # /etc/xdg/qt5ct/qt5ct.conf. The accent's palette is a file of silikos-desktop (tools/gen_accents.py)
 QT_SCHEMES = "/usr/share/silikos/qt"
 QT5CT_GLOBAL = "/etc/xdg/qt5ct/qt5ct.conf"
+QT5CT_PLUGIN_DIRS = tuple(os.environ.get("SILIK_QT5CT_PLUGIN_DIRS", "/usr/lib64/qt5/plugins/platformthemes").split(":"))
 
 
 def qt5ct_conf(text, keys):
@@ -2964,8 +2965,8 @@ def qt_accent(ctx, accent, icons):
     """the user's qt5ct.conf takes the accent's palette and the icon theme (from silikos-desktop's file when the user
     has none yet); a running Qt 5 program follows it at once (qt5ct watches the file)"""
     scheme = os.path.join(QT_SCHEMES, accent + ".conf")
-    if not os.path.isfile(scheme):
-        return
+    if not os.path.isfile(scheme) or not any(os.path.isfile(os.path.join(d, "libqt5ct.so")) for d in QT5CT_PLUGIN_DIRS):
+        return   # (qt5ct is only recommended: without it nothing reads the file)
     path = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "qt5ct", "qt5ct.conf")
     old = read(path, None)
     new = qt5ct_conf(old if old is not None else read(QT5CT_GLOBAL, ""),
@@ -2979,10 +2980,17 @@ def qt_accent(ctx, accent, icons):
     try:
         # written beside it and renamed over it: qt5ct watches the folder, whose entries change only so (a file
         # rewritten in place left running programs as they were, seen in the rig 12/11/2026)
+        path = os.path.realpath(path)   # (a dotfiles link stays a link)
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path + ".silik", "w", encoding="utf-8") as f:
-            f.write(new)
-        os.replace(path + ".silik", path)
+        fd, tmp = tempfile.mkstemp(prefix=".qt5ct.conf.", dir=os.path.dirname(path))
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(new)
+            os.chmod(tmp, 0o644)
+            os.replace(tmp, path)
+        except BaseException:
+            os.unlink(tmp)
+            raise
     except OSError as e:
         die("could not write %s: %s" % (path, e.strerror or e))
 
@@ -3003,7 +3011,18 @@ def accent_theme(ident):
     return "SilikOS" if ident == "ink" else "SilikOS-" + ident
 
 
+def accent_icons(ctx, accent):
+    """the icons: in ink with the ink, with a band of colour per kind of file with an accent (tools/gen_icons.py)"""
+    return "SilikOS" if accent == "ink" or (not ctx.dry and not os.path.isdir(os.path.join(ICONS, "SilikOS-Colour"))) else "SilikOS-Colour"
+
+
 def cmd_look(ctx, a):
+    if a.qt:
+        # Qt 5 programs brought in line with the accent in use (the shell runs it at login and at each change of the
+        # accent: a user's qt5ct.conf seeded from the ink one, or an accent set with gsettings, follows it)
+        acc = accent_now(ctx) or "ink"
+        qt_accent(ctx, acc, accent_icons(ctx, acc))
+        return 0
     now = look_now(ctx)
     if a.which is None and a.accent is None:
         acc = accent_now(ctx) if now else ""
@@ -3043,8 +3062,7 @@ def cmd_look(ctx, a):
         ctx.run(["gsettings", "set", LOOK_SCHEMA, "accent", a.accent])
         ctx.run(["gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", theme])
         ctx.run(["gsettings", "set", USER_THEME, "name", theme])
-        # the icons: in ink with the ink, with a band of colour per kind of file with an accent (tools/gen_icons.py)
-        icons = "SilikOS" if a.accent == "ink" or (not ctx.dry and not os.path.isdir(os.path.join(ICONS, "SilikOS-Colour"))) else "SilikOS-Colour"
+        icons = accent_icons(ctx, a.accent)
         ctx.run(["gsettings", "set", "org.gnome.desktop.interface", "icon-theme", icons])
         if not ctx.dry and accent_now(ctx) != a.accent:
             die("the accent is still %s: run it as the user, in the desktop session (gsettings could not change the setting)" % (accent_now(ctx) or "unknown"))
@@ -3091,6 +3109,7 @@ def parser():
     x = s.add_parser("look", help="the desktop's look: silik | bar | island, and its accent (no argument: which are in use)")
     x.add_argument("which", nargs="?", choices=[k for k, _ in LOOKS])
     x.add_argument("--accent", choices=[k for k, _ in ACCENTS], help="one colour for what is selected, focused, on or running (ink: none)")
+    x.add_argument("--qt", action="store_true", help="Qt 5 programs take the accent in use (the shell runs it)")
     x.add_argument("--json", action="store_true"); x.set_defaults(fn=cmd_look)
     x = s.add_parser("session", help="this session: lock | logout | off (the last two ask first)")
     x.add_argument("what", choices=sorted(SESSION)); x.set_defaults(fn=cmd_session)
@@ -3139,7 +3158,7 @@ def parser():
     x.add_argument("--prefix"); x.add_argument("file"); x.add_argument("cmd", nargs=argparse.REMAINDER); x.set_defaults(fn=win_open)
     x = box(w.add_parser("create")); x.add_argument("prefix"); x.add_argument("--arch", default="win64", choices=["win64", "win32"]); x.set_defaults(fn=win_create)
     x = box(w.add_parser("run")); x.add_argument("prefix"); x.add_argument("cmd", nargs=argparse.REMAINDER); x.set_defaults(fn=win_run)
-    x = box(w.add_parser("install")); x.add_argument("prefix"); x.add_argument("setup"); x.add_argument("args", nargs="*"); x.set_defaults(fn=win_install)
+    x = box(w.add_parser("install")); x.add_argument("prefix"); x.add_argument("setup"); x.add_argument("args", nargs=argparse.REMAINDER); x.set_defaults(fn=win_install)
     x = w.add_parser("stop", help="end every program of the prefix"); x.add_argument("prefix"); x.set_defaults(fn=win_stop)
     x = w.add_parser("rm"); x.add_argument("prefix"); x.set_defaults(fn=win_rm)
     x = w.add_parser("sync", help="installed Windows programs become applications of the desktop"); x.set_defaults(fn=win_sync)
@@ -3181,10 +3200,18 @@ def main(argv=None):
     cut = argv.index("--") if "--" in argv else len(argv)
     # (after `win open FILE` / `win run PREFIX` / `win install PREFIX SETUP` the words are the Windows program's own:
     # its -q or --dry-run are not silik's)
-    gcut = cut
-    words = [x for x in argv[:cut] if not x.startswith("-")]
-    if len(words) >= 3 and words[0] == "win" and words[1] in ("open", "run", "install"):
-        gcut = argv.index(words[2], argv.index(words[1]) + 1)
+    gcut, pos, i = cut, [], 0
+    while i < cut:   # where the words that are not switches are (the value of a bare --prefix is not one)
+        if argv[i] == "--prefix":
+            i += 2
+            continue
+        if not argv[i].startswith("-"):
+            pos.append(i)
+        i += 1
+    words = [argv[k] for k in pos]
+    prog = {"open": 2, "run": 2, "install": 3}.get(words[1] if len(words) > 1 and words[0] == "win" else "")
+    if prog and len(words) > prog:
+        gcut = pos[prog]
     head = [x for x in argv[:gcut] if x not in ("--dry-run", "-q", "--quiet")] + argv[gcut:cut]
     glob_ = [x for x in argv[:gcut] if x in ("--dry-run", "-q", "--quiet")]
     a = p.parse_args(glob_ + head + argv[cut:])
@@ -3199,7 +3226,7 @@ def main(argv=None):
     # `silik win open FILE --no-net` would hand --no-net to the Windows program and run it with the network: the
     # switches go before FILE (PREFIX for `win run`); after a "--" they are the program's own. (Read from the words
     # typed: argparse's REMAINDER keeps or drops the "--" depending on the Python version)
-    if a.fn in (win_open, win_run):
+    if a.fn in (win_open, win_run, win_install):
         words = head[head.index(a.group) + 2:] if a.group in head else []
         seen, i = False, 0
         while i < len(words):
@@ -3207,13 +3234,14 @@ def main(argv=None):
             if w.split("=")[0] in WIN_SWITCHES:
                 if seen:
                     die("the switches %s go before %s: silik win %s [--prefix P] [--no-net] [--no-sandbox] %s"
-                        % ("/".join(WIN_SWITCHES), "FILE" if a.fn is win_open else "PREFIX", "open" if a.fn is win_open else "run",
-                           "FILE [ARGS]" if a.fn is win_open else "PREFIX -- PROG.exe [ARGS]"), 2)
+                        % ("/".join(WIN_SWITCHES), "FILE" if a.fn is win_open else "PREFIX",
+                           {win_open: "open", win_run: "run", win_install: "install"}[a.fn],
+                           {win_open: "FILE [ARGS]", win_run: "PREFIX -- PROG.exe [ARGS]", win_install: "PREFIX SETUP [ARGS]"}[a.fn]), 2)
                 i += 2 if w == "--prefix" else 1
                 continue
             seen = True
             i += 1
-    for k in ("cmd",):   # argparse.REMAINDER keeps the "--" separator
+    for k in ("cmd", "args"):   # argparse.REMAINDER keeps the "--" separator
         v = getattr(a, k, None)
         if isinstance(v, list) and v and v[0] == "--":
             setattr(a, k, v[1:])

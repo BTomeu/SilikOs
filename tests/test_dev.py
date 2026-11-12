@@ -357,11 +357,21 @@ class Recipes(unittest.TestCase):
         self.assertIn("BuildArch:      noarch", spec)
         self.assertIn("%{_datadir}/sigrok-firmware/", spec)          # where libsigrok looks (FIRMWARE_DIR)
         self.assertIn("sed -n 's/^# uses: *//p'", build)
-        self.assertIn("releases/tags/dev-tools", build)
+        self.assertNotIn("api.github.com", build)                      # only our own build, at dev/versions' version
+        self.assertIn('"$u-$uver"-*.rpm', build)
         wf = text(".github/workflows/dev.yml")
         uses = wf.split("  build-uses:")[1].split("\n  trial:")[0]
         self.assertIn("tool: [sigrok-firmware-fx2lafw]", uses)
         self.assertIn("name: dev-sdcc, path: build/deps", uses)
+
+    def test_release_archives_are_pinned_by_their_hashes(self):
+        for l in text("dev/versions").splitlines():
+            w = l.split()
+            if l.startswith("#") or len(w) < 4:
+                continue
+            self.assertEqual(len(w), 5, l)
+            self.assertRegex(w[4], r"^[0-9a-f]{64}$", l)
+        self.assertIn("sha256sum -c --quiet", text("tools/build_dev.sh"))
 
     def test_the_python_tools_are_pinned_by_their_hashes(self):
         lines = [l for l in text("dev/pylab-requirements.txt").splitlines() if l and not l.startswith("#")]

@@ -34,7 +34,8 @@ family (8051, 8052, the Cypress FX2 of USB logic analysers, DS390), STM8, Z80 / 
 R800, HC08 / S08, MOS 6502 / 65C02, Padauk PDK13 / 14 / 15 and f8, with its assemblers and linker (sdas, sdld), its
 libraries, sdcpp, packihx and makebin, and ucsim's simulators (ucsim_51, ucsim_z80, ucsim_stm8...). Not the PIC
 ports (they need gputils). Upstream's release archive, unmodified, built on EL 9 by SilikVolt (dev/sdcc.spec); not in
-the base's repositories or in EPEL 9.
+the base's repositories or in EPEL 9. The run-time libraries carry upstream's linking exception (README.txt in the
+licence folder): linking them does not by itself put a program under the GPL.
 
 %prep
 %setup -q -n sdcc-%{version}
@@ -65,5 +66,7 @@ cp -p sdas/COPYING3 %{buildroot}%{_datadir}/licenses/%{name}/COPYING3
 cp -p doc/README.txt %{buildroot}%{_datadir}/licenses/%{name}/README.txt
 cp -p ../%{boost}/LICENSE_1_0.txt %{buildroot}%{_datadir}/licenses/%{name}/BOOST_LICENSE_1_0.txt
 %filelist
+# (the package's own folders too: nothing is left behind by rpm -e)
+(cd %{buildroot} && find ./usr/share/sdcc ./usr/libexec/sdcc ./usr/share/doc/sdcc ./usr/share/doc/ucsim -type d | sed 's|^[.]|%%dir |') >> %{_builddir}/%{name}-files.list
 
 %files -f %{_builddir}/%{name}-files.list

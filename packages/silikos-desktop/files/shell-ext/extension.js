@@ -101,12 +101,17 @@ function isWin(app) {
 const BENCH_IDS = ['savvycan', 'pulseview', 'sigrok', 'wireshark', 'putty', 'openhantek', 'scopy', 'gtkterm', 'cutecom',
                    'moserial', 'serialplot', 'coolterm', 'busmaster', 'cangaroo'];
 const BENCH_WORDS = ['serial port', 'serial terminal', 'canbus', 'can bus', 'logic analyzer', 'logic analyser', 'oscilloscope',
-                     'modbus'];
+                     'modbus',
+                     'port sèrie', 'terminal sèrie', 'bus can', 'analitzador lògic', 'oscil·loscopi',
+                     'puerto serie', 'terminal serie', 'analizador lógico', 'osciloscopio'];
 
 function isBench(app, info) {
     const id = app.get_id().toLowerCase();
     if (BENCH_IDS.some(b => id.includes(b))) return true;
-    const words = info && info.get_keywords ? (info.get_keywords() || []).join(';').toLowerCase() : '';
+    /* (get_keywords() is the session language's Keywords[ca]; the untranslated key is read too) */
+    let words = info && info.get_keywords ? (info.get_keywords() || []).join(';') : '';
+    try { if (info && info.get_string) words += ';' + (info.get_string('Keywords') || ''); } catch (e) { /* not a desktop file */ }
+    words = words.toLowerCase();
     return !!words && BENCH_WORDS.some(w => words.includes(w));
 }
 
@@ -269,8 +274,9 @@ class SilikShell {
         this._settings = lookSettings();
         if (this._settings) this._lookSig = this._settings.connect('changed::look', () => this._switch());
         if (this._settings && this._settings.settings_schema.has_key('accent'))
-            this._accentSig = this._settings.connect('changed::accent', () => this._accent());
+            this._accentSig = this._settings.connect('changed::accent', () => { this._accent(); this._qt(); });
         this._accent();
+        this._qt();
         this._up();
     }
 
@@ -847,6 +853,14 @@ class SilikShell {
     }
 
     /* the keyboard and the pointer go back at once; in a Flow look the pane then leaves (faster than it came) */
+    /* Qt 5 programs take the accent in use (`silik look --qt`: nothing is written when the user's qt5ct.conf already
+       says it, or when qt5ct is not installed). A file seeded from the ink one, or an accent set with gsettings, is
+       brought in line at login and at each change */
+    _qt() {
+        if (!this._accentSig) return;
+        try { GLib.spawn_command_line_async('silik look --qt -q'); } catch (e) { /* silik-tools older than the key */ }
+    }
+
     _closeStart(now) {
         if (!this._startOpen) return;
         this._startOpen = false;
@@ -856,6 +870,8 @@ class SilikShell {
         const b = this._startBox;
         const gone = () => { b.hide(); b.opacity = 255; b.translation_y = 0; };
         b.remove_all_transitions();
+        if (!this._startApps || this._list && this._list._silikRow.size < this._appList().length)
+            this._warmStart();                               /* (the applications changed while it was open) */
         if (!this._flow || now) { gone(); return; }
         const s = St.ThemeContext.get_for_stage(global.stage).scale_factor;
         Flow.ease(b, { opacity: 0, translation_y: 6 * s }, Flow.T_START_OUT, Clutter.AnimationMode.EASE_IN_QUAD,
