@@ -1,0 +1,10 @@
+#!/usr/bin/python3
+# SilikOS — /usr/bin/silik. The command itself is /usr/share/silikos/python/silik_main.py (packages/silik-tools/files/silik),
+# imported from here so that Python takes it compiled from its __pycache__ (made when the package is built): a script
+# run directly is compiled again at every start, 20-30 ms for this one (docs/STATUS.md).
+import sys
+
+sys.path.insert(0, "/usr/share/silikos/python")
+import silik_main  # noqa: E402
+
+sys.exit(silik_main.main())
