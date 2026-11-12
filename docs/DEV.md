@@ -45,6 +45,25 @@ silik dev install FILE       runs a vendor's IDE installer that you downloaded
 The program is for no particular part (no peripheral is touched, the memory sizes are small on purpose): a real
 project takes its part's linker script and start-up file. Nothing was flashed or debugged on a board here.
 
+## Serial ports and CAN
+
+The serial ports of USB adapters and boards (an ST-LINK's or a Nucleo's virtual COM port, FTDI, CP210x, CH340, CDC
+ACM) belong to the user at the screen (`70-silikos-serial.rules`, uaccess, as the probes): `picocom /dev/ttyACM0
+-b 115200` works without the group `dialout`.
+
+EL 9's kernel carries the CAN core and the drivers of the usual USB adapters (gs_usb: candleLight, CANable; peak_usb:
+PCAN-USB; slcan; mcp251x / mcp251xfd over SPI: seen in its package list, 12/11/2026), so an adapter is a network
+interface:
+
+```
+silik dev can                     the CAN interfaces, their state and bit rate
+silik dev can up can0 500k        the bit rate, then up (ip, through sudo); rates 10k ... 1M
+silik dev can down can0
+candump can0 / cansend can0 123#DEADBEEF / canplayer      (can-utils, EPEL 9, recommended by silik-dev)
+```
+
+Not run: a real adapter on a bus [A: the drivers' names are the kernel package's; no adapter here].
+
 ## The vendors' IDEs
 
 **STM32CubeIDE (ST) and Code Composer Studio (TI) are not part of SilikOS**: they are their vendors' programs under

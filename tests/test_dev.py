@@ -350,8 +350,37 @@ class BarEntries(unittest.TestCase):
 
     def test_completion_and_usage(self):
         comp = text("packages/silik-tools/files/silik.bash-completion")
-        self.assertIn('dev) COMPREPLY=($(compgen -W "tools try install"', comp)
+        self.assertIn('dev) COMPREPLY=($(compgen -W "tools try install can"', comp)
         self.assertIn("silik dev   tools [--json] | try [JOB] | install FILE", text("packages/silik-tools/files/silik"))
+
+
+class Can(unittest.TestCase):
+    def test_up_sets_the_bit_rate_then_brings_it_up(self):
+        rc, o = run("dev", "can", "up", "can0", "500k")
+        self.assertEqual(rc, 0)
+        self.assertEqual(o.splitlines()[:3], ["$ sudo ip link set can0 down", "$ sudo ip link set can0 type can bitrate 500000",
+                                              "$ sudo ip link set can0 up"])
+        rc, o = run("dev", "can", "down", "can0")
+        self.assertEqual(o.strip(), "$ sudo ip link set can0 down")
+
+    def test_bit_rates(self):
+        self.assertEqual(silik.can_rate("1M"), 1000000)
+        self.assertEqual(silik.can_rate("125k"), 125000)
+        self.assertEqual(silik.can_rate("250000"), 250000)
+        for bad in ("333k", "fast", "2M"):
+            with self.assertRaises(Exception):
+                silik.can_rate(bad)
+
+    def test_an_interface_name_is_checked(self):
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            silik.main(["--dry-run", "dev", "can", "up", "can0;reboot", "1M"])
+
+    def test_the_list_reads_ip(self):
+        class Q(silik.Ctx):
+            def query(self, argv):
+                return json.dumps([{"ifname": "can0", "operstate": "UP", "linkinfo": {"info_data": {"bittiming": {"bitrate": 500000}}}},
+                                   {"ifname": "can1", "operstate": "DOWN", "linkinfo": {"info_data": {}}}])
+        self.assertEqual(silik.can_links(Q(True, True)), [("can0", "UP", 500000), ("can1", "DOWN", None)])
 
 
 if __name__ == "__main__":

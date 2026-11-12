@@ -37,7 +37,7 @@ TEXT = {
            "accent_volt": "accent: volt violet (what is selected, focused, on)",
            "accent_volt_vivid": "accent: volt violet (what is selected, focused, on, with the title bars)",
            "accent_spark": "accent: spark yellow (what is selected, focused, on)",
-           "dev_tools": "the embedded-development tools on this system", "dev_try": "the embedded tools do their small jobs"},
+           "dev_tools": "the embedded-development tools on this system", "dev_try": "the embedded tools do their small jobs", "dev_can": "the CAN interfaces of this system (adapters: candleLight, CANable, PCAN-USB)"},
     "ca": {"placeholder": "adreça o nom: app/ eda/ dev/ win/ sys/ look/ o un camí", "run": "executa", "complete": "completa", "close": "tanca", "held": "estat de sortida %s; Retorn tanca aquesta finestra",
            "none": "no hi ha cap coincidència", "status": "estat del sistema", "secure": "seguretat: audita aquest sistema", "secure_apply": "seguretat: posa els valors de SilikOS", "update": "actualitza el sistema", "settings": "configuració",
            "terminal": "terminal", "files": "fitxers", "lock": "bloqueja la pantalla", "logout": "tanca la sessió", "eda_check": "comprova l'entorn EDA", "eda_tools": "les eines EDA obertes d'aquest sistema", "eda_try": "les eines EDA obertes fan les seves feines de prova",
@@ -56,7 +56,7 @@ TEXT = {
            "accent_volt": "accent: violeta volt (el que és triat, enfocat, encès)",
            "accent_volt_vivid": "accent: violeta volt (el que és triat, enfocat, encès, amb les barres de títol)",
            "accent_spark": "accent: groc llamp (el que és triat, enfocat, encès)",
-           "dev_tools": "les eines de desenvolupament encastat d'aquest sistema", "dev_try": "les eines de desenvolupament encastat fan les seves feines de prova"},
+           "dev_tools": "les eines de desenvolupament encastat d'aquest sistema", "dev_try": "les eines de desenvolupament encastat fan les seves feines de prova", "dev_can": "les interfícies CAN d'aquest sistema (adaptadors: candleLight, CANable, PCAN-USB)"},
     "es": {"placeholder": "dirección o nombre: app/ eda/ dev/ win/ sys/ look/ o una ruta", "run": "ejecuta", "complete": "completa", "close": "cierra", "held": "estado de salida %s; Intro cierra esta ventana",
            "none": "no hay coincidencias", "status": "estado del sistema", "secure": "seguridad: audita este sistema", "secure_apply": "seguridad: pone los valores de SilikOS", "update": "actualiza el sistema", "settings": "configuración",
            "terminal": "terminal", "files": "archivos", "lock": "bloquea la pantalla", "logout": "cierra la sesión", "eda_check": "comprueba el entorno EDA", "eda_tools": "las herramientas EDA abiertas de este sistema", "eda_try": "las herramientas EDA abiertas hacen sus trabajos de prueba",
@@ -75,7 +75,7 @@ TEXT = {
            "accent_volt": "acento: violeta volt (lo seleccionado, enfocado, encendido)",
            "accent_volt_vivid": "acento: violeta volt (lo seleccionado, enfocado, encendido, con las barras de título)",
            "accent_spark": "acento: amarillo chispa (lo seleccionado, enfocado, encendido)",
-           "dev_tools": "las herramientas de desarrollo embebido de este sistema", "dev_try": "las herramientas de desarrollo embebido hacen sus trabajos de prueba"},
+           "dev_tools": "las herramientas de desarrollo embebido de este sistema", "dev_try": "las herramientas de desarrollo embebido hacen sus trabajos de prueba", "dev_can": "las interfaces CAN de este sistema (adaptadores: candleLight, CANable, PCAN-USB)"},
 }
 
 
@@ -197,6 +197,7 @@ def system_items(t, boxes=(), prefixes=(), programs=()):
         Item("eda/try", t["eda_try"], [SILIK, "eda", "try"], True),
         Item("dev/tools", t["dev_tools"], [SILIK, "dev", "tools"], True),
         Item("dev/try", t["dev_try"], [SILIK, "dev", "try"], True),
+        Item("dev/can", t["dev_can"], [SILIK, "dev", "can"], True),
         Item("win/vm", t["winvm"], [SILIK, "win", "vm", "start"], True),
     ]
     for b in boxes:

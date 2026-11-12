@@ -7,7 +7,7 @@
 #               | list | create PREFIX | run [--no-net --no-sandbox] PREFIX -- PROG.exe [ARGS] | install PREFIX SETUP.exe | rm PREFIX
 #               | vm create --iso WIN.iso [--name N --ram GB --disk GB --cpus N] | vm start [N] | vm stop [N]
 #               | vm app --exe 'C:\path\app.exe' --user U
-#   silik dev   tools [--json] | try [JOB] | install FILE     embedded development; FILE: a vendor's IDE installer
+#   silik dev   tools [--json] | try [JOB] | install FILE | can [up IFACE BITRATE | down IFACE]   embedded development
 #   silik hw    probe | nvidia install | nvidia status
 #   silik identity show | silikos | base
 #   silik look  [silik | bar | island] [--json]     the desktop's look; no argument: which one is in use
@@ -26,7 +26,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.6.5"
+VERSION = "0.6.6"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -2393,6 +2393,7 @@ DEV_TOOLS = (   # command, package, what it is for
     ("make", "make", "builds"),
     ("cmake", "cmake", "builds"),
     ("picocom", "picocom", "serial terminal"),
+    ("candump", "can-utils", "CAN bus: candump, cansend, canplayer, cansniffer"),
 )
 # a vendor's IDE: its key, its name, the program to look for, the folders it may be under, how its downloaded file
 # is recognised and which script inside an archive is its installer (regular expressions on the lower-case file
@@ -2435,6 +2436,60 @@ def dev_find_ide(exe, roots, depth=5):
     """the newest program called EXE under one of ROOTS, or ''"""
     found = dev_find_ides(exe, roots, depth)
     return found[-1] if found else ""
+
+
+# CAN: the EL 9 kernel carries the CAN core and the USB adapters' drivers (gs_usb: candleLight, CANable; peak_usb:
+# PCAN-USB; slcan; mcp251x/mcp251xfd over SPI), so an adapter is a network interface (can0). `silik dev can` lists
+# them; `up IFACE BITRATE` sets the bit rate and brings it up (ip, as root); can-utils (silik-dev) reads and writes it.
+CAN_RATES = (10000, 20000, 50000, 100000, 125000, 250000, 500000, 800000, 1000000)
+
+
+def can_rate(v):
+    """a bit rate: 500000, 500k, 1M"""
+    t = v.strip().lower()
+    mult = 1000 if t.endswith("k") else 1000000 if t.endswith("m") else 1
+    try:
+        n = int(float(t.rstrip("km")) * mult)
+    except ValueError:
+        raise argparse.ArgumentTypeError("not a bit rate: %s (e.g. 500k, 1M)" % v)
+    if n not in CAN_RATES:
+        raise argparse.ArgumentTypeError("%s: CAN bit rates are %s" % (v, ", ".join("%dk" % (r // 1000) if r < 1000000 else "1M" for r in CAN_RATES)))
+    return n
+
+
+def can_links(ctx):
+    """[(name, state, bitrate or None)] of the CAN interfaces of this system"""
+    out = ctx.query(["ip", "-details", "-json", "link", "show", "type", "can"])
+    try:
+        links = json.loads(out) if out.strip() else []
+    except ValueError:
+        return []
+    res = []
+    for l in links:
+        info = ((l.get("linkinfo") or {}).get("info_data") or {})
+        res.append((l.get("ifname"), l.get("operstate", "?"), (info.get("bittiming") or {}).get("bitrate")))
+    return res
+
+
+def dev_can(ctx, a):
+    if a.action in (None, "list"):
+        links = can_links(ctx)
+        if not links:
+            print("no CAN interfaces: plug in an adapter (candleLight / CANable, PCAN-USB, slcan); `ip link` shows it as can0")
+            return 1
+        for name, state, rate in links:
+            print("%-8s %-6s %s" % (name, state.lower(), "%d bit/s" % rate if rate else "bit rate not set"))
+        return 0
+    if not a.iface or not valid_name(a.iface):
+        die("silik dev can %s IFACE%s" % (a.action, " BITRATE" if a.action == "up" else ""), 2)
+    ctx.run(["sudo", "ip", "link", "set", a.iface, "down"], check=a.action == "down")
+    if a.action == "up":
+        if not a.bitrate:
+            die("silik dev can up IFACE BITRATE (e.g. 500k, 1M)", 2)
+        ctx.run(["sudo", "ip", "link", "set", a.iface, "type", "can", "bitrate", str(a.bitrate)])
+        ctx.run(["sudo", "ip", "link", "set", a.iface, "up"])
+        print("%s up at %d bit/s: `candump %s` shows its frames, `cansend %s 123#DEADBEEF` sends one" % (a.iface, a.bitrate, a.iface, a.iface))
+    return 0
 
 
 def dev_tools(ctx, a):
@@ -2810,6 +2865,9 @@ def parser():
     x = d.add_parser("tools", help="the embedded-development tools and the vendors' IDEs on this system"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=dev_tools)
     x = d.add_parser("try", help="the tools do real jobs: build, libc, cxx, debug, probe, dfu, stlink")
     x.add_argument("job", nargs="?", default="all"); x.set_defaults(fn=dev_try)
+    x = d.add_parser("can", help="CAN interfaces: list them; up IFACE BITRATE; down IFACE")
+    x.add_argument("action", nargs="?", choices=["list", "up", "down"]); x.add_argument("iface", nargs="?")
+    x.add_argument("bitrate", nargs="?", type=can_rate); x.set_defaults(fn=dev_can)
     x = d.add_parser("install", help="runs the installer of STM32CubeIDE or Code Composer Studio that you downloaded (FILE: .zip, .sh or .run)")
     x.add_argument("file"); x.set_defaults(fn=dev_install)
     w = s.add_parser("win", help="Windows programs: Wine prefixes and a Windows virtual machine").add_subparsers(dest="cmd")

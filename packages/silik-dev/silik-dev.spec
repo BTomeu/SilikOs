@@ -1,5 +1,5 @@
 Name:           silik-dev
-Version:        0.1.1
+Version:        0.1.2
 Release:        1%{?dist}
 Summary:        Embedded development on SilikOS: ARM compiler, debugger, flashing; recipes for the vendors' IDEs
 License:        LicenseRef-SilikVolt
@@ -22,6 +22,8 @@ Recommends:     make
 Recommends:     cmake
 Recommends:     picocom
 Recommends:     python3-pyserial
+# CAN bus tools (EPEL 9): candump, cansend, canplayer; the kernel has the adapters' drivers (`silik dev can`)
+Recommends:     can-utils
 Recommends:     unzip
 
 %description
