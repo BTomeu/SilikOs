@@ -78,6 +78,18 @@ acknowledgement (to watch a car's bus). The list names each adapter and its driv
 (The drivers were read from EL 9's kernel package list, 12/11/2026; the PEAK and Kvaser model names are the
 drivers' own families [A]. Vector's IDs from a driver catalogue: verify with `lsusb`.)
 
+**The devices SilikOS knows** are listed in `/usr/share/silikos/hardware.tsv` (silik-tools): USB vendor:product,
+kind (CAN adapter, slcan, serial, debug probe, logic analyser, VM-only), the driver or program that opens it, what to
+run, whether EL 9.8's kernel knows the ID, verified, date and the source each ID was read from (the drivers' device
+tables in Linux v6.12, OpenOCD v0.12.0's device rules, libsigrok's fx2lafw table, the CANable firmware). Each
+kernel-driver ID was checked against the module aliases of EL 9.8's kernel (5.14.0-687.66.2.el9_8): all are there
+but three Kvaser products newer than it. A CANable with its original **slcan** firmware (USB ad50:60c4) is a serial
+port, not yet a CAN interface: `sudo slcand -o -c -s6 /dev/ttyACM0 can0 && sudo ip link set can0 up` (`-s6` is
+500 kbit/s); with candleLight firmware it is a gs_usb adapter. No row has been tried with a real device (verified:
+no [A]). `silik dev can list` names the known adapters that are plugged in but are not a CAN interface, and
+`silik doctor bench` says, for each CAN interface, its state (error-active, warning, passive, bus-off), error
+counters and bus errors, and for each known device whether it is yours (uaccess) and the command to use it.
+
 Serial and RS-485: `silik dev serial` lists the ports with their adapter (FTDI, CP210x, CH340, an ST-LINK's COM
 port...) and stable name (`/dev/serial/by-id/...`); USB-RS485 adapters switch direction by themselves. Terminals:
 tio, minicom, picocom, screen; Modbus RTU: libmodbus, pyserial; a port over the network: ser2net, socat.

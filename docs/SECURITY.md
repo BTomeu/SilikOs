@@ -8,6 +8,7 @@ silik secure status          # read-only audit: ● ok / ◆ warn / ▼ bad / ? 
 sudo silik secure status     # the same with what only root may read (what the firewall zone opens)
 silik secure apply           # sets the SilikOS defaults; prints every command; --dry-run runs nothing
 silik secure apply --keep-ssh    # the same, leaving sshd on and its port open
+silik doctor                 # these checks in short (all but the pending advisories), with the rest of the workstation
 ```
 
 `status` exits 1 when a row is bad; `--json` gives the rows to a program; `--offline` does not ask the repositories.

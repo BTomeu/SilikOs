@@ -16,7 +16,7 @@ Recommends:     pciutils
 on this desktop), `silik win ...` (Windows programs: a double-click runs them with Wine in a sandbox; a Windows
 virtual machine for the rest), `silik dev ...` (embedded development), `silik hw ...`, `silik look` (the desktop's
 look: silik, bar, island), `silik session`,
-`silik update`.
+`silik update`, `silik doctor` (is this workstation healthy, and what to do).
 Every action prints the commands it runs; --dry-run runs nothing.
 
 %install
@@ -31,9 +31,12 @@ if /usr/bin/python3 -c 'import sys; sys.exit(sys.version_info[:2] != (3, 9))' 2>
     %{buildroot}%{_datadir}/silikos/python/silik_main.py %{_datadir}/silikos/python/silik_main.py
 fi
 install -Dm0644 %{_sourcedir}/silik.bash-completion %{buildroot}%{_datadir}/bash-completion/completions/silik
+# the USB devices SilikOS knows (silik doctor bench, silik dev can): IDs read from the drivers' tables and upstream rules
+install -Dm0644 %{_sourcedir}/hardware.tsv %{buildroot}%{_datadir}/silikos/hardware.tsv
 
 %files
 %{_bindir}/silik
 %dir %{_datadir}/silikos
 %{_datadir}/silikos/python
+%{_datadir}/silikos/hardware.tsv
 %{_datadir}/bash-completion/completions/silik
