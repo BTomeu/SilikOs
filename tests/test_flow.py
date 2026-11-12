@@ -131,7 +131,14 @@ class Extension(unittest.TestCase):
         limit = self.flow.split("timeout_add(")[1].split("}));")[0]
         self.assertIn("return GLib.SOURCE_REMOVE;", limit)
         self.assertNotIn("SOURCE_CONTINUE", self.flow + self.ext)
-        self.assertNotIn("timeout_add", self.ext)
+        # the extension's one time limit: Start's rows made before the first opening, once, a slice per idle moment
+        # until they are all made (each slice asks for the next one only while rows are missing)
+        self.assertEqual(self.ext.count("timeout_add"), 1)
+        warm = self.ext.split("    _warmStart() {")[1].split("\n    }\n")[0]
+        self.assertIn("timeout_add", warm)
+        self.assertIn("if (this._list._silikRow.size < apps.length) this._warmId = GLib.idle_add(", warm)
+        self.assertEqual(self.ext.count("idle_add"), 1)
+        self.assertIn("GLib.source_remove(this._warmId)", self.ext.split("    _down() {")[1].split("\n    }\n")[0])
         for loop in ("add_tick_callback", "setInterval", "Mainloop", "queue_repaint"):
             self.assertNotIn(loop, self.flow)
         self.assertIn("repeatCount: PULSES - 1", self.flow)          # the breathing line ends by itself
@@ -182,13 +189,66 @@ class Extension(unittest.TestCase):
 
 
 class StartSpeed(unittest.TestCase):
-    def test_the_rows_are_made_once_per_opening(self):
-        """a key typed in Start shows or hides rows; it does not destroy and make them again (measured: docs/STATUS.md)"""
-        ext = text(os.path.join(EXT, "extension.js"))
-        fill = ext.split("    _fill() {")[1].split("\n    }\n")[0]
-        self.assertIn("list._silikApps !== this._apps", fill)
-        self.assertEqual(fill.count("destroy_all_children"), 1)          # only when the applications changed
+    def setUp(self):
+        self.ext = text(os.path.join(EXT, "extension.js"))
+
+    def body(self, name):
+        return self.ext.split("    %s {" % name)[1].split("\n    }\n")[0]
+
+    def test_the_rows_are_kept_while_the_applications_are_the_same(self):
+        """a key typed in Start shows or hides rows; an opening keeps them too (measured: docs/STATUS.md)"""
+        fill = self.body("_fill()")
+        self.assertIn("this._rowsFor(this._apps)", fill)
+        self.assertNotIn("destroy_all_children", fill)
         self.assertIn("b.visible = shown.has(a)", fill)
+        rows = self.body("_rowsFor(apps, n = Infinity)")
+        self.assertIn("if (list._silikApps !== apps) {", rows)
+        self.assertEqual(rows.count("destroy_all_children"), 1)          # only when the applications changed
+
+    def test_the_applications_are_found_once(self):
+        """an opening takes the list made before; the installed applications or the icon theme changing make it again"""
+        self.assertIn("this._apps = this._appList();", self.body("_openStart()"))
+        self.assertIn("if (this._startApps) return this._startApps;", self.body("_appList()"))
+        self.assertIn("'installed-changed', () => { programs = null; this._startApps = null;", self.ext)
+        self.assertIn("'icon-theme-changed', () => { this._startApps = null;", self.ext)
+        self.assertIn("this._startApps = null;", self.body("_down()"))
+
+    def test_the_category_keys_are_kept(self):
+        cats = self.body("_fillCats()")
+        self.assertIn("if (this._catKeys !== sig) {", cats)
+        self.assertIn("this._catKeys = null;", self.body("_down()"))
+
+    def test_the_list_is_made_before_the_first_opening(self):
+        self.assertIn("this._warmStart();", self.body("_up()"))
+        warm = self.body("_warmStart()")
+        self.assertIn("if (!this._list || this._startOpen) return GLib.SOURCE_REMOVE;", warm)
+        self.assertIn("this._rowsFor(apps, 12)", warm)
+
+
+class Bench(unittest.TestCase):
+    """Start's category of the lab's programs (buses, logic analysers, scopes, serial terminals, network captures)"""
+
+    def setUp(self):
+        self.ext = text(os.path.join(EXT, "extension.js"))
+
+    def test_its_name_in_the_three_languages(self):
+        names = dict(zip(("en", "ca", "es"), re.findall(r"cats: \{[^}]*?bench: '([^']+)'", self.ext)))
+        self.assertEqual(names, {"en": "Bench", "ca": "Banc", "es": "Banco"})
+        keys = [sorted(re.findall(r"(\w+): '", c)) for c in re.findall(r"cats: \{(.*?)\}", self.ext, re.S)]
+        self.assertEqual(len(keys), 3)
+        self.assertTrue(keys[0] == keys[1] == keys[2], keys)
+        listed = re.search(r"return \['all', 'fav'\]\.concat\(\[([^\]]+)\]", self.ext).group(1)
+        self.assertEqual(sorted(re.findall(r"'(\w+)'", listed) + ["all", "fav"]), keys[0])
+
+    def test_it_comes_before_engineering_and_development(self):
+        """SavvyCAN and PulseView declare Development and Electronics (as KLayout does), Wireshark Network: the bench
+        is decided before the freedesktop categories"""
+        cat = self.ext.split("function category(app) {")[1].split("\n}\n")[0]
+        self.assertLess(cat.index("isBench(app, info)"), cat.index("for (const [k, names] of CATS)"))
+        ids = re.search(r"const BENCH_IDS = \[([^\]]+)\]", self.ext).group(1)
+        for p in ("savvycan", "pulseview", "wireshark", "putty"):
+            self.assertIn("'%s'" % p, ids)
+        self.assertIn("'serial port'", self.ext)
 
 
 class ReviewFindings(unittest.TestCase):
@@ -225,7 +285,7 @@ class ReviewFindings(unittest.TestCase):
 
     def test_start_reads_the_shells_list_of_applications(self):
         self.assertNotIn("Gio.AppInfo.get_all()", self.ext)
-        self.assertIn("sys.get_installed()", self.body(self.ext, "_openStart"))
+        self.assertIn("sys.get_installed()", self.body(self.ext, "_appList"))
 
     def test_recent_files_are_looked_for_on_disk_only_as_many_as_shown(self):
         rec = self.body(self.ext, "_recentFiles")

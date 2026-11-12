@@ -36,19 +36,19 @@ const TEXT = {
           filter: 'type to filter', kOpen: 'open', kMove: 'move', kCat: 'category', kClose: 'close', none: 'nothing matches',
           hint: 'Super+Space', search: 'type to search the applications', pinned: 'pinned', recent: 'recent', all: 'all applications',
           lock: 'lock', logout: 'log out', off: 'power off',
-          cats: { all: 'All', fav: 'Rail', eda: 'Engineering', win: 'Windows programs', dev: 'Development', office: 'Office',
+          cats: { all: 'All', fav: 'Rail', eda: 'Engineering', bench: 'Bench', win: 'Windows programs', dev: 'Development', office: 'Office',
                   graphics: 'Graphics', net: 'Internet', media: 'Sound and video', tools: 'Tools', system: 'System', other: 'Other' } },
     ca: { ready: 'a punt', upd: 'actualització', restart: 'reinicia per acabar', ws: 'espai', base: 'base', kernel: 'nucli', host: 'equip', open: 'obertes', windows: 'Finestres',
           filter: 'escriu per filtrar', kOpen: 'obre', kMove: 'mou', kCat: 'categoria', kClose: 'tanca', none: 'no hi ha res que coincideixi',
           hint: 'Super+Espai', search: 'escriu per cercar les aplicacions', pinned: 'ancorades', recent: 'recents', all: 'totes les aplicacions',
           lock: 'bloqueja', logout: 'tanca la sessió', off: 'apaga',
-          cats: { all: 'Totes', fav: 'Rail', eda: 'Enginyeria', win: 'Programes de Windows', dev: 'Desenvolupament', office: 'Oficina',
+          cats: { all: 'Totes', fav: 'Rail', eda: 'Enginyeria', bench: 'Banc', win: 'Programes de Windows', dev: 'Desenvolupament', office: 'Oficina',
                   graphics: 'Gràfics', net: 'Internet', media: 'So i vídeo', tools: 'Eines', system: 'Sistema', other: 'Altres' } },
     es: { ready: 'listo', upd: 'actualización', restart: 'reinicia para terminar', ws: 'espacio', base: 'base', kernel: 'núcleo', host: 'equipo', open: 'abiertas', windows: 'Ventanas',
           filter: 'escribe para filtrar', kOpen: 'abre', kMove: 'mueve', kCat: 'categoría', kClose: 'cierra', none: 'nada coincide',
           hint: 'Super+Espacio', search: 'escribe para buscar las aplicaciones', pinned: 'ancladas', recent: 'recientes', all: 'todas las aplicaciones',
           lock: 'bloquea', logout: 'cierra la sesión', off: 'apaga',
-          cats: { all: 'Todas', fav: 'Rail', eda: 'Ingeniería', win: 'Programas de Windows', dev: 'Desarrollo', office: 'Oficina',
+          cats: { all: 'Todas', fav: 'Rail', eda: 'Ingeniería', bench: 'Banco', win: 'Programas de Windows', dev: 'Desarrollo', office: 'Oficina',
                   graphics: 'Gráficos', net: 'Internet', media: 'Sonido y vídeo', tools: 'Herramientas', system: 'Sistema', other: 'Otras' } },
 };
 
@@ -95,9 +95,25 @@ function isWin(app) {
     return id.startsWith('wine-') || exec.includes('silik win ') || (info && (info.get_categories() || '').includes('Wine'));
 }
 
+/* The bench: the lab's programs (buses, logic analysers, scopes, serial terminals, captures of a network). No
+ * freedesktop category says so (SavvyCAN and PulseView say Development and Electronics, as KLayout does; Wireshark
+ * says Network): known programs by their desktop id, others by the words they declare (Keywords) */
+const BENCH_IDS = ['savvycan', 'pulseview', 'sigrok', 'wireshark', 'putty', 'openhantek', 'scopy', 'gtkterm', 'cutecom',
+                   'moserial', 'serialplot', 'coolterm', 'busmaster', 'cangaroo'];
+const BENCH_WORDS = ['serial port', 'serial terminal', 'canbus', 'can bus', 'logic analyzer', 'logic analyser', 'oscilloscope',
+                     'modbus'];
+
+function isBench(app, info) {
+    const id = app.get_id().toLowerCase();
+    if (BENCH_IDS.some(b => id.includes(b))) return true;
+    const words = info && info.get_keywords ? (info.get_keywords() || []).join(';').toLowerCase() : '';
+    return !!words && BENCH_WORDS.some(w => words.includes(w));
+}
+
 function category(app) {
     if (isWin(app)) return 'win';
     const info = app.get_app_info();
+    if (isBench(app, info)) return 'bench';
     const cs = info ? (info.get_categories() || '').split(';') : [];
     for (const [k, names] of CATS) if (names.some(n => cs.includes(n))) return k;
     return 'other';
@@ -338,7 +354,9 @@ class SilikShell {
         on(Main.panel, 'notify::height', () => this._layout());
         on(global.display, 'notify::focus-window', () => this._sync());
         on(Shell.AppSystem.get_default(), 'app-state-changed', (sys, app) => { if (this._flow) this._flow.appState(app); this._sync(); });
-        on(Shell.AppSystem.get_default(), 'installed-changed', () => { programs = null; this._sync(); });
+        on(Shell.AppSystem.get_default(), 'installed-changed', () => { programs = null; this._startApps = null; this._warmStart(); this._sync(); });
+        /* (an icon theme of another accent: the rows' icons are looked for again) */
+        on(St.TextureCache.get_default(), 'icon-theme-changed', () => { this._startApps = null; this._warmStart(); });
         on(Shell.WindowTracker.get_default(), 'tracked-windows-changed', () => this._sync());
         on(AppFavorites.getAppFavorites(), 'changed', () => this._sync());
         on(global.workspace_manager, 'active-workspace-changed', () => this._syncWs());
@@ -370,6 +388,7 @@ class SilikShell {
         this._sync();
         this._syncWs();
         this._syncMsg();
+        this._warmStart();
     }
 
     _down() {
@@ -381,6 +400,9 @@ class SilikShell {
         for (const [o, id] of this._sigs) o.disconnect(id);
         this._sigs = [];
         programs = null;
+        if (this._warmId) { GLib.source_remove(this._warmId); this._warmId = 0; }
+        this._startApps = null;
+        this._catKeys = null;
         if (this._mon) { this._mon.cancel(); this._mon = null; }
         if (this._updMon) { this._updMon.cancel(); this._updMon = null; }
         this._upd = null;
@@ -782,12 +804,22 @@ class SilikShell {
         if (this._startOpen) this._closeStart(); else this._openStart();
     }
 
+    /* the applications Start lists, with their category, in their order: made at the first opening and again only when
+       the installed applications or the icon theme change. With them the rows stay (_fill): an opening no longer
+       finds every application, classifies it and makes its row again (measured in the rig, 12/11/2026, with 152
+       applications: 50-95 ms of the shell's time per opening in the Silik look before, see docs/STATUS.md) */
+    _appList() {
+        if (this._startApps) return this._startApps;
+        const sys = Shell.AppSystem.get_default();
+        const apps = sys.get_installed().filter(i => i.should_show()).map(i => sys.lookup_app(i.get_id())).filter(a => a)
+            .map(a => ({ app: a, name: a.get_name() || '', desc: a.get_description() || '', cat: category(a) }));
+        apps.sort((a, b) => a.name.localeCompare(b.name));
+        return this._startApps = apps;
+    }
+
     _openStart() {
         if (this._startOpen) return;
-        const sys = Shell.AppSystem.get_default();
-        this._apps = sys.get_installed().filter(i => i.should_show()).map(i => sys.lookup_app(i.get_id())).filter(a => a)
-            .map(a => ({ app: a, name: a.get_name() || '', desc: a.get_description() || '', cat: category(a) }));
-        this._apps.sort((a, b) => a.name.localeCompare(b.name));
+        this._apps = this._appList();
         this._favIds = AppFavorites.getAppFavorites().getFavorites().map(a => a.get_id());
         this._cat = 'all';
         this._sel = 0;
@@ -843,18 +875,28 @@ class SilikShell {
 
     _catList() {
         const have = new Set(this._apps.map(a => a.cat));
-        return ['all', 'fav'].concat(['eda', 'win', 'dev', 'office', 'graphics', 'net', 'media', 'tools', 'system', 'other'].filter(k => have.has(k)));
+        return ['all', 'fav'].concat(['eda', 'bench', 'win', 'dev', 'office', 'graphics', 'net', 'media', 'tools', 'system', 'other'].filter(k => have.has(k)));
     }
 
+    /* the category keys are made again only when the list of categories changes; otherwise the chosen one moves */
     _fillCats() {
-        this._cats.destroy_all_children();
-        for (const k of this._catList()) {
-            const b = new St.Button({ style_class: 'silik-start-cat', label: this._t.cats[k], reactive: true, track_hover: true,
-                                      x_align: Clutter.ActorAlign.FILL });
-            b.get_child().x_align = Clutter.ActorAlign.START;
+        const keys = this._catList(), sig = keys.join(' ');
+        if (this._catKeys !== sig) {
+            this._cats.destroy_all_children();
+            this._catBtn = new Map();
+            for (const k of keys) {
+                const b = new St.Button({ style_class: 'silik-start-cat', label: this._t.cats[k], reactive: true, track_hover: true,
+                                          x_align: Clutter.ActorAlign.FILL });
+                b.get_child().x_align = Clutter.ActorAlign.START;
+                b.connect('clicked', () => { this._cat = k; this._sel = 0; this._fillCats(); this._fill(); this._entry.grab_key_focus(); });
+                this._cats.add_child(b);
+                this._catBtn.set(k, b);
+            }
+            this._catKeys = sig;
+        }
+        for (const [k, b] of this._catBtn) {
             if (k === this._cat) b.add_style_class_name('silik-on');
-            b.connect('clicked', () => { this._cat = k; this._sel = 0; this._fillCats(); this._fill(); this._entry.grab_key_focus(); });
-            this._cats.add_child(b);
+            else b.remove_style_class_name('silik-on');
         }
     }
 
@@ -875,24 +917,7 @@ class SilikShell {
            only shown or hidden: a key typed no longer makes and lays out every row again (measured in the rig,
            12/11/2026, with 150 applications: 30 ms of the shell's time per key before, see docs/STATUS.md) */
         const list = this._list;
-        if (list._silikApps !== this._apps) {
-            list.destroy_all_children();
-            list._silikRow = new Map();
-            for (const a of this._apps) {
-                const b = new St.Button({ style_class: 'silik-start-row', reactive: true, track_hover: true, x_expand: true });
-                const box = new St.BoxLayout({ x_expand: true });
-                box.add_child(icon(a.app, 16));
-                box.add_child(new St.Label({ text: a.name, style_class: 'silik-start-name', y_align: Clutter.ActorAlign.CENTER }));
-                box.add_child(new St.Label({ text: a.desc, style_class: 'silik-start-desc', x_expand: true, y_align: Clutter.ActorAlign.CENTER }));
-                b.set_child(box);
-                b.connect('clicked', () => this._launch(a.app));
-                list.add_child(b);
-                list._silikRow.set(a, b);
-            }
-            list._silikNone = new St.Label({ text: this._t.none, style_class: 'silik-start-none' });
-            list.add_child(list._silikNone);
-            list._silikApps = this._apps;
-        }
+        this._rowsFor(this._apps);
         const shown = new Set(this._shown);
         for (const [a, b] of list._silikRow) {
             b.visible = shown.has(a);
@@ -901,6 +926,50 @@ class SilikShell {
         this._rows = this._shown.map(a => list._silikRow.get(a));
         if (this._rows[this._sel]) this._rows[this._sel].add_style_class_name('silik-on');
         list._silikNone.visible = !this._shown.length;
+    }
+
+    /* the rows of APPS (made N at a time when N is given): kept while the list of applications is the same */
+    _rowsFor(apps, n = Infinity) {
+        const list = this._list;
+        if (list._silikApps !== apps) {
+            list.destroy_all_children();
+            list._silikRow = new Map();
+            list._silikNone = new St.Label({ text: this._t.none, style_class: 'silik-start-none' });
+            list.add_child(list._silikNone);
+            list._silikApps = apps;
+        }
+        const made = [];
+        for (let k = list._silikRow.size; k < apps.length && made.length < n; k++) {
+            const a = apps[k];
+            const b = new St.Button({ style_class: 'silik-start-row', reactive: true, track_hover: true, x_expand: true });
+            const box = new St.BoxLayout({ x_expand: true });
+            box.add_child(icon(a.app, 16));
+            box.add_child(new St.Label({ text: a.name, style_class: 'silik-start-name', y_align: Clutter.ActorAlign.CENTER }));
+            box.add_child(new St.Label({ text: a.desc, style_class: 'silik-start-desc', x_expand: true, y_align: Clutter.ActorAlign.CENTER }));
+            b.set_child(box);
+            b.connect('clicked', () => this._launch(a.app));
+            list.insert_child_below(b, list._silikNone);
+            list._silikRow.set(a, b);
+            made.push(b);
+        }
+        return made;
+    }
+
+    /* Start's list made before it is opened, a few rows at a time while the shell has nothing else to do (after the
+       session has started, and after a change of the installed applications or of the icon theme): the first
+       opening then costs what the later ones do. Each slice is a few milliseconds; the rows are also styled and
+       measured then (what their first showing would do) */
+    _warmStart() {
+        if (this._warmId) GLib.source_remove(this._warmId);
+        const slice = () => {
+            this._warmId = 0;
+            if (!this._list || this._startOpen) return GLib.SOURCE_REMOVE;          /* (an opening makes what is left) */
+            const apps = this._appList();
+            for (const b of this._rowsFor(apps, 12)) b.get_preferred_height(-1);
+            if (this._list._silikRow.size < apps.length) this._warmId = GLib.idle_add(GLib.PRIORITY_LOW, slice);
+            return GLib.SOURCE_REMOVE;
+        };
+        this._warmId = GLib.timeout_add(GLib.PRIORITY_LOW, 2000, slice);
     }
 
     _move(d) {
