@@ -2,8 +2,8 @@
 # release_keep.sh RELEASE FILE...: puts packages (binary RPMs and their source packages, *.src.rpm) into the GitHub
 # release RELEASE (which must exist), and moves what they replace into the release `sources-archive` instead of
 # deleting it, so that a package once published keeps its source published (GPL v2 section 3 asks for three years:
-# nothing here ever deletes from the archive). What a FILE replaces: an asset of the same package name and kind
-# (binary or source) under another file name, and an asset of its own file name with other contents (a rebuild with
+# nothing here ever deletes from the archive). What a FILE replaces: an asset of the same package name, kind
+# (binary or source) and architecture (the aarch64 build stays beside the x86_64 one) under another file name, and an asset of its own file name with other contents (a rebuild with
 # the same release number); the second keeps its name in the archive with the day it was moved in front
 # (YYYYMMDD-NAME). The new file is uploaded before the old one leaves: the release is never without the package.
 # Needs gh (GH_TOKEN) and GITHUB_REPOSITORY; used by the workflows EDA tools (eda/keep.sh), Dev tools and Wine.
@@ -14,6 +14,7 @@ archive=sources-archive
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 pkg() { basename "$1" | sed -E 's/-[^-]+-[^-]+\.[^.]+\.rpm$//'; }          # NAME-VERSION-RELEASE.ARCH.rpm -> NAME
 kind() { case $1 in *.src.rpm) echo src ;; *) echo bin ;; esac; }
+arch() { basename "$1" .rpm | sed 's/.*\.//'; }                           # x86_64, aarch64, noarch, src
 assets() { gh release view "$1" --repo "$repo" --json assets -q '.assets[].name'; }
 gh release view "$archive" --repo "$repo" > /dev/null 2>&1 || gh release create "$archive" --repo "$repo" \
   --title "Archive: packages replaced in the other releases, with their sources" --prerelease \
@@ -30,7 +31,7 @@ to_archive() {   # to_archive NAME [ARCHIVED NAME]: the asset NAME of the releas
 }
 for f in "$@"; do
   [ -s "$f" ] || { echo "error: no file $f" >&2; exit 1; }
-  b=$(basename "$f"); n=$(pkg "$f"); k=$(kind "$f")
+  b=$(basename "$f"); n=$(pkg "$f"); k=$(kind "$f"); a=$(arch "$f")
   have=$(assets "$rel")
   if echo "$have" | grep -qxF "$b"; then
     d=$tmp/s$RANDOM; mkdir -p "$d"
@@ -44,10 +45,10 @@ for f in "$@"; do
     gh release upload "$rel" "$f" --repo "$repo"
     echo "added: $rel/$b"
   fi
-  # older builds of the same package and kind: into the archive, then out of this release
+  # older builds of the same package, kind and architecture: into the archive, then out of this release
   echo "$have" | while read -r old; do
     case $old in *.rpm) ;; *) continue ;; esac
-    [ "$old" != "$b" ] && [ "$(pkg "$old")" = "$n" ] && [ "$(kind "$old")" = "$k" ] || continue
+    [ "$old" != "$b" ] && [ "$(pkg "$old")" = "$n" ] && [ "$(kind "$old")" = "$k" ] && [ "$(arch "$old")" = "$a" ] || continue
     to_archive "$old"
     gh release delete-asset "$rel" "$old" --repo "$repo" -y
   done

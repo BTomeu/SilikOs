@@ -10,6 +10,10 @@
 # at the end of its job: a later step that fails (an upload GitHub refuses) does not throw hours of building away.
 # Each build also makes its source package (tools/build_eda.sh: build/srpm/), kept in the same release as the binary
 # (eda/keep.sh); a package that a newer build replaces moves to the release sources-archive with its source.
+# ARM (aarch64): the recipes whose ExclusiveArch lists aarch64 are built on GitHub's ARM runners (ubuntu-24.04-arm),
+# tried there and kept in a release of their own, `eda-tools-aarch64` (jobs build-arm, keep-arm): the x86_64 jobs and
+# the CI's ISO read `eda-tools` by name patterns that do not tell the architectures apart. (Written 12/11/2026 after
+# the same build and trial under emulation; not run on GitHub yet: docs/STATUS.md)
 name: EDA tools
 on:
   push:
@@ -270,3 +274,83 @@ jobs:
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL; df -h . | tail -1
           bash eda/keep.sh kicad-packages3d
+
+  # ARM: built in an almalinux:9 container of the ARM runner, read-only token (upstream's build code runs there)
+  build-arm:
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: [ngspice]
+    runs-on: ubuntu-24.04-arm
+    container: almalinux:9
+    timeout-minutes: 330
+    steps:
+      - name: Tools
+        run: dnf -y -q install git tar gzip findutils zstd
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - name: Build ${{ matrix.tool }} (aarch64)
+        shell: bash
+        run: |
+          uname -m
+          if ! bash tools/build_eda.sh ${{ matrix.tool }} > build.log 2>&1; then
+            tail -80 build.log
+            echo "::error title=build ${{ matrix.tool }} aarch64::$(grep -iE 'error|no such file|not found|cannot|undefined|unpackaged|No match' build.log | tail -10 | tr '\n' ' ' | cut -c1-900)"
+            exit 1
+          fi
+          tail -5 build.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: edaarm-${{ matrix.tool }}
+          path: build/extra/${{ matrix.tool }}-*.rpm
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: srpm-edaarm-${{ matrix.tool }}
+          path: build/srpm/${{ matrix.tool }}-*.src.rpm
+          compression-level: 0
+
+  # tried in a clean EL 9 aarch64, then kept: the job with the token that writes never meets the build's workspace
+  keep-arm:
+    needs: build-arm
+    permissions:
+      contents: write        # (keeps the tried package in the release eda-tools-aarch64)
+    if: ${{ !cancelled() }}
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: [ngspice]
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/download-artifact@v4
+        with:
+          name: edaarm-${{ matrix.tool }}
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: srpm-edaarm-${{ matrix.tool }}
+          path: src
+      - name: Try ${{ matrix.tool }} in a clean EL 9 aarch64, then keep it in the release eda-tools-aarch64
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          t=${{ matrix.tool }}
+          if out=$(docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD/eda:/eda:ro" almalinux:9 bash -c "uname -m; bash /eda/trial.sh $t /dist/*.rpm" 2>&1); then
+            echo "$out" | tail -5
+            echo "::notice title=$t on EL 9 aarch64::$(echo "$out" | grep '^TRIAL-OK' | cut -c10-300)"
+          else
+            echo "$out" | tail -60
+            echo "::error title=trial $t aarch64::$(echo "$out" | tail -12 | tr '\n' ' ' | cut -c1-900)"
+            exit 1
+          fi
+          rel=eda-tools-aarch64
+          gh release view $rel --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || gh release create $rel --repo "$GITHUB_REPOSITORY" \
+            --title "Open EDA tools for SilikOS (EL 9, aarch64)" --prerelease \
+            --notes "The open EDA tools of eda-tools that build on ARM (aarch64), from the same recipes (eda/*.spec, eda/versions), upstream's unmodified sources, each tried on EL 9 aarch64. Each keeps its own licence (in the package). Not products of or supported by their authors' projects."
+          # with its source package; what they replace moves to the release sources-archive (tools/release_keep.sh)
+          ls src/$t-[0-9]*.src.rpm > /dev/null || { echo "::error title=keep $t aarch64::no source package"; exit 1; }
+          bash tools/release_keep.sh $rel dist/*.rpm src/$t-[0-9]*.src.rpm
+          done

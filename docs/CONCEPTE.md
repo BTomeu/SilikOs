@@ -177,6 +177,17 @@ sense haver-ho executat de veritat. Les suposicions es marquen amb [A].
   - una clau de signatura que genera i guarda el propietari.
 - **KiCad**: compilat, però la seva prova es va quedar a mitges per la facturació.
 
+**A ARM (aarch64), provat en un contenidor ARM emulat en aquesta màquina (12/11/2026):**
+- Els paquets de SilikOS són els mateixos per a les dues arquitectures: es construeixen i s'instal·len sobre AlmaLinux 9
+  ARM, `silik` funciona i diu l'arquitectura, i les proves passen amb el Python 3.9 d'ARM.
+- L'escriptori, el compilador ARM, gdb, stlink i les eines de banc d'EPEL existeixen per a ARM; dfu-util, stm32flash i
+  OpenOCD es compilen per a ARM amb les nostres receptes, i també el simulador ngspice.
+- El que no existeix a ARM, `silik` ho diu en lloc de fallar: Wine (al portàtil Snapdragon els programes de Windows
+  van al seu propi Windows), les eines dels fabricants d'EDA (són x86_64), el controlador NVIDIA.
+- La ISO ARM: `SILIK_ARCH=aarch64 bash tools/build_iso.sh`. Provada amb una còpia petita del disc d'AlmaLinux: el
+  menú UEFI diu SilikOS i el nucli arrenca amb la recepta. La ISO real (1,5 GB) no s'ha instal·lat enlloc.
+- Al Snapdragon X: com a màquina virtual Hyper-V (no provat). Detall: `docs/HARDWARE.md`.
+
 **Següents passos proposats:**
 - Una ISO que instal·li sense xarxa.
 - Que l'ordre `silik` i el COMMAND bar arrenquin més ràpid (s'està mesurant).

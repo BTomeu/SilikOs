@@ -42,6 +42,44 @@ jobs:
           name: silikos-sources
           path: build/srpm/*.src.rpm
 
+  # ARM (aarch64), on GitHub's ARM runners: the unit tests, the packages (noarch) built and installed in an aarch64
+  # EL 9 with CRB and EPEL as the kickstart has them, `silik` asked what it sees, and the aarch64 ISO built from
+  # AlmaLinux's aarch64 boot ISO (UEFI only). Not installed in a virtual machine: no KVM is assumed on these runners [A].
+  # (Written 12/11/2026 after the same steps under emulation; not run on GitHub yet: docs/STATUS.md)
+  arm:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - name: Unit tests (aarch64)
+        run: uname -m && python3 -m unittest discover -s tests -v
+      - name: Packages, installed on EL 9 aarch64
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src almalinux:9 bash -c '
+            set -e; uname -m
+            dnf -y -q install rpm-build createrepo_c dnf-plugins-core > /dev/null
+            bash tools/build_rpms.sh
+            dnf config-manager --set-enabled crb && dnf -y -q install epel-release
+            dnf -y -q install --setopt=install_weak_deps=False build/repo/silik-tools-*.rpm build/repo/silik-dev-*.rpm \
+              build/repo/silik-eda-open-*.rpm build/repo/silik-win-*.rpm build/repo/silik-command-*.rpm
+            for c in "--version" "status --json" "dev tools --json" "eda tools --json" "win apps --json" "hw probe --json"; do silik $c > /dev/null; done
+            silik status --json | grep -q "\"arch\": \"aarch64\""
+            silik status --json | grep -q "\"vsyscall\": \"n/a\""
+            dnf install --assumeno build/repo/*.rpm 2>&1 | grep -E "edk2-aarch64|Install +[0-9]+ Packages|Total download size"'
+      - name: The aarch64 ISO
+        run: |
+          bash tools/ci_apt.sh rpm createrepo-c xorriso mtools cpio isomd5sum
+          sudo chown -R "$(id -u):$(id -g)" build      # (build/repo: the packages the step above built in EL 9, as root)
+          SILIK_ARCH=aarch64 bash tools/build_iso.sh
+          ls -la build/SilikOS-*-aarch64-netinstall.iso
+      - uses: actions/upload-artifact@v4
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          name: silikos-iso-aarch64
+          path: build/SilikOS-*-aarch64-netinstall.iso
+          compression-level: 0
+
   install:
     needs: packages
     runs-on: ubuntu-24.04
@@ -60,7 +98,7 @@ jobs:
       - name: Tools and disk space
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
-          bash tools/ci_apt.sh rpm createrepo-c xorriso mtools cpio qemu-system-x86 qemu-utils imagemagick gcc-mingw-w64-x86-64 gcc-mingw-w64-i686 wixl
+          bash tools/ci_apt.sh rpm createrepo-c xorriso mtools cpio isomd5sum qemu-system-x86 qemu-utils imagemagick gcc-mingw-w64-x86-64 gcc-mingw-w64-i686 wixl
           df -h /
       - name: Wine and the open EDA tools for the ISO, when their workflows have made them (releases wine-*, eda-tools)
         env:
@@ -86,6 +124,7 @@ jobs:
           get eda-tools '*.rpm' "the open EDA tools"                # (workflow EDA tools)
           get dev-tools '*.rpm' "OpenOCD or dfu-util"               # (workflow Dev tools)
           rm -f build/extra/*.src.rpm      # (the releases' source packages: kept there, not on the ISO)
+          rm -f build/extra/*.aarch64.rpm                           # (the ARM builds: the ISO here is x86_64)
           ls -la build/extra
       # our packages as the packages job built them (in EL 9, with the base's rpmbuild): the ISO carries those
       - uses: actions/download-artifact@v4
@@ -138,7 +177,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: install
+    needs: [install, arm]
     runs-on: ubuntu-24.04
     permissions:
       contents: write        # (the release)

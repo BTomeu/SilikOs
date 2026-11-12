@@ -5,11 +5,13 @@
 | Packages + repository | `bash tools/build_rpms.sh` (and their source packages in `build/srpm/`) | `rpmbuild`, `createrepo_c` (any Linux; nothing is compiled) |
 | Tests | `python3 -m unittest discover -s tests` | Python >= 3.9 |
 | Dependency names | `bash tools/check_deps.sh` | an EL9 system with its repositories and EPEL |
-| Installer ISO | `bash tools/build_iso.sh [AlmaLinux-9-…-boot.iso]` (the base ISO is checked first: its sha256 against AlmaLinux's signed `CHECKSUM`) | `xorriso`, `mtools`, `cpio`, `curl`, `gpg`, repo.almalinux.org |
+| Installer ISO | `bash tools/build_iso.sh [AlmaLinux-9-…-boot.iso]` (the base ISO is checked first: its sha256 against AlmaLinux's signed `CHECKSUM`) | `xorriso`, `mtools`, `cpio`, `curl`, `gpg`, `implantisomd5` (isomd5sum), repo.almalinux.org |
+| Installer ISO for ARM | `SILIK_ARCH=aarch64 bash tools/build_iso.sh` (AlmaLinux's aarch64 boot ISO: UEFI only) | the same |
 | The base's sources | `bash tools/fetch_base_sources.sh [--list] [--limit N]`: the source packages of the boot ISO's installer image, from vault.almalinux.org, each checked by AlmaLinux's signature | `xorriso`, `unsquashfs`, `rpm`, `gpg`; several GB |
 | Brand rasters (committed) | `bash tools/gen_brand.sh` | `rsvg-convert`, the Cascadia Mono font |
 
-The ISO is the base's boot image relabelled `SilikOS-9-x-x86_64`, with `kickstart/silikos.ks`, the repository
+The ISO is the base's boot image relabelled `SilikOS-9-x-x86_64` (`SilikOS-9-x-aarch64`: its kickstart copy takes the
+aarch64 package sources and leaves out the x86_64 kernel argument `vsyscall=xonly`), with `kickstart/silikos.ks`, the repository
 `build/repo` as `/silikos`, `inst.ks=` added to the boot entries, the menus renamed, and `images/product.img`
 (`installer/product/` + `.buildstamp`): the installer unpacks it over its own root, which gives it the SilikOS name,
 its configuration (`etc/anaconda/product.d/silikos.conf`, based on the base product's) and the sidebar / top bar. The installation downloads the base system from the AlmaLinux and EPEL

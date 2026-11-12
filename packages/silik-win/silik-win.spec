@@ -26,7 +26,11 @@ Recommends:     libvirt-client
 Recommends:     virt-install
 Recommends:     virt-viewer
 Recommends:     virt-manager
-Recommends:     edk2-ovmf
+# the VM's UEFI firmware of the machine's own architecture (the package is noarch: both names exist in both
+# repositories): OVMF on x86_64, AAVMF on aarch64 (a Windows 11 for ARM VM). glibc(x86-64) / glibc(aarch-64) are the
+# provides of the installed glibc, so the condition is the architecture of the system
+Recommends:     (edk2-ovmf if glibc(x86-64))
+Recommends:     (edk2-aarch64 if glibc(aarch-64))
 Recommends:     swtpm
 Recommends:     passt
 Recommends:     freerdp

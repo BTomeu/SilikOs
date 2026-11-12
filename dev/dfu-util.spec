@@ -6,7 +6,7 @@ Summary:        dfu-util, firmware download over USB (DFU) (upstream's source bu
 License:        GPL-2.0-or-later
 URL:            https://dfu-util.sourceforge.net
 Source0:        dfu-util-%{version}.tar.gz
-ExclusiveArch:  x86_64
+ExclusiveArch:  x86_64 aarch64
 BuildRequires:  gcc make libusbx-devel
 
 %description

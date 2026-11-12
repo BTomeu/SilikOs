@@ -6,7 +6,7 @@ Summary:        stm32flash, flashing STM32 parts through their serial (UART) or 
 License:        GPL-2.0-or-later
 URL:            https://sourceforge.net/projects/stm32flash/
 Source0:        stm32flash-%{version}.tar.gz
-ExclusiveArch:  x86_64
+ExclusiveArch:  x86_64 aarch64
 BuildRequires:  gcc make
 
 %description

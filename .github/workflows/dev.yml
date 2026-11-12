@@ -7,6 +7,10 @@
 # that release (workflow CI). Each build also makes its source package (tools/build_dev.sh: build/srpm/), kept in the
 # same release; a package a newer build replaces moves to the release sources-archive with its source
 # (tools/release_keep.sh). Runs when a recipe changes, or by hand.
+# ARM (aarch64): the recipes that list aarch64 in ExclusiveArch are built the same way on GitHub's ARM runners
+# (ubuntu-24.04-arm, the almalinux:9 image's arm64 build), tried there, and kept in the same release beside the
+# x86_64 ones (jobs build-arm, trial-arm). (Written 12/11/2026 after the same builds and trials under emulation;
+# not run on GitHub yet: docs/STATUS.md)
 name: Dev tools
 on:
   push:
@@ -150,4 +154,92 @@ jobs:
           for t in openocd dfu-util stm32flash silik-pylab savvycan sigrok sdcc sigrok-firmware-fx2lafw; do
             ls src/$t-[0-9]*.src.rpm > /dev/null || { echo "::error title=keep $t::no source package"; exit 1; }
             bash tools/release_keep.sh dev-tools dist/$t-[0-9]*.rpm src/$t-[0-9]*.src.rpm
+          done
+
+  # ARM: the recipes whose ExclusiveArch lists aarch64 (built and tried under emulation here first: docs/STATUS.md)
+  build-arm:
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: [openocd, dfu-util, stm32flash]
+    runs-on: ubuntu-24.04-arm
+    container: almalinux:9
+    timeout-minutes: 60
+    steps:
+      - name: Tools
+        run: dnf -y -q install git tar gzip findutils
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - name: Build ${{ matrix.tool }} (aarch64)
+        shell: bash
+        run: |
+          uname -m
+          if ! bash tools/build_dev.sh ${{ matrix.tool }} > build.log 2>&1; then
+            tail -80 build.log
+            echo "::error title=build ${{ matrix.tool }} aarch64::$(grep -iE 'error|no such file|not found|cannot|undefined|unpackaged|No match' build.log | tail -10 | tr '\n' ' ' | cut -c1-900)"
+            exit 1
+          fi
+          tail -5 build.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: devarm-${{ matrix.tool }}
+          path: build/extra/${{ matrix.tool }}-*.rpm
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: srpm-devarm-${{ matrix.tool }}
+          path: build/srpm/${{ matrix.tool }}-*.src.rpm
+          compression-level: 0
+
+  trial-arm:
+    needs: build-arm
+    permissions:
+      contents: write        # (keeps the tried packages in the release)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: devarm-*
+          path: dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: srpm-devarm-*
+          path: src
+          merge-multiple: true
+      - name: Our own packages (silik, the job files)
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src almalinux:9 bash -c 'dnf -y -q install rpm-build createrepo_c > /dev/null && bash tools/build_rpms.sh'
+          cp build/repo/silik-tools-*.rpm build/repo/silik-dev-*.rpm dist/
+          ls -la dist
+      - name: Try each tool, then the stack (EPEL's ARM compiler, newlib, stlink; the base's gdb), in a clean EL 9 aarch64
+        run: |
+          rc=0
+          for t in openocd dfu-util stm32flash stack; do
+            case $t in stack) pk='/dist/*.rpm' ;; *) pk="/dist/$t-[0-9]*.rpm" ;; esac
+            if out=$(docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD/dev:/dev-recipes:ro" almalinux:9 bash -c "uname -m; bash /dev-recipes/trial.sh $t $pk" 2>&1); then
+              echo "$out" | tail -12
+              echo "::notice title=$t on EL 9 aarch64::$(echo "$out" | grep '^TRIAL-OK' | cut -c10-400)"
+            else
+              echo "$out" | tail -60
+              echo "::error title=trial $t aarch64::$(echo "$out" | tail -12 | tr '\n' ' ' | cut -c1-900)"
+              rc=1
+            fi
+          done
+          exit $rc
+      - name: Keep the aarch64 packages in the release dev-tools (beside the x86_64 ones)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view dev-tools --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || { echo "::error title=dev-tools::no release yet: the x86_64 jobs make it"; exit 1; }
+          # what an aarch64 package replaces (the older aarch64 build of the same package) moves to the release
+          # sources-archive; the x86_64 one stays (tools/release_keep.sh tells the architectures apart)
+          bash tools/release_keep.sh dev-tools dist/*.aarch64.rpm
+          # the source package: one recipe and one source for both architectures, under one file name. The x86_64
+          # job's stays when it is there; this build's goes up only when the release has none of that name
+          for f in src/*.src.rpm; do
+            gh release view dev-tools --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -qxF "$(basename "$f")" || bash tools/release_keep.sh dev-tools "$f"
           done

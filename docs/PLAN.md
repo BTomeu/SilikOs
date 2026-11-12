@@ -30,8 +30,10 @@ be used.
    one ink on paper, and the COMMAND bar (Super+Space, or a click on the command line) takes typed addresses
    (`app/`, `eda/`, `win/`, `sys/`, paths), each with the command line that does the same from a terminal, and a
    session log. A shell of our own (no GNOME underneath) comes only after v0 is used on a real machine.
-7. **x86_64 first.** The EDA tools and Altium exist only for x86_64 [A: as far as known on 09/11/2026]. ARM is a
-   later experiment (`docs/HARDWARE.md`).
+7. **x86_64 first; ARM too** (owner, 12/11/2026: "a top system, also for ARM"). The EDA tools and Altium exist only
+   for x86_64 [A: as far as known on 09/11/2026]. On AlmaLinux 9 for aarch64 SilikOS is the same packages (noarch),
+   an aarch64 ISO and the recipes that build there; what does not exist on ARM (Wine, the vendors' x86_64 tools,
+   NVIDIA's x86_64 driver) is said by `silik`, not hidden (`docs/HARDWARE.md`).
 8. **Three looks, one shell** (owner, 11/11/2026: the Silik look stays, and a second way of working "with the flow
    of Ubuntu and Windows, but unique"; of three drawings the owner kept two). `silik look silik | bar | island`
    (`look/…` in the COMMAND bar) sets one setting and the shell extension follows it at once: **silik** (title bar =
@@ -68,7 +70,7 @@ be used.
 | 0e | Altium: Wine try, then the Windows virtual machine | owner's licences |
 | 1 | Hosted package repository, updates, signed packages | after phase 0 |
 | 2 | Desktop: own shell pieces (panel, window rules, settings), first-run setup | the looks bar and island: done (`docs/STATUS.md`); the rest after phase 0 |
-| 3 | ARM image (as a virtual machine first) | after phase 0 |
+| 3 | ARM image (as a virtual machine first) | started 12/11/2026: packages, `silik`, the aarch64 ISO script three embedded tools and ngspice tried on emulated aarch64 (`docs/HARDWARE.md`); not installed or booted on ARM hardware |
 
 ## Risks
 

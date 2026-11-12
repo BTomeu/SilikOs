@@ -235,6 +235,18 @@ class ReleaseKeep(unittest.TestCase):
             self.assertRegex(n, r"^[0-9]{8}-a-1\.0-1\.el9\.(x86_64|src)\.rpm$")
         self.assertEqual(sorted(self.read("sources-archive", n) for n in arch), ["b1", "s1"])
 
+    def test_the_arm_build_stays_beside_the_x86_64_one(self):
+        self.keep(self.file("a-1.0-1.el9.x86_64.rpm", "x1"), self.file("a-1.0-1.el9.src.rpm", "s1"))
+        self.keep(self.file("a-1.0-1.el9.aarch64.rpm", "r1"))
+        self.assertEqual(self.rel("tools"), ["a-1.0-1.el9.aarch64.rpm", "a-1.0-1.el9.src.rpm", "a-1.0-1.el9.x86_64.rpm"])
+        self.assertEqual(self.rel("sources-archive"), [])
+        # a newer aarch64 build replaces the aarch64 one only
+        self.keep(self.file("a-1.1-1.el9.aarch64.rpm", "r2"))
+        self.assertEqual(self.rel("tools"), ["a-1.0-1.el9.src.rpm", "a-1.0-1.el9.x86_64.rpm", "a-1.1-1.el9.aarch64.rpm"])
+        self.assertEqual(self.rel("sources-archive"), ["a-1.0-1.el9.aarch64.rpm"])
+        for wf in ("dev", "eda"):                                  # (the ARM jobs keep through the same script)
+            self.assertGreaterEqual(text(".github/workflows/%s.yml" % wf).count("srpm-%sarm-" % wf), 2, wf)
+
     def test_a_name_that_starts_like_another_is_another_package(self):
         self.keep(self.file("kicad-10.0.8-1.el9.x86_64.rpm", "k"), self.file("kicad-symbols-10.0.8-1.el9.noarch.rpm", "s"))
         self.keep(self.file("kicad-10.0.9-1.el9.x86_64.rpm", "k2"))

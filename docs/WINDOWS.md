@@ -163,6 +163,12 @@ that have the prefix's runtime folder mounted).
   forwarded to `127.0.0.1:3389`. Enable Remote Desktop in Windows; `silik win vm app` then opens one program as a
   window of this desktop (RDP RemoteApp, FreeRDP), with the shared folder `~/Windows` as a drive (never the whole
   home folder: a program in the VM could otherwise write ~/.bashrc or an autostart entry), the clipboard shared.
+- Its screen until Remote Desktop is on: VNC (virt-viewer) with a VGA card. EL 9's qemu-kvm has no SPICE and no QXL
+  (seen on AlmaLinux 9.8: `qemu-kvm -spice` is an invalid option, no QXL device); the first command line asked for
+  both and would have been refused (fixed 12/11/2026; the new one not run either: no KVM here).
+- On ARM (aarch64): Windows 11 for ARM, `virt` machine, AAVMF (edk2-aarch64), the installation disc on USB, disk and
+  network virtio with virtio-win's ARM64 drivers (`--drivers virtio-win.iso`, "Load driver" in Setup), a RAM
+  framebuffer; without `/dev/kvm` (a VM in Hyper-V on a Windows on ARM laptop) it says why it cannot (`docs/HARDWARE.md`).
 - Windows and the programs need their own licences.
 
 ## Altium Designer

@@ -325,7 +325,9 @@ class Recipes(unittest.TestCase):
                                  "sigrok-firmware-fx2lafw"])
         wf, trial = text(".github/workflows/dev.yml"), text("dev/trial.sh")
         built = [t.strip() for m in re.findall(r"tool: \[([^\]]*)\]", wf) for t in m.split(",")]   # (both build jobs)
-        tried, kept = [l for l in wf.splitlines() if l.strip().startswith("for t in ")]
+        # (the x86_64 jobs' loops; the third is the ARM trial's: tests/test_arm.py)
+        tried, kept, arm = [l for l in wf.splitlines() if l.strip().startswith("for t in ")]
+        self.assertIn("for t in openocd dfu-util stm32flash stack; do", arm)
         for n in names:
             spec = text("dev/%s.spec" % n)
             self.assertIn("Name:           " + n, spec)
