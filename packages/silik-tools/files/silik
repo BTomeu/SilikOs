@@ -28,7 +28,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.6.12"
+VERSION = "0.6.13"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -2907,7 +2907,8 @@ LOOKS = (
 # The accent (key "accent", silikos-desktop 0.13): one colour for what is selected, focused, on or running; text,
 # frames and the mark stay ink on paper; NAME-vivid also gives the title bars a deep tone of it. Its colours are silikos-desktop's (tools/gen_accents.py); the extension
 # follows the key, GTK programs and the shell's own parts follow the themes SilikOS-<accent> (gtk-theme and
-# shell-theme make them on the system), which this sets with the key. "ink" is the look without an accent: SilikOS.
+# shell-theme make them on the system), which this sets with the key, and Qt 5 programs the user's qt5ct.conf
+# (qt_accent). "ink" is the look without an accent: SilikOS.
 ACCENTS = (
     ("ink", "one ink on paper, the original"),
     ("steel", "steel #3e5c76"),
@@ -2923,6 +2924,57 @@ ACCENTS = (
 THEMES = "/usr/share/themes"
 ICONS = "/usr/share/icons"
 USER_THEME = "org.gnome.shell.extensions.user-theme"
+# Qt 5 programs (KLayout, SavvyCAN, PulseView) take their palette from qt5ct (silikos-desktop 0.15: the session's
+# QT_QPA_PLATFORMTHEME); qt5ct reads the user's ~/.config/qt5ct/qt5ct.conf, made from silikos-desktop's
+# /etc/xdg/qt5ct/qt5ct.conf. The accent's palette is a file of silikos-desktop (tools/gen_accents.py)
+QT_SCHEMES = "/usr/share/silikos/qt"
+QT5CT_GLOBAL = "/etc/xdg/qt5ct/qt5ct.conf"
+
+
+def qt5ct_conf(text, keys):
+    """TEXT (a qt5ct.conf) with KEYS ({key: value}) set in its [Appearance], every other line as it was"""
+    lines = text.splitlines()
+    start = next((i for i, l in enumerate(lines) if l.strip() == "[Appearance]"), None)
+    if start is None:
+        lines += ([""] if lines and lines[-1].strip() else []) + ["[Appearance]"]
+        start = len(lines) - 1
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].strip().startswith("[")), len(lines))
+    left = dict(keys)
+    for i in range(start + 1, end):
+        k = lines[i].split("=", 1)[0].strip()
+        if k in left:
+            lines[i] = "%s=%s" % (k, left.pop(k))
+    while end > start + 1 and not lines[end - 1].strip():      # (new keys go after the section's last line)
+        end -= 1
+    lines[end:end] = ["%s=%s" % kv for kv in left.items()]
+    return "\n".join(lines) + "\n"
+
+
+def qt_accent(ctx, accent, icons):
+    """the user's qt5ct.conf takes the accent's palette and the icon theme (from silikos-desktop's file when the user
+    has none yet); a running Qt 5 program follows it at once (qt5ct watches the file)"""
+    scheme = os.path.join(QT_SCHEMES, accent + ".conf")
+    if not os.path.isfile(scheme):
+        return
+    path = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "qt5ct", "qt5ct.conf")
+    old = read(path, None)
+    new = qt5ct_conf(old if old is not None else read(QT5CT_GLOBAL, ""),
+                     {"custom_palette": "true", "color_scheme_path": scheme, "icon_theme": icons})
+    if new == old:
+        return
+    if not ctx.quiet:
+        print("%s %s  (Qt 5 programs: color_scheme_path=%s icon_theme=%s)" % ("~" if old is not None else "+", path, scheme, icons))
+    if ctx.dry:
+        return
+    try:
+        # written beside it and renamed over it: qt5ct watches the folder, whose entries change only so (a file
+        # rewritten in place left running programs as they were, seen in the rig 12/11/2026)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path + ".silik", "w", encoding="utf-8") as f:
+            f.write(new)
+        os.replace(path + ".silik", path)
+    except OSError as e:
+        die("could not write %s: %s" % (path, e.strerror or e))
 
 
 def look_now(ctx):
@@ -2986,6 +3038,7 @@ def cmd_look(ctx, a):
         ctx.run(["gsettings", "set", "org.gnome.desktop.interface", "icon-theme", icons])
         if not ctx.dry and accent_now(ctx) != a.accent:
             die("the accent is still %s: run it as the user, in the desktop session (gsettings could not change the setting)" % (accent_now(ctx) or "unknown"))
+        qt_accent(ctx, a.accent, icons)
         if (before or "ink").endswith("-vivid") != a.accent.endswith("-vivid") and before:
             # (mutter redraws the frames of X11 windows only at the first change of theme of a session: seen 12/11/2026)
             print("silik: the title bars of X11 programs (xterm, Magic, Xschem, Wine) take the new colour at the next login")
