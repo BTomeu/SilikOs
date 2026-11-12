@@ -28,7 +28,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.6.11"
+VERSION = "0.6.12"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -1760,7 +1760,8 @@ def cmd_update(ctx, a):
         if on:
             ctx.run(["sudo", "systemctl", "enable", "--now"] + on)
         return 0
-    ctx.run(["sudo", "dnf", "-y", "upgrade", "--refresh"])
+    # (ten downloads at a time, as the automatic updates: measured faster here; the base's dnf.conf is not changed)
+    ctx.run(["sudo", "dnf", "-y", "--setopt=max_parallel_downloads=10", "upgrade", "--refresh"])
     if not ctx.dry and shutil.which("needs-restarting"):
         # (dnf-utils: exit 1 when the kernel, glibc, systemd or another core part was updated under the running system)
         if subprocess.run(["needs-restarting", "-r"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 1:
