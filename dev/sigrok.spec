@@ -28,8 +28,8 @@ The sigrok suite: libsigrok (drivers for some 200 logic analysers, oscilloscopes
 fx2lafw / Saleae-type analysers, Rigol, Siglent, DSLogic...), libsigrokdecode with its protocol decoders (SPI, I2C,
 UART, CAN, LIN, 1-Wire, JTAG, SWD, USB, I2S... over 100), sigrok-cli (captures and decodes from a command line) and
 PulseView (the window: capture, look, decode). Upstream's sources at the commits named above, unmodified, built on EL 9 by
-SilikVolt (dev/sigrok.spec); not in the base's repositories or in EPEL 9. Not yet here: the fx2lafw firmware that
-inexpensive Cypress FX2 analysers load (it is built with SDCC, which EL 9 and EPEL 9 lack).
+SilikVolt (dev/sigrok.spec); not in the base's repositories or in EPEL 9. The fx2lafw firmware that inexpensive
+Cypress FX2 analysers load is the package sigrok-firmware-fx2lafw (built with SDCC: dev/sdcc.spec).
 
 %prep
 %setup -q -c -T -a 0 -a 1 -a 2 -a 3

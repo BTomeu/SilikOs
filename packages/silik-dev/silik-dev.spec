@@ -1,5 +1,5 @@
 Name:           silik-dev
-Version:        0.4.0
+Version:        0.5.0
 Release:        1%{?dist}
 Summary:        Embedded development and the lab bench on SilikOS: ARM compiler, debugger, flashing, CAN, serial / RS-485, buses
 License:        LicenseRef-SilikVolt
@@ -24,6 +24,10 @@ Recommends:     savvycan
 Recommends:     silik-pylab
 # logic analysers, scopes, multimeters: sigrok-cli and PulseView with 100+ protocol decoders
 Recommends:     sigrok
+# the firmware libsigrok loads into inexpensive Cypress FX2 analysers (Saleae Logic clones, "24MHz 8CH"), and SDCC,
+# the C compiler for 8051 / STM8 / Z80 parts it is built with (both built by SilikOS: dev/)
+Recommends:     sigrok-firmware-fx2lafw
+Recommends:     sdcc
 # around them
 Recommends:     make
 Recommends:     cmake

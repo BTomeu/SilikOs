@@ -321,8 +321,11 @@ class Install(unittest.TestCase):
 class Recipes(unittest.TestCase):
     def test_versions_and_specs(self):
         names = [l.split()[0] for l in text("dev/versions").splitlines() if l and not l.startswith("#")]
-        self.assertEqual(names, ["openocd", "dfu-util", "stm32flash", "silik-pylab", "savvycan", "sigrok"])
+        self.assertEqual(names, ["openocd", "dfu-util", "stm32flash", "silik-pylab", "savvycan", "sigrok", "sdcc",
+                                 "sigrok-firmware-fx2lafw"])
         wf, trial = text(".github/workflows/dev.yml"), text("dev/trial.sh")
+        built = [t.strip() for m in re.findall(r"tool: \[([^\]]*)\]", wf) for t in m.split(",")]   # (both build jobs)
+        tried, kept = [l for l in wf.splitlines() if l.strip().startswith("for t in ")]
         for n in names:
             spec = text("dev/%s.spec" % n)
             self.assertIn("Name:           " + n, spec)
@@ -331,8 +334,34 @@ class Recipes(unittest.TestCase):
             if n != "silik-pylab":                     # (its licences are in each package's dist-info)
                 self.assertTrue("%licences" in spec or "%{_datadir}/licenses/%{name}" in spec, n)
             self.assertIn("  %s)" % n, trial)            # a real job in a clean EL 9
-            self.assertIn(n, wf.split("tool: [")[1].split("]")[0])
+            self.assertIn(n, built)
+            self.assertRegex(tried, r" %s[ ;]" % re.escape(n))      # tried in a clean EL 9
+            self.assertRegex(kept, r" %s[ ;]" % re.escape(n))       # kept in the release
             self.assertIn("Recommends:     " + n, text("packages/silik-dev/silik-dev.spec"))
+
+    def test_further_archives_are_pinned_by_their_hashes(self):
+        n = 0
+        for f in sorted(os.listdir(os.path.join(ROOT, "dev"))):
+            if f.endswith(".spec"):
+                for l in text("dev/" + f).splitlines():
+                    if l.startswith("# archive:"):
+                        self.assertRegex(l, r"^# archive: https://\S+ [0-9a-f]{64}$", f)
+                        n += 1
+        self.assertGreater(n, 0)                                     # (SDCC's Boost headers)
+        self.assertIn("sha256sum -c", text("tools/build_dev.sh"))
+
+    def test_the_firmware_is_built_with_our_sdcc(self):
+        spec, build = text("dev/sigrok-firmware-fx2lafw.spec"), text("tools/build_dev.sh")
+        self.assertIn("\n# uses: sdcc\n", spec)
+        self.assertIn("BuildRequires:  sdcc", spec)
+        self.assertIn("BuildArch:      noarch", spec)
+        self.assertIn("%{_datadir}/sigrok-firmware/", spec)          # where libsigrok looks (FIRMWARE_DIR)
+        self.assertIn("sed -n 's/^# uses: *//p'", build)
+        self.assertIn("releases/tags/dev-tools", build)
+        wf = text(".github/workflows/dev.yml")
+        uses = wf.split("  build-uses:")[1].split("\n  trial:")[0]
+        self.assertIn("tool: [sigrok-firmware-fx2lafw]", uses)
+        self.assertIn("name: dev-sdcc, path: build/deps", uses)
 
     def test_the_python_tools_are_pinned_by_their_hashes(self):
         lines = [l for l in text("dev/pylab-requirements.txt").splitlines() if l and not l.startswith("#")]

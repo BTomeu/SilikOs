@@ -92,7 +92,9 @@ Built here (dev/, workflow "Dev tools", release `dev-tools`; none is in EL 9 or 
 | `savvycan` | SavvyCAN V220 (MIT): a CAN analyser window: capture from can0, DBC decoding, graphs, sending, replay, log formats |
 | `silik-pylab` | python-can 4.6.1, cantools 45.1.2 (DBC, ARXML, KCD), esptool 4.8.1, pymodbus 3.16.2 and what they need, from PyPI's source archives pinned by sha256 (`dev/pylab-requirements.txt`), on EL 9's Python 3.12 and apart from the system's Python: the commands `cantools`, `can_logger`, `can_player`, `can_viewer`, `esptool`; `silik-python script.py` imports them |
 | `stm32flash` | stm32flash 0.7: an STM32 written through its serial bootloader with a USB-serial adapter |
-| `sigrok` | the sigrok suite: PulseView (the window), sigrok-cli, libsigrok's drivers (logic analysers, oscilloscopes, multimeters, power supplies: some 200 devices) and 131 protocol decoders (SPI, I2C, UART, CAN, LIN, JTAG, SWD, 1-Wire, I2S...). Its last releases (2019-2020) do not build with EL 9's Qt and glibmm: the four parts at the commits of their main branches read on 12/11/2026 (dev/sigrok.spec). Not yet: the fx2lafw firmware of inexpensive FX2 analysers (built with SDCC, which EL 9 lacks) |
+| `sigrok` | the sigrok suite: PulseView (the window), sigrok-cli, libsigrok's drivers (logic analysers, oscilloscopes, multimeters, power supplies: some 200 devices) and 131 protocol decoders (SPI, I2C, UART, CAN, LIN, JTAG, SWD, 1-Wire, I2S...). Its last releases (2019-2020) do not build with EL 9's Qt and glibmm: the four parts at the commits of their main branches read on 12/11/2026 (dev/sigrok.spec) |
+| `sigrok-firmware-fx2lafw` | fx2lafw (GPL-2.0+, its fx2lib LGPL-2.1+) at the commit of its main branch read on 12/11/2026: its last release, 0.1.7 (2019), does not build with SDCC 4.6. The firmware libsigrok uploads to Cypress FX2 analysers each time one is plugged in (they keep none): Saleae Logic and its clones (USB 0925:3881 in libsigrok's table; the "24MHz 8CH" boards show that ID [A: not seen here]), USBee AX / DX / SX / ZX, the FX2 kit, sigrok's FX2 boards, Hantek 6022BE / BL / PSO2020, Instrustar ISDS205B and Sainsmart DDS120 scopes: 15 files in `/usr/share/sigrok-firmware`, where libsigrok looks. Built with our SDCC |
+| `sdcc` | SDCC 4.6.0 (GPL-2.0+ / GPL-3.0+; its libraries carry a linking exception: your program is yours): C for 8051 (the FX2 among them), STM8, Z80 / Rabbit / SM83 / eZ80, HC08 / S08, 6502, Padauk and f8, with its assemblers, linker and ucsim's simulators (`ucsim_51`, `ucsim_stm8`...). Not the PIC ports (they need gputils, which EL 9 lacks). SDCC refuses Boost older than 1.79 (EL 9 has 1.75): the graph headers of Boost 1.86.0's release archive are compiled in |
 
 ```
 candump can0 | cantools decode car.dbc          frames of a bus decoded with its database, live
@@ -105,8 +107,11 @@ Tried in a clean EL 9 (dev/trial.sh, 12/11/2026): cantools decoded a DBC frame (
 carried it across its virtual bus, pymodbus framed a Modbus RTU request, esptool and stm32flash started, SavvyCAN
 started and stayed up; the system's Python does not see them. sigrok-cli decoded a UART line made of samples to "SilikOS", its
 demo device captured, PulseView started and stayed up (and captured from the demo device on the session's desktop).
+SDCC compiled an 8051 program to Intel HEX and ucsim_51 ran it (it printed fib(30)=832040); the same C compiled for
+STM8 and Z80. With the firmware package, libsigrok's own search path (SIGROK_FIRMWARE_DIR unset) finds 14 of the 15
+firmware files its drivers name, the Saleae clones' among them (the 15th, usb-c-grok's, is not fx2lafw's).
 
-Not run: a real adapter on a bus; the Windows VM with a USB device [A: libvirt's hostdev for qemu:///session].
+Not run: a real adapter on a bus; a real FX2 analyser taking the firmware (none here); the Windows VM with a USB device [A: libvirt's hostdev for qemu:///session].
 
 ## The vendors' IDEs
 

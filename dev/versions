@@ -7,3 +7,5 @@ stm32flash  https://sourceforge.net/projects/stm32flash/  v0.7  https://download
 silik-pylab  pypi  1.0
 savvycan  https://github.com/collin80/SavvyCAN  V220
 sigrok  multi  0.6.20261112
+sdcc  https://sourceforge.net/projects/sdcc/  4.6.0  https://downloads.sourceforge.net/project/sdcc/sdcc/{ver}/sdcc-src-{ver}.tar.bz2
+sigrok-firmware-fx2lafw  multi  0.1.7.20261112
