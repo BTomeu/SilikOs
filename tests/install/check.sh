@@ -63,7 +63,7 @@ has desktop.super-space "$(asuser gsettings get org.gnome.settings-daemon.plugin
 # the three looks (silik, bar, island): the setting is there with its default, the running shell takes each one
 # (seen from outside: the room it leaves to windows; the rail and the top bar are gone in bar and island) without an
 # error of the extension, and the session ends in the default one. Their pictures are tests/install/run.sh's.
-is look.default "$(asuser silik -q look --json)" '{"look": "silik", "looks": ["silik", "bar", "island"], "accent": "ink", "accents": ["ink", "steel", "steel-vivid", "cobalt", "cobalt-vivid", "silicon", "silicon-vivid", "volt", "volt-vivid", "spark"]}'
+is look.default "$(asuser silik -q look --json)" '{"look": "island", "looks": ["silik", "bar", "island"], "accent": "ink", "accents": ["ink", "steel", "steel-vivid", "cobalt", "cobalt-vivid", "silicon", "silicon-vivid", "volt", "volt-vivid", "spark"]}'
 exterr() { journalctl -b --no-pager -o cat 2> /dev/null | grep -A12 'JS ERROR' | awk '/JS ERROR/ { n += hit; hit = 0; seen = 1 } seen && /silik-shell@/ { hit = 1 } END { print n + hit }'; }
 # x,y,width,height of the room windows have on the first screen, then the screen's height (GTK 3, as the COMMAND bar has it)
 room() { asuser python3 -c "
@@ -73,7 +73,7 @@ from gi.repository import Gdk
 m = Gdk.Display.get_default().get_primary_monitor() or Gdk.Display.get_default().get_monitor(0)
 w, g = m.get_workarea(), m.get_geometry()
 print('%d,%d,%d,%d %d' % (w.x - g.x, w.y - g.y, w.width, w.height, g.height))" 2> /dev/null; }
-for l in bar island silik; do
+for l in silik bar island; do
   e0=$(exterr); s=$(asuser silik look $l); sleep 8
   r=$(room); screen_h=${r##* }; r=${r%% *}; v=$(asuser gsettings get com.silikvolt.silikos.shell look); e=$(( $(exterr) - e0 ))
   x=${r%%,*}; y=$(echo "$r" | cut -d, -f2); h=$(echo "$r" | cut -d, -f4)

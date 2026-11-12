@@ -1,5 +1,5 @@
 Name:           silikos-desktop
-Version:        0.14.0
+Version:        0.14.1
 Release:        1%{?dist}
 Summary:        The SilikOS desktop: the Silik layout and the Flow looks (bar, island), its accents, GTK and shell themes, Cascadia Mono
 License:        LicenseRef-SilikVolt AND OFL-1.1
@@ -32,7 +32,7 @@ System-wide GNOME defaults (dconf database "local"), the Cascadia Mono font (SIL
 default of the login screen: the EDA tools this system is for are X11 programs. The shell extension silik-shell is
 the desktop in three looks, chosen by the key "look" of the settings com.silikvolt.silikos.shell (`silik look`):
 silik (the title bar is the command line, a text rail of keys, a status bar), bar (one bar across the bottom, the
-applications as icons) and island (one floating piece centred at the bottom). The key "accent" (`silik look --accent`)
+applications as icons) and island (one floating piece centred at the bottom, the default). The key "accent" (`silik look --accent`)
 gives one colour to what is selected, focused, on or running: ink (none, the default), steel, cobalt, silicon, volt
 or spark; NAME-vivid also gives the title bars a deep tone of it. The GTK and shell themes of each, SilikOS-NAME, are
 made on the system beside SilikOS.

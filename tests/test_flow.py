@@ -40,8 +40,9 @@ class Schema(unittest.TestCase):
         self.assertEqual(accents[0], "ink")                                   # (the list itself: tests/test_accents.py)
         self.assertEqual(keys[1].find("default").text.strip(), "'ink'")     # one ink on paper until one is chosen
 
-    def test_the_default_is_the_silik_look(self):
-        self.assertEqual(self.root.find("schema/key/default").text.strip(), "'silik'")
+    def test_the_default_is_the_island_look(self):
+        # owner, 12/11/2026: "the standard mode should be the island mode"
+        self.assertEqual(self.root.find("schema/key/default").text.strip(), "'island'")
 
     def test_the_package_installs_it(self):
         spec = text(os.path.join(DESK, "silikos-desktop.spec"))

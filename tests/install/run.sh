@@ -161,10 +161,13 @@ if kill -0 $qpid 2> /dev/null; then
     # KiCad as a new user meets it (what it asks on its first start included), then its window
     if grep -q 'SILIKOS-CI|eda.kicad|ok' "$out/boot.log"; then eda kicad 30 12; key alt-f4 || true; sleep 3; key alt-f4 || true; sleep 3; key alt-f4 || true; sleep 3; fi
   fi
-  # the other two looks, each chosen from the COMMAND bar by its address, with a window open: the look, Start in it;
-  # in the bar look also the lock screen and back (the shell turns the extension off there and on again)
+  # the other two looks (the island is the default), each chosen from the COMMAND bar by its address, with a window
+  # open: the look, Start in it; in the bar look also the lock screen and back (the shell turns the extension off there
+  # and on again); then the island again, with an accent and back to the ink
   look() { key meta_l-spc || true; sleep 5; typ "look/$1" || true; sleep 2; key ret || true; sleep 8; }
   key meta_l-spc || true; sleep 5; typ "sys/files" || true; sleep 2; key ret || true; sleep 10
+  look silik; shot look-silik || true
+  key meta_l || true; sleep 4; typ "te" || true; sleep 2; shot look-silik-start || true; key esc || true; sleep 2
   look bar; shot look-bar || true
   key meta_l || true; sleep 4; shot look-bar-start || true; key esc || true; sleep 2
   key meta_l-spc || true; sleep 5; typ "sys/lock" || true; sleep 2; key ret || true; sleep 14  # `silik session lock` (and the fade to the lock screen)
@@ -172,8 +175,7 @@ if kill -0 $qpid 2> /dev/null; then
   typ "silikos-ci" || true; key ret || true; sleep 8; shot look-bar-unlocked || true
   look island; shot look-island || true
   key meta_l || true; sleep 4; shot look-island-start || true; key esc || true; sleep 2
-  look silik; shot look-silik || true
-  # an accent from the COMMAND bar (look/volt-vivid): the Silik look in volt violet with its title bars, Start in it;
+  # an accent from the COMMAND bar (look/volt-vivid): the island in volt violet with its title bars, Start in it;
   # then the ink again (look/ink)
   look volt-vivid; shot accent-volt-vivid || true
   key meta_l || true; sleep 4; typ "te" || true; sleep 2; shot accent-volt-vivid-start || true; key esc || true; sleep 2

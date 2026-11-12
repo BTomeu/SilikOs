@@ -9,7 +9,7 @@
         <choice value="bar"/>
         <choice value="island"/>
       </choices>
-      <default>'silik'</default>
+      <default>'island'</default>
       <summary>The look of the desktop</summary>
       <description>silik: the title bar is the command line, a text rail of keys, a status bar. bar: one bar across the bottom, the applications as icons. island: one floating piece centred at the bottom.</description>
     </key>

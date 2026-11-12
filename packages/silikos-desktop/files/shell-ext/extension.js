@@ -239,7 +239,7 @@ function programOf(app) {
     return null;
 }
 
-/* the look asked for: the key of the settings, "silik" when the schema is not on this system */
+/* the look asked for: the key of the settings, "island" (the default) when the schema is not on this system */
 function lookSettings() {
     try {
         const src = Gio.SettingsSchemaSource.get_default();
@@ -322,7 +322,7 @@ class SilikShell {
         this._moved = [];
         this._rk = new Map();                                /* the rail's keys: application -> key, window -> key */
         this._rw = new Map();
-        const look = this._settings ? this._settings.get_string('look') : 'silik';
+        const look = this._settings ? this._settings.get_string('look') : 'island';
         this._flow = look === 'bar' || look === 'island'
             ? new Flow.FlowLook(look, { t: this._t, icon, mark: markSmall, programOf, toggleStart: () => this._toggleStart(),
                                         closeStart: () => this._closeStart(), command: () => this._command() })

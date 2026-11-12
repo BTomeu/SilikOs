@@ -38,6 +38,8 @@ be used.
    command line, text rail, status bar), **bar** (one bar at the bottom: Start, the command line, the applications as
    icons, workspaces, system, clock), **island** (one floating piece at the bottom). All three keep the same ink on
    paper, the mark as Start, the digits, the COMMAND bar on Super+Space and every action through `silik`.
+   **The island is the default** (owner, 12/11/2026: "the standard mode should be the island mode"); the other two
+   stay a command away.
 9. **The kernel is not touched** (owner, 11/11/2026: "the rule is simple: maximum compatibility with the programs; if
    that means the kernel cannot be touched, it is not touched"). Speed and security come from settings on top of the
    base's kernel (sysctl files, boot arguments, service choices), each one measured before it is claimed. Secure Boot
