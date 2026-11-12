@@ -4,12 +4,14 @@
 # is built here from upstream's source at the tag of dev/versions (dev/<tool>.spec), tried in a clean EL 9
 # (dev/trial.sh) and kept in the release `dev-tools`. Then the whole stack is tried there: the ARM compiler, newlib
 # and ST-LINK's tools of EPEL 9, the base's gdb, these two and `silik dev try`. The CI's ISO takes the packages from
-# that release (workflow CI). Runs when a recipe changes, or by hand.
+# that release (workflow CI). Each build also makes its source package (tools/build_dev.sh: build/srpm/), kept in the
+# same release; a package a newer build replaces moves to the release sources-archive with its source
+# (tools/release_keep.sh). Runs when a recipe changes, or by hand.
 name: Dev tools
 on:
   push:
     branches: [main]
-    paths: ['dev/**', 'tools/build_dev.sh', '.github/workflows/dev.yml', 'eda/common.inc', 'packages/silik-dev/**']
+    paths: ['dev/**', 'tools/build_dev.sh', 'tools/release_keep.sh', '.github/workflows/dev.yml', 'eda/common.inc', 'packages/silik-dev/**']
   workflow_dispatch:
 # read-only by default (the builds run upstream's build code); only the job that keeps the tried packages writes
 permissions:
@@ -47,6 +49,11 @@ jobs:
           name: dev-${{ matrix.tool }}
           path: build/extra/${{ matrix.tool }}-*.rpm
           compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: srpm-dev-${{ matrix.tool }}
+          path: build/srpm/${{ matrix.tool }}-[0-9]*.src.rpm
+          compression-level: 0
 
   # the tools built with packages of ours ("# uses:" in the recipe): after those, with the ones of this run (the
   # release's when one was not made). fx2lafw's firmware is compiled with our SDCC
@@ -81,6 +88,11 @@ jobs:
         with:
           name: dev-${{ matrix.tool }}
           path: build/extra/${{ matrix.tool }}-*.rpm
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: srpm-dev-${{ matrix.tool }}
+          path: build/srpm/${{ matrix.tool }}-[0-9]*.src.rpm
           compression-level: 0
 
   trial:
@@ -122,19 +134,20 @@ jobs:
             fi
           done
           exit $rc
-      - name: Keep the packages in the release dev-tools
+      - uses: actions/download-artifact@v4      # (the source packages: kept beside the binaries, not tried)
+        with:
+          pattern: srpm-dev-*
+          path: src
+          merge-multiple: true
+      - name: Keep the packages in the release dev-tools, with their source packages
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view dev-tools --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || gh release create dev-tools --repo "$GITHUB_REPOSITORY" \
             --title "Embedded-development tools for SilikOS (EL 9)" --prerelease \
             --notes "Tools of the bench built from upstream's unmodified sources on EL 9 (dev/*.spec, dev/versions): OpenOCD, dfu-util, stm32flash, SavvyCAN, sigrok (sigrok-cli, PulseView, the protocol decoders) with the fx2lafw firmware of FX2 logic analysers, SDCC (the compiler it is built with), and silik-pylab (python-can, cantools, esptool, pymodbus from PyPI's source archives, pinned by sha256). None is in EL 9's repositories or EPEL 9. Each keeps its own licence, in the package. Not products of or supported by their authors' projects."
+          # (the new one first: never a gap; an older build of the same package moves to sources-archive)
           for t in openocd dfu-util stm32flash silik-pylab savvycan sigrok sdcc sigrok-firmware-fx2lafw; do
-            for f in dist/$t-[0-9]*.rpm; do
-              n=$(basename "$f" | sed -E 's/-[^-]+-[^-]+\.[^.]+\.rpm$//')     # (the package's own name: a subpackage keeps its own)
-              gh release upload dev-tools "$f" --repo "$GITHUB_REPOSITORY" --clobber      # (the new one first: never a gap)
-              gh release view dev-tools --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | { grep -E "^$n-[0-9]" || true; } | while read -r old; do
-                [ "$old" = "$(basename "$f")" ] || gh release delete-asset dev-tools "$old" --repo "$GITHUB_REPOSITORY" -y
-              done
-            done
+            ls src/$t-[0-9]*.src.rpm > /dev/null || { echo "::error title=keep $t::no source package"; exit 1; }
+            bash tools/release_keep.sh dev-tools dist/$t-[0-9]*.rpm src/$t-[0-9]*.src.rpm
           done

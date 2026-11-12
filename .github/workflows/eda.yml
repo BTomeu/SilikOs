@@ -8,11 +8,13 @@
 # Runs when a recipe changes, or by hand. A build is kept (cache) while its recipe (its line of eda/versions, its
 # spec, eda/common.inc; for KiCad also those of what it uses) does not change. It is kept as soon as it is built, not
 # at the end of its job: a later step that fails (an upload GitHub refuses) does not throw hours of building away.
+# Each build also makes its source package (tools/build_eda.sh: build/srpm/), kept in the same release as the binary
+# (eda/keep.sh); a package that a newer build replaces moves to the release sources-archive with its source.
 name: EDA tools
 on:
   push:
     branches: [main]
-    paths: ['eda/**', 'tools/build_eda.sh', '.github/workflows/eda.yml']
+    paths: ['eda/**', 'tools/build_eda.sh', 'tools/release_keep.sh', '.github/workflows/eda.yml']
   workflow_dispatch:
 # read-only by default: the build jobs run upstream's build code (for hours, as root in their container); only the
 # jobs that keep a tried package in a release may write, and no checkout keeps the token in .git/config
@@ -43,7 +45,9 @@ jobs:
       - uses: actions/cache/restore@v4
         id: cache
         with:
-          path: build/extra
+          path: |
+            build/extra
+            build/srpm
           key: eda-${{ matrix.tool }}-${{ steps.line.outputs.sum }}-${{ hashFiles('eda/common.inc', 'tools/build_eda.sh', format('eda/{0}.spec', matrix.tool)) }}
       - name: Build ${{ matrix.tool }}
         if: steps.cache.outputs.cache-hit != 'true'
@@ -58,7 +62,9 @@ jobs:
       - uses: actions/cache/save@v4
         if: steps.cache.outputs.cache-hit != 'true'
         with:
-          path: build/extra
+          path: |
+            build/extra
+            build/srpm
           key: ${{ steps.cache.outputs.cache-primary-key }}
       - name: What was built
         run: echo "::notice title=${{ matrix.tool }} built::$(cd build/extra && ls -la ${{ matrix.tool }}-*.rpm | awk '{print $5, $9}')"
@@ -66,6 +72,11 @@ jobs:
         with:
           name: eda-${{ matrix.tool }}
           path: build/extra/${{ matrix.tool }}-*.rpm
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: srpm-eda-${{ matrix.tool }}
+          path: build/srpm/${{ matrix.tool }}-[0-9]*.src.rpm
           compression-level: 0
 
   # KiCad, against our Open CASCADE, nng and ngspice (the packages of this run; the release's when one was not made)
@@ -90,7 +101,9 @@ jobs:
       - uses: actions/cache/restore@v4
         id: cache
         with:
-          path: build/extra
+          path: |
+            build/extra
+            build/srpm
           key: eda-kicad-${{ steps.line.outputs.sum }}-${{ hashFiles('eda/common.inc', 'tools/build_eda.sh', 'eda/kicad.spec', 'eda/opencascade.spec', 'eda/nng.spec', 'eda/ngspice.spec') }}
       - uses: actions/download-artifact@v4
         if: steps.cache.outputs.cache-hit != 'true'
@@ -119,7 +132,9 @@ jobs:
       - uses: actions/cache/save@v4
         if: steps.cache.outputs.cache-hit != 'true'
         with:
-          path: build/extra
+          path: |
+            build/extra
+            build/srpm
           key: ${{ steps.cache.outputs.cache-primary-key }}
       - name: What was built
         run: echo "::notice title=kicad built::$(cd build/extra && ls -la kicad-*.rpm | awk '{print $5, $9}')"
@@ -127,6 +142,11 @@ jobs:
         with:
           name: eda-kicad
           path: build/extra/kicad-*.rpm
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: srpm-eda-kicad
+          path: build/srpm/kicad-[0-9]*.src.rpm
           compression-level: 0
 
   trial:
@@ -147,6 +167,10 @@ jobs:
         with:
           name: eda-${{ matrix.tool }}
           path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: srpm-eda-${{ matrix.tool }}
+          path: src
       - name: Try ${{ matrix.tool }} in a clean EL 9, then keep it in the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -164,6 +188,8 @@ jobs:
         with: { persist-credentials: false }
       - uses: actions/download-artifact@v4
         with: { name: eda-kicad, path: dist }
+      - uses: actions/download-artifact@v4
+        with: { name: srpm-eda-kicad, path: src }
       # KiCad runs on our Open CASCADE, nng and ngspice: the packages of this run beside it (eda/keep.sh takes the
       # release's when one was not made in this run), and its symbols and footprints for a real job
       - uses: actions/download-artifact@v4
@@ -188,7 +214,9 @@ jobs:
       - uses: actions/cache/restore@v4
         id: cache
         with:
-          path: build/extra
+          path: |
+            build/extra
+            build/srpm
           key: eda-kicad-packages3d-${{ steps.line.outputs.sum }}-${{ hashFiles('eda/common.inc', 'tools/build_eda.sh', 'eda/kicad-packages3d.spec') }}
       - name: Build kicad-packages3d
         if: steps.cache.outputs.cache-hit != 'true'
@@ -204,7 +232,9 @@ jobs:
       - uses: actions/cache/save@v4
         if: steps.cache.outputs.cache-hit != 'true'
         with:
-          path: build/extra
+          path: |
+            build/extra
+            build/srpm
           key: ${{ steps.cache.outputs.cache-primary-key }}
       - name: What was built
         run: echo "::notice title=kicad-packages3d built::$(cd build/extra && ls -la kicad-packages3d-*.rpm | awk '{print $5, $9}')"
@@ -212,6 +242,11 @@ jobs:
         with:
           name: eda-kicad-packages3d
           path: build/extra/kicad-packages3d-*.rpm
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: srpm-eda-kicad-packages3d
+          path: build/srpm/kicad-packages3d-[0-9]*.src.rpm
           compression-level: 0
 
   # tried and kept by a job of its own: the build above ran upstream's build code in a container that could write its
@@ -227,6 +262,8 @@ jobs:
         with: { persist-credentials: false }
       - uses: actions/download-artifact@v4
         with: { name: eda-kicad-packages3d, path: dist }
+      - uses: actions/download-artifact@v4
+        with: { name: srpm-eda-kicad-packages3d, path: src }
       - name: Try it in a clean EL 9, then keep it in the release eda-optional
         env:
           GH_TOKEN: ${{ github.token }}

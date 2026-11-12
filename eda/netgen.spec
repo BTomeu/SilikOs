@@ -3,7 +3,9 @@ Name:           netgen
 Version:        %{upver}
 Release:        1.silik%{?dist}
 Summary:        Netgen, layout against schematic (LVS) (upstream's source built for SilikOS / EL 9)
-License:        LicenseRef-Upstream
+# read in the source at 1.5.328 (12/11/2026): the files say "the GNU General Public License as published by the Free
+# Software Foundation (any version)", and Copying is the GPL's version 1 (picked up by the licences macro)
+License:        GPL-1.0-or-later
 URL:            http://opencircuitdesign.com/netgen/
 Source0:        netgen-%{version}.tar.gz
 ExclusiveArch:  x86_64

@@ -9,9 +9,11 @@ senceres abans de decidir.
 
 - No hi ha cap `LICENSE` ni `COPYING`.
 - Els paquets propis declaren `License: LicenseRef-SilikVolt`, que no està definida enlloc.
-- Cap script genera SRPMs (`rpmbuild -bb` només).
+- Cap script genera SRPMs (`rpmbuild -bb` només). **Ara sí** (12/11/2026): tots els scripts de build fan l'SRPM
+  (`build/srpm/`), vegeu la secció 2.
 - El repositori és privat.
-- Els workflows esborren les versions antigues de les releases.
+- Els workflows esborren les versions antigues de les releases. **Ja no** (12/11/2026): les mouen a la release
+  `sources-archive` amb el seu SRPM (`tools/release_keep.sh`).
 - `build_iso.sh` redistribueix la boot ISO d'AlmaLinux modificada.
 
 Mentre tot sigui privat no es distribueix a tercers [A]. Tot el que ve a continuació bloqueja la primera ISO pública,
@@ -70,19 +72,30 @@ Compilar des de tags fixats d'upstream no n'hi ha prou:
 3. `LicenseRef-SilikVolt` → l'SPDX triat, amb `%license LICENSE` a cada spec, i capçaleres SPDX als fitxers de codi.
 
 **Metadades dels paquets d'upstream**
-4. `LicenseRef-Upstream` (magic, netgen, ngspice, yosys) → l'SPDX real de cada tag.
-5. `%licences` (`eda/common.inc`): ha d'aplegar més noms i fer fallar la build si no en troba cap.
-6. Llicències que falten:
-   - les parts de sigrok;
-   - els subpaquets de Wine Mono/Gecko;
-   - els paquets Python de silik-pylab;
-   - l'OFL de Cascadia Mono a `installer/product/`.
+4. `LicenseRef-Upstream` (magic, netgen, ngspice, yosys) → l'SPDX real de cada tag. **Fet** (12/11/2026, llegit als
+   fitxers de llicència de cada versió fixada): magic `HPND-UC-export-US` + dos avisos que no són a la llista SPDX
+   (`LicenseRef-`, amb el text al paquet), netgen `GPL-1.0-or-later`, ngspice i yosys per parts (vegeu els specs).
+5. `%licences` (`eda/common.inc`): ha d'aplegar més noms i fer fallar la build si no en troba cap. **Fet**: LICENSE*,
+   LICENCE*, COPYING*, COPYRIGHT* en qualsevol caixa (el de netgen és `Copying` i abans no es copiava), més els fitxers
+   que se li passin; si no en troba cap, la build s'atura.
+6. Llicències que falten: **fet**.
+   - les parts de sigrok (els quatre COPYING);
+   - els subpaquets de Wine Mono/Gecko (`%license`, SPDX: el de Mono és la lectura de Fedora [A], Gecko MPL-2.0);
+   - els paquets Python de silik-pylab (els fitxers de llicència de cada dist-info, o de l'arxiu font; si un paquet no
+     en té, la build s'atura);
+   - l'OFL de Cascadia Mono a `installer/product/` (el `LICENSE` de microsoft/cascadia-code al tag v2102.03, la versió
+     de la font).
 
 **Font corresponent**
-7. SRPMs a tots els scripts de build, publicats a la mateixa release.
-8. Deixar d'esborrar les versions antigues: moure-les a una release d'arxiu i conservar-les 3 anys.
+7. SRPMs a tots els scripts de build, publicats a la mateixa release. **Fet** als scripts (`build_rpms.sh`,
+   `build_eda.sh`, `build_dev.sh`, `build_wine.sh`, `build_wine_addons.sh`) i als workflows; els workflows no s'han
+   executat (GitHub no engega jobs).
+8. Deixar d'esborrar les versions antigues: moure-les a una release d'arxiu i conservar-les 3 anys. **Fet**:
+   `tools/release_keep.sh` les mou a `sources-archive` i no n'esborra mai res. Els binaris publicats abans d'avui no
+   tenen SRPM: el primer build nou en publica la font.
 9. `tools/fetch_base_sources.sh`: els SRPMs dels paquets de la boot ISO (des de vault.almalinux.org), i la font de
-   Wine Mono/Gecko.
+   Wine Mono/Gecko. **Fet**: l'script (provat amb ISOs de prova; vault.almalinux.org no s'ha pogut provar des d'aquí),
+   i les fonts de Wine Mono i Wine Gecko van dins l'SRPM de `silik-wine-addons`.
 10. `/LEGAL.txt` a la ISO, amb:
     - els components i les seves llicències;
     - on és la font i l'oferta escrita;
@@ -93,7 +106,12 @@ Compilar des de tags fixats d'upstream no n'hi ha prou:
 12. Corregir "binari a binari" als textos.
 13. `docs/PRIVACY.md`: quins servidors es contacten (mirrors d'AlmaLinux i EPEL, docker.io i vault.centos.org per a
     `silik eda`, NVIDIA si es tria, i el futur repositori de SilikOS). `silik` no envia telemetria.
-14. Tests: `test_licences.py` (SPDX vàlid, llicència a cada RPM, SRPM per a cada RPM).
+14. Tests: `test_licences.py` (SPDX vàlid, llicència a cada RPM, SRPM per a cada RPM). **En part**:
+    `tests/test_sources.py` comprova la forma de les expressions, el macro que atura la build sense llicència, i que
+    cada script fa l'SRPM. No valida els identificadors contra la llista SPDX.
+**Cadena de subministrament** (auditoria 12/11/2026): **fet**. Cada font descarregada es comprova: arxius per sha256
+(`eda/versions`, `dev/versions`, `wine/sources`), arbres git pel commit, Wine per la signatura de Julliard, la boot ISO
+pel CHECKSUM signat d'AlmaLinux (empremtes fixades als scripts).
 15. Amb els fabricants (Cadence, Vector, Altium, ST…), només ús nominatiu: "pot executar X amb la teva llicència". Mai
     "suportat" ni "certificat", i cap logo.
 

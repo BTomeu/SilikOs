@@ -145,5 +145,6 @@ by 1 % or less, which is what the same build differs from itself. A first run of
 the flags. The package stays as it is. Not measured: the other tools; a real design; link-time or profile-guided
 optimisation.
 
-To change a version: the tag in `eda/versions`. To add a tool: a line there, `eda/NAME.spec`, a case in
+To change a version: the tag in `eda/versions` and its pin there (the commit the tag names, `git ls-remote URL
+refs/tags/TAG`; or the new archive's sha256), never one without the other. To add a tool: a line there, `eda/NAME.spec`, a case in
 `eda/trial.sh`, its name in the workflow's two lists and in `silik-eda-open`.

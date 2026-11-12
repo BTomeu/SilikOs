@@ -3,7 +3,11 @@ Name:           yosys
 Version:        %{upver}
 Release:        1.silik%{?dist}
 Summary:        Yosys, Verilog synthesis (upstream's source built for SilikOS / EL 9)
-License:        ISC AND LicenseRef-Upstream
+# read in the release archive of 0.70 (12/11/2026): Yosys ISC (COPYING); ABC MIT-Modern-Variant (abc/copyright.txt);
+# the bundled libraries of libs/: MIT (fst, json11, slang, tomlplusplus, fmt, cxxopts, minisat), BSD-2-Clause (fst's
+# LZ4), BSD-3-Clause-flex (flex), BSL-1.0 (boost_regex), BSD-3-Clause OR GPL-3.0 (symfpu), public domain (bigint,
+# sha1). Each file is kept in the licence folder
+License:        ISC AND MIT-Modern-Variant AND MIT AND BSD-2-Clause AND BSD-3-Clause-flex AND BSL-1.0 AND (BSD-3-Clause OR GPL-3.0-only) AND LicenseRef-Public-Domain
 URL:            https://yosyshq.net/yosys/
 Source0:        yosys-%{version}.tar.gz
 ExclusiveArch:  x86_64
@@ -29,6 +33,10 @@ cmake --build build %{?_smp_mflags}
 %install
 DESTDIR=%{buildroot} cmake --install build
 %licences
+cp -p abc/copyright.txt %{buildroot}%{_datadir}/licenses/%{name}/copyright.abc.txt
+for f in libs/*/LICENSE* libs/*/COPYING* libs/*/doc/LICENSE*; do
+  [ -f "$f" ] && cp -p "$f" %{buildroot}%{_datadir}/licenses/%{name}/$(echo "${f#libs/}" | tr / .)
+done
 %filelist
 
 %files -f %{_builddir}/%{name}-files.list

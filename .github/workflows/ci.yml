@@ -1,7 +1,7 @@
 # SilikOS CI: on every change, the unit tests and the packages; then the real thing: the ISO is built and installed,
 # unattended, in a virtual machine (KVM), the installed system boots, checks itself and its screen is saved
 # (tests/install/run.sh). The report and the pictures of the last run on main are kept on the branch `ci-results`.
-# On a tag v*, the ISO and the packages are attached to a release.
+# On a tag v*, the ISO, the packages and their source packages are attached to a release.
 name: CI
 on:
   push:
@@ -37,6 +37,10 @@ jobs:
         with:
           name: silikos-packages
           path: build/repo/*.rpm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: silikos-sources
+          path: build/srpm/*.src.rpm
 
   install:
     needs: packages
@@ -81,6 +85,7 @@ jobs:
           if [ -n "$wine" ]; then get "$wine" 'silik-wine-*.rpm' Wine; else echo "::notice title=Wine::no wine-* release yet: the ISO of this run has no Wine"; fi
           get eda-tools '*.rpm' "the open EDA tools"                # (workflow EDA tools)
           get dev-tools '*.rpm' "OpenOCD or dfu-util"               # (workflow Dev tools)
+          rm -f build/extra/*.src.rpm      # (the releases' source packages: kept there, not on the ISO)
           ls -la build/extra
       # our packages as the packages job built them (in EL 9, with the base's rpmbuild): the ISO carries those
       - uses: actions/download-artifact@v4
@@ -148,5 +153,5 @@ jobs:
         run: |
           ls -la dist
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "SilikOS $GITHUB_REF_NAME" \
-            --notes "The ISO installs the system from the base's own package sources (network). What has and has not been run: docs/STATUS.md; the installation test of this tag: branch ci-results." \
+            --notes "The ISO installs the system from the base's own package sources (network). What has and has not been run: docs/STATUS.md; the installation test of this tag: branch ci-results. Source packages (*.src.rpm): SilikOS's own here; those of the tools the ISO carries in the releases eda-tools, dev-tools and wine-* (older builds in sources-archive); those of the base's packages in the ISO's installer at vault.almalinux.org (tools/fetch_base_sources.sh lists and fetches them)." \
             dist/SilikOS-*-netinstall.iso dist/*.rpm

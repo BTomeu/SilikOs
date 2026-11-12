@@ -18,10 +18,11 @@ dnf -y -q install dnf-plugins-core > /dev/null
 dnf config-manager --set-enabled crb
 dnf -y -q install gcc gcc-c++ make bison flex readline-devel ncurses-devel libX11-devel libXaw-devel libXmu-devel libXext-devel \
   libXft-devel fontconfig-devel freetype-devel fftw-devel python3 tar gzip findutils git > /dev/null
-# the source: the newest release tag, as tools/build_eda.sh takes it
-line=$(grep -E '^ngspice[[:space:]]' "$root/eda/versions"); url=$(echo "$line" | awk '{print $2}'); archive=$(echo "$line" | awk '{print $4}')
-ver=$(git ls-remote --tags "$url" 'refs/tags/ngspice-*' | sed 's#.*refs/tags/ngspice-##' | grep -E '^[0-9][0-9.]*$' | sort -V | tail -1)
+# the source: the release archive of eda/versions, checked against its sha256 there, as tools/build_eda.sh takes it
+line=$(grep -E '^ngspice[[:space:]]' "$root/eda/versions"); tag=$(echo "$line" | awk '{print $3}')
+archive=$(echo "$line" | awk '{print $4}'); asha=$(echo "$line" | awk '{print $5}'); ver=${tag#ngspice-}
 [ -s "$work/ngspice-$ver.tar.gz" ] || curl -fsSL --retry 3 -o "$work/ngspice-$ver.tar.gz" "${archive//\{ver\}/$ver}"
+echo "$asha  $work/ngspice-$ver.tar.gz" | sha256sum -c --quiet - || { echo "error: not the archive of sha256 $asha (eda/versions)" >&2; exit 1; }
 echo "ngspice $ver, $(nproc) processors: $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs)"
 python3 - "$work/ladder.cir" <<'PY'
 import sys

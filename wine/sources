@@ -1,0 +1,19 @@
+# The files tools/build_wine.sh and tools/build_wine_addons.sh build from, each with its sha256 (the build stops on any
+# other file) and where it is fetched. Recorded 12/11/2026:
+# - wine-11.0.tar.xz: the archive the workflow Wine downloaded from dl.winehq.org on 10/11/2026 (runs 42837292563 and
+#   42842887114 printed this sha256); the same file is in Fedora's wine-11.0-3.fc44 source package, and its
+#   wine-11.0.tar.xz.sign verifies with Alexandre Julliard's key DA23579A74D4AD9AF9D3F945CEFAC8EAAF17519D (gpgv, key
+#   from keyserver.ubuntu.com). tools/build_wine.sh checks both, the sha256 and that signature.
+# - Wine Mono (GitHub): downloaded and hashed here; the binary archive's sha256 is also the one the workflow Wine
+#   printed on 10/11/2026. COPYING is upstream's file at the tag wine-mono-10.4.1.
+# - Wine Gecko binaries: the sha256 the workflow Wine printed on 10/11/2026 (dl.winehq.org; not reachable from the
+#   machine this was recorded on, so not downloaded again). Its source archive: the file of that name inside Fedora's
+#   mingw-wine-gecko-2.47.4-11.fc45 source package (Fedora takes it from dl.winehq.org), hashed here.
+# name                              sha256                                                            url
+wine-11.0.tar.xz                    c07a6857933c1fc60dff5448d79f39c92481c1e9db5aa628db9d0358446e0701  https://dl.winehq.org/wine/source/11.0/wine-11.0.tar.xz
+wine-mono-10.4.1-x86.tar.xz         a16606ef0724202e6a6848ece6e0cbba64d11e2f11aefe744af1d93c6d9f99bb  https://github.com/wine-mono/wine-mono/releases/download/wine-mono-10.4.1/wine-mono-10.4.1-x86.tar.xz
+wine-mono-10.4.1-src.tar.xz         128e335396689e466dff5e1aa0770a714dbe3d16397fc4ddbb8a80999c67323b  https://github.com/wine-mono/wine-mono/releases/download/wine-mono-10.4.1/wine-mono-10.4.1-src.tar.xz
+wine-mono-10.4.1-COPYING            0265443ffc97c9450dbcf402c2430bf9fe87d7a6c92d5d7684fcecfe749bf75d  https://raw.githubusercontent.com/wine-mono/wine-mono/wine-mono-10.4.1/COPYING
+wine-gecko-2.47.4-x86.tar.xz        2cfc8d5c948602e21eff8a78613e1826f2d033df9672cace87fed56e8310afb6  https://dl.winehq.org/wine/wine-gecko/2.47.4/wine-gecko-2.47.4-x86.tar.xz
+wine-gecko-2.47.4-x86_64.tar.xz     fd88fc7e537d058d7a8abf0c1ebc90c574892a466de86706a26d254710a82814  https://dl.winehq.org/wine/wine-gecko/2.47.4/wine-gecko-2.47.4-x86_64.tar.xz
+wine-gecko-2.47.4-src.tar.xz        bf31b6619570ce289f07298bdd670081635cd12104010050f06c16e44ccd153f  https://dl.winehq.org/wine/wine-gecko/2.47.4/wine-gecko-2.47.4-src.tar.xz

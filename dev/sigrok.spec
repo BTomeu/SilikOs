@@ -60,8 +60,12 @@ rm -f %{buildroot}%{_libdir}/*.la
 # EL 9 has none)
 for r in libsigrok-0bc2487778e660f4d3116729b6f4aee2b1996bb0/contrib/60-libsigrok.rules libsigrok-0bc2487778e660f4d3116729b6f4aee2b1996bb0/contrib/61-libsigrok-uaccess.rules; do install -Dm0644 "$r" %{buildroot}%{_prefix}/lib/udev/rules.d/$(basename "$r"); done
 test -x %{buildroot}%{_bindir}/sigrok-cli && test -x %{buildroot}%{_bindir}/pulseview
+# the four parts' own licence files (each: GPL-3.0-or-later, its README; read at these commits on 12/11/2026)
 mkdir -p %{buildroot}%{_datadir}/licenses/%{name}
-cp -p libsigrok-0bc2487778e660f4d3116729b6f4aee2b1996bb0/COPYING %{buildroot}%{_datadir}/licenses/%{name}/COPYING
+for p in libsigrok-0bc2487778e660f4d3116729b6f4aee2b1996bb0 libsigrokdecode-71f451443029322d57376214c330b518efd84f88 \
+         sigrok-cli-f44dd91347e7ac797cefc23162b9fcf0b7329f1f pulseview-af02198741b4e57c9f9b796bd5e6c0f2ae9f2f2b; do
+  cp -p $p/COPYING %{buildroot}%{_datadir}/licenses/%{name}/COPYING.${p%%-*}
+done
 %filelist
 
 %files -f %{_builddir}/%{name}-files.list

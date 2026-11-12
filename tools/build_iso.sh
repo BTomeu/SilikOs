@@ -13,6 +13,23 @@ mkdir -p "$work"
 if [ ! -f "$src" ]; then
   curl -fL --retry 3 -o "$src" https://repo.almalinux.org/almalinux/9/isos/x86_64/AlmaLinux-9-latest-x86_64-boot.iso
 fi
+# The base's boot ISO is checked before anything is taken from it: its sha256 must be the one AlmaLinux's CHECKSUM file
+# gives for its name, and that file must carry a good signature of AlmaLinux OS 9's key, of this fingerprint (read
+# 12/11/2026: the key at repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux-9 is byte for byte the one the almalinux:9
+# image carries in almalinux-gpg-keys-9.8-1, and that day's CHECKSUM verified with it). Only the signed text is read.
+# An ISO of an older release: its CHECKSUM from vault.almalinux.org as SILIK_ISO_CHECKSUM=FILE (checked the same way).
+ALMA_KEY_FPR=BF18AC2876178908D6E71267D36CB86CB86B3716
+g=$(mktemp -d); trap 'rm -rf "$g"' EXIT
+if [ -n "${SILIK_ISO_CHECKSUM:-}" ]; then cp "$SILIK_ISO_CHECKSUM" "$g/CHECKSUM"
+else curl -fsSL --retry 3 -o "$g/CHECKSUM" https://repo.almalinux.org/almalinux/9/isos/x86_64/CHECKSUM; fi
+curl -fsSL --retry 3 -o "$g/key.asc" https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux-9
+GNUPGHOME=$g gpg --batch -q --dearmor < "$g/key.asc" > "$g/key.gpg"
+gpgv --status-fd 1 --keyring "$g/key.gpg" --output "$g/signed" "$g/CHECKSUM" 2> /dev/null | grep -Eq "^\[GNUPG:\] VALIDSIG .* $ALMA_KEY_FPR\$" \
+  || { echo "error: the CHECKSUM file is not signed by AlmaLinux OS 9's key $ALMA_KEY_FPR" >&2; exit 1; }
+want=$(sed -n "s/^SHA256 ($(basename "$src" | sed 's/[.]/[.]/g')) = \([0-9a-f]\{64\}\)$/\1/p" "$g/signed" | head -1)
+[ -n "$want" ] || { echo "error: AlmaLinux's signed CHECKSUM has no $(basename "$src") (keep upstream's file name; an older release: SILIK_ISO_CHECKSUM)" >&2; exit 1; }
+echo "$want  $src" | sha256sum -c --quiet - || { echo "error: $src is not AlmaLinux's $(basename "$src") (sha256 $want)" >&2; exit 1; }
+echo "base: $(basename "$src")  sha256 $want, in AlmaLinux's CHECKSUM signed by $ALMA_KEY_FPR"
 label=$(xorriso -indev "$src" -pvd_info 2>/dev/null | sed -n 's/^Volume Id *: *//p')
 [ -n "$label" ] || { echo "cannot read the volume label of $src" >&2; exit 1; }
 # the base's release from its label (AlmaLinux-9-8-x86_64-dvd -> 9.8): SilikOS carries the base's version

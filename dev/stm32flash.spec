@@ -22,8 +22,7 @@ make %{?_smp_mflags} CFLAGS="%{optflags}" LDFLAGS="%{build_ldflags}"
 
 %install
 make install PREFIX=%{_prefix} DESTDIR=%{buildroot}
-%licences
-cp -p gpl-2.0.txt %{buildroot}%{_datadir}/licenses/%{name}/ 2> /dev/null || :
+%licences gpl-2.0.txt
 %filelist
 
 %files -f %{_builddir}/%{name}-files.list

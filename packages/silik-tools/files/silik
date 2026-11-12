@@ -21,6 +21,7 @@
 # Python 3.9 (the base system's), standard library only. Every external command is printed as `$ ...` before it runs.
 # Installed as /usr/share/silikos/python/silik_main.py, which /usr/bin/silik (files/silik-launch) imports compiled.
 import argparse
+import errno
 import json
 import os
 import shlex
@@ -1463,33 +1464,23 @@ def win_adopt(dry):
             if not fn.endswith(".desktop") or not pfx or not _under(pfx[0], WINE_ROOT) or pfx[0] == WINE_ROOT:
                 continue
             name = pfx[0][len(WINE_ROOT):].strip("/").split("/")[0]
-            keep = os.path.isdir(os.path.join(WINE_ROOT, name))
-            mine = os.path.join(WINE_ROOT, name, "home", ".local", "share")
-            # (the prefix's home is the sandbox's: a link planted there must not carry the entry out of it, e.g. into
-            # ~/.config/autostart. The entry is then removed instead)
-            keep = keep and _linkfree(os.path.join(WINE_ROOT, name), os.path.join(mine, "applications", "wine",
-                                                                                 os.path.dirname(os.path.relpath(src, real))))
-            keep = keep and _linkfree(os.path.join(WINE_ROOT, name), os.path.join(mine, "icons", "hicolor"))
             if dry:
                 continue
+            # The prefix's home is the sandbox's, and its programs may still run while this runs: a check of the
+            # destination followed by a move by path would follow whatever is there at the moment of the move (a link
+            # swapped in after the check, e.g. to ~/.config/autostart; audit 12/11/2026). So every folder on the way is
+            # opened relative to the one before it and never through a link (O_NOFOLLOW), and the file is renamed
+            # between the two open folders: a link, or a folder swapped for one, stops it, and the entry is then
+            # removed instead. (A folder moved elsewhere inside the prefix while it is open still is the prefix's.)
+            share = [name, "home", ".local", "share"]
             for sz, icon in win_icons(data_home(), e.get("Icon", "\0")):
                 isrc = os.path.join(data_home(), "icons", "hicolor", sz, "apps", icon)
-                idst = os.path.join(mine, "icons", "hicolor", sz, "apps", icon)
-                if keep and _linkfree(os.path.join(WINE_ROOT, name), os.path.dirname(idst)) and not os.path.islink(idst):
-                    os.makedirs(os.path.dirname(idst), exist_ok=True)
-                    shutil.move(isrc, idst)
-                else:
-                    os.unlink(isrc)
-            if keep:
-                dst = os.path.join(mine, "applications", "wine", os.path.relpath(src, real))
-                os.makedirs(os.path.dirname(dst), exist_ok=True)
-                if os.path.islink(dst):
-                    # (a link planted where the entry goes: shutil.move would follow it, e.g. into ~/.config/autostart)
-                    os.unlink(src)
-                else:
-                    shutil.move(src, dst)
-            else:
-                os.unlink(src)
+                if not _move_into(isrc, WINE_ROOT, share + ["icons", "hicolor", sz, "apps"]):
+                    _unlink(isrc)
+            rel = os.path.relpath(dp, real)
+            sub = [] if rel == "." else rel.split(os.sep)
+            if not _move_into(src, WINE_ROOT, share + ["applications", "wine"] + sub):
+                _unlink(src)
         if not dry:
             try:
                 os.rmdir(dp)        # only when it is empty now
@@ -1497,17 +1488,94 @@ def win_adopt(dry):
                 pass
 
 
-def _linkfree(top, path):
-    """True when no part of PATH below TOP that exists is a symbolic link"""
-    rel = os.path.relpath(path, top)
-    cur = top
-    for part in ([] if rel == "." else rel.split(os.sep)):
-        cur = os.path.join(cur, part)
-        if os.path.islink(cur):
+def _unlink(path):
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        pass
+
+
+def _open_below(top, parts, create=True):
+    """a descriptor of the folder TOP/PARTS..., each part opened relative to the folder before it, never through a
+    symbolic link (O_NOFOLLOW), made when missing (create); None when a part is a link, not a folder, or not a plain
+    name. TOP itself is the user's own (not the sandbox's) and is opened as it is"""
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC
+    try:
+        fd = os.open(top, flags)
+    except OSError:
+        return None
+    for part in parts:
+        if part in ("", ".", "..") or "/" in part or "\0" in part:
+            os.close(fd)
+            return None
+        try:
+            nfd = os.open(part, flags | os.O_NOFOLLOW, dir_fd=fd)
+        except FileNotFoundError:
+            nfd = None
+            if create:
+                try:
+                    os.mkdir(part, 0o777, dir_fd=fd)
+                except FileExistsError:
+                    pass
+                except OSError:
+                    os.close(fd)
+                    return None
+                try:
+                    nfd = os.open(part, flags | os.O_NOFOLLOW, dir_fd=fd)
+                except OSError:
+                    nfd = None
+        except OSError:             # a link (ELOOP), not a folder (ENOTDIR)
+            nfd = None
+        os.close(fd)
+        if nfd is None:
+            return None
+        fd = nfd
+    return fd
+
+
+def _move_into(src, top, parts):
+    """moves the file SRC (in the user's own folders) into TOP/PARTS... (below TOP: the sandbox may write there) under
+    its own name, without following a link on the way or at the end: True when it was moved"""
+    fn = os.path.basename(src)
+    if fn in ("", ".", ".."):
+        return False
+    dfd = _open_below(top, parts)
+    if dfd is None:
+        return False
+    try:
+        sfd = os.open(os.path.dirname(src), os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    except OSError:
+        os.close(dfd)
+        return False
+    try:
+        try:
+            # rename() replaces a link or file at the destination itself, never what a link names; a folder there fails
+            os.rename(fn, fn, src_dir_fd=sfd, dst_dir_fd=dfd)
+            return True
+        except OSError as err:
+            if err.errno != errno.EXDEV:
+                return False
+        # another file system: a copy written under a new name in the open folder, then renamed over the name
+        tmp = ".silik-adopt-%d" % os.getpid()
+        try:
+            out = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o644, dir_fd=dfd)
+        except OSError:
             return False
-        if not os.path.exists(cur):
-            break
-    return not os.path.islink(top)
+        try:
+            with open(src, "rb") as f, os.fdopen(out, "wb") as o:
+                shutil.copyfileobj(f, o)
+            os.rename(tmp, fn, src_dir_fd=dfd, dst_dir_fd=dfd)
+        except OSError:
+            try:
+                os.unlink(tmp, dir_fd=dfd)
+            except OSError:
+                pass
+            return False
+        os.unlink(src)
+        return True
+    finally:
+        os.close(sfd)
+        os.close(dfd)
 
 
 def win_menu(name):
