@@ -1,5 +1,5 @@
 Name:           silik-dev
-Version:        0.3.0
+Version:        0.4.0
 Release:        1%{?dist}
 Summary:        Embedded development and the lab bench on SilikOS: ARM compiler, debugger, flashing, CAN, serial / RS-485, buses
 License:        LicenseRef-SilikVolt
@@ -22,6 +22,8 @@ Recommends:     dfu-util
 Recommends:     stm32flash
 Recommends:     savvycan
 Recommends:     silik-pylab
+# logic analysers, scopes, multimeters: sigrok-cli and PulseView with 100+ protocol decoders
+Recommends:     sigrok
 # around them
 Recommends:     make
 Recommends:     cmake

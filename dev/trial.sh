@@ -59,6 +59,24 @@ print(FramerRTU(DecodePDU(False)).buildFrame(ReadHoldingRegistersRequest(address
     [ "$rc" = 124 ] || { cat s.out; echo "SavvyCAN ended with $rc before 8 s"; exit 1; }
     test -f /usr/lib64/savvycan/help/connectionwindow.md || { echo "its help is not beside it"; exit 1; }
     echo "TRIAL-OK SavvyCAN $(rpm -q --qf '%{VERSION}' savvycan) : starts and stays up (8 s, off screen), its help beside it" ;;
+  sigrok)   # a UART line carrying "SilikOS" at 115200 baud, made here as samples, decoded by sigrok-cli's UART decoder;
+            # its demo device captures; PulseView starts and stays up
+    again dnf -y -q install "$@"
+    python3 -c "
+import sys
+bits = []
+for ch in b'SilikOS':
+    bits += [1] * 20 + [0] + [(ch >> i) & 1 for i in range(8)] + [1]
+spb = 1000000 // 115200 + 1   # (samples per bit at 1 MHz, rounded up: within the decoder's tolerance)
+sys.stdout.buffer.write(bytes(b for b in bits for _ in range(spb)))" > uart.bin
+    sigrok-cli -I binary:numchannels=1:samplerate=1000000 -i uart.bin -P uart:rx=D0:baudrate=115200 -A uart=rx-data > u.out 2>&1 || { cat u.out; exit 1; }
+    got=$(sed -n 's/.*uart-1: //p' u.out | while read -r h; do printf "\\x$h"; done | xargs -0 printf "%b")
+    [ "$got" = SilikOS ] || { cat u.out; echo "decoded: $got"; exit 1; }
+    sigrok-cli -d demo --samples 1000 -O csv > demo.out 2>&1 && [ "$(wc -l < demo.out)" -gt 900 ] || { head demo.out; exit 1; }
+    n=$(sigrok-cli -L 2>/dev/null | sed -n '/Supported protocol decoders/,/Supported input/p' | grep -c '^  ')
+    rc=0; QT_QPA_PLATFORM=offscreen timeout 8 pulseview > p.out 2>&1 || rc=$?
+    [ "$rc" = 124 ] || { cat p.out; echo "PulseView ended with $rc before 8 s"; exit 1; }
+    echo "TRIAL-OK $(sigrok-cli -V | head -1) : a UART line decoded to \"$got\"; the demo device captured 1000 samples; $n protocol decoders; PulseView up 8 s off screen" ;;
   stack)
     again dnf -y -q install "$@"       # (silik-dev's weak dependencies bring the compiler, newlib, stlink, gdb, make)
     silik dev tools

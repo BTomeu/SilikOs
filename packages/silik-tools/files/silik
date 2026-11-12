@@ -28,7 +28,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.6.10"
+VERSION = "0.6.11"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -2488,6 +2488,8 @@ DEV_TOOLS = (   # command, package, what it is for
     ("cantools", "silik-pylab", "CAN databases (DBC, ARXML, KCD): decode, encode, dump, plot"),
     ("can_logger", "silik-pylab", "python-can: log, replay, view a bus; silik-python imports can"),
     ("esptool", "silik-pylab", "Espressif (ESP32) flashing"),
+    ("pulseview", "sigrok", "logic analysers, scopes, multimeters: capture, protocol decoding (PulseView)"),
+    ("sigrok-cli", "sigrok", "the same from a command line: capture, decode SPI / I2C / UART / CAN..."),
 )
 # a vendor's IDE: its key, its name, the program to look for, the folders it may be under, how its downloaded file
 # is recognised and which script inside an archive is its installer (regular expressions on the lower-case file

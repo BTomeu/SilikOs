@@ -92,6 +92,7 @@ Built here (dev/, workflow "Dev tools", release `dev-tools`; none is in EL 9 or 
 | `savvycan` | SavvyCAN V220 (MIT): a CAN analyser window: capture from can0, DBC decoding, graphs, sending, replay, log formats |
 | `silik-pylab` | python-can 4.6.1, cantools 45.1.2 (DBC, ARXML, KCD), esptool 4.8.1, pymodbus 3.16.2 and what they need, from PyPI's source archives pinned by sha256 (`dev/pylab-requirements.txt`), on EL 9's Python 3.12 and apart from the system's Python: the commands `cantools`, `can_logger`, `can_player`, `can_viewer`, `esptool`; `silik-python script.py` imports them |
 | `stm32flash` | stm32flash 0.7: an STM32 written through its serial bootloader with a USB-serial adapter |
+| `sigrok` | the sigrok suite: PulseView (the window), sigrok-cli, libsigrok's drivers (logic analysers, oscilloscopes, multimeters, power supplies: some 200 devices) and 131 protocol decoders (SPI, I2C, UART, CAN, LIN, JTAG, SWD, 1-Wire, I2S...). Its last releases (2019-2020) do not build with EL 9's Qt and glibmm: the four parts at the commits of their main branches read on 12/11/2026 (dev/sigrok.spec). Not yet: the fx2lafw firmware of inexpensive FX2 analysers (built with SDCC, which EL 9 lacks) |
 
 ```
 candump can0 | cantools decode car.dbc          frames of a bus decoded with its database, live
@@ -102,7 +103,8 @@ silik-python my_test.py                         `import can, cantools` in your o
 
 Tried in a clean EL 9 (dev/trial.sh, 12/11/2026): cantools decoded a DBC frame (399.6 V, -20 A, 90 %), python-can
 carried it across its virtual bus, pymodbus framed a Modbus RTU request, esptool and stm32flash started, SavvyCAN
-started and stayed up; the system's Python does not see them.
+started and stayed up; the system's Python does not see them. sigrok-cli decoded a UART line made of samples to "SilikOS", its
+demo device captured, PulseView started and stayed up (and captured from the demo device on the session's desktop).
 
 Not run: a real adapter on a bus; the Windows VM with a USB device [A: libvirt's hostdev for qemu:///session].
 

@@ -321,7 +321,7 @@ class Install(unittest.TestCase):
 class Recipes(unittest.TestCase):
     def test_versions_and_specs(self):
         names = [l.split()[0] for l in text("dev/versions").splitlines() if l and not l.startswith("#")]
-        self.assertEqual(names, ["openocd", "dfu-util", "stm32flash", "silik-pylab", "savvycan"])
+        self.assertEqual(names, ["openocd", "dfu-util", "stm32flash", "silik-pylab", "savvycan", "sigrok"])
         wf, trial = text(".github/workflows/dev.yml"), text("dev/trial.sh")
         for n in names:
             spec = text("dev/%s.spec" % n)
@@ -329,7 +329,7 @@ class Recipes(unittest.TestCase):
             self.assertRegex(spec, r"(?m)^License: +\S")
             self.assertIn("%filelist", spec)
             if n != "silik-pylab":                     # (its licences are in each package's dist-info)
-                self.assertIn("%licences", spec)
+                self.assertTrue("%licences" in spec or "%{_datadir}/licenses/%{name}" in spec, n)
             self.assertIn("  %s)" % n, trial)            # a real job in a clean EL 9
             self.assertIn(n, wf.split("tool: [")[1].split("]")[0])
             self.assertIn("Recommends:     " + n, text("packages/silik-dev/silik-dev.spec"))

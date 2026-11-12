@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        tool: [openocd, dfu-util, stm32flash, silik-pylab, savvycan]
+        tool: [openocd, dfu-util, stm32flash, silik-pylab, savvycan, sigrok]
     runs-on: ubuntu-24.04
     container: almalinux:9
     timeout-minutes: 60
@@ -70,7 +70,7 @@ jobs:
       - name: Try each tool, then the whole stack, in a clean EL 9
         run: |
           rc=0
-          for t in openocd dfu-util stm32flash silik-pylab savvycan stack; do
+          for t in openocd dfu-util stm32flash silik-pylab savvycan sigrok stack; do
             case $t in stack) pk='/dist/*.rpm' ;; *) pk="/dist/$t-*.rpm" ;; esac
             if out=$(docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD/dev:/dev-recipes:ro" almalinux:9 bash -c "bash /dev-recipes/trial.sh $t $pk" 2>&1); then
               echo "$out" | tail -12
@@ -88,8 +88,8 @@ jobs:
         run: |
           gh release view dev-tools --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || gh release create dev-tools --repo "$GITHUB_REPOSITORY" \
             --title "Embedded-development tools for SilikOS (EL 9)" --prerelease \
-            --notes "Tools of the bench built from upstream's unmodified sources on EL 9 (dev/*.spec, dev/versions): OpenOCD, dfu-util, stm32flash, SavvyCAN, and silik-pylab (python-can, cantools, esptool, pymodbus from PyPI's source archives, pinned by sha256). None is in EL 9's repositories or EPEL 9. Each keeps its own licence, in the package. Not products of or supported by their authors' projects."
-          for t in openocd dfu-util stm32flash silik-pylab savvycan; do
+            --notes "Tools of the bench built from upstream's unmodified sources on EL 9 (dev/*.spec, dev/versions): OpenOCD, dfu-util, stm32flash, SavvyCAN, sigrok (sigrok-cli, PulseView, the protocol decoders), and silik-pylab (python-can, cantools, esptool, pymodbus from PyPI's source archives, pinned by sha256). None is in EL 9's repositories or EPEL 9. Each keeps its own licence, in the package. Not products of or supported by their authors' projects."
+          for t in openocd dfu-util stm32flash silik-pylab savvycan sigrok; do
             for f in dist/$t-*.rpm; do
               gh release upload dev-tools "$f" --repo "$GITHUB_REPOSITORY" --clobber      # (the new one first: never a gap)
               gh release view dev-tools --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | { grep "^$t-[0-9]" || true; } | while read -r old; do

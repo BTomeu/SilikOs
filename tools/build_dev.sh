@@ -17,7 +17,20 @@ if grep -q '^# needs: epel' "$root/dev/$name.spec"; then $sudo dnf -y -q install
 ver=${tag#[vV]}
 top=$root/build/dev-rpm/$name
 rm -rf "$top"; mkdir -p "$top/SOURCES" "$top/src" "$root/build/extra"
-if [ "$url" = pypi ]; then   # a set of PyPI's source archives: the pinned list is the source, pip fetches and checks them
+if [ "$url" = multi ]; then   # several upstream repositories: the spec's "# source: URL TAG" lines, each at its tag
+  grep -E '^# source: ' "$root/dev/$name.spec" | while read -r _ _ surl stag; do
+    sname=$(basename "$surl" .git)
+    if [[ "$stag" =~ ^[0-9a-f]{40}$ ]]; then   # a commit of upstream's (when no release builds here)
+      git init -q "$top/src/$sname-$stag" && git -C "$top/src/$sname-$stag" fetch -q --depth 1 "$surl" "$stag"
+      git -C "$top/src/$sname-$stag" checkout -q FETCH_HEAD
+    else
+      git clone -q --depth 1 -b "$stag" "$surl" "$top/src/$sname-$stag"
+    fi
+    echo "source: $surl at $stag ($(git -C "$top/src/$sname-$stag" rev-parse HEAD))"
+    rm -rf "$top/src/$sname-$stag/.git"
+    tar -C "$top/src" -czf "$top/SOURCES/$sname-$stag.tar.gz" "$sname-$stag"
+  done
+elif [ "$url" = pypi ]; then   # a set of PyPI's source archives: the pinned list is the source, pip fetches and checks them
   cp "$root/dev/pylab-requirements.txt" "$top/SOURCES/"
   echo "source: PyPI, $(grep -c -- '--hash=sha256:' "$root/dev/pylab-requirements.txt") archives pinned with their sha256"
 elif [ -n "$archive" ]; then   # upstream's release archive of that version
