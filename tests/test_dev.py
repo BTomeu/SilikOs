@@ -409,7 +409,7 @@ class BarEntries(unittest.TestCase):
 
     def test_completion_and_usage(self):
         comp = text("packages/silik-tools/files/silik.bash-completion")
-        self.assertIn('dev) COMPREPLY=($(compgen -W "tools try install can serial"', comp)
+        self.assertIn('dev) COMPREPLY=($(compgen -W "tools try install can serial ccache"', comp)
         self.assertIn("silik dev   tools [--json] | try [JOB] | install FILE", text("packages/silik-tools/files/silik"))
 
 

@@ -9,7 +9,9 @@
 #               | vm create --iso WIN.iso [--name N --ram GB --disk GB --cpus N] | vm start [N] | vm stop [N]
 #               | vm app --exe 'C:\path\app.exe' --user U | vm usb [attach|detach VID:PID] [--name N]
 #   silik dev   tools [--json] | try [JOB] | install FILE | can [up IFACE BITRATE [--fd RATE] [--listen] | down IFACE]
-#               | serial [--json]                       embedded development, buses
+#               | serial [--json] | ccache [on | off]   embedded development, buses; the compiler cache
+#   silik power [show | performance | balanced | saver | auto [--ac P --battery P] | apply] [--json]
+#               | zram [on | off] | trim [on | off]   the power profile (tuned), zram swap, SSD trim
 #   silik hw    probe | nvidia install | nvidia status
 #   silik identity show | silikos | base
 #   silik look  [silik | bar | island] [--json]     the desktop's look; no argument: which one is in use
@@ -111,11 +113,12 @@ class Ctx:
             die("%s exited %d" % (argv[0], p.returncode), p.returncode)
         return p.returncode, (p.stdout or "")
 
-    def query(self, argv):
-        """a read-only command (not echoed, runs under --dry-run too); '' when it is missing or fails"""
+    def query(self, argv, any_rc=False):
+        """a read-only command (not echoed, runs under --dry-run too); '' when it is missing or fails. any_rc: its
+        output whatever its exit code (`systemctl is-enabled` says "disabled" and exits 1)"""
         try:
             p = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True)
-            return p.stdout if p.returncode == 0 else ""
+            return p.stdout if p.returncode == 0 or any_rc else ""
         except (FileNotFoundError, PermissionError):
             return ""
 
@@ -1769,7 +1772,7 @@ def update_auto_now(ctx):
     """which automatic updates are on: all, security, off; '' when systemd cannot say"""
     st = {}
     for unit in (SEC_FULL_TIMER, SEC_TIMER):
-        st[unit] = ctx.query(["systemctl", "is-enabled", unit]).strip()
+        st[unit] = ctx.query(["systemctl", "is-enabled", unit], any_rc=True).strip()     # ("disabled" exits 1)
     if not any(st.values()):
         return ""
     return "all" if st[SEC_FULL_TIMER] == "enabled" else "security" if st[SEC_TIMER] == "enabled" else "off"
@@ -2842,6 +2845,36 @@ def dev_try(ctx, a):
     return 1 if n["bad"] else 0
 
 
+# ccache (EPEL 9: 4.5.1). Installing it is what turns it on: its /etc/profile.d/ccache.sh puts /usr/lib64/ccache, a
+# folder of links named after the compilers (gcc, cc, arm-none-eabi-gcc, avr-gcc...), first in the PATH of every login
+# shell, so a Makefile that calls the compiler by its name compiles through the cache. Measured on an STM32G4 build
+# (docs/POWER.md): a rebuild of unchanged sources a third of the time, a first build a quarter slower.
+CCACHE_LINKS = "/usr/lib64/ccache"
+
+
+def dev_ccache(ctx, a):
+    if a.action == "on":
+        ctx.run(as_root(["dnf", "-y", "install", "ccache"]))
+        print("silik: every new login shell compiles through ccache (%s first in PATH); in this one: export PATH=%s:$PATH."
+              " CMake: -DCMAKE_C_COMPILER_LAUNCHER=ccache. One build without it: CCACHE_DISABLE=1 make" % (CCACHE_LINKS, CCACHE_LINKS))
+        return 0
+    if a.action == "off":
+        ctx.run(as_root(["dnf", "-y", "remove", "ccache"]))
+        print("silik: the cache stays in ~/.cache/ccache (rm -rf ~/.cache/ccache frees its space); a shell started before "
+              "keeps %s in its PATH until it ends" % CCACHE_LINKS)
+        return 0
+    if not shutil.which("ccache") and not ctx.dry:
+        print("%-14s %s" % ("ccache", "off: silik dev ccache on"))
+        return 1
+    links = sorted(n for n in os.listdir(CCACHE_LINKS) if os.path.islink(os.path.join(CCACHE_LINKS, n))
+                   and shutil.which(n, path="/usr/bin")) if os.path.isdir(CCACHE_LINKS) else []
+    here = CCACHE_LINKS in os.environ.get("PATH", "").split(":") and not os.environ.get("CCACHE_DISABLE")
+    print("%-14s %s" % ("ccache", "on in this shell" if here else "installed; not in this shell's PATH (a new login shell has it)"))
+    print("%-14s %s" % ("compilers", " ".join(links) or "-"))
+    ctx.run(["ccache", "--show-stats"], check=False)
+    return 0
+
+
 def dev_which_ide(path):
     n = os.path.basename(path).lower()
     for key, name, exe, roots, file_rx, setup_rx in DEV_IDES:
@@ -3120,6 +3153,263 @@ def cmd_session(ctx, a):
     return 0
 
 
+# ------------------------------------------------------------------ power
+# `silik power`: one front for the power profile (docs/POWER.md). On EL 9.8 the profiles are tuned's (tuned 2.27, in
+# the base set). tuned-ppd (AppStream; gnome-control-center 40 pulls it in, and it conflicts with
+# power-profiles-daemon) puts the power-profiles-daemon interface on the system bus, the one the shell's system menu
+# and the Settings' Power panel use: a profile is set through it when the system has it, so that the menu shows the
+# same, and with tuned-adm otherwise. `auto` is the service silikos-power-auto (package silikos-power): at boot and
+# when the mains is plugged or unplugged (a udev rule) it runs `silik power apply`. Nothing here is read through a
+# command that starts a service: a look at the profile never changes it.
+POWER = (("performance", "full speed: the highest clocks and boost (tuned throughput-performance)"),
+         ("balanced", "fast when there is work, saving when idle (tuned balanced; balanced-battery on battery)"),
+         ("saver", "the least power: low clocks, no boost (tuned powersave)"))
+POWER_PPD = {"performance": "performance", "balanced": "balanced", "saver": "power-saver"}   # the interface's names
+# each one's tuned profile on mains power and on battery: /etc/tuned/ppd.conf of EL 9.8's tuned-ppd, which does the same
+POWER_TUNED = {"performance": ("throughput-performance", "throughput-performance"), "balanced": ("balanced", "balanced-battery"),
+               "saver": ("powersave", "powersave")}
+POWER_WORD = {"throughput-performance": "performance", "balanced": "balanced", "balanced-battery": "balanced",
+              "powersave": "saver", "performance": "performance", "power-saver": "saver"}
+POWER_BUS = ["net.hadess.PowerProfiles", "/net/hadess/PowerProfiles", "net.hadess.PowerProfiles", "ActiveProfile"]
+POWER_AUTO = "silikos-power-auto.service"
+POWER_CONF = "/etc/silikos/power.conf"
+POWER_AUTO_DEFAULT = {"ac": "performance", "battery": "balanced"}
+PPD_SERVICE = "/usr/share/dbus-1/system-services/net.hadess.PowerProfiles.service"   # tuned-ppd's or power-profiles-daemon's
+TUNED_PPD = "/usr/sbin/tuned-ppd"
+TUNED_ACTIVE = "/etc/tuned/active_profile"
+UNIT_DIR = "/usr/lib/systemd/system"
+SYSFS = os.environ.get("SILIK_SYSFS") or "/sys"
+PROC_SWAPS = "/proc/swaps"
+ZRAM_GEN = "/usr/lib/systemd/system-generators/zram-generator"   # zram-generator (AppStream): its config makes zram0
+ZRAM_UNITS = ["dev-zram0.swap", "systemd-zram-setup@zram0.service"]
+
+
+def as_root(argv):
+    """sudo, unless this already runs as root (the service of `auto`)"""
+    return list(argv) if os.geteuid() == 0 else ["sudo"] + list(argv)
+
+
+def power_source(root=None):
+    """(on battery, mains, batteries) from the kernel's power supplies. mains: True when one is online, False when
+    some are and none is online, None when none is reported (a desktop's supply is not). A battery: name, percent,
+    status; a device's own battery (a mouse: scope Device) is not the computer's. On battery: a battery discharging
+    and no mains online (UPower's rule)"""
+    top = os.path.join(root or SYSFS, "class", "power_supply")
+    mains, bats = None, []
+    try:
+        names = sorted(os.listdir(top))
+    except OSError:
+        names = []
+    for n in names:
+        d = os.path.join(top, n)
+        kind = read(os.path.join(d, "type")).strip()
+        if kind == "Battery":
+            if read(os.path.join(d, "scope")).strip() == "Device":
+                continue
+            cap = read(os.path.join(d, "capacity")).strip()
+            bats.append({"name": n, "percent": int(cap) if cap.isdigit() else None, "status": read(os.path.join(d, "status")).strip() or None})
+        elif kind in ("Mains", "USB", "Wireless"):
+            if read(os.path.join(d, "online")).strip() == "1":
+                mains = True
+            elif mains is None:
+                mains = False
+    on_battery = bool(bats) and not mains and any(b["status"] == "Discharging" for b in bats)
+    return on_battery, mains, bats
+
+
+def power_driver():
+    """what carries the profiles: tuned-ppd or power-profiles-daemon (they conflict: one at most), tuned alone, or ''"""
+    if os.path.exists(PPD_SERVICE):
+        return "tuned-ppd" if os.path.exists(TUNED_PPD) else "power-profiles-daemon"
+    return "tuned" if shutil.which("tuned-adm") else ""
+
+
+def power_conf(path=None):
+    """auto's choice: the profile on mains power and on battery (/etc/silikos/power.conf, `key = value` lines)"""
+    conf = dict(POWER_AUTO_DEFAULT)
+    for line in read(path or POWER_CONF).splitlines():
+        k, _, v = line.partition("=")
+        k, v = k.strip(), v.strip()
+        if k in conf and v in POWER_PPD:
+            conf[k] = v
+    return conf
+
+
+def power_cpu(root=None):
+    """what the processor was told (read-only, from sysfs): frequency driver, governor, energy preference, boost,
+    and the firmware's platform profile. None where the machine does not say (a virtual machine, a container)"""
+    r = root or SYSFS
+    c = os.path.join(r, "devices/system/cpu/cpu0/cpufreq")
+    out = {k: read(os.path.join(c, f)).strip() or None for k, f in
+           (("driver", "scaling_driver"), ("governor", "scaling_governor"), ("energy_preference", "energy_performance_preference"))}
+    out["platform_profile"] = read(os.path.join(r, "firmware/acpi/platform_profile")).strip() or None
+    boost = read(os.path.join(r, "devices/system/cpu/cpufreq/boost")).strip()
+    no_turbo = read(os.path.join(r, "devices/system/cpu/intel_pstate/no_turbo")).strip()
+    out["boost"] = (boost == "1") if boost else (no_turbo == "0") if no_turbo else None
+    return out
+
+
+def power_zram(path=None):
+    """the zram swap devices in use: name, size and used in MiB (/proc/swaps)"""
+    out = []
+    for line in read(path or PROC_SWAPS).splitlines()[1:]:
+        f = line.split()
+        if len(f) >= 4 and "/zram" in f[0] and f[2].isdigit() and f[3].isdigit():
+            out.append({"device": f[0], "size_mib": int(f[2]) // 1024, "used_mib": int(f[3]) // 1024})
+    return out
+
+
+def power_ppd_now(ctx):
+    """the profile the power-profiles interface has, when its service runs ('' otherwise: not started for asking)"""
+    out = ctx.query(["busctl", "--auto-start=no", "get-property"] + POWER_BUS).strip()     # s "balanced"
+    return out[3:-1] if out.startswith('s "') and out.endswith('"') else ""
+
+
+def power_state(ctx):
+    on_battery, mains, bats = power_source()
+    driver = power_driver()
+    ppd = power_ppd_now(ctx) if driver in ("tuned-ppd", "power-profiles-daemon") else ""
+    # (tuned-ppd answering means tuned runs: it requires it)
+    tuned_runs = (driver == "tuned-ppd" and bool(ppd)) or ctx.query(["systemctl", "is-active", "tuned.service"]).strip() == "active"
+    tuned = read(TUNED_ACTIVE).strip() if tuned_runs and driver != "power-profiles-daemon" else ""
+    auto = ctx.query(["systemctl", "is-enabled", POWER_AUTO], any_rc=True).strip()
+    return {"profile": POWER_WORD.get(ppd) or POWER_WORD.get(tuned), "ppd": ppd or None, "tuned": tuned or None,
+            "tuned_running": tuned_runs, "driver": driver or None,
+            "auto": True if auto == "enabled" else False if auto else None, "auto_profiles": power_conf(),
+            "on_battery": on_battery, "mains": mains, "batteries": bats, "cpu": power_cpu(), "zram": power_zram(),
+            "zram_generator": os.path.exists(ZRAM_GEN), "trim": ctx.query(["systemctl", "is-enabled", "fstrim.timer"], any_rc=True).strip() or None}
+
+
+def power_print(st):
+    for k, what in POWER:
+        print("%s %-12s %s" % ("●" if k == st["profile"] else " ", k, what))
+    ap = st["auto_profiles"]
+    if st["auto"] is None:
+        print("  %-12s not on this system: sudo dnf install silikos-power" % "auto")
+    else:
+        print("%s %-12s %s on mains power, %s on battery, chosen at each plug and unplug" % ("●" if st["auto"] else " ", "auto", ap["ac"], ap["battery"]))
+    if st["batteries"]:
+        src = ", ".join("battery %s%% (%s)" % (b["percent"] if b["percent"] is not None else "?", (b["status"] or "?").lower()) for b in st["batteries"])
+        src = ("on battery: " if st["on_battery"] else "mains, " if st["mains"] else "") + src
+    else:
+        src = "mains (no battery)" if st["mains"] is not False else "no battery reported"
+    print("%-14s %s" % ("power source", src))
+    drv = {"tuned-ppd": "tuned through tuned-ppd (the system menu's power profiles)", "power-profiles-daemon": "power-profiles-daemon",
+           "tuned": "tuned (no power-profiles service: the system menu shows no profiles)"}.get(st["driver"] or "", "none: sudo dnf install tuned tuned-ppd")
+    print("%-14s %s" % ("driver", drv))
+    if st["driver"] in ("tuned", "tuned-ppd"):
+        print("%-14s %s" % ("tuned", st["tuned"] or "not running: sudo systemctl enable --now tuned"))
+    cpu = st["cpu"]
+    said = ["%s %s" % (k, cpu[f]) for k, f in (("governor", "governor"), ("energy preference", "energy_preference"), ("platform", "platform_profile")) if cpu[f]]
+    if cpu["boost"] is not None:
+        said.append("boost " + ("on" if cpu["boost"] else "off"))
+    print("%-14s %s" % ("processor", (", ".join(said) + (" (%s)" % cpu["driver"] if cpu["driver"] else "")) if said else "the machine does not say (no cpufreq: a virtual machine?)"))
+    z = st["zram"]
+    print("%-14s %s" % ("zram swap", ", ".join("%s %d MiB, %d MiB used" % (d["device"], d["size_mib"], d["used_mib"]) for d in z) if z
+                        else "set up at the next start (zram-generator)" if st["zram_generator"] else "off: silik power zram on"))
+    print("%-14s %s" % ("trim", "weekly (fstrim.timer)" if st["trim"] == "enabled" else "off: silik power trim on" if st["trim"] else "unknown"))
+
+
+def power_show(ctx, a):
+    st = power_state(ctx)
+    if getattr(a, "json", False):
+        print(json.dumps(st, indent=1))
+    else:
+        power_print(st)
+    return 0 if st["profile"] else 1
+
+
+def power_set(ctx, word):
+    """sets the profile WORD; through the power-profiles interface when the system has it (the session at the screen
+    may: polkit's allow_active; from elsewhere it asks for root), with tuned-adm otherwise"""
+    driver = power_driver()
+    if driver in ("tuned-ppd", "power-profiles-daemon"):
+        argv = ["busctl", "set-property"] + POWER_BUS + ["s", POWER_PPD[word]]
+        rc, _ = ctx.run(argv, check=False)
+        if rc and os.geteuid() != 0:
+            ctx.run(["sudo"] + argv)
+        elif rc:
+            die("busctl exited %d" % rc, rc)
+    elif driver == "tuned":
+        if ctx.query(["systemctl", "is-active", "tuned.service"]).strip() != "active" and not ctx.dry:
+            die("tuned is not running: sudo systemctl enable --now tuned")
+        ctx.run(as_root(["tuned-adm", "profile", POWER_TUNED[word][1 if power_source()[0] else 0]]))
+    else:
+        die("no power profiles on this system: sudo dnf install tuned tuned-ppd")
+    if ctx.dry:
+        return 0
+    now = power_state(ctx)["profile"]
+    if now != word:
+        print("silik: the profile reads %s, not %s" % (now or "unknown", word), file=sys.stderr)
+        return 1
+    return 0
+
+
+def power_profile(ctx, a):
+    """a profile chosen by hand: the automatic choice stops (it would change it at the next plug or unplug)"""
+    if ctx.query(["systemctl", "is-enabled", POWER_AUTO], any_rc=True).strip() == "enabled":
+        ctx.run(as_root(["systemctl", "disable", "--now", POWER_AUTO]))
+    return power_set(ctx, a.cmd)
+
+
+def power_auto(ctx, a):
+    if not os.path.exists(os.path.join(UNIT_DIR, POWER_AUTO)) and not ctx.dry:
+        die("the automatic choice comes with the package silikos-power: sudo dnf install silikos-power")
+    conf = power_conf()
+    want = {"ac": a.ac or conf["ac"], "battery": a.battery or conf["battery"]}
+    if want != conf:
+        ctx.run(as_root(["sed", "-i", "-e", "s/^ac *=.*/ac = %s/" % want["ac"], "-e", "s/^battery *=.*/battery = %s/" % want["battery"], POWER_CONF]))
+    ctx.run(as_root(["systemctl", "enable", POWER_AUTO]))
+    ctx.run(as_root(["systemctl", "restart", POWER_AUTO]))     # (a oneshot: this runs `silik power apply` now)
+    return 0
+
+
+def power_apply(ctx, a):
+    """the profile auto chooses for the power source now (what silikos-power-auto runs)"""
+    on_battery = power_source()[0]
+    word = power_conf()["battery" if on_battery else "ac"]
+    st = power_state(ctx)
+    # (with the power-profiles interface, what it says: tuned-ppd not started yet would, when it starts, put back the
+    # profile it keeps, whatever tuned's file says; so it is set through it, which starts it)
+    now = POWER_WORD.get(st["ppd"] or "") if st["driver"] in ("tuned-ppd", "power-profiles-daemon") else st["profile"]
+    print("silik: on %s: %s%s" % ("battery" if on_battery else "mains power", word, " (already)" if now == word else ""))
+    return 0 if now == word else power_set(ctx, word)
+
+
+def power_zram_cmd(ctx, a):
+    """swap in compressed memory (zram-generator, AppStream): the kernel compresses pages instead of writing them to
+    disk. Its configuration (the package's) makes /dev/zram0 as large as the memory, at most 8 GiB, used before a disk
+    swap. Never on by itself: installing the package is what turns it on, so nothing of SilikOS asks for it"""
+    if a.action == "on":
+        if not os.path.exists(ZRAM_GEN) or ctx.dry:
+            ctx.run(as_root(["dnf", "-y", "install", "zram-generator"]))
+        ctx.run(as_root(["systemctl", "daemon-reload"]))         # (the generator writes the units)
+        ctx.run(as_root(["systemctl", "start", ZRAM_UNITS[0]]))
+    elif a.action == "off":
+        # (the pages in it come back to memory first: that needs the free memory, and takes a moment)
+        ctx.run(as_root(["systemctl", "stop"] + ZRAM_UNITS), check=False)
+        ctx.run(as_root(["dnf", "-y", "remove", "zram-generator"]))
+        ctx.run(as_root(["systemctl", "daemon-reload"]))
+    if ctx.dry:
+        return 0
+    z = power_zram()
+    print("%-14s %s" % ("zram swap", ", ".join("%s %d MiB, %d MiB used" % (d["device"], d["size_mib"], d["used_mib"]) for d in z)
+                        if z else "set up at the next start (zram-generator)" if os.path.exists(ZRAM_GEN) else "off"))
+    return 0 if bool(z) == (a.action != "off") or a.action is None else 1
+
+
+def power_trim(ctx, a):
+    """fstrim.timer (util-linux): once a week the file systems tell the SSD which blocks are free. Off on EL 9.8 by
+    default; the SilikOS kickstart turns it on"""
+    if a.action:
+        ctx.run(as_root(["systemctl", "enable" if a.action == "on" else "disable", "--now", "fstrim.timer"]))
+    if ctx.dry:
+        return 0
+    st = ctx.query(["systemctl", "is-enabled", "fstrim.timer"], any_rc=True).strip()
+    print("%-14s %s" % ("trim", "weekly (fstrim.timer)" if st == "enabled" else "off" if st else "unknown"))
+    return 0
+
+
 # ------------------------------------------------------------------ command line
 def parser(only=None):
     """the command line. ONLY: the group typed (main reads it): the other groups get their name and help, which
@@ -3179,6 +3469,8 @@ def parser(only=None):
         x.add_argument("--json", action="store_true"); x.set_defaults(fn=dev_serial)
         x = d.add_parser("install", help="runs the installer of STM32CubeIDE or Code Composer Studio that you downloaded (FILE: .zip, .sh or .run)")
         x.add_argument("file"); x.set_defaults(fn=dev_install)
+        x = d.add_parser("ccache", help="the compiler cache: on | off (no argument: its state); rebuilds of unchanged files come from it")
+        x.add_argument("action", nargs="?", choices=["on", "off"]); x.set_defaults(fn=dev_ccache)
     w = s.add_parser("win", help="Windows programs: Wine prefixes and a Windows virtual machine").add_subparsers(dest="cmd")
     if only in (None, "win"):
         def box(x):   # the sandbox switches, before the positional arguments
@@ -3207,6 +3499,23 @@ def parser(only=None):
         x = v.add_parser("app"); x.add_argument("--exe", required=True); x.add_argument("--user", required=True)
         x.add_argument("--host", default="127.0.0.1:3389"); x.set_defaults(fn=vm_app)
 
+    pw = s.add_parser("power", help="the power profile: performance | balanced | saver | auto (no command: which is in use); zram swap, trim")
+    pw.add_argument("--json", action="store_true"); pw.set_defaults(fn=power_show)
+    pw = pw.add_subparsers(dest="cmd")
+    if only in (None, "power"):
+        x = pw.add_parser("show", help="the profile in use, the power source, what the processor was told"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=power_show)
+        for k, what in POWER:
+            x = pw.add_parser(k, help=what + "; stops auto"); x.set_defaults(fn=power_profile)
+        x = pw.add_parser("auto", help="one profile on mains power, another on battery, chosen at each plug and unplug (package silikos-power)")
+        x.add_argument("--ac", choices=[k for k, _ in POWER], help="on mains power (default: performance)")
+        x.add_argument("--battery", choices=[k for k, _ in POWER], help="on battery (default: balanced)")
+        x.set_defaults(fn=power_auto)
+        x = pw.add_parser("apply", help="sets the profile auto chooses for the power source now (the service silikos-power-auto runs it)"); x.set_defaults(fn=power_apply)
+        x = pw.add_parser("zram", help="swap in compressed memory (zram-generator): on | off (no argument: its state)")
+        x.add_argument("action", nargs="?", choices=["on", "off"]); x.set_defaults(fn=power_zram_cmd)
+        x = pw.add_parser("trim", help="the SSD told weekly which blocks are free (fstrim.timer): on | off")
+        x.add_argument("action", nargs="?", choices=["on", "off"]); x.set_defaults(fn=power_trim)
+
     h = s.add_parser("hw", help="hardware: probe, NVIDIA driver").add_subparsers(dest="cmd")
     if only in (None, "hw"):
         x = h.add_parser("probe"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=hw_probe)
@@ -3227,7 +3536,7 @@ def parser(only=None):
 WIN_SWITCHES = ("--prefix", "--no-net", "--no-sandbox")
 
 
-GROUPS = ("eda", "dev", "win", "hw", "secure")   # the groups with commands of their own (parser(only=...))
+GROUPS = ("eda", "dev", "win", "power", "hw", "secure")   # the groups with commands of their own (parser(only=...))
 
 
 def main(argv=None):

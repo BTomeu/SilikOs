@@ -98,6 +98,14 @@ silik secure status              revisa la seguretat del sistema
 Allò que no és de codi obert (Cadence, Altium, els IDEs dels fabricants, CANoe) **no el portem mai**: cadascú
 l'instal·la des de la seva descàrrega i amb la seva llicència. SilikOS hi posa el lloc perquè funcioni.
 
+**Energia i rendiment.** `silik power` tria el perfil: rendiment, equilibrat, estalvi o **automàtic**, que és el de
+fàbrica: a tota velocitat endollat (un ordinador de taula sempre ho està) i equilibrat amb bateria. Fa servir les
+eines de la mateixa base (tuned i tuned-ppd), així que el menú del sistema mostra el mateix perfil. La memòria
+comprimida (zram) s'ofereix però no s'activa mai sola, i el disc SSD s'endreça cada setmana. Per al firmware hi ha
+`silik dev ccache`: mesurat compilant la HAL d'un STM32G4, tornar a compilar el mateix passa de 8,7 s a 2,9 s, però la
+primera compilació és un quart més lenta, per això és opcional. Encara no s'ha mesurat què fa cada perfil en un
+portàtil de veritat (consum, hores de bateria).
+
 ## 5. Seguretat i actualitzacions
 
 - **SELinux** actiu (el de Red Hat), **tallafoc** que tanca les connexions entrants i **ssh** apagat per defecte.
