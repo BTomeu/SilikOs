@@ -29,7 +29,8 @@ is security.selinux "$(getenforce 2>&1)" Enforcing
 is security.firewalld "$(systemctl is-active firewalld 2>&1)" active
 is security.zone "$(firewall-cmd --get-default-zone 2>&1)" silikos
 case "$(systemctl is-enabled sshd 2>&1)" in enabled) say security.sshd FAIL "sshd is enabled";; *) say security.sshd ok "not enabled";; esac
-is security.update-timer "$(systemctl is-active silikos-security-update.timer 2>&1)" active
+is security.update-timer "$(systemctl is-active silikos-update.timer 2>&1) $(systemctl is-enabled silikos-security-update.timer 2>&1)" "active disabled"   # every update, daily (the security-only timer is the other choice)
+is update.auto "$(asuser silik update --auto | grep "^●" | awk "{print \$2}")" all
 is security.ptrace_scope "$(sysctl -n kernel.yama.ptrace_scope 2>&1)" 1
 is security.dmesg_restrict "$(sysctl -n kernel.dmesg_restrict 2>&1)" 1
 has kernel.vsyscall "$(cat /proc/cmdline)" "vsyscall=xonly"

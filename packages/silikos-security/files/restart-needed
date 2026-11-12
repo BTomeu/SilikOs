@@ -1,0 +1,10 @@
+#!/bin/sh
+# SilikOS: after an automatic update, /run/silikos/restart exists while the machine must be restarted to run what was
+# updated (a new kernel, glibc, systemd...: needs-restarting -r of dnf-utils exits 1); the desktop's status bar shows
+# it. /run is emptied at the next boot, which is the restart it asks for.
+command -v needs-restarting > /dev/null 2>&1 || exit 0
+mkdir -p /run/silikos || exit 0
+needs-restarting -r > /dev/null 2>&1
+rc=$?
+if [ "$rc" = 1 ]; then date -Iseconds > /run/silikos/restart; elif [ "$rc" = 0 ]; then rm -f /run/silikos/restart; fi
+exit 0

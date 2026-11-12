@@ -39,7 +39,7 @@ forced), several people sharing the machine, a malicious administrator.
 | SELinux enforcing, targeted policy | the base's default; the kickstart states `selinux --enforcing` | Confines the system's services. Programs the user starts (EDA tools, Wine) run unconfined, so it does not get in their way [A: the targeted policy's design; not run here] |
 | Firewall on, zone `silikos` | `/usr/lib/firewalld/zones/silikos.xml`; kickstart `firewall --enabled --remove-service=ssh` and `--set-default-zone=silikos`; on a running system `silik secure apply` | See below |
 | sshd off | kickstart `services --disabled=sshd`; `silik secure apply` | A workstation needs no remote login. To have it: `sudo systemctl enable --now sshd`, then `silik secure apply --keep-ssh` |
-| Security updates every day | `silikos-security-update.timer` runs the base's `dnf-automatic` with `/etc/silikos/security-update.conf` (`upgrade_type = security`, no restart) | The base's `/etc/dnf/automatic.conf` is neither used nor changed |
+| Every update, every day (since silikos-security 0.2.0; owner, 12/11/2026: "the system updates itself") | `silikos-update.timer` runs the base's `dnf-automatic` with `/etc/silikos/update.conf` (`upgrade_type = default`, no restart); when a new kernel or core library waits, `/run/silikos/restart` makes the desktop say "restart" (a notification in every look, a status-bar field in the Silik look). `silik update --auto security` keeps the security advisories only (`silikos-security-update.timer`), `off` none | The base's `/etc/dnf/automatic.conf` is neither used nor changed; the machine is never restarted by itself |
 | Kernel settings | `/usr/lib/sysctl.d/60-silikos-security.conf` | See below; each line is justified in the file |
 | Screen lock: blank after 300 s, locked at once | `/etc/dconf/db/local.d/10-silikos-security` | GNOME's own defaults on EL 9.8, stated; a user may change them, `status` warns above 900 s [A: the figure of the CIS benchmark for RHEL 9, from memory] |
 | No autorun of plugged media | the same file | GNOME would ask; this never starts anything |
@@ -104,7 +104,7 @@ for example `/etc/sysctl.d/90-local.conf` with `kernel.yama.ptrace_scope = 0`.
 - **The vsyscall page.** The kickstart starts the kernel with `vsyscall=xonly` so that EL6 userlands (glibc 2.12) run.
   The trade-off: one page of kernel entry points stays at a fixed address in every process, execute-only. `none` is
   stricter and stops EL6 boxes; `emulate` (`silik eda kernel-arg`) also makes the page readable and is flagged.
-- **Automatic updates.** `sudo systemctl disable --now silikos-security-update.timer` turns them off; `status` warns.
+- **Automatic updates.** `silik update --auto off` turns them off (`security`: the advisories only); `status` warns.
   [A] AlmaLinux 9 gives no updates to an old minor release: when 9.x+1 is out, the security updates are its packages.
 - **Remote access.** `--keep-ssh`; use keys, not passwords.
 

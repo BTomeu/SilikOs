@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 # SilikOS — `silik`: the one command behind every action of the desktop (the COMMAND bar echoes these lines).
 #   silik status
+#   silik update [--auto [all | security | off]]          update now; the automatic updates (daily: all by default)
 #   silik eda   list | create NAME --el 6|7|8 | setup NAME | enter NAME | run NAME -- CMD... | import-vm DISK --name NAME
 #               | rm NAME | check | kernel-arg
 #   silik win   open [--prefix P --no-net --no-sandbox] FILE [ARGS] | apps | sync | stop [PREFIX]
@@ -26,7 +27,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.6.7"
+VERSION = "0.6.8"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -1679,12 +1680,44 @@ def cmd_identity(ctx, a):
     return 0
 
 
+UPDATE_AUTO = (("all", "every update, daily (silikos-update.timer)"),
+               ("security", "security advisories only, daily (silikos-security-update.timer)"),
+               ("off", "none: `silik update` by hand"))
+
+
+def update_auto_now(ctx):
+    """which automatic updates are on: all, security, off; '' when systemd cannot say"""
+    st = {}
+    for unit in (SEC_FULL_TIMER, SEC_TIMER):
+        st[unit] = ctx.query(["systemctl", "is-enabled", unit]).strip()
+    if not any(st.values()):
+        return ""
+    return "all" if st[SEC_FULL_TIMER] == "enabled" else "security" if st[SEC_TIMER] == "enabled" else "off"
+
+
 def cmd_update(ctx, a):
+    if a.auto == "":
+        now = update_auto_now(ctx)
+        for k, what in UPDATE_AUTO:
+            print("%s %-8s %s" % ("●" if k == now else " ", k, what))
+        if os.path.exists("/run/silikos/restart"):
+            print("silik: an update waits for a restart of the computer")
+        return 0 if now else 1
+    if a.auto:
+        on = {"all": [SEC_FULL_TIMER], "security": [SEC_TIMER], "off": []}[a.auto]
+        off = [u for u in (SEC_FULL_TIMER, SEC_TIMER) if u not in on]
+        if off:
+            ctx.run(["sudo", "systemctl", "disable", "--now"] + off)
+        if on:
+            ctx.run(["sudo", "systemctl", "enable", "--now"] + on)
+        return 0
     ctx.run(["sudo", "dnf", "-y", "upgrade", "--refresh"])
     if not ctx.dry and shutil.which("needs-restarting"):
         # (dnf-utils: exit 1 when the kernel, glibc, systemd or another core part was updated under the running system)
         if subprocess.run(["needs-restarting", "-r"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 1:
             print("silik: restart the computer to run what was updated (the kernel or a core library)")
+        if os.path.isfile("/usr/libexec/silikos/restart-needed"):
+            ctx.run(["sudo", "/usr/libexec/silikos/restart-needed"], check=False)     # (the status bar's note)
     return 0
 
 
@@ -1700,7 +1733,8 @@ import xml.etree.ElementTree as ElementTree   # (kept here so that the section i
 SEC_MARK = {"ok": "●", "warn": "◆", "bad": "▼", "unknown": "?"}
 SEC_ZONE = "silikos"                          # /usr/lib/firewalld/zones/silikos.xml
 SEC_ZONE_OPEN = ("dhcpv6-client",)            # what that zone opens
-SEC_TIMER = "silikos-security-update.timer"
+SEC_TIMER = "silikos-security-update.timer"         # security advisories only
+SEC_FULL_TIMER = "silikos-update.timer"             # every update (the default since silikos-security 0.2.0)
 SEC_SYSCTL_FILE = "/usr/lib/sysctl.d/60-silikos-security.conf"
 # (key, value, direction, who sets it). "min": a higher number is stricter; "max": a lower one is. The "silikos" rows
 # are the lines of SEC_SYSCTL_FILE (a test compares them); the "base" rows are what EL 9.8 sets itself.
@@ -1872,7 +1906,7 @@ def sec_firewall():
 
 def sec_updates_auto():
     au = {"dnf_applies": None}
-    for k, unit in (("silikos", SEC_TIMER), ("dnf_install", "dnf-automatic-install.timer"), ("dnf", "dnf-automatic.timer")):
+    for k, unit in (("full", SEC_FULL_TIMER), ("silikos", SEC_TIMER), ("dnf_install", "dnf-automatic-install.timer"), ("dnf", "dnf-automatic.timer")):
         au[k], au[k + "_active"] = sec_unit(unit), sec_active(unit)
     sect = ""
     for l in read("/etc/dnf/automatic.conf").splitlines():
@@ -2095,11 +2129,12 @@ def sec_checks(st):
         row("sshd", "ssh server", "unknown", "sshd %s; whether it runs is not visible%s" % (sh["unit"] or "state unknown", here))
 
     au = st["auto"]
-    start = ["sudo systemctl enable --now " + SEC_TIMER]
-    on = [(k, what, unit) for k, what, unit in (("silikos", "security advisories, daily", SEC_TIMER),
+    start = ["sudo systemctl enable --now " + SEC_FULL_TIMER]
+    on = [(k, what, unit) for k, what, unit in (("full", "every update, daily", SEC_FULL_TIMER),
+                                               ("silikos", "security advisories, daily", SEC_TIMER),
                                                ("dnf_install", "every update, daily", "dnf-automatic-install.timer"),
                                                ("dnf", "what /etc/dnf/automatic.conf says: it installs", "dnf-automatic.timer"))
-          if au[k] == "enabled" and (k != "dnf" or au["dnf_applies"])]
+          if au.get(k) == "enabled" and (k != "dnf" or au.get("dnf_applies"))]
     if on:
         k, what, unit = on[0]
         if au[k + "_active"] is True:
@@ -2285,7 +2320,7 @@ def sec_plan(st, keep_ssh=False, dry=False):
     elif au["silikos"] == "not-found":
         notes.append("automatic security updates: the package silikos-security is not installed")
     elif au["silikos"] != "enabled" or au["silikos_active"] is not True:
-        cmds.append(["sudo", "systemctl", "enable", "--now", SEC_TIMER])     # only turns a protection on
+        cmds.append(["sudo", "systemctl", "enable", "--now", SEC_FULL_TIMER])     # only turns a protection on
 
     weak = ["%s=%d" % (x[0], x[2]) for x in st["sysctl"] if sec_weaker(x[1], x[2], x[3])]
     if weak:
@@ -2835,7 +2870,9 @@ def parser():
     p.add_argument("--version", action="version", version="silik " + VERSION)
     s = p.add_subparsers(dest="group")
     x = s.add_parser("status", help="what this system is: base, kernel, SilikOS packages, the desktop"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=cmd_status)
-    x = s.add_parser("update", help="update every package (the base's and SilikOS's), then say whether to restart"); x.set_defaults(fn=cmd_update)
+    x = s.add_parser("update", help="update every package (the base's and SilikOS's), then say whether to restart; --auto: the automatic updates")
+    x.add_argument("--auto", nargs="?", const="", choices=["", "all", "security", "off"], help="all | security | off (no value: which is on)")
+    x.set_defaults(fn=cmd_update)
     x = s.add_parser("identity", help="the names the system shows: silikos | base | show")
     x.add_argument("which", nargs="?", default="show", choices=["show", "silikos", "base"]); x.set_defaults(fn=cmd_identity)
     x = s.add_parser("look", help="the desktop's look: silik | bar | island, and its accent (no argument: which are in use)")

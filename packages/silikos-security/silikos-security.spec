@@ -1,5 +1,5 @@
 Name:           silikos-security
-Version:        0.1.0
+Version:        0.2.0
 Release:        1%{?dist}
 Summary:        SilikOS security defaults: firewall zone, kernel settings, automatic security updates, screen lock
 License:        LicenseRef-SilikVolt
@@ -7,6 +7,8 @@ BuildArch:      noarch
 Requires:       silik-tools >= 0.3.0
 Requires:       firewalld
 Requires:       dnf-automatic
+# needs-restarting: whether an update waits for a restart
+Requires:       dnf-utils
 Requires:       systemd
 # /etc/dconf/profile/user (user-db:user, system-db:local) and /etc/dconf/db/local.d are the dconf package's on EL9
 Requires:       dconf
@@ -31,16 +33,22 @@ install -Dm0644 %{_sourcedir}/60-silikos-security.conf %{buildroot}%{_prefix}/li
 install -Dm0644 %{_sourcedir}/silikos-security-update.service %{buildroot}%{_prefix}/lib/systemd/system/silikos-security-update.service
 install -Dm0644 %{_sourcedir}/silikos-security-update.timer %{buildroot}%{_prefix}/lib/systemd/system/silikos-security-update.timer
 install -Dm0644 %{_sourcedir}/security-update.conf %{buildroot}%{_sysconfdir}/silikos/security-update.conf
+# every update, daily (the default since 0.2.0: owner, 12/11/2026, "the system updates itself"); the security-only
+# timer stays for `silik update --auto security`
+install -Dm0644 %{_sourcedir}/silikos-update.service %{buildroot}%{_prefix}/lib/systemd/system/silikos-update.service
+install -Dm0644 %{_sourcedir}/silikos-update.timer %{buildroot}%{_prefix}/lib/systemd/system/silikos-update.timer
+install -Dm0644 %{_sourcedir}/update.conf %{buildroot}%{_sysconfdir}/silikos/update.conf
+install -Dm0755 %{_sourcedir}/restart-needed %{buildroot}%{_libexecdir}/silikos/restart-needed
 install -Dm0644 %{_sourcedir}/10-silikos-security %{buildroot}%{_sysconfdir}/dconf/db/local.d/10-silikos-security
 
 %post
 dconf update >/dev/null 2>&1 || :
 systemctl daemon-reload >/dev/null 2>&1 || :
 if [ "$1" = 1 ]; then
-  # first installation: the daily security update is on (in the installer this only makes the link; on a running
-  # system the timer also starts)
-  systemctl enable silikos-security-update.timer >/dev/null 2>&1 || :
-  if [ -d /run/systemd/system ]; then systemctl start silikos-security-update.timer >/dev/null 2>&1 || :; fi
+  # first installation: every update, daily (in the installer this only makes the link; on a running system the
+  # timer also starts). `silik update --auto security` chooses the security advisories only
+  systemctl enable silikos-update.timer >/dev/null 2>&1 || :
+  if [ -d /run/systemd/system ]; then systemctl start silikos-update.timer >/dev/null 2>&1 || :; fi
 fi
 # The firewall's default zone, the running kernel's settings and sshd are not changed from a package script (it
 # could close the connection the package is being installed over): the kickstart does it for a new installation,
@@ -48,7 +56,7 @@ fi
 
 %preun
 if [ "$1" = 0 ]; then
-  systemctl disable --now silikos-security-update.timer >/dev/null 2>&1 || :
+  systemctl disable --now silikos-security-update.timer silikos-update.timer >/dev/null 2>&1 || :
 fi
 
 %postun
@@ -60,6 +68,11 @@ systemctl daemon-reload >/dev/null 2>&1 || :
 %{_prefix}/lib/sysctl.d/60-silikos-security.conf
 %{_prefix}/lib/systemd/system/silikos-security-update.service
 %{_prefix}/lib/systemd/system/silikos-security-update.timer
+%{_prefix}/lib/systemd/system/silikos-update.service
+%{_prefix}/lib/systemd/system/silikos-update.timer
+%dir %{_libexecdir}/silikos
+%{_libexecdir}/silikos/restart-needed
+%config(noreplace) %{_sysconfdir}/silikos/update.conf
 %dir %{_sysconfdir}/silikos
 %config(noreplace) %{_sysconfdir}/silikos/security-update.conf
 %config(noreplace) %{_sysconfdir}/dconf/db/local.d/10-silikos-security

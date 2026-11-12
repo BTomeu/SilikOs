@@ -32,19 +32,19 @@ const SCHEMA = 'com.silikvolt.silikos.shell';                      /* key "look"
 const COMMAND_ID = 'org.silikvolt.Command.desktop';   /* the COMMAND bar is the title bar's command line, not a rail key */
 
 const TEXT = {
-    en: { ready: 'ready', ws: 'workspace', base: 'base', kernel: 'kernel', host: 'host', open: 'open', windows: 'Windows',
+    en: { ready: 'ready', upd: 'update', restart: 'restart to finish', ws: 'workspace', base: 'base', kernel: 'kernel', host: 'host', open: 'open', windows: 'Windows',
           filter: 'type to filter', kOpen: 'open', kMove: 'move', kCat: 'category', kClose: 'close', none: 'nothing matches',
           hint: 'Super+Space', search: 'type to search the applications', pinned: 'pinned', recent: 'recent', all: 'all applications',
           lock: 'lock', logout: 'log out', off: 'power off',
           cats: { all: 'All', fav: 'Rail', eda: 'Engineering', win: 'Windows programs', dev: 'Development', office: 'Office',
                   graphics: 'Graphics', net: 'Internet', media: 'Sound and video', tools: 'Tools', system: 'System', other: 'Other' } },
-    ca: { ready: 'a punt', ws: 'espai', base: 'base', kernel: 'nucli', host: 'equip', open: 'obertes', windows: 'Finestres',
+    ca: { ready: 'a punt', upd: 'actualització', restart: 'reinicia per acabar', ws: 'espai', base: 'base', kernel: 'nucli', host: 'equip', open: 'obertes', windows: 'Finestres',
           filter: 'escriu per filtrar', kOpen: 'obre', kMove: 'mou', kCat: 'categoria', kClose: 'tanca', none: 'no hi ha res que coincideixi',
           hint: 'Super+Espai', search: 'escriu per cercar les aplicacions', pinned: 'ancorades', recent: 'recents', all: 'totes les aplicacions',
           lock: 'bloqueja', logout: 'tanca la sessió', off: 'apaga',
           cats: { all: 'Totes', fav: 'Rail', eda: 'Enginyeria', win: 'Programes de Windows', dev: 'Desenvolupament', office: 'Oficina',
                   graphics: 'Gràfics', net: 'Internet', media: 'So i vídeo', tools: 'Eines', system: 'Sistema', other: 'Altres' } },
-    es: { ready: 'listo', ws: 'espacio', base: 'base', kernel: 'núcleo', host: 'equipo', open: 'abiertas', windows: 'Ventanas',
+    es: { ready: 'listo', upd: 'actualización', restart: 'reinicia para terminar', ws: 'espacio', base: 'base', kernel: 'núcleo', host: 'equipo', open: 'abiertas', windows: 'Ventanas',
           filter: 'escribe para filtrar', kOpen: 'abre', kMove: 'mueve', kCat: 'categoría', kClose: 'cierra', none: 'nada coincide',
           hint: 'Super+Espacio', search: 'escribe para buscar las aplicaciones', pinned: 'ancladas', recent: 'recientes', all: 'todas las aplicaciones',
           lock: 'bloquea', logout: 'cierra la sesión', off: 'apaga',
@@ -198,6 +198,7 @@ function icon(app, size) { return silikIcon(app, size); }
  * "Xschem" in the rail, with their icon. Not for Windows programs: their process number is the sandbox's own. */
 const INTERPRETERS = ['sh', 'bash', 'env', 'python', 'python3', 'perl', 'wish', 'tclsh', 'java', 'gjs', 'node', 'bin', 'usr', 'lib',
                       'lib64', 'share', 'opt', 'local', 'tcl', 'home', 'tmp', 'var', 'etc'];
+let restartSaid = false;   /* the notification of an update waiting for a restart: once a session */
 let programs = null;   /* command -> Shell.App, made when first asked for and again when the installed set changes */
 
 function programOf(app) {
@@ -330,6 +331,7 @@ class SilikShell {
         if (this._flow) this._flow.build();
         else { this._title(); this._rail(); this._status(); }
         this._watchLast();
+        this._watchRestart();
         this._start();
         const on = (o, s, f) => this._sigs.push([o, o.connect(s, f)]);
         on(Main.layoutManager, 'monitors-changed', () => this._layout());
@@ -380,6 +382,8 @@ class SilikShell {
         this._sigs = [];
         programs = null;
         if (this._mon) { this._mon.cancel(); this._mon = null; }
+        if (this._updMon) { this._updMon.cancel(); this._updMon = null; }
+        this._upd = null;
         if (this._dash) { this._dash.set_height(-1); this._dash.show(); this._dash = null; }
         if (this._hadOverview !== undefined) Main.sessionMode.hasOverview = this._hadOverview;
         for (const a of [this._catcher, this._startBox]) { Main.layoutManager.removeChrome(a); a.destroy(); }
@@ -973,7 +977,30 @@ class SilikShell {
         const k = readText('/proc/sys/kernel/osrelease');
         if (k) field(t.kernel, k);
         field(t.host, GLib.get_host_name());
+        /* an automatic update that waits for a restart (silikos-security: /run/silikos/restart, made after the update,
+           gone at the next boot): a field of its own, shown only then */
+        this._upd = field(t.upd, t.restart).get_parent();
+        this._upd.visible = false;
         Main.layoutManager.addChrome(this._sb, { affectsStruts: true, trackFullscreen: true });
+    }
+
+    /* in every look: a notification once when an update starts to wait for a restart; in the Silik look also the
+       status bar's field while it waits */
+    _watchRestart() {
+        const dir = Gio.File.new_for_path('/run/silikos');
+        const sync = () => {
+            const wait = dir.get_child('restart').query_exists(null);
+            if (this._upd) this._upd.visible = wait;
+            if (wait && !restartSaid) {
+                restartSaid = true;
+                try { Main.notify(this._t.upd, this._t.restart); } catch (e) { /* no notification: the field says it */ }
+            }
+        };
+        try {
+            this._updMon = dir.monitor_directory(Gio.FileMonitorFlags.NONE, null);
+            this._updMon.connect('changed', sync);
+        } catch (e) { this._updMon = null; }
+        sync();
     }
 
     /* the last command `silik` ran: the status bar's message, or the command field of the bar */

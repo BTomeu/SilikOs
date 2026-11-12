@@ -1,0 +1,16 @@
+# SilikOS: installs every update of the system's repositories, with the base's dnf-automatic and a configuration of
+# our own (/etc/silikos/update.conf); then notes in /run/silikos/restart whether the machine must be restarted to run
+# what was updated (the desktop's status bar shows it). The machine is never restarted by this.
+[Unit]
+Description=SilikOS automatic updates (dnf-automatic, every update)
+ConditionPathExists=!/run/ostree-booted
+After=network-online.target
+
+[Service]
+Type=oneshot
+Nice=19
+IOSchedulingClass=2
+IOSchedulingPriority=7
+Environment="ABRT_IGNORE_PYTHON=1"
+ExecStart=/usr/bin/dnf-automatic /etc/silikos/update.conf --timer
+ExecStartPost=-/usr/libexec/silikos/restart-needed

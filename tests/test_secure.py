@@ -331,7 +331,7 @@ class Plan(unittest.TestCase):
             "sudo systemctl enable --now firewalld",
             "sudo firewall-cmd --set-default-zone=silikos",
             "sudo systemctl disable --now sshd",
-            "sudo systemctl enable --now silikos-security-update.timer",
+            "sudo systemctl enable --now silikos-update.timer",
             "sudo sysctl -w kernel.dmesg_restrict=1 kernel.yama.ptrace_scope=1 net.ipv4.conf.all.accept_redirects=0",
             "sudo sed -i -E s/^(AutomaticLoginEnable|TimedLoginEnable) *=.*/\\1=false/ /etc/gdm/custom.conf",
             "gsettings set org.gnome.desktop.screensaver lock-enabled true",
@@ -356,7 +356,7 @@ class Plan(unittest.TestCase):
     def test_each_command_only_tightens(self):
         """every command apply can produce, over many systems, is one of the known tightening forms"""
         allowed = [r"sudo setenforce 1$", r"sudo sed -i s/\^SELINUX=\.\*/SELINUX=enforcing/ /etc/selinux/config$",
-                   r"sudo systemctl enable --now (firewalld|silikos-security-update\.timer)$", r"sudo systemctl disable --now sshd$",
+                   r"sudo systemctl enable --now (firewalld|silikos-update\.timer)$", r"sudo systemctl disable --now sshd$",
                    r"sudo firewall-cmd --set-default-zone=silikos$", r"sudo firewall-cmd --reload$",
                    r"sudo firewall-cmd --permanent --zone=silikos --(add|remove)-service=ssh$",
                    r"sudo sysctl -w( [a-z0-9_./*]+=\d+)+$", r"sudo sed -i -E s/\^\(AutomaticLoginEnable\|TimedLoginEnable\) \*=\.\*/\\1=false/ /etc/gdm/custom\.conf$",
@@ -424,7 +424,7 @@ class Plan(unittest.TestCase):
         st["sysctl_file"] = False
         cmds, notes = silik.sec_plan(st)
         self.assertNotIn("sudo firewall-cmd --set-default-zone=silikos", flat(cmds))
-        self.assertNotIn("sudo systemctl enable --now silikos-security-update.timer", flat(cmds))
+        self.assertNotIn("sudo systemctl enable --now silikos-update.timer", flat(cmds))
         self.assertEqual(sum("silikos-security" in n for n in notes), 3)
 
     def test_root_does_not_set_a_users_screen_lock(self):
@@ -637,7 +637,15 @@ class Package(unittest.TestCase):
         self.assertIn("lib/firewalld/zones/%s.xml" % silik.SEC_ZONE, files)
         self.assertIn("BuildArch:      noarch", spec)
         post = spec.split("%post", 1)[1].split("%preun", 1)[0]
-        self.assertIn("systemctl enable " + silik.SEC_TIMER, post)
+        self.assertIn("systemctl enable " + silik.SEC_FULL_TIMER, post)     # every update, daily (owner, 12/11/2026)
+        c2 = configparser.ConfigParser()
+        c2.read(os.path.join(PKG, "files/update.conf"))
+        self.assertEqual(c2["commands"]["upgrade_type"], "default")
+        self.assertEqual(c2["commands"]["apply_updates"], "yes")
+        self.assertEqual(c2["commands"]["reboot"], "never")
+        unit = text("packages/silikos-security/files/silikos-update.service")
+        self.assertIn("ExecStart=/usr/bin/dnf-automatic /etc/silikos/update.conf --timer", unit)
+        self.assertIn("WantedBy=timers.target", text("packages/silikos-security/files/" + silik.SEC_FULL_TIMER))
         for word in ("firewall-cmd", "firewall-offline-cmd", "setenforce", "sysctl -", "sshd"):
             self.assertNotIn(word, "\n".join(l for l in post.splitlines() if not l.lstrip().startswith("#")), word)
 
