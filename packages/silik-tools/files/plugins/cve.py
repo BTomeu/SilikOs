@@ -316,6 +316,10 @@ def probe(ctx, silik, offline=False):
     run = sb.run_ro
     pkgs = sb.packages(ctx, silik)
     cache = ["-C"] if offline else []
+    names = [r["id"] for r in repos()]
+    if not offline and not ctx.quiet:        # (its one use of the network, said before it is made)
+        print("# asks the enabled repositories for their advisories, as dnf does: %s (--offline: dnf's cache only)" % (", ".join(names) or "none"),
+              file=sys.stderr, flush=True)
     rc, listed = run(ctx, ["dnf", "-q"] + cache + LIST, 300)
     info_rc, info = (None, "")
     if rc == 0:
@@ -333,7 +337,7 @@ def probe(ctx, silik, offline=False):
         rows = [{"state": "unknown", "value": "the check failed: %s: %s" % (type(e).__name__, e), "fix": []}]
     return {"dnf": rc, "listed": parse_list(listed) if rc == 0 else None, "info": parse_info(info) if info_rc == 0 else {},
             "kernel": kern, "updates": rows[0] if rows else None, "container": silik.sec_container(), "offline": offline,
-            "repos": [r["id"] for r in repos()], "packages": len(pkgs),
+            "repos": names, "packages": len(pkgs),
             "last_change": max([p["installtime"] for p in pkgs] or [0]), "not_covered": not_covered(ctx, silik, pkgs, run)}
 
 

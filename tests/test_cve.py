@@ -246,6 +246,8 @@ class Command(unittest.TestCase):
                                  "dnf -q -C updateinfo list --security --installed --with-cve"])
         for a in asked:
             self.assertIn("$ " + a, err)
+        # its one use of the network is said before it is made
+        self.assertLess(err.index("# asks the enabled repositories for their advisories"), err.index("$ dnf -q updateinfo list"))
 
     def test_json_and_offline(self):
         rc, out, err, dnf = main(["cve", "--json", "--offline"], kernel=NEW)
@@ -258,6 +260,7 @@ class Command(unittest.TestCase):
         self.assertEqual(d["packages"], 291)
         self.assertTrue(any(n["what"] == "SilikOS's own packages" and n["count"] == 2 for n in d["not_covered"]))
         self.assertEqual([a for a in dnf.asked if a[0] == "dnf"][0], ["dnf", "-q", "-C", "updateinfo", "list", "--security", "--with-cve"])
+        self.assertNotIn("asks the enabled repositories", err)        # (--offline asks nobody)
         self.assertFalse(any("--installed" in a for a in dnf.asked))  # (the newest kernel runs: nothing to ask)
 
     def test_dnf_does_not_answer(self):

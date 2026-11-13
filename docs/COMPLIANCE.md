@@ -266,7 +266,8 @@ silik cve --offline      # dnf's cache only
 
 Reads `dnf -q updateinfo list --security --with-cve` (asks the repositories), then from dnf's cache `dnf -q -C
 updateinfo info --security` (titles, dates, severities, CVE ids) and, only when a newer kernel is installed than the
-one running, `dnf -q -C updateinfo list --security --installed --with-cve`. Each command is printed on stderr.
+one running, `dnf -q -C updateinfo list --security --installed --with-cve`. Each command is printed on stderr, and
+before the first one a line says which repositories are about to be asked.
 
 | Row | ok | warn | bad | unknown |
 |---|---|---|---|---|
