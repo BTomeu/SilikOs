@@ -35,7 +35,7 @@ jobs:
     steps:
       - name: Tools
         run: dnf -y -q install git tar gzip findutils
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with: { persist-credentials: false }
       - name: Build ${{ matrix.tool }}
         shell: bash
@@ -48,12 +48,12 @@ jobs:
           tail -5 build.log
       - name: What was built
         run: echo "::notice title=${{ matrix.tool }} built::$(cd build/extra && ls -la ${{ matrix.tool }}-*.rpm | awk '{print $5, $9}')"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: dev-${{ matrix.tool }}
           path: build/extra/${{ matrix.tool }}-*.rpm
           compression-level: 0
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: srpm-dev-${{ matrix.tool }}
           path: build/srpm/${{ matrix.tool }}-[0-9]*.src.rpm
@@ -73,9 +73,9 @@ jobs:
     steps:
       - name: Tools
         run: dnf -y -q install git tar gzip findutils
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with: { persist-credentials: false }
-      - uses: actions/download-artifact@v4      # (the SDCC of this run: build_dev.sh takes no other)
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4      # (the SDCC of this run: build_dev.sh takes no other)
         with: { name: dev-sdcc, path: build/deps }
       - name: Build ${{ matrix.tool }}
         shell: bash
@@ -88,12 +88,12 @@ jobs:
           tail -5 build.log
       - name: What was built
         run: echo "::notice title=${{ matrix.tool }} built::$(cd build/extra && ls -la ${{ matrix.tool }}-*.rpm | awk '{print $5, $9}')"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: dev-${{ matrix.tool }}
           path: build/extra/${{ matrix.tool }}-*.rpm
           compression-level: 0
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: srpm-dev-${{ matrix.tool }}
           path: build/srpm/${{ matrix.tool }}-[0-9]*.src.rpm
@@ -106,9 +106,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with: { persist-credentials: false }
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           pattern: dev-*
           path: dist
@@ -138,7 +138,7 @@ jobs:
             fi
           done
           exit $rc
-      - uses: actions/download-artifact@v4      # (the source packages: kept beside the binaries, not tried)
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4      # (the source packages: kept beside the binaries, not tried)
         with:
           pattern: srpm-dev-*
           path: src
@@ -168,7 +168,7 @@ jobs:
     steps:
       - name: Tools
         run: dnf -y -q install git tar gzip findutils
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with: { persist-credentials: false }
       - name: Build ${{ matrix.tool }} (aarch64)
         shell: bash
@@ -180,12 +180,12 @@ jobs:
             exit 1
           fi
           tail -5 build.log
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: devarm-${{ matrix.tool }}
           path: build/extra/${{ matrix.tool }}-*.rpm
           compression-level: 0
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: srpm-devarm-${{ matrix.tool }}
           path: build/srpm/${{ matrix.tool }}-*.src.rpm
@@ -198,14 +198,14 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with: { persist-credentials: false }
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           pattern: devarm-*
           path: dist
           merge-multiple: true
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           pattern: srpm-devarm-*
           path: src

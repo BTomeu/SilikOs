@@ -183,6 +183,82 @@ the parser takes or one of a short read-only list. Redaction is by pattern: what
 a customer is sent as typed. `model = off` in `/etc/silikos/ask.conf` turns the model layer off for the machine.
 Not run against the real API (`docs/ASK.md`).
 
+## The audit of 13/11/2026
+
+The owner asked for the system to be audited and attacked. Four reviewers worked apart, each trying to break one
+part, with every serious claim run in a throw-away AlmaLinux 9.8 container before it counted; the fixes were then
+run against the same attacks. Nobody outside did this: it is SilikOS reading itself, hard.
+
+**Not found:** a way for a user outside `wheel`, or without a password, to become root through SilikOS's code; a
+setuid file, a capability, a sudoers or polkit rule of ours; a stranger's pull request reaching a write token, the
+signing key or a signed package; a secret in the repository or its history.
+
+| Id | What was found | How bad | State |
+|---|---|---|---|
+| S1 | `silik mirror use`: the mirror's own manifest said which repositories dnf checks, and the unsigned repository of SilikOS's packages could replace any package. Run: a hand-made mirror installed an unsigned `tzdata-9999` as root | high | **fixed**: this machine's table decides; the own repository is off without the mirror's key (or `--unsigned`, said) and brings only SilikOS's own names. The attack run again: refused |
+| S2 | The releases are where built packages wait, and whatever lies there is signed and put on the ISO: anything that can write a release (a stolen token, a compromised action in a writing job) gets a signed package onto every machine. Run with a stand-in key | high | **open, the owner's**: provenance attestations in the workflows, and never signing what is already published unsigned (below) |
+| S3 | `main` is not protected, and the signing step runs `main`'s scripts with the private key | high | **open, the owner's**: GitHub settings (below) |
+| S4 | A network installation trusts TLS alone for its 1570 packages (the installer checks no signature) | medium | said here and in `docs/OFFLINE.md`; the offline ISO checks every package before installing |
+| S5 | Actions named by tag in the jobs that hold the write token and the key; the key stayed in the environment of what parsed foreign packages | medium | **fixed**: every action by its commit (99 references; a test holds it); the key leaves the environment once imported. The container image by digest: open |
+| S6 | Well-signed metadata can be served again later, or one channel's as the other's | medium | open: a revision in the signed metadata and a check in `silik update` |
+| P1 | `silik manifest apply FILE --kernel` gave the file's kernel arguments to the boot loader: `init=FILE`, `selinux=0`, `systemd.debug_shell`. Run | medium | **fixed**: a list of what a manifest may set, by name and value; the rest is said, never set |
+| P2 | `silik manifest apply FILE` turned automatic updates off, took packages back to old versions, made a box from any registry | medium | **fixed**: updates are never lowered, no downgrade without `--downgrade`, no image a file names |
+| B1 | `--no-net` reads as isolation and takes only the network: the program keeps the X11 display, so the keyboard | medium | said plainly (`docs/WINDOWS.md`, the option's help); a display of its own for such a program: open |
+| B2 | A double click runs an `.exe`, `.msi`, `.lnk` or `.bat` without a question | medium | said; asking first for a downloaded file: the owner's call |
+| B3 | Wine's SELinux domain was described as a restriction; in the base's policy it is unconfined | medium | said: the boundary is bubblewrap |
+| P3 | As root with a user's `XDG_RUNTIME_DIR` (after `su` without a dash), `silik` wrote its note through a link the user had put there. Run | low | **fixed**: not through a link, not in another user's folder |
+| P4 | A Wine prefix named with `$(...)` in it ran at the TAB key. Run | low | **fixed**: names are completed as text |
+| P5 | A plugin file writable by a group was loaded | low | **fixed** |
+| B4 | A command line typed after `$` in the bar, secrets and all, went to the session log; the log's mode followed the umask | low | **fixed**: the line is not kept; 0700 / 0600 always |
+| B5 | `silik dev install` runs ST's installer as root, chosen by its file name | low | open: show the path and ask |
+| S7 | A fork's pull request could start hours of CI here by naming its branch `main` | low | **fixed** in the CI's jobs; the repository workflow's choice of run: open |
+| S8 | Released packages restored from the build cache without a check | low | open (with S2) |
+| S9 | The ISO release had no checksum | low | **fixed**: `SHA256SUMS` in the release (not signed: no key yet) |
+| S10 | NVIDIA's repository key and the old CentOS images are trusted on first use | low | open |
+| — | SilikOS's three root services had the whole machine in reach (`systemd-analyze security`: 9.6) | — | **fixed**: 1.5 to 1.7, each still doing its work |
+
+**What only the owner can do**, before the signing key goes to GitHub:
+
+1. Settings → Rules → Rulesets: a branch ruleset on the default branch (restrict updates, restrict deletions,
+   block force pushes; bypass: repository admin), and a tag ruleset on `v*` (restrict creations, updates, deletions).
+2. Settings → Environments → `package-signing`: deployment branches "Selected" → `main`; required reviewers: the
+   owner; no bypass for administrators.
+3. Settings → Actions → General: workflow permissions "Read"; fork pull requests "Require approval for all
+   external contributors".
+4. Delete the release `repo-el9-next` before the first signed run: its 87 packages are unsigned and would be signed
+   as they lie.
+5. PROPOSAL: keep the key of the `stable` channel off GitHub (`tools/build_pkgrepo.sh --gpg-name` signs on the
+   owner's PC), so that whoever gets into GitHub reaches `next` only.
+
+**Beside a hardened system.** Measured with the base's own OpenSCAP content in a container made to be judged as a
+machine: CIS Workstation level 1, 148 rules pass and 113 fail (the base alone: 144 and 117); ANSSI BP-028
+intermediary 89 and 103; STIG with GUI 157 and 268. To a scanner SilikOS is its base: its own settings moved four
+rules. Since then every installation also gets: stricter handling of files in shared folders, no memory image of a
+program that changed user, line disciplines by root only, rare network protocols never loaded on demand, IPv6
+temporary addresses, nothing of a notification on the locked screen, no login with an empty password.
+
+What a system like GrapheneOS has and SilikOS does not, and why:
+
+| Property | There | Here |
+|---|---|---|
+| Verified boot of everything | every partition, keys the owner can set | Secure Boot covers the boot loader and the kernel when it is on; the initramfs and the kernel's arguments are not covered on bare metal. The kernel locks itself down under Secure Boot (the base's build) |
+| Disk always encrypted | always | a tick in the installer; `silik secure status` says bad without it. Proposing it ticked: needs an installer run |
+| A hardened memory allocator | yes | no: none is packaged for EL 9, and changing glibc would end the binary identity with RHEL that the EDA tools need |
+| Every program in its own box, with its own permissions | yes | no: what the user starts runs as the user, on X11, where programs see each other's keys and windows. Wine has bubblewrap; an untrusted program belongs in `silik win vm` |
+| USB refused while locked | yes | not yet: the base ships USBGuard and GNOME 40 knows how to use it, and nothing here installs or configures it. First on the list, after a run with a real device |
+| Fast patches | monthly, with live reboot prompts | daily, automatic, with a snapshot to go back to; a kernel fix protects after a restart the owner does (the base has no live patches) |
+
+**Proposed and not done** (each has a cost an engineer pays; the owner decides): a `hardened` level of `silik
+secure` for a laptop that travels — Secure Boot and encryption required, the kernel locked down and module
+signatures enforced (unsigned kernel modules stop: NVIDIA through DKMS, VirtualBox), memory zeroed on allocation,
+strict IOMMU, TPM unlock with a PIN, the screen-lock settings locked, login attempts limited, the Wi-Fi address
+per network (a licence bound to it stops matching); USBGuard at GNOME's "locked screen" level; encryption ticked in
+the installer; nothing listening beyond this machine (`rpcbind.socket` and avahi are the base's, and listen).
+
+Refused, with the reason: a different kernel or glibc (the product is binary identity with RHEL 9); application
+allowlisting by default (it stops compiled programs and tools in `/opt`); no user namespaces (podman and bubblewrap
+are made of them); `noexec` on `/tmp` (vendor installers); kernel lockdown at "confidentiality" (no kernel tracing).
+
 ## What SilikOS does not do
 
 No antivirus, no USBGuard, no audit rules, no FIPS mode or CIS / STIG profile, no kernel lockdown beyond the base's,

@@ -139,7 +139,16 @@ that have the prefix's runtime folder mounted).
   `wine-core-8.0-1.el9` needs `mesa-libOSMesa`, which EL 9.8's Mesa 25 no longer builds).
 - EL 9's SELinux policy does not let a user's program run Wine's kind of code (`selinuxuser_execmod` is off):
   `silik-win` carries a rule (`silikos_wine.cil`) that gives Wine's three programs the policy's own Wine domain
-  (`wine_t`). The boolean stays off for everything else.
+  (`wine_t`). The boolean stays off for everything else. **`wine_t` is not a confinement**: in the base's policy it
+  is an unconfined domain (read with `seinfo -t wine_t -x` on EL 9.8 by the audit of 13/11/2026: `unconfined_domain_type`,
+  and among its attributes the right to load policy and to set enforcing). It is there so that Wine's kind of code
+  runs at all. What holds a Windows program is bubblewrap (no capabilities, no new privileges, its own namespaces);
+  with `--no-sandbox`, or without bubblewrap installed, nothing does.
+- **`--no-net` takes the network away and nothing else**: the program still has this session's X11 display, and
+  with it the keyboard and the other windows (above). It is not how to run a program you do not trust.
+- **A double click runs it.** `.exe`, `.msi`, `.lnk` and `.bat` files open with `silik win open`, without a
+  question: a file that arrived by mail is one click from running with the reach described above. Whether to ask
+  first for a file in `~/Downloads` is the owner's to decide (the audit's finding B2).
 - **.NET and HTML: Wine Mono and Wine Gecko are packages of the system** (`silik-wine-mono`, `silik-wine-gecko`:
   upstream's binary archives unpacked under `/opt/silik-wine/share/wine`, `wine/silik-wine-addons.spec`). WineHQ's
   Wine otherwise offers to download them with a dialog: "Wine Mono Installer" the first time a prefix is made (behind

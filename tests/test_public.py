@@ -172,10 +172,10 @@ class Workflows(unittest.TestCase):
     def test_the_actions_are_github_s_own_or_pinned_by_commit(self):
         for wf in WORKFLOWS:
             for use in re.findall(r"^\s*-? ?uses: (\S+)", text(wf), re.M):
-                if use.startswith("actions/"):
-                    self.assertRegex(use, r"@v\d+$", wf)
-                else:
-                    self.assertRegex(use, r"@[0-9a-f]{40}$", "%s: %s is not GitHub's: pin it by commit" % (wf, use))
+                # every action by its commit, GitHub's own too (the audit of 13/11/2026: a tag can be moved, and the
+                # jobs that hold the write token and the signing key ran `actions/checkout@v4`). The commits are the
+                # ones GitHub's own log of our runs resolved the tags to that day
+                self.assertRegex(use, r"@[0-9a-f]{40}$", "%s: %s is not pinned by commit" % (wf, use))
 
 
 class Tree(unittest.TestCase):

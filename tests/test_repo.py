@@ -706,8 +706,8 @@ class Workflow(unittest.TestCase):
     def test_the_site_and_the_order(self):
         s = self.s
         self.assertIn("if [ -d site ]; then cp -a site/. _site/; fi\n          rm -rf _site/repo; cp -a w/site/repo _site/repo", s)
-        self.assertRegex(s, r"uses: actions/upload-pages-artifact@v\d+\n        if: .*\n        with:\n          path: _site")
-        self.assertRegex(s, r"uses: actions/deploy-pages@v\d+")
+        self.assertRegex(s, r"uses: actions/upload-pages-artifact@[0-9a-f]{40}  # v\d+\n        if: .*\n        with:\n          path: _site")
+        self.assertRegex(s, r"uses: actions/deploy-pages@[0-9a-f]{40}  # v\d+")
         import test_public
         j = test_public.jobs(s)
         self.assertEqual(list(j), ["packages", "release", "deploy", "prune"])

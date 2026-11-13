@@ -475,7 +475,7 @@ class Candidates(unittest.TestCase):
         self.assertNotIn("runs-on: ubuntu-24.04\n", body)
         self.assertIn("fail-fast: false", body)
         self.assertIn("timeout-minutes: 330", body)
-        self.assertEqual(body.count("actions/checkout@v4"), body.count("persist-credentials: false"))
+        self.assertEqual(body.count("actions/checkout@"), body.count("persist-credentials: false"))
         self.assertIn("bash tools/arm_candidate.sh ${{ matrix.tool }}", body)
         self.assertIn('bash tools/arm_candidate.sh --summary results | tee -a "$GITHUB_STEP_SUMMARY"', body)
         sh = text("tools/arm_candidate.sh")

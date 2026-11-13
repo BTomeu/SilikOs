@@ -40,13 +40,13 @@ jobs:
     steps:
       - name: Tools
         run: dnf -y -q install git tar gzip findutils zstd
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with: { persist-credentials: false }
       - name: The tool's own line of eda/versions (another tool's version does not make this one build again)
         id: line
         shell: bash
         run: echo "sum=$(grep -E '^${{ matrix.tool }}[[:space:]]' eda/versions | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
         id: cache
         with:
           path: |
@@ -63,7 +63,7 @@ jobs:
             exit 1
           fi
           tail -5 build.log
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
         if: steps.cache.outputs.cache-hit != 'true'
         with:
           path: |
@@ -72,12 +72,12 @@ jobs:
           key: ${{ steps.cache.outputs.cache-primary-key }}
       - name: What was built
         run: echo "::notice title=${{ matrix.tool }} built::$(cd build/extra && ls -la ${{ matrix.tool }}-*.rpm | awk '{print $5, $9}')"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: eda-${{ matrix.tool }}
           path: build/extra/${{ matrix.tool }}-*.rpm
           compression-level: 0
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: srpm-eda-${{ matrix.tool }}
           path: build/srpm/${{ matrix.tool }}-[0-9]*.src.rpm
@@ -96,28 +96,28 @@ jobs:
     steps:
       - name: Tools
         run: dnf -y -q install git tar gzip findutils zstd
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with: { persist-credentials: false }
       - name: The lines of eda/versions KiCad is made from
         id: line
         shell: bash
         run: echo "sum=$(grep -E '^(kicad|opencascade|nng|ngspice)[[:space:]]' eda/versions | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
         id: cache
         with:
           path: |
             build/extra
             build/srpm
           key: eda-kicad-${{ steps.line.outputs.sum }}-${{ hashFiles('eda/common.inc', 'tools/build_eda.sh', 'eda/kicad.spec', 'eda/opencascade.spec', 'eda/nng.spec', 'eda/ngspice.spec') }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         if: steps.cache.outputs.cache-hit != 'true'
         continue-on-error: true
         with: { name: eda-opencascade, path: build/deps }
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         if: steps.cache.outputs.cache-hit != 'true'
         continue-on-error: true
         with: { name: eda-nng, path: build/deps }
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         if: steps.cache.outputs.cache-hit != 'true'
         continue-on-error: true
         with: { name: eda-ngspice, path: build/deps }
@@ -133,7 +133,7 @@ jobs:
             exit 1
           fi
           tail -5 build.log; df -h . | tail -1
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
         if: steps.cache.outputs.cache-hit != 'true'
         with:
           path: |
@@ -142,12 +142,12 @@ jobs:
           key: ${{ steps.cache.outputs.cache-primary-key }}
       - name: What was built
         run: echo "::notice title=kicad built::$(cd build/extra && ls -la kicad-*.rpm | awk '{print $5, $9}')"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: eda-kicad
           path: build/extra/kicad-*.rpm
           compression-level: 0
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: srpm-eda-kicad
           path: build/srpm/kicad-[0-9]*.src.rpm
@@ -165,13 +165,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with: { persist-credentials: false }
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           name: eda-${{ matrix.tool }}
           path: dist
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           name: srpm-eda-${{ matrix.tool }}
           path: src
@@ -188,15 +188,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with: { persist-credentials: false }
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with: { name: eda-kicad, path: dist }
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with: { name: srpm-eda-kicad, path: src }
       # KiCad runs on our Open CASCADE, nng and ngspice: the packages of this run beside it (eda/keep.sh takes the
       # release's when one was not made in this run), and its symbols and footprints for a real job
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         continue-on-error: true
         with: { pattern: 'eda-{opencascade,nng,ngspice,kicad-symbols,kicad-footprints,kicad-templates}', path: deps, merge-multiple: true }
       - name: Try kicad in a clean EL 9, then keep it in the release
@@ -210,12 +210,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with: { persist-credentials: false }
       - name: The line of eda/versions
         id: line
         run: echo "sum=$(grep -E '^kicad-packages3d[[:space:]]' eda/versions | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
         id: cache
         with:
           path: |
@@ -233,7 +233,7 @@ jobs:
           fi
           tail -3 build.log; df -h . | tail -1
           sudo rm -rf build/eda-rpm
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
         if: steps.cache.outputs.cache-hit != 'true'
         with:
           path: |
@@ -242,12 +242,12 @@ jobs:
           key: ${{ steps.cache.outputs.cache-primary-key }}
       - name: What was built
         run: echo "::notice title=kicad-packages3d built::$(cd build/extra && ls -la kicad-packages3d-*.rpm | awk '{print $5, $9}')"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: eda-kicad-packages3d
           path: build/extra/kicad-packages3d-*.rpm
           compression-level: 0
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: srpm-eda-kicad-packages3d
           path: build/srpm/kicad-packages3d-[0-9]*.src.rpm
@@ -262,11 +262,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with: { persist-credentials: false }
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with: { name: eda-kicad-packages3d, path: dist }
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with: { name: srpm-eda-kicad-packages3d, path: src }
       - name: Try it in a clean EL 9, then keep it in the release eda-optional
         env:
@@ -287,7 +287,7 @@ jobs:
     steps:
       - name: Tools
         run: dnf -y -q install git tar gzip findutils zstd
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with: { persist-credentials: false }
       - name: Build ${{ matrix.tool }} (aarch64)
         shell: bash
@@ -299,12 +299,12 @@ jobs:
             exit 1
           fi
           tail -5 build.log
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: edaarm-${{ matrix.tool }}
           path: build/extra/${{ matrix.tool }}-*.rpm
           compression-level: 0
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: srpm-edaarm-${{ matrix.tool }}
           path: build/srpm/${{ matrix.tool }}-*.src.rpm
@@ -323,13 +323,13 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with: { persist-credentials: false }
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           name: edaarm-${{ matrix.tool }}
           path: dist
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           name: srpm-edaarm-${{ matrix.tool }}
           path: src

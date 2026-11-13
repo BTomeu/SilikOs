@@ -9293,7 +9293,8 @@ def parser(only=None):
     w = s.add_parser("win", help="Windows programs: Wine prefixes and a Windows virtual machine").add_subparsers(dest="cmd")
     if only in (None, "win"):
         def box(x):   # the sandbox switches, before the positional arguments
-            x.add_argument("--no-net", action="store_true", help="the program has no network")
+            x.add_argument("--no-net", action="store_true", help="the program has no network (it still shares this session's screen and keyboard: "
+                           "not a way to run a program you do not trust; that is `silik win vm`)")
             x.add_argument("--no-sandbox", action="store_true", help="run without the sandbox: the program sees the whole home folder")
             return x
         x = w.add_parser("list"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=win_list)

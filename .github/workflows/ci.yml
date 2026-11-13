@@ -28,20 +28,23 @@ permissions:
   contents: read
 jobs:
   packages:
+    # (a run started by another workflow's end is taken only when that workflow ran for this repository's own main:
+    # a pull request from a fork whose branch is called main would otherwise start hours of work here. The audit of 13/11/2026)
+    if: ${{ github.event_name != 'workflow_run' || (github.event.workflow_run.event != 'pull_request' && github.event.workflow_run.head_repository.full_name == github.repository) }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with: { persist-credentials: false }
       - name: Unit tests
         run: python3 -m unittest discover -s tests -v
       - name: Packages
         # (built in an EL 9 container, with the base's own rpmbuild: nothing of the runner's package servers is needed)
         run: docker run --rm -v "$PWD:/src" -w /src almalinux:9 bash -c 'dnf -y -q install rpm-build createrepo_c > /dev/null && bash tools/build_rpms.sh'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: silikos-packages
           path: build/repo/*.rpm
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: silikos-sources
           path: build/srpm/*.src.rpm
@@ -51,10 +54,13 @@ jobs:
   # AlmaLinux's aarch64 boot ISO (UEFI only). Not installed in a virtual machine: no KVM is assumed on these runners [A].
   # (Written 12/11/2026 after the same steps under emulation; not run on GitHub yet: docs/STATUS.md)
   arm:
+    # (a run started by another workflow's end is taken only when that workflow ran for this repository's own main:
+    # a pull request from a fork whose branch is called main would otherwise start hours of work here. The audit of 13/11/2026)
+    if: ${{ github.event_name != 'workflow_run' || (github.event.workflow_run.event != 'pull_request' && github.event.workflow_run.head_repository.full_name == github.repository) }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with: { persist-credentials: false }
       - name: Unit tests (aarch64)
         run: uname -m && python3 -m unittest discover -s tests -v
@@ -77,7 +83,7 @@ jobs:
           sudo chown -R "$(id -u):$(id -g)" build      # (build/repo: the packages the step above built in EL 9, as root)
           SILIK_ARCH=aarch64 bash tools/build_iso.sh
           ls -la build/SilikOS-*-aarch64-netinstall.iso
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         if: startsWith(github.ref, 'refs/tags/v')
         with:
           name: silikos-iso-aarch64
@@ -89,7 +95,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 170
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with: { persist-credentials: false }
       - name: KVM for the runner's user
         run: |
@@ -129,7 +135,7 @@ jobs:
           rm -f build/extra/*.aarch64.rpm                           # (the ARM builds: the ISO here is x86_64)
           ls -la build/extra
       # our packages as the packages job built them (in EL 9, with the base's rpmbuild): the ISO carries those
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with: { name: silikos-packages, path: build/repo }
       - name: Packages and ISO
         run: |
@@ -157,7 +163,7 @@ jobs:
             cat build/install-test/bench.txt 2>/dev/null || echo 'no measurement: see the consoles of the measurement starts (artifact install-bench)'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         if: always()
         with:
           name: install-bench
@@ -168,7 +174,7 @@ jobs:
             build/install-test/bench-*.txt
             build/install-test/bench-start*.log
             build/install-test/bench-start*.out
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         if: always()
         with:
           name: install-test
@@ -178,7 +184,7 @@ jobs:
             build/install-test/*.png
             build/install-test/*.ppm
             build/install-test/ci.ks
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         if: startsWith(github.ref, 'refs/tags/v')
         with:
           name: silikos-iso
@@ -196,7 +202,7 @@ jobs:
       contents: write        # (the branch ci-results)
     timeout-minutes: 10
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         continue-on-error: true      # (an installation that left no file: the branch then says so with its commit)
         with: { name: install-test, path: install-test }
       - name: Keep the last report and pictures of main on the branch ci-results
@@ -222,7 +228,7 @@ jobs:
     permissions:
       contents: write        # (the release)
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           path: dist
           merge-multiple: true
@@ -231,9 +237,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           ls -la dist
+          # what the release holds, by its sha256: a download can be checked against it (not signed: the key is the
+          # owner's to make, docs/REPO.md)
+          (cd dist && sha256sum SilikOS-*-netinstall.iso *.rpm > SHA256SUMS && cat SHA256SUMS)
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "SilikOS $GITHUB_REF_NAME" \
             --notes "The ISO installs the system from the base's own package sources (network). What has and has not been run: docs/STATUS.md; the installation test of this tag: branch ci-results. Source packages (*.src.rpm): SilikOS's own here; those of the tools the ISO carries in the releases eda-tools, dev-tools and wine-* (older builds in sources-archive); those of the base's packages in the ISO's installer at vault.almalinux.org (tools/fetch_base_sources.sh lists and fetches them)." \
-            dist/SilikOS-*-netinstall.iso dist/*.rpm
+            dist/SilikOS-*-netinstall.iso dist/*.rpm dist/SHA256SUMS
 
   # The way back from an update (docs/ROLLBACK.md, its test plan's steps 1-6, 8 and 10), in virtual machines with the
   # ISO: an unattended installation whose kickstart names no partitioning scheme (the installer's default on this
@@ -251,7 +260,7 @@ jobs:
     continue-on-error: true
     timeout-minutes: 170
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with: { persist-credentials: false }
       - name: KVM for the runner's user
         run: |
@@ -265,7 +274,7 @@ jobs:
           bash tools/ci_apt.sh rpm createrepo-c xorriso mtools cpio isomd5sum qemu-system-x86 qemu-utils
           df -h /
       # our packages as the packages job built them (in EL 9, with the base's rpmbuild)
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with: { name: silikos-packages, path: build/repo }
       - name: The ISO (the system alone)
         run: |
@@ -282,7 +291,7 @@ jobs:
             cat build/rollback-test/report.txt 2>/dev/null || echo 'no report: see the consoles (artifact rollback-test)'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         if: always()
         with:
           name: rollback-test

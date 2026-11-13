@@ -78,6 +78,9 @@ if [ -n "${SILIKOS_GPG_PRIVATE_KEY:-}" ]; then
     || { echo "error: SILIKOS_GPG_PRIVATE_KEY is not a private key gpg can import" >&2; sed 's/^/  gpg: /' "$tmp/import.log" >&2; exit 3; }
   fpr=$(gpg --batch --with-colons --list-secret-keys | awk -F: '$1 == "fpr" { print $10; exit }')
   [ -n "$fpr" ] || { echo "error: SILIKOS_GPG_PRIVATE_KEY holds no private key" >&2; exit 3; }
+  # (the key is in the keyring made for this run and its passphrase in a file of this run: neither stays in the
+  # environment of what runs next, which reads packages that came from elsewhere. The audit of 13/11/2026)
+  unset SILIKOS_GPG_PRIVATE_KEY SILIKOS_GPG_PASSPHRASE
   passargs=(--batch --pinentry-mode loopback --passphrase-file "$tmp/pass")
   signing=1
 elif [ -n "$gpgname" ]; then

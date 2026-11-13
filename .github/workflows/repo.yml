@@ -55,7 +55,7 @@ jobs:
     outputs:
       channel: ${{ steps.plan.outputs.channel }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with: { persist-credentials: false }
       - name: Which channel, which CI run
         id: plan
@@ -176,14 +176,14 @@ jobs:
             echo "::warning title=Package repository::published UNSIGNED: no installed system accepts it. The key is the owner's to make (docs/REPO.md)"
           fi
           du -sh _site w/assets
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         if: steps.plan.outputs.channel != 'none'
         with:
           name: pkgrepo-assets
           path: w/assets
           retention-days: 3
           compression-level: 0
-      - uses: actions/upload-pages-artifact@v5
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9  # v5
         if: steps.plan.outputs.channel != 'none'
         with:
           path: _site
@@ -197,7 +197,7 @@ jobs:
     permissions:
       contents: write        # (the releases repo-el9-next and repo-el9-stable)
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with: { name: pkgrepo-assets, path: assets }
       - name: The packages into the releases repo-el9-next and repo-el9-stable
         env:
@@ -227,7 +227,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346  # v5
       - name: The site answers, and it is the address the installed systems ask
         env:
           PAGE_URL: ${{ steps.deployment.outputs.page_url }}
@@ -258,7 +258,7 @@ jobs:
     permissions:
       contents: write        # (the releases repo-el9-next and repo-el9-stable)
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with: { name: pkgrepo-assets, path: assets }
       - name: Older versions leave the releases
         env:
