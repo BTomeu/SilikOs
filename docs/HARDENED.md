@@ -175,9 +175,13 @@ Run, in an AlmaLinux 9.8 container (13/11/2026; no systemd, no boot loader, anot
   --print-config` showed the section; `augenrules --check` took the two rule files; `sshd -G` read the drop-in and
   showed the three values in effect, also without host keys (and `sshd -T` showed `PermitRootLogin yes` winning when
   the file was named `40-...`).
-- A second run changed nothing but what that container cannot hold (it has no boot entries). `silik secure level
-  default` then left `faillock.conf` byte for byte as before, the PAM files as before but for authselect's date line,
-  and none of the files above.
+- A second run changed nothing. `silik secure level default` then left `faillock.conf` byte for byte as before, the
+  PAM files as before but for authselect's date line, and none of the files above.
+- EL 9's `grubby` (8.40) on made-up boot entries there, one of them with the owner's own `debugfs=off`: the
+  arguments reached every entry, `/etc/default/grub` and `/etc/kernel/cmdline`; a second run ran no command; `level
+  default` left the three byte for byte as before, with `debugfs=off` kept and said.
+- Both states of authselect (1.2.6): no profile selected (`authselect select sssd with-faillock --force`, then
+  `disable-feature` on the way back, the profile staying), and a profile with features (they stayed).
 
 Not run anywhere yet, and what will run it:
 
