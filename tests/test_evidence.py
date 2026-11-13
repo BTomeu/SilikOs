@@ -146,6 +146,7 @@ class Rig:
             mock.patch.object(cv, "repos", lambda *a: [dict(r) for r in repos]),
             mock.patch.object(cv, "count_dirs", lambda globs, ends: 0),
             mock.patch("os.listdir", self.listdir),
+            mock.patch("os.geteuid", lambda: 0),        # (as root: the audit's own tests cover a user, with sudo)
             contextlib.redirect_stdout(out), contextlib.redirect_stderr(err)]
         with contextlib.ExitStack() as stack:
             for p in patches:
