@@ -102,6 +102,22 @@ elif a[0] == "run":
 '''
 
 
+
+# the recorded resolution and lock are an x86_64 machine's, and a lock of another architecture is refused: these tests
+# are that machine's, whatever runs them (they failed on GitHub's aarch64 runner, run 43405299386)
+def setUpModule():
+    global _ARCH_WAS
+    _ARCH_WAS = os.environ.get("SILIK_ARCH")
+    os.environ["SILIK_ARCH"] = "x86_64"
+
+
+def tearDownModule():
+    if _ARCH_WAS is None:
+        os.environ.pop("SILIK_ARCH", None)
+    else:
+        os.environ["SILIK_ARCH"] = _ARCH_WAS
+
+
 class Case(unittest.TestCase):
     """a project folder, the stand-in runtime, silik's state and cache in a temporary folder"""
 
