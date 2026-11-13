@@ -9,7 +9,7 @@ an EL9 system. It is a try: `docs/STATUS.md` says what has been run and what has
 |---|---|---|
 | Base | AlmaLinux 9 packages and kernel, from its own repositories | `kickstart/silikos.ks` |
 | Desktop | GNOME Shell on X11 in three looks of the same shell (`silik look`): **island** (the default: one floating piece at the bottom), **bar** (one bar at the bottom) and **silik** (command line, text rail, status bar); one ink on paper, or an accent, alone or with coloured title bars (`silik look --accent`); the **COMMAND** bar on Super+Space | `packages/silikos-desktop`, `packages/silik-command` |
-| Tested by installing it | every change is built into an ISO, installed unattended in a virtual machine, booted and checked; the last report and pictures of the installed system are on the branch [`ci-results`](../../tree/ci-results) | `.github/workflows/ci.yml`, `tests/install/` |
+| Tested by installing it | every change is built into an ISO, installed unattended in a virtual machine, booted and checked; the last report and pictures of the installed system are on the branch [`ci-results`](../../tree/ci-results). The last such run is of commit fa6c6e8 (11/11/2026): the workflows have not run since, and what changed after it was run in containers only (`docs/STATUS.md`) | `.github/workflows/ci.yml`, `tests/install/` |
 | Security | SELinux enforcing (the base's), a firewall zone that drops incoming connections, sshd off, every update installed daily by itself (`silik update --auto`, the desktop says when to restart), screen lock; `silik secure status` audits, `silik secure apply` sets; `docs/SECURITY.md` | `packages/silikos-security` |
 | SilikStudio | the SilikVolt suite as a native application: a window of its own, the first key of the rail, its programs in the PATH. Its package is built from SilikStudio's repository on EL 9 and put in `build/extra/` for the ISO | `tools/build_iso.sh`, `docs/img/silikstudio.png` |
 | `silik` | one command behind every action; prints what it runs; `--dry-run` | `packages/silik-tools` |
@@ -57,5 +57,22 @@ bash tools/build_iso.sh           # the network installer ISO (needs repo.almali
 Read `docs/PLAN.md` (decisions and phases), `docs/STATUS.md` (verified / not verified), `docs/HARDWARE.md`
 (Ryzen 7 5800HS + RTX 3050, Snapdragon X, SilikOS on ARM / aarch64), `docs/BUILD.md`.
 
-No vendor software is in this repository or in the system: EDA tools, Windows and Windows programs are the user's own
-licences.
+## State
+
+A prototype verified in virtual machines and containers, not a product. Not run, among others: any real hardware
+(graphics drivers, Wi-Fi, suspend, CAN adapters, flashing a board), any vendor tool (Cadence, Synopsys, Altium,
+STM32CubeIDE), the Windows virtual machine, ARM other than emulated. There is no signed package repository yet, so an
+installed system does not receive new versions of SilikOS's own packages. `docs/STATUS.md` has both tables, verified
+and not verified, with how each row was run.
+
+## Licence, brand, security
+
+- **Licence.** The licence of SilikOS's own code (this repository) is not chosen yet: until it is, all rights are
+  reserved. The base and the tools the workflows build keep their own licences (each recipe's `License:` field in
+  `eda/`, `dev/` and `wine/`; the licence files are inside each package); Cascadia Mono is under the SIL Open Font
+  License (`packages/silikos-desktop/files/CascadiaMono-LICENSE.txt`).
+- **Brand.** The names SilikOS, SilikStudio and SilikVolt and the SilikVolt mark are not licensed for reuse.
+- **Security.** To report a vulnerability privately: `SECURITY.md`. What the system sets and why: `docs/SECURITY.md`.
+- **Vendors.** No vendor software is in this repository or in the system: EDA tools, Windows and Windows programs are
+  the user's own licences. SilikOS is not affiliated with or endorsed by the AlmaLinux OS Foundation, Red Hat, or the
+  vendors and projects whose tools it names.

@@ -353,4 +353,3 @@ jobs:
           # with its source package; what they replace moves to the release sources-archive (tools/release_keep.sh)
           ls src/$t-[0-9]*.src.rpm > /dev/null || { echo "::error title=keep $t aarch64::no source package"; exit 1; }
           bash tools/release_keep.sh $rel dist/*.rpm src/$t-[0-9]*.src.rpm
-          done

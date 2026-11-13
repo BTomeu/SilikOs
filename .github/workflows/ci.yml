@@ -19,7 +19,7 @@ on:
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
-# read-only by default; the installation test writes the branch ci-results, a tag's release job the release
+# read-only by default; the job results writes the branch ci-results, a tag's release job the release
 permissions:
   contents: read
 jobs:
@@ -83,8 +83,6 @@ jobs:
   install:
     needs: packages
     runs-on: ubuntu-24.04
-    permissions:
-      contents: write        # (the branch ci-results)
     timeout-minutes: 170
     steps:
       - uses: actions/checkout@v4
@@ -154,12 +152,34 @@ jobs:
             build/install-test/*.png
             build/install-test/*.ppm
             build/install-test/ci.ks
+      - uses: actions/upload-artifact@v4
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          name: silikos-iso
+          path: build/SilikOS-*-netinstall.iso
+          compression-level: 0
+
+  # the last report and pictures of main, kept on the branch ci-results by a job of its own (written 13/11/2026, not
+  # run yet): the token that writes never meets the workspace where the ISO was built and the virtual machine ran,
+  # and no job that a pull request starts has it
+  results:
+    needs: install
+    if: ${{ !cancelled() && needs.install.result != 'skipped' && github.ref == 'refs/heads/main' }}   # (a run cancelled by a newer one keeps the last report)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write        # (the branch ci-results)
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        continue-on-error: true      # (an installation that left no file: the branch then says so with its commit)
+        with: { name: install-test, path: install-test }
       - name: Keep the last report and pictures of main on the branch ci-results
-        if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}   # (a run cancelled by a newer one keeps the last report)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           d=$(mktemp -d)
-          cp build/install-test/report.txt build/install-test/*.png "$d/" 2>/dev/null || true
-          tr -d '\r' < build/install-test/install.log 2>/dev/null | tail -120 > "$d/install-console-tail.txt" || true
+          cp install-test/report.txt install-test/*.png "$d/" 2>/dev/null || true
+          tr -d '\r' < install-test/install.log 2>/dev/null | tail -120 > "$d/install-console-tail.txt" || true
           printf '# SilikOS: the last unattended installation on main\n\nCommit %s, run %s.\n\n`report.txt`: what the installed system reported on its first boot. `desktop.png`, `start.png`, `command.png`, `windows-program.png`, `windows-installed.png`, `eda-*.png`, `look-*.png` (the Silik, bar and island looks chosen from the COMMAND bar, Start in each, the bar look after its lock screen; the island is the default), `accent-volt-vivid.png`, `accent-volt-vivid-start.png` (the accent volt violet with its title bars, chosen from the COMMAND bar, Start in it), `idle-lock.png` (when the session had locked itself during the checks), `lock.png`, `unlock.png`, `unlocked.png`, `logout.png`, `login.png`, `login-prompt.png`: its screen (the desktop, Start after the Super key, the COMMAND bar after Super+Space, a Windows program and the open EDA tools opened from the COMMAND bar, the lock screen and its password prompt, the session after the password, the question before logging out, the login screen and its password prompt).\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > "$d/README.md"
           cd "$d"
           git init -q -b ci-results
@@ -167,13 +187,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -q -m "Installation test of $GITHUB_SHA"
-          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-results
-      - uses: actions/upload-artifact@v4
-        if: startsWith(github.ref, 'refs/tags/v')
-        with:
-          name: silikos-iso
-          path: build/SilikOS-*-netinstall.iso
-          compression-level: 0
+          git push -q -f "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git" ci-results
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
