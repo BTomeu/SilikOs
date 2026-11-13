@@ -84,7 +84,8 @@ python3 -m unittest discover -s tests
 bash tools/build_iso.sh           # la ISO d'instal·lació per xarxa (necessita repo.almalinux.org)
 ```
 
-[`docs/BUILD.md`](docs/BUILD.md) té els passos i què necessita cadascun. També: `docs/PLAN.md` (decisions i fases),
+[`docs/BUILD.md`](docs/BUILD.md) té els passos i què necessita cadascun. [`docs/PRIMERA-HORA.md`](docs/PRIMERA-HORA.md) és la
+primera hora amb una placa, una sonda i un adaptador CAN. També: `docs/PLAN.md` (decisions i fases),
 `docs/HARDWARE.md` (Ryzen 7 5800HS + RTX 3050, Snapdragon X, SilikOS a ARM / aarch64), `docs/DRIVERS.md` (per a quin maquinari
 té controlador el nucli de la base; `silik hw check`), `docs/EDA.md`, `docs/DEV.md`,
 `docs/WINDOWS.md`, `docs/POWER.md`, `docs/CONCEPTE.md` (la idea des de zero). `site/` és un lloc estàtic amb el

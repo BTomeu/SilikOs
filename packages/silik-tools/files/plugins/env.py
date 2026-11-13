@@ -1,6 +1,7 @@
 # silik-plugin: env
 # help: a project's tools, pinned: one file (silik.env), one lock, the same image on every machine and in CI
 # words: init lock build enter run check export list
+# state: experimental: run with docker standing in for podman, not with podman and not on an installed SilikOS
 """silik env: a pinned, reproducible tool environment for a project (docs/ENV.md).
 
 `silik.env` (an INI file at the project's root) names the tools; `silik env lock` resolves it to `silik.env.lock`:

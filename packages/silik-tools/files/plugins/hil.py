@@ -1,6 +1,7 @@
 # silik-plugin: hil
 # help: hardware in the loop: a board on the bench tested by a plan (CAN, serial, flash, power, measurements)
 # words: run check new report
+# state: experimental: run with a simulated ECU only: no real bus, probe or board yet
 """silik hil: a hardware-in-the-loop test runner (docs/HIL.md).
 
   silik hil new [DIR]             an example to start from: a plan, its CAN database, a simulated ECU

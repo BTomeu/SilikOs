@@ -1697,7 +1697,7 @@ def register(group, silik):
     import argparse
     group.formatter_class = argparse.RawDescriptionHelpFormatter
     group.add_argument("words", nargs="*", metavar="QUESTION", help="the question, in words (after a `--` when one starts with -)")
-    group.add_argument("--model", action="store_true", help="also ask a language model (opt-in: your own API key, shows what it sends, asks the first time)")
+    group.add_argument("--model", action="store_true", help="experimental: not run against the real API. Also ask a language model (opt-in: your own API key, shows what it sends, asks the first time)")
     group.add_argument("--show-context", action="store_true", help="print exactly the bytes --model would send, and send nothing")
     group.add_argument("--json", action="store_true")
     group.add_argument("--verbose", action="store_true", help="also the read-only commands it ran")

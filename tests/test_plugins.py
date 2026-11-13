@@ -80,6 +80,15 @@ class Plugins(unittest.TestCase):
         self.assertEqual(rc, 3)
         self.assertIn("boom", err)
 
+    def test_a_plugin_that_says_it_is_experimental_is_listed_so(self):
+        self.put("young", "# silik-plugin: young\n# help: does a thing\n# words: go\n# state: experimental: never run on hardware\n"
+                 "def register(g, s):\n    g.add_subparsers(dest='cmd').add_parser('go').set_defaults(fn=lambda c, a: 0)\n")
+        rc, out, _ = self.silik("--help")
+        self.assertEqual(rc, 0)
+        self.assertRegex(" ".join(out.split()), r"young experimental: never run on hardware\. does a thing")
+        self.assertRegex(" ".join(out.split()), r"demo a plugin of the tests")           # (the others as before)
+        self.assertEqual(self.silik("young", "go")[0], 0)
+
     def test_the_group_alone_shows_its_help(self):
         rc, out, _ = self.silik("demo")
         self.assertEqual(rc, 2)

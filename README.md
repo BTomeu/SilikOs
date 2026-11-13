@@ -78,7 +78,8 @@ python3 -m unittest discover -s tests
 bash tools/build_iso.sh           # the network installer ISO (needs repo.almalinux.org)
 ```
 
-[`docs/BUILD.md`](docs/BUILD.md) has the steps and what each needs. Also: `docs/PLAN.md` (decisions and phases),
+[`docs/BUILD.md`](docs/BUILD.md) has the steps and what each needs. [`docs/PRIMERA-HORA.md`](docs/PRIMERA-HORA.md) is the
+first hour with a board, a probe and a CAN adapter (in Catalan). Also: `docs/PLAN.md` (decisions and phases),
 `docs/HARDWARE.md` (Ryzen 7 5800HS + RTX 3050, Snapdragon X), `docs/ARM.md` (SilikOS on ARM / aarch64), `docs/DRIVERS.md` (which hardware the base's
 kernel has a driver for; `silik hw check`), `docs/EDA.md`, `docs/DEV.md`,
 `docs/WINDOWS.md`, `docs/POWER.md`, `docs/CONCEPTE.md` (the idea from zero, in Catalan). `site/` is a static site

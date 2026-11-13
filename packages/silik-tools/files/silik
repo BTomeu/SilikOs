@@ -8233,6 +8233,7 @@ def manifest_apply(ctx, a):
 #     # silik-plugin: NAME
 #     # help: one line for `silik --help`
 #     # words: the group's commands, for the shell's completion
+#     # state: experimental: why (optional: what has not been run yet; `silik --help` says it before the help)
 # and which has `register(group, silik)`: GROUP is the group's parser (it adds its commands with
 # group.add_subparsers(dest="cmd"), each with set_defaults(fn=...), fn(ctx, a) as every command here), SILIK this
 # module (Ctx, die, the helpers). The head is read as text and the file is imported only when its group is typed:
@@ -8269,7 +8270,9 @@ def plugins():
         if not m or m.group(1) != f[:-3]:
             continue
         h = re.search(r"^# help: (.+)$", head, re.M)
-        _plugins[m.group(1)] = (path, h.group(1).strip() if h else "")
+        st = re.search(r"^# state: (experimental: .+)$", head, re.M)
+        text = h.group(1).strip() if h else ""
+        _plugins[m.group(1)] = (path, "%s. %s" % (st.group(1).strip().rstrip("."), text) if st else text)
     return _plugins
 
 
@@ -8437,10 +8440,10 @@ def parser(only=None):
         x.add_argument("--arch", choices=["x86_64", "aarch64"], help="with --from: the machine's architecture (default x86_64)")
         x.add_argument("--all", action="store_true", help="also the devices that often have no driver (bridges, memory)")
         x.add_argument("--json", action="store_true"); x.set_defaults(fn=hw_check)
-        x = h.add_parser("driver", help="a driver the base's kernel lacks, as a kmod package of ELRepo (a third party): list | add NAME")
+        x = h.add_parser("driver", help="experimental: `add` has not been run beyond --dry-run. A driver the base's kernel lacks, as a kmod package of ELRepo (a third party): list | add NAME")
         x.add_argument("action", nargs="?", choices=["list", "add"], default="list"); x.add_argument("name", nargs="?"); x.set_defaults(fn=hw_driver)
 
-    vd = s.add_parser("vendor", help="vendors' tools (Vivado, MATLAB, Virtuoso...): is this system ready for one, and the command that prepares it").add_subparsers(dest="cmd")
+    vd = s.add_parser("vendor", help="experimental: no vendor's installer has been run, and most requirement lists are not read from the vendor's own page. Vendors' tools (Vivado, MATLAB, Virtuoso...): is this system ready for one, and the command that prepares it").add_subparsers(dest="cmd")
     if only in (None, "vendor"):
         x = vd.add_parser("list", help="the tools known: what each vendor says of EL 9, for which release, read how, when and where")
         x.add_argument("--json", action="store_true"); x.set_defaults(fn=vendor_list)

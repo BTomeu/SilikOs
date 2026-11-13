@@ -1,6 +1,7 @@
 # silik-plugin: mirror
 # help: the package sources as a local copy, for a network without Internet: create, update, verify, serve, use
 # words: create update verify serve use status pack unpack
+# state: experimental: run in containers and in an emulated machine with a reduced set; the full offline ISO has not been installed
 """silik mirror: SilikOS installed and updated with no network at all (docs/OFFLINE.md).
 
   silik mirror create DIR --silikos RPMS [--arch x86_64|aarch64] [--set kickstart | --only-installed] [--ks FILE]
