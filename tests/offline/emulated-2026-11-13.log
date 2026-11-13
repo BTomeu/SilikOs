@@ -1,0 +1,44 @@
+OFFLINE-TEST|net-devices|lo 
+OFFLINE-TEST|verify-tail|/run/install/repo/mirror: generation 1 of 2026-11-13T08:35:31Z, 400 packages, 1092.6 MB, checked in 77.6 s: everything is as the manifest and the keys say
+OFFLINE-TEST|verify-lines|10
+OFFLINE-TEST|verify-row|● files                  0 of 424 missing
+OFFLINE-TEST|verify-row|● sha256                 0 of 424 differ from the manifest
+OFFLINE-TEST|verify-row|● strangers              0 file(s) the manifest does not list
+OFFLINE-TEST|verify-row|● signatures AppStream   0 of 43 without a good signature of RPM-GPG-KEY-AlmaLinux-9 (BF18AC2876178908D6E71267D36CB86CB86B3716)
+OFFLINE-TEST|verify-row|● signatures BaseOS      0 of 357 without a good signature of RPM-GPG-KEY-AlmaLinux-9 (BF18AC2876178908D6E71267D36CB86CB86B3716)
+OFFLINE-TEST|verify-row|· metadata signature     none: repomd.xml and the manifest are not signed (silik mirror create --sign KEYID)
+OFFLINE-TEST|installed-packages|337
+OFFLINE-TEST|kernel|kernel-5.14.0-687.66.2.el9_8.x86_64
+OFFLINE-TEST|repo-mount|/dev/sr0 iso9660
+OFFLINE-TEST|DONE
+
+--- the first boot of the installed disk (QEMU, no network device), on its serial console ---
+AlmaLinux 9.8 (Olive Jaguar)
+Kernel 5.14.0-687.66.2.el9_8.x86_64 on an x86_64
+localhost login: root
+Password: 
+[root@localhost ~]# cat /etc/redhat-release
+AlmaLinux release 9.8 (Olive Jaguar)
+[root@localhost ~]# uname -r
+5.14.0-687.66.2.el9_8.x86_64
+[root@localhost ~]# rpm -qa | wc -l
+337
+[root@localhost ~]# ls /sys/class/net
+lo
+[root@localhost ~]# getenforce
+Enforcing
+[root@localhost ~]# systemctl is-system-running
+starting
+[root@localhost ~]# tail -1 /root/silikos-mirror-verify.log
+/run/install/repo/mirror: generation 1 of 2026-11-13T08:35:31Z, 400 packages, 1092.6 MB, checked in 77.6 s: everything is as the manifest and the keys say
+[root@localhost ~]# grep -c . /root/silikos-mirror-verify.log
+10
+[root@localhost ~]# rpm -q kernel grub2-efi-x64 grub2-pc
+kernel-5.14.0-687.66.2.el9_8.x86_64
+package grub2-efi-x64 is not installed
+grub2-pc-2.06-127.el9_8.alma.1.x86_64
+[root@localhost ~]# firewall-cmd --state
+running
+[root@localhost ~]# echo BOOT-TEST-DONE
+BOOT-TEST-DONE
+[root@localhost ~]# 
