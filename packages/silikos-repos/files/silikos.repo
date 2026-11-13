@@ -1,0 +1,27 @@
+# SilikOS's own packages: silik, the desktop, Wine, the open EDA tools, the embedded tools (package silikos-repos).
+# The base's repositories are other files and are not touched. Both channels are off until one is chosen:
+#   silik update channel stable | next | off
+# which refuses while this system has no SilikOS signing key (/etc/pki/rpm-gpg/RPM-GPG-KEY-SilikOS). The signature
+# of every package and of the repository's metadata is checked (gpgcheck, repo_gpgcheck): do not turn them off.
+# A repository that does not answer is skipped, so that it never stops the base's updates; one that answers with a
+# bad signature is refused.
+
+[silikos]
+name=SilikOS 9 - stable
+baseurl=https://btomeu.github.io/SilikOs/repo/el9/stable/$basearch/
+enabled=0
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-SilikOS
+skip_if_unavailable=1
+metadata_expire=6h
+
+[silikos-next]
+name=SilikOS 9 - next
+baseurl=https://btomeu.github.io/SilikOs/repo/el9/next/$basearch/
+enabled=0
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-SilikOS
+skip_if_unavailable=1
+metadata_expire=6h

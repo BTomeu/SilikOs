@@ -1,0 +1,274 @@
+# SilikOS's package repository (docs/REPO.md): what an installed SilikOS updates its own packages from.
+# After every green CI of main (channel next) and of a release tag v* (channel stable), and by hand:
+#   1. packages: our packages of that CI run (its artifact silikos-packages) and the tools' packages of their releases
+#      (eda-tools, eda-optional, eda-tools-aarch64, dev-tools, wine-*) are signed and their metadata made and signed
+#      (tools/build_pkgrepo.sh, in EL 9). The only job that sees the signing key, and it has no token that writes.
+#   2. release: the signed packages go to the releases repo-el9-next / repo-el9-stable (a release has no size or
+#      traffic limit; a Pages site may not pass 1 GB, and the packages are already more).
+#   3. deploy: the folder site/ of the repository at the root of GitHub Pages and the metadata under /repo/ (they name
+#      the releases' addresses for the packages).
+#   4. prune: versions older than the three newest leave the releases, once the metadata no longer name them.
+# Without the secrets SILIKOS_GPG_PRIVATE_KEY / SILIKOS_GPG_PASSPHRASE (of the environment package-signing) the
+# repository is published unsigned and says so; no installed system accepts it (its channels are off without a key,
+# and gpgcheck and repo_gpgcheck are on).
+# Never started by a pull request: a run of the CI that a pull request started is not published.
+# (Written 13/11/2026; not run on GitHub yet: docs/STATUS.md)
+name: Package repository
+on:
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
+  push:
+    branches: [main]
+    paths: ['site/**']       # (the site alone changed: published again with the packages of the last green CI of main)
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'Channel to publish: next, or stable (the packages of that CI run become the stable channel)'
+        type: choice
+        options: [next, stable]
+        default: next
+      run:
+        description: 'Id of the CI run whose packages are published (empty: the last green CI of main)'
+        required: false
+        default: ''
+# one at a time, and none cancelled half way (the releases and the metadata must agree)
+concurrency:
+  group: pkgrepo
+  cancel-in-progress: false
+# read-only by default; the job release and the job prune write the releases, the job deploy the Pages site
+permissions:
+  contents: read
+jobs:
+  packages:
+    # a CI run is published when it is green, of this repository, and not a pull request's (its packages would be
+    # a stranger's); by hand and for the site, from main only (the scripts that see the key are main's)
+    if: ${{ (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event != 'pull_request' && github.event.workflow_run.head_repository.full_name == github.repository) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    # the key is a secret of this environment, not of the repository (docs/PLAN.md, decision 10): in its settings the
+    # owner limits it to main and may ask that every run waits for their approval (docs/REPO.md). No other job has it
+    environment: package-signing
+    permissions:
+      contents: read
+      actions: read          # (the artifact of the CI run)
+    outputs:
+      channel: ${{ steps.plan.outputs.channel }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - name: Which channel, which CI run
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          IN_CHANNEL: ${{ inputs.channel }}
+          IN_RUN: ${{ inputs.run }}
+        run: |
+          set -euo pipefail
+          channel=none; run=
+          if [ "$EVENT" = workflow_run ]; then
+            run=$RUN_ID
+            if [ "$HEAD_BRANCH" = main ]; then
+              channel=next
+            elif echo "$HEAD_BRANCH" | grep -Eq '^v[0-9A-Za-z._-]+$' \
+                 && [ "$(gh api "repos/$GITHUB_REPOSITORY/commits/tags/$HEAD_BRANCH" -q .sha 2> /dev/null)" = "$HEAD_SHA" ]; then
+              channel=stable       # (the CI of a release tag: the name is a tag of this repository at that commit)
+            else
+              echo "::notice title=Package repository::that CI run is neither main's nor a release tag's: nothing is published"
+            fi
+          else
+            channel=${IN_CHANNEL:-next}; run=${IN_RUN:-}
+            case $channel in next|stable) ;; *) echo "::error::the channel is next or stable"; exit 1 ;; esac
+            if [ -z "$run" ]; then
+              run=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow CI --branch main --status success --limit 1 --json databaseId -q '.[0].databaseId')
+            fi
+            case $run in ''|*[!0-9]*) echo "::error::no green CI run of main was found, or the run id is not a number"; exit 1 ;; esac
+            # a run named by hand is held to the same as one that started this by itself
+            what=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run" -q '[.name, .conclusion, .head_repository.full_name] | join(" ")')
+            event=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run" -q .event)
+            if [ "$what" != "CI success $GITHUB_REPOSITORY" ] || [ "$event" = pull_request ]; then
+              echo "::error::run $run is not a green CI run of this repository (or it is a pull request's)"; exit 1
+            fi
+          fi
+          # the commit those packages were built from (the channel's STATE names it)
+          sha=
+          if [ "$channel" != none ]; then sha=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run" -q .head_sha); fi
+          echo "$sha" | grep -Eq '^[0-9a-f]{40}$' || sha=
+          { echo "channel=$channel"; echo "run=$run"; echo "sha=$sha"; } >> "$GITHUB_OUTPUT"
+          echo "channel $channel, CI run $run, commit ${sha:-unknown}"
+      - name: The packages (ours of that CI run, the tools' of their releases) and what each channel holds now
+        if: steps.plan.outputs.channel != 'none'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ steps.plan.outputs.run }}
+        run: |
+          set -euo pipefail
+          mkdir -p w/in w/tools w/pub/next w/pub/stable
+          gh run download "$RUN" --repo "$GITHUB_REPOSITORY" --name silikos-packages --dir w/in
+          gh run download "$RUN" --repo "$GITHUB_REPOSITORY" --name silikos-sources --dir w/in
+          tags=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate -q '.[].tag_name')
+          wine=$(echo "$tags" | grep '^wine-' | sort -V | tail -1 || true)
+          # all: RELEASE DIR: its packages into DIR (a failed download stops the job: a channel quietly without them
+          # would be published as if it were whole)
+          all() {
+            if [ "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$1" -q '[.assets[].name | select(endswith(".rpm"))] | length')" -gt 0 ]; then
+              gh release download "$1" --repo "$GITHUB_REPOSITORY" --pattern '*.rpm' --dir "$2" --clobber
+            fi
+          }
+          for t in eda-tools eda-optional eda-tools-aarch64 dev-tools $wine; do
+            if echo "$tags" | grep -qxF "$t"; then all "$t" w/tools
+            else echo "::notice title=$t::no such release yet: the repository has none of its packages"; fi
+          done
+          rm -f w/tools/*.src.rpm      # (the tools' source packages stay in their releases and in sources-archive)
+          for f in w/tools/*.rpm; do [ ! -f "$f" ] || mv "$f" w/in/; done
+          for c in next stable; do
+            if echo "$tags" | grep -qxF "repo-el9-$c"; then all "repo-el9-$c" "w/pub/$c"; fi
+          done
+          echo "to publish: $(ls w/in | wc -l) files; published now: next $(ls w/pub/next | wc -l), stable $(ls w/pub/stable | wc -l)"; df -h . | tail -1
+      # the key reaches this step only, as two variables of its environment; the step has no token. The packages are
+      # read (rpm, createrepo_c), never run. The only code is tools/build_pkgrepo.sh of this checkout and EL 9's tools
+      - name: Sign the packages, make and sign the metadata (EL 9)
+        if: steps.plan.outputs.channel != 'none'
+        env:
+          SILIKOS_GPG_PRIVATE_KEY: ${{ secrets.SILIKOS_GPG_PRIVATE_KEY }}
+          SILIKOS_GPG_PASSPHRASE: ${{ secrets.SILIKOS_GPG_PASSPHRASE }}
+          CHANNEL: ${{ steps.plan.outputs.channel }}
+          PKG_SHA: ${{ steps.plan.outputs.sha }}
+        run: |
+          set -euo pipefail
+          export BASE="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download"
+          docker run --rm -e SILIKOS_GPG_PRIVATE_KEY -e SILIKOS_GPG_PASSPHRASE -e GITHUB_ACTIONS -e GITHUB_SHA="$PKG_SHA" -e CHANNEL -e BASE \
+            -v "$PWD:/src" -w /src almalinux:9 bash -c '
+              set -euo pipefail
+              dnf -y -q install rpm-sign createrepo_c dnf-utils > /dev/null
+              other=$([ "$CHANNEL" = next ] && echo stable || echo next)
+              # the channel of this run takes the new packages; the other one is made again from what it holds
+              # (signed if it was not, its metadata signed again): both are always whole on the site
+              bash tools/build_pkgrepo.sh --out w/site/repo --channel "$CHANNEL" --in w/in --published "w/pub/$CHANNEL" \
+                --pool "w/pool/$CHANNEL" --baseurl "$BASE/repo-el9-$CHANNEL"
+              bash tools/build_pkgrepo.sh --out w/site/repo --channel "$other" --published "w/pub/$other" \
+                --pool "w/pool/$other" --baseurl "$BASE/repo-el9-$other"'
+          sudo chown -R "$(id -u):$(id -g)" w
+      - name: The site (site/ at the root, the repository under /repo/) and what goes to the releases
+        if: steps.plan.outputs.channel != 'none'
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          if [ -d site ]; then cp -a site/. _site/; fi
+          rm -rf _site/repo; cp -a w/site/repo _site/repo
+          for c in next stable; do
+            mkdir -p "w/assets/$c/upload"
+            while read -r f; do mv "w/pool/$c/$f" "w/assets/$c/upload/"; done < "w/pool/$c/UPLOAD"
+            cp "w/pool/$c/DELETE" "w/assets/$c/DELETE"
+          done
+          {
+            echo '### SilikOS package repository'
+            for c in next stable; do
+              echo; echo "**$c**: $(ls "w/assets/$c/upload" | wc -l) packages put into the release repo-el9-$c, $(wc -l < "w/assets/$c/DELETE") to remove"
+              echo '```'; cat "_site/repo/el9/$c/STATE"; echo '```'
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+          if grep -q '^signed=no' _site/repo/el9/*/STATE; then
+            echo "::warning title=Package repository::published UNSIGNED: no installed system accepts it. The key is the owner's to make (docs/REPO.md)"
+          fi
+          du -sh _site w/assets
+      - uses: actions/upload-artifact@v4
+        if: steps.plan.outputs.channel != 'none'
+        with:
+          name: pkgrepo-assets
+          path: w/assets
+          retention-days: 3
+          compression-level: 0
+      - uses: actions/upload-pages-artifact@v5
+        if: steps.plan.outputs.channel != 'none'
+        with:
+          path: _site
+
+  # the signed packages into the releases: the token that writes never meets the key
+  release:
+    needs: packages
+    if: ${{ needs.packages.outputs.channel != 'none' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write        # (the releases repo-el9-next and repo-el9-stable)
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: pkgrepo-assets, path: assets }
+      - name: The packages into the releases repo-el9-next and repo-el9-stable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for c in next stable; do
+            rel=repo-el9-$c
+            if ! ls "assets/$c/upload/"*.rpm > /dev/null 2>&1; then echo "$rel: nothing new"; continue; fi
+            gh api "repos/$GITHUB_REPOSITORY/releases/tags/$rel" > /dev/null 2>&1 || gh release create "$rel" --repo "$GITHUB_REPOSITORY" \
+              --title "Package repository, channel $c (EL 9)" --prerelease \
+              --notes "The packages of SilikOS's own repository, channel $c: an installed SilikOS takes them through the metadata on the site (silik update channel $c), which names these files and their checksums. Not for downloading by hand: the ISO is in the releases v*. The tools' source packages (*.src.rpm) are in the releases eda-tools, eda-optional, dev-tools, wine-* and sources-archive; SilikOS's own are here. docs/REPO.md."
+            # (--clobber: a package published before the key existed is replaced by its signed self)
+            gh release upload "$rel" "assets/$c/upload/"*.rpm --repo "$GITHUB_REPOSITORY" --clobber
+            echo "$rel: $(ls "assets/$c/upload" | wc -l) files"
+          done
+
+  deploy:
+    needs: [packages, release]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      pages: write           # (the Pages site)
+      id-token: write        # (Pages checks where the deployment comes from)
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
+      - name: The site answers, and it is the address the installed systems ask
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          set -euo pipefail
+          page=${PAGE_URL%/}/
+          for c in next stable; do
+            for a in x86_64 aarch64; do
+              u="${page}repo/el9/$c/$a/repodata/repomd.xml"
+              for i in 1 2 3 4 5 6; do curl -fsS -o /dev/null "$u" && break; sleep 10; done
+              curl -fsS -o /dev/null "$u" || { echo "::error title=Pages::$u does not answer"; exit 1; }
+              echo "ok $u"
+            done
+          done
+          # /etc/yum.repos.d/silikos.repo of the package silikos-repos must name this site
+          curl -fsS "${page}repo/silikos.repo" | grep '^baseurl=' | while read -r l; do
+            case $l in
+              "baseurl=${page}repo/el9/"*) echo "ok $l" ;;
+              *) echo "::warning title=silikos.repo::$l is not under ${page}repo/el9/: installed systems ask another address (packages/silikos-repos/files/silikos.repo)" ;;
+            esac
+          done
+
+  # versions older than the newest three leave the releases, now that the metadata on the site no longer name them
+  prune:
+    needs: [packages, deploy]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write        # (the releases repo-el9-next and repo-el9-stable)
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: pkgrepo-assets, path: assets }
+      - name: Older versions leave the releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for c in next stable; do
+            while read -r f; do
+              case $f in *.rpm) ;; *) continue ;; esac
+              if gh release delete-asset "repo-el9-$c" "$f" --repo "$GITHUB_REPOSITORY" -y; then echo "removed: repo-el9-$c/$f"
+              else echo "::warning title=repo-el9-$c::$f could not be removed (the next run names it again)"; fi
+            done < "assets/$c/DELETE"
+          done

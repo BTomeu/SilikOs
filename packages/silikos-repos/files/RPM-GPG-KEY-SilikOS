@@ -1,0 +1,10 @@
+SILIKOS-KEY-PLACEHOLDER
+
+This file is not a key. SilikOS's package signing key has not been made yet: only the owner can make it
+(docs/REPO.md says how, once). When it exists, this file is its armored public half and nothing else:
+
+    gpg --armor --export FINGERPRINT > packages/silikos-repos/files/RPM-GPG-KEY-SilikOS
+
+Until then: the package silikos-repos installs no key, `silik update channel` refuses to turn a channel on, and
+the workflow "Package repository" publishes an unsigned repository that no installed system trusts.
+The private half never comes here: it lives on the owner's computer and in the repository's Actions secrets.

@@ -43,6 +43,7 @@ muestra y no ejecuta nada. El COMMAND bar (Super+Espacio) muestra la misma líne
 | Windows | un doble clic en un `.exe` lo ejecuta con Wine (nuestro Wine 11.0 compilado para EL 9, con Wine Mono y Wine Gecko) dentro de una caja que no ve el resto de la carpeta personal; una máquina virtual de Windows para lo que Wine no puede ejecutar | `silik win open`, `silik win apps`, `silik win vm` |
 | Salud | una sola revisión del equipo: sistema, seguridad, gráficos, banco, EDA, Windows, red; ok / aviso / mal / desconocido y la orden que lo arregla; desconocido, nunca ok, para lo que no puede ver | `silik doctor` |
 | Seguridad y actualizaciones | SELinux en modo enforcing (el de la base), una zona del cortafuegos que descarta las conexiones entrantes, sshd apagado, todas las actualizaciones instaladas cada día; el sistema nunca reinicia por su cuenta | `silik secure status`, `silik secure apply`, `silik update`, `silik update --auto` |
+| Actualizaciones de los paquetes propios | un repositorio de paquetes propio de SilikOS con dos canales (stable: lo que ha publicado una release; next: cada build que ha pasado los tests), cada paquete y los metadatos firmados; un canal solo se enciende en un sistema que tiene la clave. Construido y probado con claves de un solo uso; no publicado: la clave de firma la tiene que hacer el propietario | `silik update channel`, `silik update channel stable` |
 | Energía | rendimiento, equilibrado, ahorro o automático (rendimiento enchufado, equilibrado con batería), con el tuned de la base; se ofrece swap zram; trim del SSD cada semana | `silik power` |
 | Velocidad | lo que la base arranca o mantiene en marcha y una estación de trabajo de ingeniería no necesita está apagado desde el primer arranque (nueve elementos; nada de seguridad, ningún parámetro del núcleo, nada borrado), y una orden lo vuelve a poner; el sistema mide su propio arranque y memoria. Aún no se dice ningún tiempo de arranque: las medidas esperan al CI | `silik speed`, `silik speed apply`, `silik speed undo`, `silik bench system` |
 | SilikStudio | la suite de SilikVolt como aplicación nativa: una ventana propia, la primera tecla del rail. Su paquete se construye desde el repositorio de SilikStudio | |
@@ -60,9 +61,9 @@ muestra y no ejecuta nada. El COMMAND bar (Super+Espacio) muestra la misma líne
 
 Un prototipo verificado en máquinas virtuales y contenedores, no un producto. No se ha ejecutado, entre otros: ningún
 hardware real (controladores gráficos, Wi-Fi, suspensión, adaptadores CAN, programar una placa), ninguna herramienta
-de fabricante (Cadence, Synopsys, Altium, STM32CubeIDE), la máquina virtual de Windows, ARM si no es emulado. Todavía
-no hay un repositorio de paquetes firmado, así que un sistema instalado no recibe versiones nuevas de los paquetes de
-SilikOS. `docs/STATUS.md` tiene las dos tablas, verificado y no verificado, con cómo se ha ejecutado cada fila.
+de fabricante (Cadence, Synopsys, Altium, STM32CubeIDE), la máquina virtual de Windows, ARM si no es emulado. El repositorio del que un
+sistema instalado actualizaría los paquetes de SilikOS está construido pero no publicado (`docs/REPO.md`): la clave
+de firma la tiene que hacer el propietario, así que un sistema instalado todavía no recibe versiones nuevas. `docs/STATUS.md` tiene las dos tablas, verificado y no verificado, con cómo se ha ejecutado cada fila.
 
 Probado instalándolo: el workflow CI construye la ISO, la instala sola en una máquina virtual, arranca el sistema
 instalado y deja que se revise a sí mismo; el informe y las imágenes están en la rama

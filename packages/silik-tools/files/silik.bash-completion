@@ -56,6 +56,15 @@ _silik() {
   if [ "$COMP_CWORD" -eq 2 ] && [ -n "$g" ] && [ -f "$pd/$g.py" ] && [[ " $pl " == *" $g "* ]]; then
     COMPREPLY=($(compgen -W "$(sed -n 's/^# words: //p' "$pd/$g.py" | head -1)" -- "$cur")); return
   fi
+  # update: channel and its channels, --auto and its choices
+  if [ "$g" = update ] && [ "$COMP_CWORD" -ge 2 ]; then
+    case ${COMP_WORDS[COMP_CWORD-1]} in
+      channel) COMPREPLY=($(compgen -W "stable next off" -- "$cur")) ;;
+      --auto) COMPREPLY=($(compgen -W "all security off" -- "$cur")) ;;
+      update) COMPREPLY=($(compgen -W "channel --auto" -- "$cur")) ;;
+    esac
+    return
+  fi
   case $COMP_CWORD in
     1) COMPREPLY=($(compgen -W "status update identity look session eda dev win power speed bench hw secure doctor vendor manifest snapshot rollback $pl --dry-run --version" -- "$cur"));;
     2) case $g in

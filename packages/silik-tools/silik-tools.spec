@@ -17,7 +17,8 @@ on this desktop), `silik win ...` (Windows programs: a double-click runs them wi
 virtual machine for the rest), `silik dev ...` (embedded development), `silik power ...` (the power profile:
 performance, balanced, saver, auto), `silik hw ...` (which devices have a driver in this kernel), `silik look` (the desktop's
 look: silik, bar, island), `silik session`,
-`silik update`, `silik doctor` (is this workstation healthy, and what to do), `silik vendor` (is this system ready
+`silik update` (and `silik update channel`: the repository SilikOS's own packages are updated from),
+`silik doctor` (is this workstation healthy, and what to do), `silik vendor` (is this system ready
 for a vendor's tool: what the vendor says of EL 9, the packages and settings its requirements name, the command that
 prepares them; no vendor software is included or run), `silik manifest` (packages, repositories, settings and boxes
 as one file: export, diff, apply).

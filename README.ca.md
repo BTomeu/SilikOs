@@ -43,6 +43,7 @@ ensenya i no executa res. El COMMAND bar (Super+Espai) ensenya la mateixa línia
 | Windows | un doble clic en un `.exe` l'executa amb Wine (el nostre Wine 11.0 compilat per a EL 9, amb Wine Mono i Wine Gecko) dins d'una capsa que no veu la resta de la carpeta personal; una màquina virtual de Windows per al que Wine no pot executar | `silik win open`, `silik win apps`, `silik win vm` |
 | Salut | una sola revisió de l'equip: sistema, seguretat, gràfics, banc, EDA, Windows, xarxa; ok / avís / malament / desconegut i l'ordre que ho arregla; desconegut, mai ok, per al que no pot veure | `silik doctor` |
 | Seguretat i actualitzacions | SELinux en mode enforcing (el de la base), una zona del tallafoc que descarta les connexions entrants, sshd apagat, totes les actualitzacions instal·lades cada dia; el sistema no reinicia mai pel seu compte | `silik secure status`, `silik secure apply`, `silik update`, `silik update --auto` |
+| Actualitzacions dels paquets propis | un repositori de paquets propi de SilikOS amb dos canals (stable: el que ha publicat una release; next: cada build que ha passat els tests), cada paquet i les metadades signats; un canal només s'encén en un sistema que té la clau. Construït i provat amb claus d'un sol ús; no publicat: la clau de signatura l'ha de fer el propietari | `silik update channel`, `silik update channel stable` |
 | Energia | rendiment, equilibrat, estalvi o automàtic (rendiment endollat, equilibrat amb bateria), amb el tuned de la base; s'ofereix swap zram; trim de l'SSD cada setmana | `silik power` |
 | Velocitat | el que la base engega o manté en marxa i una estació de treball d'enginyeria no necessita està apagat des de la primera arrencada (nou elements; res de seguretat, cap paràmetre del nucli, res esborrat), i una ordre ho torna a posar; el sistema mesura la seva pròpia arrencada i memòria. Encara no es diu cap temps d'arrencada: les mesures esperen el CI | `silik speed`, `silik speed apply`, `silik speed undo`, `silik bench system` |
 | SilikStudio | la suite de SilikVolt com a aplicació nativa: una finestra pròpia, la primera tecla del rail. El seu paquet es construeix des del repositori de SilikStudio | |
@@ -60,8 +61,9 @@ ensenya i no executa res. El COMMAND bar (Super+Espai) ensenya la mateixa línia
 
 Un prototip verificat en màquines virtuals i contenidors, no un producte. No s'ha executat, entre d'altres: cap
 maquinari real (controladors gràfics, Wi-Fi, suspensió, adaptadors CAN, programar una placa), cap eina de fabricant
-(Cadence, Synopsys, Altium, STM32CubeIDE), la màquina virtual de Windows, ARM si no és emulat. Encara no hi ha un
-repositori de paquets signat, de manera que un sistema instal·lat no rep versions noves dels paquets de SilikOS.
+(Cadence, Synopsys, Altium, STM32CubeIDE), la màquina virtual de Windows, ARM si no és emulat. El repositori d'on un sistema
+instal·lat actualitzaria els paquets de SilikOS està construït però no publicat (`docs/REPO.md`): la clau de
+signatura l'ha de fer el propietari, de manera que un sistema instal·lat encara no en rep versions noves.
 `docs/STATUS.md` té les dues taules, verificat i no verificat, amb com s'ha executat cada fila.
 
 Provat instal·lant-lo: el workflow CI construeix la ISO, la instal·la sola en una màquina virtual, arrenca el sistema

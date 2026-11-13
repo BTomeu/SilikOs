@@ -77,7 +77,37 @@ class Workflows(unittest.TestCase):
         for wf in WORKFLOWS:
             s = text(wf)
             self.assertNotIn("pull_request_target", s, wf)
-            self.assertNotIn("secrets.", s, wf)          # (nothing but the run's own token is used)
+            if os.path.basename(wf) != "repo.yml":       # (the package repository's signing key: the tests below)
+                self.assertNotIn("secrets.", s, wf)      # (nothing but the run's own token is used)
+
+    def test_the_signing_key_is_seen_by_one_step_that_no_stranger_starts(self):
+        # .github/workflows/repo.yml: the two secrets of the package signing key (docs/REPO.md)
+        s = text(".github/workflows/repo.yml")
+        head = s.split("\njobs:\n", 1)[0]
+        self.assertNotRegex(head, r"(?m)^  pull_request")                  # no pull request starts it
+        self.assertEqual(sorted(set(re.findall(r"secrets\.([A-Za-z_]+)", s.split("\nname: ", 1)[1]))),
+                         ["SILIKOS_GPG_PASSPHRASE", "SILIKOS_GPG_PRIVATE_KEY"])
+        j = jobs(s)
+        for name, body in j.items():
+            self.assertEqual("secrets." in body, name == "packages", name)
+        job = j["packages"]
+        self.assertNotIn(": write", job)                                   # the job with the key writes nothing
+        self.assertRegex(job, r"(?m)^    environment: package-signing$")   # the key is that environment's, not the repository's
+        self.assertEqual(s.count("environment: package-signing"), 1)
+        cond = re.search(r"^    if: (.*)$", job, re.M).group(1)
+        for must in ("github.event.workflow_run.conclusion == 'success'", "github.event.workflow_run.event != 'pull_request'",
+                     "github.event.workflow_run.head_repository.full_name == github.repository", "github.ref == 'refs/heads/main'"):
+            self.assertIn(must, cond)
+        steps = re.split(r"(?m)^      - ", job)
+        with_key = [st for st in steps if "secrets." in st]
+        self.assertEqual(len(with_key), 1)
+        self.assertNotIn("github.token", with_key[0])                      # that step has no token
+        self.assertNotIn("GH_TOKEN", with_key[0])
+        self.assertIn("bash tools/build_pkgrepo.sh", with_key[0])          # and runs our script, in EL 9
+        self.assertIn("almalinux:9", with_key[0])
+        self.assertNotRegex(with_key[0], r"SILIKOS_GPG_[A-Z_]+=")          # the key is never on a command line
+        for name in ("release", "deploy", "prune"):                        # the jobs that write: no checkout, no key
+            self.assertNotIn("actions/checkout", j[name], name)
 
     def test_the_token_reads_unless_a_job_says_otherwise(self):
         for wf in WORKFLOWS:
@@ -85,8 +115,13 @@ class Workflows(unittest.TestCase):
             head = s.split("\njobs:\n", 1)[0] + "\n"
             self.assertRegex(head, r"\npermissions:\n  contents: read\n", wf)
             self.assertNotIn("write-all", s, wf)
-            for perm in re.findall(r"^\s+([a-z-]+): write\b", s, re.M):
-                self.assertEqual(perm, "contents", wf)
+            for name, body in jobs(s).items():
+                for perm in re.findall(r"^\s+([a-z-]+): write\b", body, re.M):
+                    if os.path.basename(wf) == "repo.yml" and name == "deploy":      # (the Pages site, and nothing else)
+                        self.assertIn(perm, ("pages", "id-token"), wf)
+                    else:
+                        self.assertEqual(perm, "contents", "%s: job %s" % (wf, name))
+            self.assertNotRegex(s.split("\njobs:\n", 1)[0], r": write\b", wf)
 
     def test_a_job_that_a_pull_request_starts_has_no_token_that_writes(self):
         seen = 0
