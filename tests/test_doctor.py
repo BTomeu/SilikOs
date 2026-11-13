@@ -590,9 +590,9 @@ class Areas(unittest.TestCase):
         self.assertEqual(net(route=None)["route"]["state"], "unknown")
         self.assertEqual(net(hosts={}, dns={})["dns"]["state"], "unknown")
         # a session proxy that dnf does not know: the automatic updates go without it. Its password is never shown
-        r = net(env={"https_proxy": "http://me:secret@proxy.upc.edu:3128"})["proxy"]
+        r = net(env={"https_proxy": "http://me:secret@proxy.example.org:3128"})["proxy"]
         self.assertEqual(r["state"], "warn")
-        self.assertEqual(r["fix"], ["sudo dnf config-manager --save --setopt=proxy=http://proxy.upc.edu:3128"])
+        self.assertEqual(r["fix"], ["sudo dnf config-manager --save --setopt=proxy=http://proxy.example.org:3128"])
         self.assertNotIn("secret", json.dumps(r))
         self.assertEqual(net(env={"https_proxy": "http://p:3128"}, dnf="http://p:3128")["proxy"]["state"], "ok")
         r = net(env={"https_proxy": "http://p:3128"}, dns={"repo.almalinux.org": "fail: x", "dl.fedoraproject.org": "ok"}, dnf="http://p:3128")
