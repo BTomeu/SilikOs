@@ -305,6 +305,7 @@ SYNONYMS = """
  board placa
  chip xip
  bench banc banco
+ cve vulnerab* advisor*
 """
 # the words that say a question is about an area of `silik doctor`: its rows of right now are then read
 AREAS = {
