@@ -190,12 +190,33 @@ controladors").
 **Decisió de l'amo:** les dues primeres files (182 MB) no toquen la base; les lletres CJK i els langpacks (515 MB)
 sí que en canvien el conjunt de paquets.
 
-## 9. Encara no mesurat
+## 9. Arrencada i memòria del sistema instal·lat (primera mesura)
+
+Workflow CI, run 43393494218 (commit b596ffc, 13/11/2026): SilikOS instal·lat en una màquina virtual KVM d'un runner de
+GitHub (4096 MB de memòria, sense targeta gràfica), mesurat per `silik bench system` dins la màquina, dues arrencades amb
+el perfil de `silik speed` posat i dues després de `silik speed undo`. Són quatre captures d'una sola execució en una
+màquina virtual compartida: una primera mesura, no una mitjana.
+
+| Captura | Arrencada (nucli + initrd + espai d'usuari) | Pantalla d'inici | Escriptori | Memòria usada | Processos | Unitats en marxa |
+|---|---|---|---|---|---|---|
+| perfil posat, 1 | 1,1 + 2,1 + 6,1 = 9,3 s | 5,7 s | 8,9 s | 990 MB | 99 | 44 |
+| perfil posat, 2 | 1,2 + 2,3 + 6,1 = 9,7 s | 6,0 s | 9,2 s | 982 MB | 99 | 44 |
+| perfil tret, 1 | 1,3 + 2,1 + 6,8 = 10,2 s | 6,0 s | 9,6 s | 1625 MB | 122 | 50 |
+| perfil tret, 2 | 1,1 + 2,1 + 6,8 = 10,1 s | 5,9 s | 9,4 s | 1355 MB | 109 | 49 |
+
+- El perfil estalvia entre 0,4 i 0,9 s d'arrencada (0,7 s d'espai d'usuari a les quatre captures) i entre 365 i 643 MB
+  de memòria usada; les dues captures sense perfil difereixen entre elles 270 MB, o sigui que la xifra de memòria té
+  aquest soroll.
+- La mateixa execució: 113 comprovacions bé, 1 fallada (la de la prova mateixa, `look.default`, ja arreglada), 14G de
+  disc després d'instal·lar.
+- No hi ha encara la mateixa mesura sobre l'AlmaLinux Workstation de sèrie (`.github/workflows/compare.yml`, a mà), ni
+  en maquinari real.
+
+## 10. Encara no mesurat
 
 | Què | Qui ho omplirà |
 |---|---|
-| Temps d'arrencada (fins a l'escriptori) | agent `speed`, CI (màquina virtual instal·lada) |
-| Memòria en repòs | agent `speed`, CI |
+| Arrencada i memòria en maquinari real, i al costat de l'AlmaLinux de sèrie | el Ryzen; `compare.yml` |
 | Temps d'instal·lació i temps d'actualització | CI |
 | Espai real al disc del conjunt d'avui; mida de la ISO construïda | CI (`tools/build_iso.sh`, test d'instal·lació) |
 | aarch64 amb aquest mètode (del 12/11 només hi ha els nou RPM resolts sobre un contenidor: 895 paquets, 1,6 GB, 4,8 GB; no és comparable amb la taula 1) | `tools/weigh.sh` en una màquina ARM (segueix l'arquitectura) |
