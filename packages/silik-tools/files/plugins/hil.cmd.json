@@ -1,0 +1,12 @@
+[
+ {"address": "hil/new", "argv": ["hil", "new"],
+  "en": "hardware in the loop: an example test plan to start from (a simulated ECU), in the folder hil-example",
+  "ca": "hardware in the loop: un pla de proves d'exemple per començar (una ECU simulada), a la carpeta hil-example",
+  "es": "hardware in the loop: un plan de pruebas de ejemplo para empezar (una ECU simulada), en la carpeta hil-example",
+  "terminal": true},
+ {"address": "hil/example", "argv": ["hil", "run", "--example"],
+  "en": "hardware in the loop: run the example plan against the simulated ECU (no hardware needed)",
+  "ca": "hardware in the loop: executa el pla d'exemple contra l'ECU simulada (no cal maquinari)",
+  "es": "hardware in the loop: ejecuta el plan de ejemplo contra la ECU simulada (no hace falta hardware)",
+  "terminal": true}
+]

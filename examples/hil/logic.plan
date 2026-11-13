@@ -1,0 +1,39 @@
+# logic.plan: a measurement taken by a command. sigrok-cli's demo device stands for a logic analyser: no hardware.
+#   silik hil run logic.plan          (it needs the package sigrok; no bus, so no silik-pylab)
+# A `measure` step runs a command of [commands] and compares the number it prints with limits. Without `pattern`
+# the number is the last one of the last line printed; with it, the group of the regular expression.
+
+[plan]
+name = A logic analyser's capture as a measurement (sigrok-cli, demo device)
+dut = sigrok demo device
+
+[commands]
+# the demo device's "incremental" pattern at its 200 kHz: D3 rises every 16 samples, 12.5 kHz
+d3-edges = sigrok-cli -d demo -g Logic -c pattern=incremental --samples 2000 -P counter:data=D3:data_edge=rising -A counter=edge_count
+d3-period = sigrok-cli -d demo -g Logic -c pattern=incremental --samples 2000 -P timing:data=D3:edge=rising -A timing=time
+d3-duty = sigrok-cli -d demo -g Logic -c pattern=incremental --samples 2000 -P pwm:data=D3 -A pwm=duty-cycle
+
+[step edges]
+do = measure
+req = LOGIC-001
+note = rising edges of D3 in 2000 samples (10 ms)
+command = d3-edges
+equals = 125
+
+[step frequency]
+do = measure
+req = LOGIC-002
+command = d3-period
+pattern = \(([0-9.]+) kHz\)\s*$
+min = 12.4
+max = 12.6
+unit = kHz
+
+[step duty]
+do = measure
+req = LOGIC-003
+command = d3-duty
+pattern = ([0-9.]+)%\s*$
+min = 49
+max = 51
+unit = %

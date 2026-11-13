@@ -130,6 +130,10 @@ firmware files its drivers name, the Saleae clones' among them (the 15th, usb-c-
 
 Not run: a real adapter on a bus; a real FX2 analyser taking the firmware (none here); the Windows VM with a USB device [A: libvirt's hostdev for qemu:///session].
 
+A board on the bench tested automatically (flash, power, CAN with the cyclic times of its messages, the serial
+console, measurements; a JUnit file and a traceability matrix; a simulated ECU for a first run without hardware):
+`silik hil`, `docs/HIL.md`.
+
 ## The vendors' IDEs
 
 **STM32CubeIDE (ST) and Code Composer Studio (TI) are not part of SilikOS**: they are their vendors' programs under
