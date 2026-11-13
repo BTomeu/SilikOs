@@ -1,0 +1,151 @@
+--- a/packages/silik-command/files/silik-command
++++ b/packages/silik-command/files/silik-command
+@@ -1,5 +1,7 @@
+ #!/usr/bin/python3
+ # SilikOS — the COMMAND bar: one line where you type an address (app/…, eda/…, win/…, sys/…, a path) and Enter runs it.
++# `?QUESTION` asks this system (silik ask, offline): Enter lists the commands that answer, Enter on one puts it in the
++# bar as `$ COMMAND` without running it; a line that starts with `$` is a command line, run in a terminal.
+ # Every entry shows the command line that does the same from a terminal (its "twin"), and what was run goes to the
+ # session log (~/.local/state/silikos/session.log) so that it can be run again. Bound to Super+Space by the desktop
+ # defaults (silikos-desktop).
+@@ -104,6 +106,16 @@
+     return "en"
+ 
+ 
++# `?QUESTION` (silik ask, offline: docs/ASK.md) and `$ COMMAND`; in a block of its own
++for _lang, _words in (
++        ("en", {"ask": "ask this system (offline: nothing leaves the machine); Enter lists the commands that answer",
++                "ask_empty": "ask this system: type the question after the ?", "shell": "run this command line in a terminal", "fill": "to the bar"}),
++        ("ca", {"ask": "pregunta a aquest sistema (fora de línia: res surt de la màquina); Retorn llista les ordres que responen",
++                "ask_empty": "pregunta a aquest sistema: escriu la pregunta després del ?", "shell": "executa aquesta línia d'ordres en un terminal", "fill": "a la barra"}),
++        ("es", {"ask": "pregunta a este sistema (sin conexión: nada sale de la máquina); Intro lista las órdenes que responden",
++                "ask_empty": "pregunta a este sistema: escribe la pregunta después del ?", "shell": "ejecuta esta línea de órdenes en un terminal", "fill": "a la barra"})):
++    TEXT[_lang].update(_words)
++
+ WIN_FILES = (".exe", ".msi", ".bat", ".cmd", ".lnk")    # what `silik win open` takes
+ 
+ 
+@@ -116,12 +128,17 @@
+ 
+ 
+ class Item:
+-    def __init__(self, address, title, argv, terminal=False, takes=False):
++    def __init__(self, address, title, argv, terminal=False, takes=False, ask=None, fill=None, line=None):
+         self.address, self.title, self.argv, self.terminal = address, title, list(argv), terminal
+         self.takes = takes      # a box or a prefix: `address COMMAND...` runs a command inside it
++        self.ask = ask          # a question for `silik ask`: Enter lists its answers
++        self.fill = fill        # an answer: Enter puts this text in the bar and runs nothing
++        self.line = line        # the command line as it is shown, when it is not ARGV word for word
+ 
+     @property
+     def twin(self):
++        if self.line is not None:
++            return self.line
+         argv = ["silik"] + self.argv[1:] if self.argv and self.argv[0] == SILIK else self.argv   # as typed in a terminal
+         return " ".join(shlex.quote(a) for a in argv)
+ 
+@@ -291,11 +308,43 @@
+     return None
+ 
+ 
+-def match(items, query, t, limit=9):
+-    """the entries for what is typed. `eda/BOX CMD…` and `win/PREFIX PROG…` run a command inside; a path opens."""
++def ask_items(question, lang, timeout=10):
++    """the answers of `silik ask QUESTION` (offline: a search over what this system knows about itself, nothing is
++    sent anywhere) as entries. Enter on one puts its command in the bar as `$ COMMAND` and runs nothing: the person
++    reads it, changes it, and Enter again runs it in a terminal"""
++    env = dict(os.environ, SILIK_LANG=lang)
++    try:
++        p = subprocess.run([SILIK, "-q", "ask", "--json", "--", question], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
++                           stdin=subprocess.DEVNULL, universal_newlines=True, timeout=timeout, env=env)
++        answers = json.loads(p.stdout)["answers"] if p.stdout.strip() else []
++    except (OSError, subprocess.TimeoutExpired, ValueError, KeyError, TypeError):
++        return []
++    out = []
++    for n, a in enumerate(answers if isinstance(answers, list) else [], 1):
++        try:
++            c, what = str(a["command"]), str(a.get("what") or "")
++        except (KeyError, TypeError, AttributeError):
++            continue
++        out.append(Item("?%d" % n, c + ("  \u2014  " + what if what else ""), [], fill="$ " + c, line=c))
++    return out
++
++
++def match(items, query, t, limit=9, asked=None):
++    """the entries for what is typed. `eda/BOX CMD…` and `win/PREFIX PROG…` run a command inside; a path opens;
++    `?QUESTION` asks this system (ASKED: (question, its answers) once Enter was pressed on it); `$ COMMAND` is a
++    command line for a terminal."""
+     q = query.strip()
+     if not q:
+         return [i for i in items if i.address.startswith("sys/")][:limit]
++    if q[0] == "?":
++        question = q[1:].strip()
++        if asked and asked[0] == question:
++            return list(asked[1])
++        return [Item("?", t["ask"] if question else t["ask_empty"], [SILIK, "ask", "--"] + question.split(), ask=question,
++                     line="silik ask " + question)]
++    if q[0] == "$":
++        line = q[1:].strip()
++        return [Item("$", t["shell"], ["sh", "-c", line], True, line=line)] if line else []
+     head, _, rest = q.partition(" ")
+     fixed = set(i.address for i in items if not i.takes)     # eda/check, win/vm, an installed program: no command inside
+     if rest and head.startswith("eda/") and head not in fixed:
+@@ -346,6 +395,8 @@
+ 
+ 
+ def launch(item, t=None):
++    if not item.argv:           # (an answer of `silik ask`: it fills the bar, it is not run)
++        return False
+     argv = held(item.argv, t) if item.terminal else item.argv
+     log_line(item)
+     try:
+@@ -501,12 +552,12 @@
+     for w in (top, rule, lst, foot):
+         box.pack_start(w, False, False, 0)
+     win.add(box)
+-    shown = []
++    shown, asked = [], []
+ 
+     def refresh(*_):
+         for r in lst.get_children():
+             lst.remove(r)
+-        shown[:] = match(items, entry.get_text(), t)
++        shown[:] = match(items, entry.get_text(), t, asked=asked or None)
+         for it in shown:
+             row = Gtk.Box(spacing=16)
+             a = Gtk.Label(label=it.address, xalign=0)
+@@ -535,6 +586,7 @@
+     def selected(*_):
+         it = current()
+         twin.set_text("$ " + it.twin if it else "")
++        keys.set_text("Enter %s   Tab %s   Esc %s" % (t["fill"] if it and it.fill else t["run"], t["complete"], t["close"]))
+ 
+     def key(_w, ev):
+         k = ev.keyval
+@@ -554,6 +606,15 @@
+             return True
+         if k in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+             it = current()
++            if it and it.ask is not None:       # ?question: its answers take the list (silik ask, offline)
++                if it.ask:
++                    asked[:] = [it.ask, ask_items(it.ask, lang)]
++                    refresh()
++                return True
++            if it and it.fill is not None:      # an answer: its command goes to the bar, nothing runs
++                entry.set_text(it.fill)
++                entry.set_position(-1)
++                return True
+             if it and launch(it, TEXT[lang]):
+                 Gtk.main_quit()
+             return True
+@@ -596,7 +657,9 @@
+             return 2
+         i += 1
+     if list_only is not None:
+-        for it in match(all_items(lang), list_only, TEXT[lang], limit=50):
++        q = list_only.strip()
++        asked = (q[1:].strip(), ask_items(q[1:].strip(), lang)) if q[:1] == "?" and q[1:].strip() else None
++        for it in match(all_items(lang) if asked is None else [], list_only, TEXT[lang], limit=50, asked=asked):
+             print("%s\t%s" % (it.address, it.twin))
+         return 0
+     started = [silik_json_start(a) for a in SILIK_LISTS]     # they answer while the theme is read and GTK loads

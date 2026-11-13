@@ -38,6 +38,7 @@ def load(name, path):
     loader = importlib.machinery.SourceFileLoader(name, path)
     spec = importlib.util.spec_from_loader(name, loader)
     mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod         # (silik hands itself to a plugin as sys.modules[__name__])
     loader.exec_module(mod)
     return mod
 

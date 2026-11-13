@@ -119,4 +119,4 @@ set up by default], so its builds would not go through `/usr/lib64/ccache`; CMak
   machine has no frequency scaling; this needs the laptop (Ryzen 7 5800HS) on mains and on battery.
 - **The system menu showing the profile** that `silik power` set (the code is in the base's gnome-shell [A]); the
   status-bar field and the COMMAND bar entries on a desktop (the field's code and strings are checked by the tests).
-- **zram swap in use**, and fstrim on an installed system (the CI's installation checks the timer: `tests/install/check.sh`).
+- **zram swap in use**, and fstrim on an installed system (the CI's installation checks the timer, in its check script).

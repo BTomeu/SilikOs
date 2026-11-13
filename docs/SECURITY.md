@@ -109,6 +109,22 @@ for example `/etc/sysctl.d/90-local.conf` with `kernel.yama.ptrace_scope = 0`.
   [A] AlmaLinux 9 gives no updates to an old minor release: when 9.x+1 is out, the security updates are its packages.
 - **Remote access.** `--keep-ssh`; use keys, not passwords.
 
+## The assistant (`silik ask`)
+
+`silik ask QUESTION` answers from what the system knows about itself and sends nothing anywhere; it runs no command
+for the person in any mode. `silik ask --model` is the only part of SilikOS that sends data about the machine to a
+third party, and only when typed: one HTTPS request to Anthropic's Messages API (or to the address in `ask.conf`)
+with the user's own API key, after showing the message it sends (the question, the offline answers, the rows of
+`silik status` and `silik doctor` the question is about, with the host and user names, home paths, IP and MAC
+addresses and serial numbers replaced by placeholders; `--show-context` prints every byte and sends nothing) and,
+the first time, after a yes at a terminal that `silik ask consent off` withdraws. The key is read from
+`ANTHROPIC_API_KEY` or from `~/.config/silikos/ask.key`, which is refused unless it is the user's and mode 0600; it is
+never printed or logged, and a redirect is not followed. What comes back is treated as untrusted text: control
+characters are removed, nothing is executed, and a command in it is marked checked only when it is a `silik` command
+the parser takes or one of a short read-only list. Redaction is by pattern: what the person types about a project or
+a customer is sent as typed. `model = off` in `/etc/silikos/ask.conf` turns the model layer off for the machine.
+Not run against the real API (`docs/ASK.md`).
+
 ## What SilikOS does not do
 
 No antivirus, no USBGuard, no audit rules, no FIPS mode or CIS / STIG profile, no kernel lockdown beyond the base's,

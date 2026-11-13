@@ -1,0 +1,18 @@
+[
+ {"address": "ask/key", "argv": ["ask", "key", "set"], "terminal": true,
+  "en": "ask: your API key for --model (typed without echo, kept in a file only you read)",
+  "ca": "ask: la teva clau de l'API per a --model (s'escriu sense mostrar-la, es desa en un fitxer que només llegeixes tu)",
+  "es": "ask: tu clave de la API para --model (se escribe sin mostrarla, se guarda en un archivo que solo lees tú)"},
+ {"address": "ask/consent", "argv": ["ask", "consent"], "terminal": true,
+  "en": "ask: may --model send? (the consent stored, and for which address)",
+  "ca": "ask: pot enviar --model? (el consentiment desat, i per a quina adreça)",
+  "es": "ask: ¿puede enviar --model? (el consentimiento guardado, y para qué dirección)"},
+ {"address": "ask/consent-off", "argv": ["ask", "consent", "off"], "terminal": true,
+  "en": "ask: withdraw the consent (--model sends nothing until you say yes again)",
+  "ca": "ask: retira el consentiment (--model no envia res fins que tornis a dir que sí)",
+  "es": "ask: retira el consentimiento (--model no envía nada hasta que vuelvas a decir que sí)"},
+ {"address": "ask/config", "argv": ["ask", "config"], "terminal": true,
+  "en": "ask: the model, where it is sent, where the key comes from",
+  "ca": "ask: el model, on s'envia, d'on ve la clau",
+  "es": "ask: el modelo, adónde se envía, de dónde viene la clave"}
+]
