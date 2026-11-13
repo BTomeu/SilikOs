@@ -34,7 +34,8 @@ const COMMAND_ID = 'org.silikvolt.Command.desktop';   /* the COMMAND bar is the 
 const TUNED_ACTIVE = '/etc/tuned/active_profile';
 const PPD_DAEMON = '/usr/libexec/power-profiles-daemon';   /* that one instead of tuned: tuned's file would be stale */
 const POWER_AUTO_LINK = '/etc/systemd/system/multi-user.target.wants/silikos-power-auto.service';
-const POWER_WORD = { 'throughput-performance': 'performance', 'balanced': 'balanced', 'balanced-battery': 'balanced', 'powersave': 'saver' };
+const POWER_WORD = { 'throughput-performance': 'performance', 'balanced': 'balanced', 'balanced-battery': 'balanced', 'powersave': 'saver',
+                     'silikos-saver': 'saver' };      /* (silikos-power's own saver: `silik power profiles silikos`) */
 
 /* the update field's other words (docs/ROLLBACK.md): the last update was made without a snapshot of / (the note of
    silikos-security's update hook in /run/silikos), the automatic updates wait since a rollback (/etc/silikos) */

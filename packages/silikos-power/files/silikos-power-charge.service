@@ -1,0 +1,16 @@
+# silik power charge: the battery's charge limit of /etc/silikos/power.conf (charge_limit = N), written again at each
+# start: a laptop's firmware often forgets it when it is switched off. Enabled by `silik power charge N`, never by
+# the package. 80-silikos-power.rules runs it again when a battery appears (try-restart: only while it is on).
+# `silik power charge apply` prints what it writes: journalctl -u silikos-power-charge
+[Unit]
+Description=SilikOS battery charge limit (silik power charge)
+ConditionPathExists=/usr/bin/silik
+ConditionPathExists=/etc/silikos/power.conf
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/silik power charge apply
+
+[Install]
+WantedBy=multi-user.target

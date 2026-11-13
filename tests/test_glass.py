@@ -410,7 +410,7 @@ class Saver(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             f, none = os.path.join(d, "active_profile"), os.path.join(d, "no-such-daemon")
             self.assertFalse(bar.power_saver(f, none))                     # no tuned: not saver
-            for profile, saver in (("powersave\n", True), ("balanced\n", False), ("balanced-battery", False),
+            for profile, saver in (("powersave\n", True), ("silikos-saver\n", True), ("balanced\n", False), ("balanced-battery", False),
                                    ("throughput-performance\n", False), ("", False)):
                 with open(f, "w") as h:
                     h.write(profile)
@@ -424,6 +424,8 @@ class Saver(unittest.TestCase):
         self.assertIn("const TUNED_ACTIVE = '%s';" % bar.TUNED_ACTIVE, ext)
         self.assertIn("const PPD_DAEMON = '%s';" % bar.PPD_DAEMON, ext)
         self.assertIn("'powersave': 'saver'", ext)
+        self.assertIn("'silikos-saver': 'saver'", ext)          # silikos-power's own saver rests the glass too
+        self.assertEqual(set(bar.SAVER_PROFILES), {"powersave"} | set(silik.POWER_OWN.values()))
 
     def test_the_shell_follows_the_profile_in_every_look(self):
         ext = text(os.path.join(EXT, "extension.js"))

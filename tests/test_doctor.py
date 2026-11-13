@@ -668,7 +668,7 @@ class Command(unittest.TestCase):
         ok = {a: self.area(a, "ok") for a in silik.DOCTOR_AREAS}
         rc, out, _ = self.run_with(ok)
         self.assertEqual(rc, 0)
-        self.assertRegex(out, r"8 ok, 0 warn, 0 bad, 0 unknown \(\d+\.\d\d s\)\n$")
+        self.assertRegex(out, r"9 ok, 0 warn, 0 bad, 0 unknown \(\d+\.\d\d s\)\n$")
         self.assertEqual([l for l in out.splitlines() if l and l[0].isalpha() and " " not in l], list(silik.DOCTOR_AREAS))
         self.assertEqual(self.run_with(dict(ok, eda=self.area("eda", "warn")))[0], 1)
         self.assertEqual(self.run_with(dict(ok, eda=self.area("eda", "unknown")))[0], 1)     # all ok is not said for what is not seen
@@ -690,7 +690,7 @@ class Command(unittest.TestCase):
         self.assertEqual(rc, 1)
         rc, _, err = self.run_with(areas, "kitchen")
         self.assertEqual(rc, 2)
-        self.assertIn("the areas are system security graphics hardware bench eda windows network", err)
+        self.assertIn("the areas are system security graphics hardware power bench eda windows network", err)
 
     def test_the_areas_are_read_at_once(self):
         areas = {a: self.area(a, "ok", delay=0.3) for a in silik.DOCTOR_AREAS}
@@ -716,7 +716,8 @@ class Command(unittest.TestCase):
         every_row_says_what_to_do(self, rows)
         self.assertEqual({r["area"] for r in rows}, set(silik.DOCTOR_AREAS))
         for c in silik.DOC_RAN:
-            self.assertRegex(c, r"^(rpm -q|systemctl (--user )?(show|list-units|list-unit-files|is-active)|journalctl -q|lspci|modinfo|ip -details|podman ps|gsettings get)\b", c)
+            self.assertRegex(c, r"^(rpm -q|systemctl (--user )?(show|list-units|list-unit-files|is-active|is-enabled)|journalctl -q|lspci|modinfo|ip -details|podman ps|gsettings get"
+                                r"|busctl --auto-start=no get-property|iw dev \S+ get power_save)\b", c)
             self.assertNotIn("sudo", c)
 
     def test_the_command_line_the_completion_and_the_command_bar(self):
@@ -724,7 +725,7 @@ class Command(unittest.TestCase):
         self.assertEqual((a.fn, a.areas, a.json, a.verbose), (silik.cmd_doctor, ["bench", "eda"], True, False))
         comp = text("packages/silik-tools/files/silik.bash-completion")
         self.assertIn("secure doctor", comp)
-        self.assertIn("system security graphics hardware bench eda windows network --json --verbose", comp)
+        self.assertIn("system security graphics hardware power bench eda windows network --json --verbose", comp)
         self.assertIn("silik doctor [--json] [--verbose] [AREA...]", text("packages/silik-tools/files/silik"))
         items = {i.address: i for i in bar.system_items(bar.TEXT["en"])}
         self.assertEqual(items["sys/doctor"].twin, "silik doctor")

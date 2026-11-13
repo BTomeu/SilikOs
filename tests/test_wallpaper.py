@@ -390,7 +390,8 @@ class Look(unittest.TestCase):
         self.assertIn("\nVersion:        %s\n" % v, text(os.path.join(ROOT, "packages/silik-tools/silik-tools.spec")))
         self.assertGreaterEqual(tuple(int(x) for x in v.split(".")), (0, 8, 0))
         self.assertIn("\nVersion:        0.5.0\n", text(os.path.join(ROOT, "packages/silikos-branding/silikos-branding.spec")))
-        self.assertIn("\nRequires:       silik-tools >= 0.8.0\n", text(os.path.join(ROOT, "packages/silik-command/silik-command.spec")))
+        need = re.search(r"\nRequires:       silik-tools >= ([\d.]+)\n", text(os.path.join(ROOT, "packages/silik-command/silik-command.spec"))).group(1)
+        self.assertGreaterEqual(tuple(int(x) for x in need.split(".")), (0, 8, 0))      # (the bar's look/wallpaper-NAME entries)
 
 
 class Manifest(unittest.TestCase):

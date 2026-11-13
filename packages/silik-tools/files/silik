@@ -14,7 +14,10 @@
 #   silik dev   tools [--json] | try [JOB] | install FILE | can [up IFACE BITRATE [--fd RATE] [--listen] | down IFACE]
 #               | serial [--json] | ccache [on | off]   embedded development, buses; the compiler cache
 #   silik power [show | performance | balanced | saver | auto [--ac P --battery P] | apply] [--json]
-#               | zram [on | off] | trim [on | off]   the power profile (tuned), zram swap, SSD trim
+#               | check [--battery] [--json]          what decides this machine's consumption, each ok / warn / unknown
+#               | charge [N | apply]                  the battery's charge limit (80: for its life; 100: none)
+#               | profiles [silikos | base]           the tuned profiles behind the words: SilikOS's saver or the base's
+#               | zram [on | off] | trim [on | off]   the power profile (tuned), the battery, zram swap, SSD trim
 #   silik speed [show [--json] | apply [ITEM...] | undo [ITEM...]]   what a start and a session do not need, off
 #   silik bench system [--json] [--label L] [--wait S] | compare FILE...   how this system started, what it holds at rest
 #   silik hw    probe | nvidia install [--source nvidia | almalinux] | nvidia status
@@ -31,7 +34,7 @@
 #   silik update
 #   silik secure status [--json] [--offline] | apply [--keep-ssh]
 #   silik doctor [--json] [--verbose] [AREA...]       is this workstation healthy, and what to do: system security
-#               graphics hardware bench eda windows network (default: all); exit 0 all ok, 1 warn or unknown, 2 bad
+#               graphics hardware power bench eda windows network (default: all); exit 0 all ok, 1 warn or unknown, 2 bad
 #   silik vendor list [--json] | check TOOL... | check --all [--json] | prepare TOOL... | lib LIBRARY...
 #               a vendor's tool (Vivado, MATLAB, Virtuoso, J-Link...): what its vendor says of EL 9, this system
 #               against its published requirements, and the commands that prepare it (no vendor software is run)
@@ -50,7 +53,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.8.0"
+VERSION = "0.9.0"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -3763,25 +3766,42 @@ def cmd_session(ctx, a):
 # and the Settings' Power panel use: a profile is set through it when the system has it, so that the menu shows the
 # same, and with tuned-adm otherwise. `auto` is the service silikos-power-auto (package silikos-power): at boot and
 # when the mains is plugged or unplugged (a udev rule) it runs `silik power apply`. Nothing here is read through a
-# command that starts a service: a look at the profile never changes it.
-POWER = (("performance", "full speed: the highest clocks and boost (tuned throughput-performance)"),
-         ("balanced", "fast when there is work, saving when idle (tuned balanced; balanced-battery on battery)"),
-         ("saver", "the least power: low clocks, no boost (tuned powersave)"))
+# command that starts a service: a look at the profile never changes it. The batteries (what the laptop draws, their
+# health) are the kernel's files in /sys/class/power_supply; `check` reads what decides the consumption; `charge` is
+# the battery's charge limit; `profiles` puts SilikOS's own tuned profile behind `saver` (docs/POWER.md has what
+# the base's leaves out). No watts were measured for any of it: a setting is said, never a saving.
+POWER = (("performance", "full speed: the highest clocks and boost"),
+         ("balanced", "fast when there is work, saving when idle"),
+         ("saver", "the least power: low clocks, no boost"))
 POWER_PPD = {"performance": "performance", "balanced": "balanced", "saver": "power-saver"}   # the interface's names
 # each one's tuned profile on mains power and on battery: /etc/tuned/ppd.conf of EL 9.8's tuned-ppd, which does the same
 POWER_TUNED = {"performance": ("throughput-performance", "throughput-performance"), "balanced": ("balanced", "balanced-battery"),
                "saver": ("powersave", "powersave")}
 POWER_WORD = {"throughput-performance": "performance", "balanced": "balanced", "balanced-battery": "balanced",
               "powersave": "saver", "performance": "performance", "power-saver": "saver"}
+# SilikOS's own tuned profile behind a word (package silikos-power, /usr/lib/tuned/silikos-saver): the base's and what
+# it leaves out on a laptop. `silik power profiles silikos` puts it behind `saver`; `base` puts the base's back
+POWER_OWN = {"saver": "silikos-saver"}
+# what each word's tuned profiles set for the processor (tuned 2.27's tuned.conf files, read 13/11/2026): the
+# governor and the platform profile are the first of these the machine offers
+POWER_SETS = {"performance": {"governor": ("performance",), "energy_preference": ("performance",), "platform_profile": ("performance",), "boost": True},
+              "balanced": {"governor": ("schedutil", "ondemand", "powersave"), "energy_preference": ("balance_performance", "balance_power"),
+                           "platform_profile": ("balanced",), "boost": True},
+              "saver": {"governor": ("schedutil", "conservative", "powersave"), "energy_preference": ("power",),
+                        "platform_profile": ("low-power", "quiet"), "boost": False}}
 POWER_BUS = ["net.hadess.PowerProfiles", "/net/hadess/PowerProfiles", "net.hadess.PowerProfiles", "ActiveProfile"]
 POWER_AUTO = "silikos-power-auto.service"
+POWER_CHARGE = "silikos-power-charge.service"     # the charge limit of power.conf, written again at each start
 POWER_CONF = "/etc/silikos/power.conf"
+PPD_CONF = "/etc/tuned/ppd.conf"                  # tuned-ppd's: which tuned profile each of the three names is
+TUNED_DIRS = ("/etc/tuned", "/usr/lib/tuned")     # where tuned looks for a profile, the administrator's first
 POWER_AUTO_DEFAULT = {"ac": "performance", "battery": "balanced"}
 PPD_SERVICE = "/usr/share/dbus-1/system-services/net.hadess.PowerProfiles.service"   # tuned-ppd's or power-profiles-daemon's
 TUNED_PPD = "/usr/sbin/tuned-ppd"
 TUNED_ACTIVE = "/etc/tuned/active_profile"
 UNIT_DIR = "/usr/lib/systemd/system"
 SYSFS = os.environ.get("SILIK_SYSFS") or "/sys"
+PROCFS = os.environ.get("SILIK_PROCFS") or "/proc"
 PROC_SWAPS = "/proc/swaps"
 ZRAM_GEN = "/usr/lib/systemd/system-generators/zram-generator"   # zram-generator (AppStream): its config makes zram0
 ZRAM_UNITS = ["dev-zram0.swap", "systemd-zram-setup@zram0.service"]
@@ -3818,6 +3838,181 @@ def power_source(root=None):
                 mains = False
     on_battery = bool(bats) and not mains and any(b["status"] == "Discharging" for b in bats)
     return on_battery, mains, bats
+
+
+def sys_int(path):
+    """the number in a kernel file, or None when the file is missing or holds something else"""
+    try:
+        return int(read(path).strip())
+    except ValueError:
+        return None
+
+
+def power_batteries(root=None):
+    """the computer's batteries with what the kernel says of each (/sys/class/power_supply, read-only): percent,
+    status, the energy now / full / by design in Wh (or the charge in Ah, for a battery that counts that), health
+    (full against design), the draw in W (power_now, or current_now x voltage_now), the minutes left at that draw
+    (to full while charging without a limit), cycles, the charge limit. None wherever the kernel gives no file:
+    nothing is estimated. A device's own battery (a mouse: scope Device) is not the computer's"""
+    top = os.path.join(root or SYSFS, "class", "power_supply")
+    out = []
+    try:
+        names = sorted(os.listdir(top))
+    except OSError:
+        names = []
+    for n in names:
+        d = os.path.join(top, n)
+        if read(os.path.join(d, "type")).strip() != "Battery" or read(os.path.join(d, "scope")).strip() == "Device":
+            continue
+
+        def g(f):
+            return sys_int(os.path.join(d, f))
+
+        def unit(v):
+            return None if v is None else round(v / 1e6, 2)
+        e_now, e_full, e_des = g("energy_now"), g("energy_full"), g("energy_full_design")      # µWh
+        c_now, c_full, c_des = g("charge_now"), g("charge_full"), g("charge_full_design")      # µAh
+        p_now, i_now, v_now = g("power_now"), g("current_now"), g("voltage_now")               # µW, µA, µV
+        watts = abs(p_now) / 1e6 if p_now is not None else abs(i_now) * v_now / 1e12 if i_now is not None and v_now is not None else None
+        full, des = (e_full, e_des) if e_full is not None and e_des else (c_full, c_des)
+        status = read(os.path.join(d, "status")).strip() or None
+        limit = g("charge_control_end_threshold")
+
+        def hours(e, c):
+            """energy over power, or charge over current (a battery counts one or the other)"""
+            if e is not None and p_now:
+                return e / abs(p_now)
+            if c is not None and i_now:
+                return c / abs(i_now)
+            if e is not None and i_now and v_now:
+                return e / (abs(i_now) * v_now / 1e6)
+            return None
+        left = to_full = None
+        if status == "Discharging":
+            left = hours(e_now, c_now)
+        elif status == "Charging" and limit in (None, 100):
+            to_full = hours(None if e_now is None or e_full is None else max(0, e_full - e_now),
+                            None if c_now is None or c_full is None else max(0, c_full - c_now))
+        out.append({"name": n, "percent": g("capacity"), "status": status,
+                    "energy_now_wh": unit(e_now), "energy_full_wh": unit(e_full), "energy_design_wh": unit(e_des),
+                    "charge_now_ah": unit(c_now), "charge_full_ah": unit(c_full), "charge_design_ah": unit(c_des),
+                    "health_percent": round(100.0 * full / des, 1) if full is not None and des else None,
+                    "power_w": None if watts is None else round(watts, 2),
+                    "time_left_min": None if left is None else int(round(left * 60)),
+                    "time_to_full_min": None if to_full is None else int(round(to_full * 60)),
+                    "cycles": g("cycle_count"), "charge_limit": limit, "charge_start": g("charge_control_start_threshold")})
+    return out
+
+
+def power_battery_line(b):
+    """one battery's figures in words; only what the kernel gave"""
+    said = []
+    if b["power_w"] is not None:
+        said.append("%.1f W %s" % (b["power_w"], {"Discharging": "drawn", "Charging": "going in"}.get(b["status"], "")))
+    for k, what in (("time_left_min", "left at this draw"), ("time_to_full_min", "to full")):
+        if b[k] is not None:
+            said.append("%d h %02d min %s" % (b[k] // 60, b[k] % 60, what))
+    for k, u in (("energy", "Wh"), ("charge", "Ah")):
+        now, full, des = (b["%s_%s_%s" % (k, w, u.lower())] for w in ("now", "full", "design"))
+        if full is not None:
+            more = " (design %.1f %s: health %.0f %%)" % (des, u, b["health_percent"]) if des and b["health_percent"] is not None else ""
+            said.append(("%.1f %s of %.1f %s" % (now, u, full, u) if now is not None else "%.1f %s when full" % (full, u)) + more)
+            break
+    if b["cycles"]:
+        said.append("%d cycles" % b["cycles"])
+    if b["charge_limit"] is not None:
+        said.append("charge limit %d %%%s" % (b["charge_limit"], " (none)" if b["charge_limit"] >= 100 else ""))
+    return "; ".join(s.strip() for s in said) or "the kernel gives no energy, current or power figures for it"
+
+
+def ini(text):
+    """{section: {key: value}} of an ini file's text (tuned-ppd's ppd.conf): `key=value` lines under `[section]`"""
+    out, cur = {}, None
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line[0] in "#;":
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            cur = out.setdefault(line[1:-1].strip(), {})
+        elif cur is not None and "=" in line:
+            k, v = line.split("=", 1)
+            cur[k.strip()] = v.split("#", 1)[0].strip()
+    return out
+
+
+def power_conf_all(path=None):
+    """every `key = value` line of /etc/silikos/power.conf"""
+    out = {}
+    for line in read(path or POWER_CONF).splitlines():
+        k, eq, v = line.partition("=")
+        if eq and not k.lstrip().startswith("#"):
+            out[k.strip()] = v.strip()
+    return out
+
+
+def power_charge_conf(path=None):
+    """the charge limit asked for (power.conf: charge_limit = N, 1 to 100), or None"""
+    v = power_conf_all(path).get("charge_limit", "")
+    return int(v) if v.isdigit() and 1 <= int(v) <= 100 else None
+
+
+def power_ppd_map(path=None):
+    """tuned-ppd's map as it reads its ppd.conf: {power-profiles name: (tuned profile on mains power, on battery)};
+    {} without the file or its [profiles]"""
+    cf = ini(read(path or PPD_CONF))
+    ac = cf.get("profiles") or {}
+    detect = (cf.get("main") or {}).get("battery_detection")
+    on = detect.lower() in ("1", "true", "yes", "on") if detect is not None else "battery" in cf
+    dc = dict(ac, **(cf.get("battery") or {})) if on else ac
+    return {k: (v, dc.get(k, v)) for k, v in ac.items()}
+
+
+def power_profile_dir(name):
+    """the folder tuned would read the profile NAME from, or None when the system has no such profile"""
+    for d in TUNED_DIRS:
+        if os.path.exists(os.path.join(d, name, "tuned.conf")):
+            return os.path.join(d, name)
+    return None
+
+
+def power_tuned(ppd=None, conf=None):
+    """{silik's word: (tuned profile on mains power, on battery)} on this system: tuned-ppd's own map when it has
+    its ppd.conf; without it the base's names, with SilikOS's own profile behind a word when power.conf says
+    `profiles = silikos` and the profile is installed"""
+    m = dict(POWER_TUNED)
+    pm = power_ppd_map(ppd)
+    if pm:
+        for w, p in POWER_PPD.items():
+            if p in pm:
+                m[w] = pm[p]
+    elif power_conf_all(conf).get("profiles") == "silikos":
+        for w, n in POWER_OWN.items():
+            if power_profile_dir(n):
+                m[w] = (n, n)
+    return m
+
+
+def power_word(name, tmap=None):
+    """silik's word for a tuned profile or a power-profiles name; None for one outside the three"""
+    if not name:
+        return None
+    if name in POWER_WORD:
+        return POWER_WORD[name]
+    for w, own in POWER_OWN.items():
+        if name == own:
+            return w
+    for w, pair in (tmap or power_tuned()).items():
+        if name in pair:
+            return w
+    return None
+
+
+def power_profiles_now(tmap=None):
+    """whose tuned profiles are behind the words: silikos, base, or other (a ppd.conf changed by hand)"""
+    tmap = tmap or power_tuned()
+    if all(tmap[w][0] == n for w, n in POWER_OWN.items()):
+        return "silikos"
+    return "base" if all(tmap[w] == POWER_TUNED[w] for w in POWER_OWN) else "other"
 
 
 def power_driver():
@@ -3869,23 +4064,29 @@ def power_ppd_now(ctx):
 
 
 def power_state(ctx):
-    on_battery, mains, bats = power_source()
+    on_battery, mains, _ = power_source()
+    bats = power_batteries()
+    tmap = power_tuned()
+    draw = [b["power_w"] for b in bats if b["status"] == "Discharging" and b["power_w"] is not None]
     driver = power_driver()
     ppd = power_ppd_now(ctx) if driver in ("tuned-ppd", "power-profiles-daemon") else ""
     # (tuned-ppd answering means tuned runs: it requires it)
     tuned_runs = (driver == "tuned-ppd" and bool(ppd)) or ctx.query(["systemctl", "is-active", "tuned.service"]).strip() == "active"
     tuned = read(TUNED_ACTIVE).strip() if tuned_runs and driver != "power-profiles-daemon" else ""
     auto = ctx.query(["systemctl", "is-enabled", POWER_AUTO], any_rc=True).strip()
-    return {"profile": POWER_WORD.get(ppd) or POWER_WORD.get(tuned), "ppd": ppd or None, "tuned": tuned or None,
+    return {"profile": POWER_WORD.get(ppd) or power_word(tuned, tmap), "ppd": ppd or None, "tuned": tuned or None,
             "tuned_running": tuned_runs, "driver": driver or None,
+            "tuned_profiles": {w: list(v) for w, v in tmap.items()}, "profiles": power_profiles_now(tmap),
             "auto": True if auto == "enabled" else False if auto else None, "auto_profiles": power_conf(),
-            "on_battery": on_battery, "mains": mains, "batteries": bats, "cpu": power_cpu(), "zram": power_zram(),
+            "on_battery": on_battery, "mains": mains, "batteries": bats, "draw_w": round(sum(draw), 2) if draw else None,
+            "charge_limit": power_charge_conf(), "cpu": power_cpu(), "zram": power_zram(),
             "zram_generator": os.path.exists(ZRAM_GEN), "trim": ctx.query(["systemctl", "is-enabled", "fstrim.timer"], any_rc=True).strip() or None}
 
 
 def power_print(st):
     for k, what in POWER:
-        print("%s %-12s %s" % ("●" if k == st["profile"] else " ", k, what))
+        ac, dc = st["tuned_profiles"][k]
+        print("%s %-12s %s (tuned %s%s)" % ("●" if k == st["profile"] else " ", k, what, ac, "; %s on battery" % dc if dc != ac else ""))
     ap = st["auto_profiles"]
     if st["auto"] is None:
         print("  %-12s not on this system: sudo dnf install silikos-power" % "auto")
@@ -3897,6 +4098,8 @@ def power_print(st):
     else:
         src = "mains (no battery)" if st["mains"] is not False else "no battery reported"
     print("%-14s %s" % ("power source", src))
+    for b in st["batteries"]:
+        print("%-14s %s" % (b["name"], power_battery_line(b)))
     drv = {"tuned-ppd": "tuned through tuned-ppd (the system menu's power profiles)", "power-profiles-daemon": "power-profiles-daemon",
            "tuned": "tuned (no power-profiles service: the system menu shows no profiles)"}.get(st["driver"] or "", "none: sudo dnf install tuned tuned-ppd")
     print("%-14s %s" % ("driver", drv))
@@ -3936,7 +4139,7 @@ def power_set(ctx, word):
     elif driver == "tuned":
         if ctx.query(["systemctl", "is-active", "tuned.service"]).strip() != "active" and not ctx.dry:
             die("tuned is not running: sudo systemctl enable --now tuned")
-        ctx.run(as_root(["tuned-adm", "profile", POWER_TUNED[word][1 if power_source()[0] else 0]]))
+        ctx.run(as_root(["tuned-adm", "profile", power_tuned()[word][1 if power_source()[0] else 0]]))
     else:
         die("no power profiles on this system: sudo dnf install tuned tuned-ppd")
     if ctx.dry:
@@ -3977,6 +4180,414 @@ def power_apply(ctx, a):
     now = POWER_WORD.get(st["ppd"] or "") if st["driver"] in ("tuned-ppd", "power-profiles-daemon") else st["profile"]
     print("silik: on %s: %s%s" % ("battery" if on_battery else "mains power", word, " (already)" if now == word else ""))
     return 0 if now == word else power_set(ctx, word)
+
+
+def power_tee(ctx, path, value):
+    """VALUE written to a kernel file as root, printed as the shell line that does the same; the exit code of tee"""
+    argv = as_root(["tee", path])
+    if not ctx.quiet:
+        print("$ echo %s | %s" % (shlex.quote(value), " ".join(shlex.quote(x) for x in argv)), flush=True)
+    if ctx.dry:
+        return 0
+    ctx.note(argv)
+    try:
+        return subprocess.run(argv, input=value + "\n", universal_newlines=True, stdout=subprocess.DEVNULL).returncode
+    except FileNotFoundError:
+        die("%s is not installed" % argv[0])
+
+
+def power_conf_set(ctx, key, value):
+    """KEY = VALUE in /etc/silikos/power.conf, whether or not the file had the line (one sed, printed: the new line
+    after the last one, the old one taken out; in that order, so that an old line that is the last one is replaced too)"""
+    ctx.run(as_root(["sed", "-i", "-e", "$a %s = %s" % (key, value), "-e", "/^%s *=/d" % key, POWER_CONF]))
+
+
+def power_charge(ctx, a):
+    """the battery's charge limit, for its life: the percent it charges to, written to charge_control_end_threshold
+    of the batteries whose driver gives the kernel one (it is the laptop's firmware that stops the charge). Kept in
+    power.conf and written again at each start by silikos-power-charge.service, since firmware often forgets it
+    [A]. apply: what that service runs. A laptop without the file: said, nothing written"""
+    apply = a.limit == "apply"
+    bats = power_batteries()
+    asked = power_charge_conf()
+
+    def end(b):
+        return os.path.join(SYSFS, "class", "power_supply", b["name"], "charge_control_end_threshold")
+    with_limit = [b for b in bats if b["charge_limit"] is not None]
+    if a.limit is None:
+        for b in bats:
+            print("%-14s %s" % (b["name"], "no charge limit: the kernel gives none for this battery (no charge_control_end_threshold)" if b["charge_limit"] is None
+                                else "charges to %d %%%s%s" % (b["charge_limit"], " (no limit)" if b["charge_limit"] >= 100 else "",
+                                                               "; starts charging below %d %%" % b["charge_start"] if b["charge_start"] else "")))
+        if not bats:
+            print("%-14s %s" % ("battery", "none here: no charge limit to set"))
+        unit = ctx.query(["systemctl", "is-enabled", POWER_CHARGE], any_rc=True).strip()
+        print("%-14s %s" % ("asked", "nothing: silik power charge 80" if asked is None else "%d %%, %s" % (
+            asked, "written again at each start (%s)" % POWER_CHARGE if unit == "enabled" else "not written again at a start: silik power charge %d" % asked)))
+        return 0 if with_limit else 1
+    if apply:
+        if asked is None:
+            print("silik: no charge limit was asked for (silik power charge 80)")
+            return 0
+        n = asked
+    else:
+        if not a.limit.isdigit() or not 1 <= int(a.limit) <= 100:
+            die("silik power charge [N | apply]: N is the percent the battery charges to, 1 to 100 (80 for its life, 100 for no limit)", 2)
+        n = int(a.limit)
+    if not bats:
+        print("silik: no battery here: no charge limit to set; nothing written")
+        return 0 if apply else 1
+    if not with_limit:
+        print("silik: %s: the kernel gives no charge limit for this laptop (no charge_control_end_threshold: its driver has none); nothing written"
+              % ", ".join(b["name"] for b in bats))
+        return 0 if apply else 1
+    rc = 0
+    for b in with_limit:
+        if b["charge_start"] is not None and b["charge_start"] > n:
+            print("silik: %s starts charging below %d %% (charge_control_start_threshold), above the limit asked: the kernel may refuse it until that one is lowered"
+                  % (b["name"], b["charge_start"]))
+        if power_tee(ctx, end(b), str(n)):
+            print("silik: the kernel did not take %d for %s" % (n, b["name"]), file=sys.stderr)
+            rc = 1
+    if not apply:
+        if os.path.exists(os.path.join(UNIT_DIR, POWER_CHARGE)) or ctx.dry:
+            if asked != n:
+                power_conf_set(ctx, "charge_limit", n)
+            if ctx.query(["systemctl", "is-enabled", POWER_CHARGE], any_rc=True).strip() != "enabled":
+                ctx.run(as_root(["systemctl", "enable", POWER_CHARGE]))
+        else:
+            print("silik: a laptop's firmware may forget the limit when it is switched off; the package silikos-power writes it again at each start: "
+                  "sudo dnf install silikos-power, then this command again")
+    if ctx.dry:
+        return 0
+    for b in with_limit:
+        now = sys_int(end(b))
+        if now != n:
+            print("silik: %s reads %s, not %d" % (b["name"], "nothing" if now is None else now, n), file=sys.stderr)
+            rc = 1
+        else:
+            print("silik: %s charges to %d %%%s" % (b["name"], n, " (no limit)" if n >= 100 else ""))
+    return rc
+
+
+def power_profiles_cmd(ctx, a):
+    """the tuned profiles behind the words: `silikos` puts SilikOS's own saver (silikos-saver: the base's powersave
+    and what it leaves out on a laptop) behind `saver`, `base` puts the base's back. With tuned-ppd it is one line of
+    its /etc/tuned/ppd.conf (the base's configuration file: changed here, printed, never by a package script), read
+    when tuned-ppd starts; without it, a line of power.conf that `silik power saver` reads"""
+    tmap = power_tuned()
+    if a.which is None:
+        now = power_profiles_now(tmap)
+        for k, what in (("base", ", ".join("%s = tuned %s" % (w, POWER_TUNED[w][0]) for w in POWER_OWN)),
+                        ("silikos", ", ".join("%s = tuned %s" % (w, n) for w, n in POWER_OWN.items())
+                         + ": the base's and, left out by it, USB autosuspend, PCI runtime power management, Wi-Fi power save")):
+            print("%s %-12s %s" % ("●" if k == now else " ", k, what))
+        if now == "other":
+            print("  %-12s %s" % ("now", ", ".join("%s = tuned %s" % (w, tmap[w][0]) for w in POWER_OWN) + " (%s, changed by hand)" % PPD_CONF))
+        missing = [n for n in POWER_OWN.values() if not power_profile_dir(n)]
+        if missing:
+            print("  %-12s %s" % ("", "tuned profile %s is not on this system: sudo dnf install silikos-power" % ", ".join(missing)))
+        return 0
+    own = a.which == "silikos"
+    missing = [n for n in POWER_OWN.values() if not power_profile_dir(n)]
+    if own and missing and not ctx.dry:
+        die("the tuned profile %s comes with the package silikos-power: sudo dnf install silikos-power" % ", ".join(missing))
+    want = {w: (n if own else POWER_TUNED[w][0]) for w, n in POWER_OWN.items()}
+    st = power_state(ctx)
+    if os.path.exists(PPD_CONF):
+        script = []
+        for w, name in sorted(want.items()):
+            script += ["-e", r"/^\[profiles\]/,/^\[/s/^%s *=.*/%s=%s/" % (POWER_PPD[w], POWER_PPD[w], name)]
+        ctx.run(as_root(["sed", "-i"] + script + [PPD_CONF]))
+        # (tuned-ppd reads its file when it starts; started again, it sets the profile it had, by the new map. Not
+        # running, it is left so: the bus starts it when it is next asked)
+        if ctx.run(as_root(["systemctl", "try-restart", "tuned-ppd.service"]), check=False)[0]:
+            print("silik: tuned-ppd was not started again: it reads the new map at its next start", file=sys.stderr)
+    if os.path.exists(POWER_CONF):
+        power_conf_set(ctx, "profiles", a.which)
+    if not os.path.exists(PPD_CONF) and st["driver"] == "tuned" and st["tuned_running"] and st["profile"] in want and st["tuned"] != want[st["profile"]]:
+        ctx.run(as_root(["tuned-adm", "profile", want[st["profile"]]]))      # (the profile in use is one that changed)
+    if ctx.dry:
+        return 0
+    now = power_profiles_now()
+    if now != a.which:
+        print("silik: the profiles read %s, not %s" % (now, a.which), file=sys.stderr)
+        return 1
+    print("silik: %s" % ", ".join("%s is tuned %s" % (w, n) for w, n in sorted(want.items())))
+    return 0
+
+
+# `silik power check`: what decides a laptop's consumption on this machine, read from /sys and /proc (and the
+# profile, as `silik power` reads it; the Wi-Fi's power save from `iw`, which the kernel gives no file for).
+# power_check_probe reads, power_check_rows judges what was read and runs nothing (the tests feed it made-up
+# machines). A row: ok, warn (the value costs power while the machine is on battery or in the saver profile, or is
+# not what the profile in use sets), unknown (no file to read: never ok), the value, and the commands that change
+# it. Nothing is measured here: a row says what a setting is, not how many watts it is worth.
+def power_check_probe(ctx):
+    st = power_state(ctx)
+
+    def ls(*rel):
+        try:
+            return sorted(os.listdir(os.path.join(SYSFS, *rel)))
+        except OSError:
+            return []
+
+    def rd(*rel):
+        return read(os.path.join(SYSFS, *rel)).strip()
+    govs, epps = {}, {}
+    for n in ls("devices/system/cpu"):
+        if not (n.startswith("cpu") and n[3:].isdigit()):
+            continue
+        g = rd("devices/system/cpu", n, "cpufreq/scaling_governor")
+        if g:
+            govs[g] = govs.get(g, 0) + 1
+            e = rd("devices/system/cpu", n, "cpufreq/energy_performance_preference")
+            if e:
+                epps[e] = epps.get(e, 0) + 1
+    wifi = []
+    for i in ls("class/net"):
+        if os.path.exists(os.path.join(SYSFS, "class/net", i, "wireless")) or os.path.exists(os.path.join(SYSFS, "class/net", i, "phy80211")):
+            out = ctx.query(["iw", "dev", i, "get", "power_save"]).strip().lower()          # "Power save: on"
+            wifi.append({"iface": i, "power_save": True if out.endswith(": on") else False if out.endswith(": off") else None})
+    sata = [{"host": h, "policy": rd("class/scsi_host", h, "link_power_management_policy")} for h in ls("class/scsi_host")]
+    aspm = rd("module/pcie_aspm/parameters/policy")                                         # "[default] performance powersave powersupersave"
+    usb = []
+    for n in ls("bus/usb/devices"):
+        vid = rd("bus/usb/devices", n, "idVendor")
+        if not vid:
+            continue                                                                        # (an interface, not a device)
+        classes = set(rd("bus/usb/devices", n, i, "bInterfaceClass").lower() for i in ls("bus/usb/devices", n) if ":" in i)
+        usb.append({"dev": n, "id": "%s:%s" % (vid, rd("bus/usb/devices", n, "idProduct")), "name": rd("bus/usb/devices", n, "product") or None,
+                    "control": rd("bus/usb/devices", n, "power/control") or None,
+                    "kept": "input" if "03" in classes else "audio" if "01" in classes else "printer" if "07" in classes else None})
+    gpus = []
+    for n in ls("bus/pci/devices"):
+        if not rd("bus/pci/devices", n, "class").startswith("0x03"):
+            continue
+        drv = os.path.join(SYSFS, "bus/pci/devices", n, "driver")
+        boot = rd("bus/pci/devices", n, "boot_vga")
+        gpus.append({"slot": n, "driver": os.path.basename(os.path.realpath(drv)) if os.path.exists(drv) else None,
+                     "boot": boot == "1" if boot else None, "control": rd("bus/pci/devices", n, "power/control") or None,
+                     "status": rd("bus/pci/devices", n, "power/runtime_status") or None})
+    backlight = [{"name": n, "now": sys_int(os.path.join(SYSFS, "class/backlight", n, "brightness")),
+                  "max": sys_int(os.path.join(SYSFS, "class/backlight", n, "max_brightness"))} for n in ls("class/backlight")]
+    ppd = power_ppd_map()
+    return {"state": st, "governors": govs, "energy_preferences": epps,
+            "platform_choices": rd("firmware/acpi/platform_profile_choices").split(),
+            "mem_sleep": rd("power/mem_sleep") or None, "wifi": wifi,
+            "audio": sys_int(os.path.join(SYSFS, "module/snd_hda_intel/parameters/power_save")),
+            "sata": [h for h in sata if h["policy"]],
+            "aspm": aspm[aspm.index("[") + 1:aspm.index("]")] if "[" in aspm and "]" in aspm else aspm or None,
+            "aspm_choices": aspm.replace("[", "").replace("]", "").split(),
+            "usb": usb, "nmi_watchdog": sys_int(os.path.join(PROCFS, "sys/kernel/nmi_watchdog")), "backlight": backlight, "gpus": gpus,
+            "charge_unit": ctx.query(["systemctl", "is-enabled", POWER_CHARGE], any_rc=True).strip() or None,
+            "own_profiles": {n: bool(power_profile_dir(n)) for n in POWER_OWN.values()},
+            "ppd_missing": sorted(set(t for pair in ppd.values() for t in pair if not power_profile_dir(t))) if any(os.path.isdir(d) for d in TUNED_DIRS) else []}
+
+
+def power_check_rows(p, battery=False):
+    """the rows of `silik power check` for what power_check_probe read. BATTERY: judged as on battery"""
+    st, rows = p["state"], []
+    prof, cpu = st["profile"], st["cpu"]
+    on_battery = st["on_battery"] or battery
+    save = on_battery or prof == "saver"            # a setting that costs power is a warning
+    why = "on battery" if st["on_battery"] else "judged as on battery" if battery else "the profile is saver"
+    # what the profile in use sets for the processor: only for tuned's own three, read from their files
+    sets = POWER_SETS.get(prof) if st["driver"] in ("tuned", "tuned-ppd") and (st["tuned"] in POWER_WORD or st["tuned"] in POWER_OWN.values()) else None
+
+    def row(i, name, state, value, change=()):
+        rows.append({"id": i, "name": name, "state": state, "value": value, "change": list(change)})
+    again = ["silik power %s   # sets it again" % prof] if prof else ["silik power balanced"]
+
+    # the batteries: what the laptop draws
+    for b in st["batteries"]:
+        row("battery-" + b["name"], "battery", "ok", "%s %s %%, %s; %s" % (b["name"], "?" if b["percent"] is None else b["percent"],
+                                                                         (b["status"] or "status unknown").lower(), power_battery_line(b)))
+    if not st["batteries"]:
+        row("battery", "battery", "unknown", "none in /sys/class/power_supply: a desktop, or a virtual machine")
+
+    # the profile, and the automatic choice
+    tuned = " (tuned %s)" % st["tuned"] if st["tuned"] else ""
+    if not st["driver"]:
+        row("profile", "profile", "unknown", "no power profiles on this system", ["sudo dnf install tuned tuned-ppd"])
+    elif not prof:
+        row("profile", "profile", "unknown", "tuned's profile is %s, not one of the three" % st["tuned"] if st["tuned"] else "none set (is tuned running?)",
+            ["silik power balanced"] if st["tuned_running"] else ["sudo systemctl enable --now tuned"])
+    elif prof == "performance" and (st["on_battery"] or (battery and not st["auto"])):
+        row("profile", "profile", "warn", "performance%s %s: full speed, the most power" % (tuned, "on battery" if st["on_battery"] else "and it stays on battery (auto is off)"),
+            ["silik power auto", "silik power balanced"])
+    else:
+        row("profile", "profile", "ok", prof + tuned, ["silik power performance | balanced | saver"])
+    ap = st["auto_profiles"]
+    if st["auto"] is None:
+        row("auto", "auto", "unknown", "the package silikos-power is not installed", ["sudo dnf install silikos-power"])
+    elif st["auto"]:
+        row("auto", "auto", "ok", "on: %s on mains power, %s on battery" % (ap["ac"], ap["battery"]), ["silik power auto --ac P --battery P"])
+    else:
+        row("auto", "auto", "ok", "off: the profile stays as it is on mains power and on battery", ["silik power auto"])
+    own = ", ".join("%s is tuned %s" % (w, st["tuned_profiles"][w][0]) for w in sorted(POWER_OWN))
+    if p["ppd_missing"]:
+        row("profiles", "tuned profiles", "warn", "%s names %s, not on this system: tuned-ppd does not start with that" % (PPD_CONF, ", ".join(p["ppd_missing"])),
+            ["silik power profiles base"])
+    else:
+        row("profiles", "tuned profiles", "ok", "%s (%s)" % (own, {"silikos": "SilikOS's", "base": "the base's", "other": "set by hand"}[st["profiles"]]),
+            ["silik power profiles silikos | base"])
+
+    # the processor: against what the profile in use sets
+    def cpu_row(i, name, value, counts, missing):
+        if not value and not counts:
+            return row(i, name, "unknown", missing)
+        said = ", ".join("%s on %d" % kv for kv in sorted(counts.items())) if len(counts) > 1 else value
+        want = sets[i.replace("-", "_")] if sets else None
+        vals = set(counts) or {value}
+        if want and not vals <= set(want):
+            return row(i, name, "warn", "%s: the profile %s sets %s" % (said, prof, " or ".join(want)), again)
+        if not want and save and "performance" in vals:
+            return row(i, name, "warn", "%s (%s)" % (said, why), ["silik power saver", "silik power balanced"])
+        row(i, name, "ok", said, ["silik power performance | balanced | saver"])
+    cpu_row("governor", "governor", cpu["governor"], p["governors"], "no cpufreq in /sys: a virtual machine, or a container")
+    cpu_row("energy-preference", "energy preference", cpu["energy_preference"], p["energy_preferences"],
+            "%s gives none (no energy_performance_preference)" % (cpu["driver"] or "this machine"))
+    pp, choices = cpu["platform_profile"], p["platform_choices"]
+    if not pp:
+        row("platform-profile", "platform profile", "unknown", "this firmware gives none (no /sys/firmware/acpi/platform_profile)")
+    elif sets and set(sets["platform_profile"]) & set(choices) and pp not in sets["platform_profile"]:
+        row("platform-profile", "platform profile", "warn", "%s: the profile %s sets %s (the firmware has: %s)" % (
+            pp, prof, " or ".join(sets["platform_profile"]), " ".join(choices)), again)
+    else:
+        row("platform-profile", "platform profile", "ok", pp + (" (the firmware has: %s)" % " ".join(choices) if choices else ""),
+            ["silik power performance | balanced | saver"])
+    if cpu["boost"] is None:
+        row("boost", "boost", "unknown", "the machine does not say (no cpufreq/boost, no intel_pstate/no_turbo)")
+    elif sets and cpu["boost"] != sets["boost"]:
+        row("boost", "boost", "warn", "%s: the profile %s turns it %s" % ("on" if cpu["boost"] else "off", prof, "on" if sets["boost"] else "off"), again)
+    else:
+        row("boost", "boost", "ok", "on" if cpu["boost"] else "off", ["silik power performance | balanced | saver"])
+
+    # suspend: the kernel takes the firmware's word for which one; it is said, not judged
+    ms = p["mem_sleep"]
+    if not ms:
+        row("suspend", "suspend", "unknown", "no /sys/power/mem_sleep")
+    else:
+        now = ms[ms.index("[") + 1:ms.index("]")] if "[" in ms and "]" in ms else ms
+        others = [w for w in ms.replace("[", "").replace("]", "").split() if w != now]
+        what = {"s2idle": "s2idle (suspend to idle: the processor idles, the devices are in their low-power states)",
+                "deep": "deep (suspend to RAM: everything but the memory is powered down)"}.get(now, now)
+        row("suspend", "suspend", "ok", what + ("; also offered: %s" % " ".join(others) if others else "; the only one this firmware offers"),
+            ["echo %s | sudo tee /sys/power/mem_sleep   # until the next start" % o for o in others if o in ("deep", "s2idle")])
+
+    # the devices
+    if not p["wifi"]:
+        row("wifi", "Wi-Fi power save", "unknown", "no Wi-Fi interface in /sys/class/net")
+    for w in p["wifi"]:
+        on = ["sudo iw dev %s set power_save on" % w["iface"]]
+        if w["power_save"] is None:
+            row("wifi-" + w["iface"], "Wi-Fi power save", "unknown", "%s: iw did not say" % w["iface"], ["iw dev %s get power_save   # sudo dnf install iw" % w["iface"]])
+        elif w["power_save"]:
+            row("wifi-" + w["iface"], "Wi-Fi power save", "ok", "%s: on" % w["iface"], ["sudo iw dev %s set power_save off" % w["iface"]])
+        else:
+            row("wifi-" + w["iface"], "Wi-Fi power save", "warn" if save else "ok", "%s: off%s" % (w["iface"], " (%s)" % why if save else ""), on)
+    hda = "/sys/module/snd_hda_intel/parameters/power_save"
+    if p["audio"] is None:
+        row("audio", "audio power save", "unknown", "no snd_hda_intel loaded (no %s)" % hda)
+    elif p["audio"] <= 0:
+        row("audio", "audio power save", "warn" if save else "ok", "off: the sound card's codec never sleeps%s" % (" (%s)" % why if save else ""),
+            ["echo 1 | sudo tee %s   # seconds idle; 1 is this kernel's own default" % hda])
+    else:
+        row("audio", "audio power save", "ok", "the codec sleeps after %d s idle" % p["audio"], ["echo N | sudo tee %s   # seconds idle; 0: never" % hda])
+    alpm = "/sys/class/scsi_host/host*/link_power_management_policy"
+    if not p["sata"]:
+        row("sata", "SATA link power", "unknown", "no SATA host with a link power policy (a machine with only NVMe disks has none)")
+    else:
+        pol = {}
+        for h in p["sata"]:
+            pol.setdefault(h["policy"], []).append(h["host"])
+        said = ", ".join("%s (%s)" % (k, " ".join(v)) for k, v in sorted(pol.items()))
+        bad = save and "max_performance" in pol
+        row("sata", "SATA link power", "warn" if bad else "ok", said + (" (%s)" % why if bad else ""), ["echo med_power_with_dipm | sudo tee %s" % alpm])
+    if not p["aspm"]:
+        row("aspm", "PCIe ASPM", "unknown", "no /sys/module/pcie_aspm/parameters/policy")
+    else:
+        bad = save and p["aspm"] == "performance"
+        row("aspm", "PCIe ASPM", "warn" if bad else "ok", "%s%s%s" % (p["aspm"], " (as the firmware set each link)" if p["aspm"] == "default" else "",
+                                                                    " (%s)" % why if bad else ""),
+            ["echo powersave | sudo tee /sys/module/pcie_aspm/parameters/policy   # one of: %s" % " ".join(p["aspm_choices"])])
+    usb = [u for u in p["usb"] if u["control"]]
+    if not usb:
+        row("usb", "USB autosuspend", "unknown", "no USB device in /sys/bus/usb/devices")
+    else:
+        awake = [u for u in usb if u["control"] != "auto"]
+        costly = [u for u in awake if not u["kept"]]
+        said = "%d of %d devices may sleep when idle" % (len(usb) - len(awake), len(usb))
+        if awake:
+            said += "; kept awake: " + ", ".join("%s %s%s" % (u["dev"], u["id"], " (%s)" % u["kept"] if u["kept"] else "") for u in awake)
+        fix = ["echo auto | sudo tee /sys/bus/usb/devices/%s/power/control" % u["dev"] for u in costly]
+        if costly and all(p["own_profiles"].values()):
+            fix = ["silik power profiles silikos   # then `silik power saver` does it"] + fix if st["profiles"] != "silikos" else ["silik power saver"] + fix
+        bad = save and bool(costly)
+        row("usb", "USB autosuspend", "warn" if bad else "ok", said + (" (%s)" % why if bad else ""), fix)
+    nmi = p["nmi_watchdog"]
+    if nmi is None:
+        row("nmi-watchdog", "NMI watchdog", "unknown", "no /proc/sys/kernel/nmi_watchdog")
+    else:
+        bad = save and nmi != 0
+        row("nmi-watchdog", "NMI watchdog", "warn" if bad else "ok", ("on" if nmi else "off") + (" (%s)" % why if bad else ""),
+            ["sudo sysctl kernel.nmi_watchdog=%d" % (0 if nmi else 1)])
+    lit = [b for b in p["backlight"] if b["now"] is not None and b["max"]]
+    if not lit:
+        row("brightness", "brightness", "unknown", "no backlight in /sys/class/backlight (an external display has none)")
+    for b in lit:
+        row("brightness-" + b["name"], "brightness", "ok", "%s: %d %% (%d of %d)" % (b["name"], round(100.0 * b["now"] / b["max"]), b["now"], b["max"]),
+            ["echo N | sudo tee /sys/class/backlight/%s/brightness   # 0 to %d; or the brightness keys" % (b["name"], b["max"])])
+    if not p["gpus"]:
+        row("graphics", "graphics card", "unknown", "no display device in /sys/bus/pci/devices")
+    for g in p["gpus"]:
+        i, name = "graphics-" + g["slot"], "graphics card"
+        said = "%s %s: " % (g["slot"], g["driver"] or "no driver")
+        ctl = "/sys/bus/pci/devices/%s/power/control" % g["slot"]
+        if not g["control"]:
+            row(i, name, "unknown", said + "no power/control")
+        elif g["control"] == "auto":
+            row(i, name, "ok", said + "may sleep when idle (runtime power management auto)%s" % (", now %s" % g["status"] if g["status"] else ""),
+                ["echo on | sudo tee " + ctl])
+        else:
+            # the card the firmware started the display on is in use anyway; a second one kept awake is the cost
+            bad = save and g["boot"] is False
+            row(i, name, "warn" if bad else "ok", said + "kept awake (runtime power management on)%s%s" % (
+                ", the display's card" if g["boot"] else "", " (%s)" % why if bad else ""), ["echo auto | sudo tee " + ctl])
+
+    # the charge limit
+    asked = st["charge_limit"]
+    for b in st["batteries"]:
+        i = "charge-limit-" + b["name"]
+        if b["charge_limit"] is None:
+            row(i, "charge limit", "unknown", "%s: the kernel gives none for this laptop (no charge_control_end_threshold)" % b["name"])
+        elif asked is not None and b["charge_limit"] != asked:
+            row(i, "charge limit", "warn", "%s reads %d %%; %d %% was asked for" % (b["name"], b["charge_limit"], asked), ["silik power charge %d" % asked])
+        elif asked is not None and p["charge_unit"] != "enabled":
+            row(i, "charge limit", "warn", "%s: %d %%, not written again at a start (%s is %s)" % (b["name"], asked, POWER_CHARGE, p["charge_unit"] or "not installed"),
+                ["silik power charge %d" % asked])
+        else:
+            row(i, "charge limit", "ok", "%s: %d %%%s" % (b["name"], b["charge_limit"], " (no limit)" if b["charge_limit"] >= 100 else ""),
+                ["silik power charge 80 | 100"])
+    if not st["batteries"]:
+        row("charge-limit", "charge limit", "unknown", "no battery")
+    return rows
+
+
+def power_check(ctx, a):
+    rows = power_check_rows(power_check_probe(ctx), battery=a.battery)
+    count = {k: sum(1 for r in rows if r["state"] == k) for k in ("ok", "warn", "unknown")}
+    rc = 1 if count["warn"] or count["unknown"] else 0
+    if a.json:
+        print(json.dumps({"checks": rows, "summary": count}, indent=1))
+        return rc
+    for r in rows:
+        print("%s %-8s %-18s %s" % (SEC_MARK[r["state"]], r["state"], r["name"], r["value"]))
+        for c in r["change"]:
+            print("%-29s %s: %s" % ("", {"ok": "change", "warn": "fix", "unknown": "see"}[r["state"]], c))
+    print("\n%d ok, %d warn, %d unknown: settings as they are now, not watts (nothing was measured or changed)" % (count["ok"], count["warn"], count["unknown"]))
+    return rc
 
 
 def power_zram_cmd(ctx, a):
@@ -5646,8 +6257,8 @@ def doc_rollback(st, rows):
 # read the system (the areas at once, in threads: the slow parts are other programs) and doc_check_* judge what was
 # read and run nothing, so the tests feed them made-up systems and command outputs. Nothing is changed; the read-only
 # commands it ran are listed with --verbose and in --json.
-DOCTOR_AREAS = ("system", "security", "graphics", "hardware", "bench", "eda", "windows", "network")
-DOCTOR_ALIASES = {"sys": "system", "secure": "security", "gpu": "graphics", "hw": "hardware", "drivers": "hardware", "dev": "bench", "can": "bench",
+DOCTOR_AREAS = ("system", "security", "graphics", "hardware", "power", "bench", "eda", "windows", "network")
+DOCTOR_ALIASES = {"sys": "system", "secure": "security", "gpu": "graphics", "hw": "hardware", "drivers": "hardware", "battery": "power", "dev": "bench", "can": "bench",
                   "win": "windows", "net": "network"}
 # the SilikOS packages the kickstart installs
 SILIKOS_PKGS = ("silikos-branding", "silikos-desktop", "silikos-security", "silik-tools", "silik-command",
@@ -7140,8 +7751,45 @@ def doc_check_hardware(st):
     return rows
 
 
+class DocQuery:
+    """the read-only commands of `silik power`, through the doctor's list of what it ran"""
+
+    def query(self, argv, any_rc=False):
+        rc, out = doc_cmd(argv)
+        return out if rc == 0 or (any_rc and rc is not None) else ""
+
+
+def doc_probe_power():
+    p = power_check_probe(DocQuery())
+    p["container"] = sec_container()
+    return p
+
+
+def doc_check_power(p):
+    """the power area: the profile, a row for each setting `silik power check` warns of, and one for the rest. A
+    setting this machine does not have (a desktop has no battery) is counted, not shown: `silik power check` has
+    every row"""
+    rows = []
+    judged = power_check_rows(p)
+    for r in judged:
+        if r["id"] == "profile" or r["state"] == "warn":
+            doc_row(rows, "power", r["id"], r["name"], r["state"], r["value"], r["change"] or ["silik power check"])
+    # (the kernel's settings: the rows about silik's own choices, auto and whose profiles, are not a reading of them)
+    rest = [r for r in judged if r["id"] not in ("profile", "auto", "profiles") and r["state"] != "warn"]
+    seen = sum(1 for r in rest if r["state"] == "ok")
+    absent = len(rest) - seen
+    if seen:
+        doc_row(rows, "power", "settings", "power settings", "ok", "%d settings read%s (silik power check lists them)" % (
+            seen, "; %d this machine does not have" % absent if absent else ""))
+    else:
+        doc_row(rows, "power", "settings", "power settings", "unknown", "no power setting to read in /sys%s" % (
+            " (inside a container)" if p["container"] else ": a virtual machine?"), ["silik power check"])
+    return rows
+
+
 DOCTOR = {"system": (doc_probe_system, doc_check_system), "security": (doc_probe_security, doc_check_security),
           "graphics": (doc_probe_graphics, doc_check_graphics), "hardware": (doc_probe_hardware, doc_check_hardware),
+          "power": (doc_probe_power, doc_check_power),
           "bench": (doc_probe_bench, doc_check_bench),
           "eda": (doc_probe_eda, doc_check_eda), "windows": (doc_probe_windows, doc_check_windows),
           "network": (doc_probe_network, doc_check_network)}
@@ -8534,7 +9182,7 @@ def parser(only=None):
     x.add_argument("--qt", action="store_true", help="Qt 5 programs take the accent in use (the shell runs it)")
     x.add_argument("--json", action="store_true"); x.set_defaults(fn=cmd_look)
     x = s.add_parser("doctor", help="is this workstation healthy, and what to do: ok / warn / bad / unknown and the command that fixes each")
-    x.add_argument("areas", nargs="*", metavar="AREA", help="system security graphics hardware bench eda windows network (default: all)")
+    x.add_argument("areas", nargs="*", metavar="AREA", help="system security graphics hardware power bench eda windows network (default: all)")
     x.add_argument("--json", action="store_true"); x.add_argument("--verbose", action="store_true", help="also the read-only commands it ran")
     x.set_defaults(fn=cmd_doctor)
     x = s.add_parser("session", help="this session: lock | logout | off (the last two ask first)")
@@ -8611,11 +9259,13 @@ def parser(only=None):
         x = v.add_parser("app"); x.add_argument("--exe", required=True); x.add_argument("--user", required=True)
         x.add_argument("--host", default="127.0.0.1:3389"); x.set_defaults(fn=vm_app)
 
-    pw = s.add_parser("power", help="the power profile: performance | balanced | saver | auto (no command: which is in use); zram swap, trim")
+    pw = s.add_parser("power", help="the power profile: performance | balanced | saver | auto (no command: which is in use, what the battery draws); "
+                                    "check, charge limit, zram swap, trim")
     pw.add_argument("--json", action="store_true"); pw.set_defaults(fn=power_show)
     pw = pw.add_subparsers(dest="cmd")
     if only in (None, "power"):
-        x = pw.add_parser("show", help="the profile in use, the power source, what the processor was told"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=power_show)
+        x = pw.add_parser("show", help="the profile in use, the power source, what the battery draws and holds, what the processor was told")
+        x.add_argument("--json", action="store_true"); x.set_defaults(fn=power_show)
         for k, what in POWER:
             x = pw.add_parser(k, help=what + "; stops auto"); x.set_defaults(fn=power_profile)
         x = pw.add_parser("auto", help="one profile on mains power, another on battery, chosen at each plug and unplug (package silikos-power)")
@@ -8623,6 +9273,15 @@ def parser(only=None):
         x.add_argument("--battery", choices=[k for k, _ in POWER], help="on battery (default: balanced)")
         x.set_defaults(fn=power_auto)
         x = pw.add_parser("apply", help="sets the profile auto chooses for the power source now (the service silikos-power-auto runs it)"); x.set_defaults(fn=power_apply)
+        x = pw.add_parser("check", help="what decides this machine's consumption, each setting ok / warn / unknown with the command that changes it; "
+                                        "exit 0 all ok, 1 warn or unknown")
+        x.add_argument("--battery", action="store_true", help="judge as on battery, while on mains power")
+        x.add_argument("--json", action="store_true"); x.set_defaults(fn=power_check)
+        x = pw.add_parser("charge", help="the battery's charge limit: N percent (80 for its life, 100 for none), kept across restarts; no argument: what it is")
+        x.add_argument("limit", nargs="?", metavar="N | apply", help="1 to 100; apply: the limit of power.conf again (the service silikos-power-charge runs it)")
+        x.set_defaults(fn=power_charge)
+        x = pw.add_parser("profiles", help="the tuned profiles behind the words: silikos (its own saver: the base's and what that leaves out on a laptop) | base")
+        x.add_argument("which", nargs="?", choices=["silikos", "base"]); x.set_defaults(fn=power_profiles_cmd)
         x = pw.add_parser("zram", help="swap in compressed memory (zram-generator): on | off (no argument: its state)")
         x.add_argument("action", nargs="?", choices=["on", "off"]); x.set_defaults(fn=power_zram_cmd)
         x = pw.add_parser("trim", help="the SSD told weekly which blocks are free (fstrim.timer): on | off")
