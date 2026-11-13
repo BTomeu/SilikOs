@@ -455,13 +455,19 @@ def run_window(query, theme, lang, started=None):
     import gi
     gi.require_version("Gtk", "3.0")
     gi.require_version("Gdk", "3.0")
-    from gi.repository import Gdk, Gtk, Pango
+    from gi.repository import Gdk, GLib, Gtk, Pango
 
     t = TEXT[lang]
     items = all_items(lang, started)
     css = Gtk.CssProvider()
     vals = css_values(theme, Gdk.Screen.get_default().is_composited(), glass_mode())
-    css.load_from_data((CSS % vals).encode())
+    try:
+        css.load_from_data((CSS % vals).encode())
+    except GLib.Error:
+        # (seen in the rig, 13/11/2026, about once in thirty openings on a busy machine: GTK refused this stylesheet with
+        # "Invalid number for color value" at its first number, and the bar did not open. The sheet is valid and the
+        # next reading takes it; why the first did not is not known [A])
+        css.load_from_data((CSS % vals).encode())
     Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
     win = Gtk.Window(title="SilikOS COMMAND")

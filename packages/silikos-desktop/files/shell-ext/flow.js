@@ -693,13 +693,14 @@ var Mica = class Mica {
         this._mask = new RoundMask();
         this.actor.add_effect(this._mask);
         this._glass.add_effect(new Shell.BlurEffect({ mode: Shell.BlurMode.ACTOR, sigma: mode.sigma * s, brightness: 1 }));
-        this._wallBox = new Clutter.Actor();             /* the wallpaper, and over it the windows' pictures */
+        /* the wallpaper in a box of its own (the shell puts a new wallpaper's actor at the bottom of its box); over it,
+           straight in the glass, the windows' pictures (in a box of their own, two pictures left the rest of the box
+           empty, the wallpaper too: a black field in the COMMAND bar's glass; seen in the rig) */
+        this._wallBox = new Clutter.Actor();
         this._glass.add_child(this._wallBox);
         this._bg = new Background.BackgroundManager({ container: this._wallBox, monitorIndex: monitor, controlPosition: false });
         this._addSig = this._wallBox.connect('actor-added', () => this._wall());       /* (a new wallpaper's actor) */
         if (this._windows) {
-            this._winBox = new Clutter.Actor();
-            this._glass.add_child(this._winBox);
             this._stills = new Map();                        /* window actor -> its picture */
             this._tracked = new Map();                       /* window actor -> [[object, signal id]...] */
             this._drew = new Map();                          /* window actors that drew since their picture was taken (-> tries) */
@@ -736,6 +737,7 @@ var Mica = class Mica {
         const mon = Main.layoutManager.monitors[this._mon];
         if (!mon || !this._at) return;
         for (const c of this._wallBox.get_children()) c.set_position(mon.x - this._at[0] + this._m, mon.y - this._at[1] + this._m);
+        this._glass.queue_redraw();                          /* (the whole glass: see _winsNow) */
     }
 
     /* ---- the windows: watched while the pane is on the screen */
@@ -812,29 +814,39 @@ var Mica = class Mica {
             if (f.x < x + w + r && f.x + f.width > x - r && f.y < y + h + r && f.y + f.height > y - r) want.push([a, f]);
         }
         const wanted = new Set(want.map(([a]) => a));
-        let again = false;
-        for (const a of Array.from(this._tracked.keys())) if (!here.has(a)) this._untrack(a);
-        for (const [a, c] of Array.from(this._stills)) if (!wanted.has(a)) { c.destroy(); this._stills.delete(a); this._drew.delete(a); }
+        let again = false, changed = false;
+        for (const a of Array.from(this._tracked.keys())) if (!here.has(a)) { changed = changed || this._stills.has(a); this._untrack(a); }
+        for (const [a, c] of Array.from(this._stills)) if (!wanted.has(a)) { c.destroy(); this._stills.delete(a); this._drew.delete(a); changed = true; }
         want.forEach(([a, f], i) => {
             let c = this._stills.get(a);
             if (!c) {
                 c = new Clutter.Actor();
                 this._stills.set(a, c);
-                this._winBox.add_child(c);
+                this._glass.add_child(c);
                 this._drew.set(a, 0);
+                changed = true;
             }
             if (this._drew.has(a)) {                         /* its contents as they are now */
                 let content = null;
                 try { content = Shell.util_get_content_for_window_actor(a, f); } catch (e) { /* a window with no contents yet */ }
-                if (content) { c.content = content; this._drew.delete(a); }
+                if (content) { c.content = content; this._drew.delete(a); changed = true; }
                 /* (none yet, as a window just brought back from its key: asked again STILL_MS later, a few times; then
                    at its next drawing) */
                 else if (this._drew.get(a) < STILL_TRIES) { this._drew.set(a, this._drew.get(a) + 1); again = true; }
             }
-            c.set_position(f.x - x + m, f.y - y + m);
-            c.set_size(f.width, f.height);
-            if (this._winBox.get_child_at_index(i) !== c) this._winBox.set_child_at_index(c, i);
+            const px = f.x - x + m, py = f.y - y + m;
+            if (c.x !== px || c.y !== py || c.width !== f.width || c.height !== f.height) {
+                c.set_position(px, py);
+                c.set_size(f.width, f.height);
+                changed = true;
+            }
+            if (this._glass.get_child_at_index(i + 1) !== c) { this._glass.set_child_at_index(c, i + 1); changed = true; }    /* (0: the wallpaper) */
         });
+        /* the whole glass is drawn again, not only where a picture changed: the wallpaper's actor draws itself only
+           inside the part of the screen being redrawn, and a glass made again while only a picture's rectangle was
+           being redrawn was left without wallpaper everywhere else (a black field in the pane at its next drawing;
+           seen in the rig in the COMMAND bar) */
+        if (changed) this._glass.queue_redraw();
         if (again) this._stillSoon();
         else if (!this._stills.size && this._stillId) { GLib.source_remove(this._stillId); this._stillId = 0; }
     }
