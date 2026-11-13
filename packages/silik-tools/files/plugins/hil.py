@@ -880,7 +880,7 @@ class CanBus:
                     raise BenchError("the CAN interface %s is down: silik dev can up %s 500k (its bit rate)" % (self.channel, self.channel))
                 self.bus = can.Bus(interface="socketcan", channel=self.channel, fd=bool(d.get("fd")))
                 self.stamps, self.echo = "kernel", False
-                if d.get("timestamps") == "hardware":
+                if d.get("timestamps") == "hardware" and own:      # (a simulated device's end reads through python-can)
                     stamp_enable(self.bus.socket)
                     self.stamps, self.hw = "hardware", True
         except BenchError:
@@ -1649,39 +1649,55 @@ class Run:
                                               ",".join(row["req"]) or "-", row["why"], dur))
 
     def run(self):
-        """the whole plan; returns the result (a dict: result.json)"""
+        """the whole plan; returns the result (a dict: result.json). Ctrl-C: the step in progress is given up, the
+        rest is not run, the teardown runs all the same and the result is written; a second Ctrl-C does not cut the
+        teardown short (the bench is left safe: Ctrl-\\ ends the program at once)"""
+        import signal
         started = time.time()
-        stop_why, opened = None, False
+        stop_why, opened, interrupted, handler = None, False, False, None
         try:
-            self.bind()
-            self.timing()
-            self.open()
-            opened = True
-            self.mark = self.clock()                    # (the first step looks at the bus from here)
-        except (PlanError, BenchError) as e:           # nothing of the bench was touched by a step
-            self.bench_error = str(e)
-            stop_why = "not run: " + self.bench_error.splitlines()[0]
-        try:
+            try:
+                self.bind()
+                self.timing()
+                self.open()
+                opened = True
+                self.mark = self.clock()                # (the first step looks at the bus from here)
+            except (PlanError, BenchError) as e:        # nothing of the bench was touched by a step
+                self.bench_error = str(e)
+                stop_why = "not run: " + self.bench_error.splitlines()[0]
             for phase in ("setup", "test"):
                 for op in [o for o in self.c.steps if o["phase"] == phase]:
                     row = self.step(op, stop_why)
                     if stop_why is None and row["verdict"] in ("fail", "error") and (phase == "setup" or self.c.meta["on-fail"] == "stop"):
                         stop_why = "not run: %s %s" % (row["name"], "failed" if row["verdict"] == "fail" else "could not be done")
         except KeyboardInterrupt:
-            self.bench_error = "interrupted at the keyboard"
-            done = set(r["name"] for r in self.steps)
-            for op in [o for o in self.c.steps if o["phase"] != "teardown" and o["name"] not in done]:
-                self.step(op, "not run: interrupted")
+            interrupted = True
+            try:
+                handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
+            except ValueError:                          # (not the program's main thread)
+                pass
         try:
+            if interrupted:
+                self.bench_error = "interrupted at the keyboard"
+                for row in self.steps:
+                    if row["t_start"] is not None and row["t_end"] is None:
+                        row["t_end"], row["why"] = round(self.clock(), 6), "interrupted while it ran"
+                        self.say_step(row)
+                done = set(r["name"] for r in self.steps)
+                for op in [o for o in self.c.steps if o["phase"] != "teardown" and o["name"] not in done]:
+                    self.step(op, "not run: interrupted")
             for t in list(self.tasks):                  # nothing is left being sent
                 self.stop_task(t)
             for op in [o for o in self.c.steps if o["phase"] == "teardown"]:
-                self.step(op, None if opened else stop_why)    # (always, once the bench was opened: it is left safe)
+                # (always, once the bench was opened: it is left safe)
+                self.step(op, None if opened else stop_why or "not run: interrupted")
         finally:
             for s in self.sims:
                 if s.error and not self.bench_error:
                     self.bench_error = "the simulated device %s stopped: %s" % (s.name, s.error)
             self.close()
+            if handler is not None:
+                signal.signal(signal.SIGINT, handler)
         return self.result(started)
 
     def result(self, started):
@@ -2138,7 +2154,14 @@ def dispatch(a, dry, quiet, echo, silik_exe=None):
             env = dict(os.environ)
             if silik_exe:
                 env["SILIK_HIL_SILIK"] = json.dumps(silik_exe)
-            return subprocess.call(argv, env=env)
+            import signal
+            # Ctrl-C reaches both programs: the one that runs the plan handles it (teardown, the result); this one
+            # waits for it. (A handler, not SIG_IGN: an ignored signal would stay ignored in the program started)
+            keep = signal.signal(signal.SIGINT, lambda *a: None)
+            try:
+                return subprocess.call(argv, env=env)
+            finally:
+                signal.signal(signal.SIGINT, keep)
         if a.cmd == "run":
             print("silik hil: " + PYLAB, file=sys.stderr)
             return 2

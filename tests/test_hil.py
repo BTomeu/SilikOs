@@ -521,6 +521,26 @@ for = 150 ms
         rc, res, _ = self.run_plan(HEAD.replace("dut = mini", "dut = mini\non-fail = stop") + steps)
         self.assertEqual((rc, self.verdicts(res)), (1, {"a": "fail", "b": "not-run"}))
 
+    def test_ctrl_c_gives_up_the_step_runs_the_teardown_and_writes_the_result(self):
+        import signal
+        before = signal.getsignal(signal.SIGINT)
+
+        def keys():                    # Ctrl-C while the first step waits, and once more right after
+            time.sleep(0.3)
+            os.kill(os.getpid(), signal.SIGINT)
+            time.sleep(0.05)
+            os.kill(os.getpid(), signal.SIGINT)
+        threading.Thread(target=keys, daemon=True).start()
+        rc, res, out = self.run_plan(HEAD + "[step long]\ndo = wait\nreq = R-1\nfor = 20 s\n[step next]\ndo = wait\nfor = 1 ms\n"
+                                            "[teardown off]\ndo = can.send\nid = 0x201\ndata = 00 00\nreq = SAFE-1\n"
+                                            "[teardown settle]\ndo = wait\nfor = 200 ms\n")
+        self.assertEqual((rc, self.verdicts(res)), (2, {"long": "not-run", "next": "not-run", "off": "pass", "settle": "pass"}), out)
+        self.assertEqual((res["error"], self.step(res, "long")["why"], self.step(res, "next")["why"]),
+                         ("interrupted at the keyboard", "interrupted while it ran", "not run: interrupted"))
+        self.assertLess(res["seconds"], 5)
+        self.assertEqual(res["buses"]["can"]["sent"], 1)                # (the teardown's frame went out)
+        self.assertIs(signal.getsignal(signal.SIGINT), before)
+
     def test_a_name_the_database_does_not_have_is_the_plans_mistake(self):
         rc, res, out = self.run_plan(HEAD + "[step a]\ndo = can.expect\nmessage = Heartbeat\nwhere = Speed == 1, State == Flying\ntimeout = 1 s\n"
                                             "[step b]\ndo = can.send\nmessage = Nothing\nsignals = A = 1\n")

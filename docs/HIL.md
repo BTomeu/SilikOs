@@ -348,7 +348,9 @@ kernel CAN frame on bytes made in the test. Timeouts and "after N ms" values are
 - What is missing is said before anything runs: a firmware file, a database, a serial port, a program of
   `[commands]` that is not on the system (exit 2, no folder made).
 - A failed `[setup]` stops the tests; `[teardown]` steps run all the same (power off); cyclic sending is stopped
-  before the teardown; Ctrl-C runs the teardown and writes the result.
+  before the teardown. Ctrl-C gives up the step in progress, leaves the rest not run, **runs the teardown and writes
+  the result** (exit 2); a second Ctrl-C does not cut the teardown short (Ctrl-\ ends the program at once). Run: the
+  installed command interrupted in the middle of the example in the container.
 - The runner never brings a CAN interface up or changes its bit rate (that needs root): `silik dev can up can0 500k`
   first; a bus that is down is an exit 2 that names that command.
 
@@ -367,7 +369,7 @@ needs no extra package. USB serial ports and debug probes belong to the person a
 
 ## What was run, and what was not
 
-Run (13/11/2026): the unit tests (`tests/test_hil.py`, 49: the parser, each step type against stand-ins, a pty as the
+Run (13/11/2026): the unit tests (`tests/test_hil.py`, 50: the parser, each step type against stand-ins, a pty as the
 serial port, shell scripts as the flasher, the supply and the meter, the JUnit file against the schema's rules, the
 candump log, the timing rule with a stand-in that is 2 ms off) on Python 3.13 (host), 3.9 (the container: the
 system's) and 3.12 with python-can and cantools (the container: `silik-python`); the example on the installed
