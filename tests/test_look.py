@@ -64,13 +64,15 @@ class Look(unittest.TestCase):
         with fake_gsettings("island"):
             rc, o, _ = call("look")
             self.assertEqual(rc, 0)
-            rows = o.splitlines()
+            rows = [r for r in o.splitlines() if "wallpaper:" not in r]      # (the wallpaper's rows: tests/test_wallpaper.py)
             self.assertEqual(len(rows), 3)          # (the stand-in's accent is "island": no accent key, no accent rows)
             self.assertEqual([r.split()[0] for r in rows if r.startswith("●")], ["●"])
             self.assertTrue([r for r in rows if r.startswith("● island")])
             rc, o, _ = call("look", "--json")
             self.assertEqual(json.loads(o), {"look": "island", "looks": ["silik", "bar", "island"],
-                                             "accent": None, "accents": [k for k, _ in silik.ACCENTS], "glass": None, "glass_modes": []})
+                                             "accent": None, "accents": [k for k, _ in silik.ACCENTS], "glass": None, "glass_modes": [],
+                                             # (the stand-in's picture is "island" too: not one of the set)
+                                             "wallpaper": None, "wallpapers": silik.WALL_CHOICES, "wallpaper_other": "island"})
 
     def test_set_runs_gsettings(self):
         with fake_gsettings("bar") as log:
@@ -161,11 +163,11 @@ class BarEntries(unittest.TestCase):
         self.assertEqual([i.address for i in bar.match(bar.system_items(t), "look", t, limit=50)],
                          sorted(["look/bar", "look/island", "look/silik", "look/glass"] +
                                 ["look/glass-" + k for k, _ in silik.GLASS if k != "on"] +
-                                ["look/" + k for k, _ in silik.ACCENTS]))
+                                ["look/" + k for k, _ in silik.ACCENTS] + ["look/wallpaper-" + k for k in silik.WALL_CHOICES]))
 
     def test_completion_and_usage(self):
         comp = text("packages/silik-tools/files/silik.bash-completion")
-        self.assertIn('else COMPREPLY=($(compgen -W "silik bar island --accent --glass --json"', comp)
+        self.assertIn('else COMPREPLY=($(compgen -W "silik bar island --accent --glass --wallpaper --json"', comp)
         self.assertIn('= --glass ]; then COMPREPLY=($(compgen -W "%s"' % " ".join(k for k, _ in silik.GLASS), comp)
         self.assertIn("silik look  [LOOK] --glass %s" % "|".join(k for k, _ in silik.GLASS), text("packages/silik-tools/files/silik"))
         self.assertIn('= --accent ]; then COMPREPLY=($(compgen -W "%s"' % " ".join(k for k, _ in silik.ACCENTS), comp)

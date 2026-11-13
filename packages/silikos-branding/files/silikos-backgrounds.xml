@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE wallpapers SYSTEM "gnome-wp-list.dtd">
+<!-- the SilikOS backgrounds (tools/gen_wallpaper.py; do not edit) -->
+<wallpapers>
+  <wallpaper deleted="false">
+    <name>SilikOS wafer map</name>
+    <name xml:lang="ca">SilikOS mapa d&apos;oblia</name>
+    <name xml:lang="es">SilikOS mapa de oblea</name>
+    <filename>/usr/share/backgrounds/silikos/silikos-light.svg</filename>
+    <options>zoom</options>
+    <shade_type>solid</shade_type>
+    <pcolor>#f1f0ec</pcolor>
+    <scolor>#f1f0ec</scolor>
+  </wallpaper>
+  <wallpaper deleted="false">
+    <name>SilikOS wafer map, dark</name>
+    <name xml:lang="ca">SilikOS mapa d&apos;oblia, fosc</name>
+    <name xml:lang="es">SilikOS mapa de oblea, oscuro</name>
+    <filename>/usr/share/backgrounds/silikos/silikos-dark.svg</filename>
+    <options>zoom</options>
+    <shade_type>solid</shade_type>
+    <pcolor>#131416</pcolor>
+    <scolor>#131416</scolor>
+  </wallpaper>
+  <wallpaper deleted="false">
+    <name>SilikOS plain sheet</name>
+    <name xml:lang="ca">SilikOS full en blanc</name>
+    <name xml:lang="es">SilikOS hoja en blanco</name>
+    <filename>/usr/share/backgrounds/silikos/silikos-plain-light.svg</filename>
+    <options>zoom</options>
+    <shade_type>solid</shade_type>
+    <pcolor>#f1f0ec</pcolor>
+    <scolor>#f1f0ec</scolor>
+  </wallpaper>
+  <wallpaper deleted="false">
+    <name>SilikOS plain sheet, dark</name>
+    <name xml:lang="ca">SilikOS full en blanc, fosc</name>
+    <name xml:lang="es">SilikOS hoja en blanco, oscuro</name>
+    <filename>/usr/share/backgrounds/silikos/silikos-plain-dark.svg</filename>
+    <options>zoom</options>
+    <shade_type>solid</shade_type>
+    <pcolor>#131416</pcolor>
+    <scolor>#131416</scolor>
+  </wallpaper>
+  <wallpaper deleted="false">
+    <name>SilikOS dot grid</name>
+    <name xml:lang="ca">SilikOS quadrícula de punts</name>
+    <name xml:lang="es">SilikOS cuadrícula de puntos</name>
+    <filename>/usr/share/backgrounds/silikos/silikos-grid-light.svg</filename>
+    <options>zoom</options>
+    <shade_type>solid</shade_type>
+    <pcolor>#f1f0ec</pcolor>
+    <scolor>#f1f0ec</scolor>
+  </wallpaper>
+  <wallpaper deleted="false">
+    <name>SilikOS dot grid, dark</name>
+    <name xml:lang="ca">SilikOS quadrícula de punts, fosc</name>
+    <name xml:lang="es">SilikOS cuadrícula de puntos, oscuro</name>
+    <filename>/usr/share/backgrounds/silikos/silikos-grid-dark.svg</filename>
+    <options>zoom</options>
+    <shade_type>solid</shade_type>
+    <pcolor>#131416</pcolor>
+    <scolor>#131416</scolor>
+  </wallpaper>
+  <wallpaper deleted="false">
+    <name>SilikOS oscilloscope</name>
+    <name xml:lang="ca">SilikOS oscil·loscopi</name>
+    <name xml:lang="es">SilikOS osciloscopio</name>
+    <filename>/usr/share/backgrounds/silikos/silikos-scope-light.svg</filename>
+    <options>zoom</options>
+    <shade_type>solid</shade_type>
+    <pcolor>#f1f0ec</pcolor>
+    <scolor>#f1f0ec</scolor>
+  </wallpaper>
+  <wallpaper deleted="false">
+    <name>SilikOS oscilloscope, dark</name>
+    <name xml:lang="ca">SilikOS oscil·loscopi, fosc</name>
+    <name xml:lang="es">SilikOS osciloscopio, oscuro</name>
+    <filename>/usr/share/backgrounds/silikos/silikos-scope-dark.svg</filename>
+    <options>zoom</options>
+    <shade_type>solid</shade_type>
+    <pcolor>#131416</pcolor>
+    <scolor>#131416</scolor>
+  </wallpaper>
+  <wallpaper deleted="false">
+    <name>SilikOS printed circuit</name>
+    <name xml:lang="ca">SilikOS circuit imprès</name>
+    <name xml:lang="es">SilikOS circuito impreso</name>
+    <filename>/usr/share/backgrounds/silikos/silikos-pcb-light.svg</filename>
+    <options>zoom</options>
+    <shade_type>solid</shade_type>
+    <pcolor>#f1f0ec</pcolor>
+    <scolor>#f1f0ec</scolor>
+  </wallpaper>
+  <wallpaper deleted="false">
+    <name>SilikOS printed circuit, dark</name>
+    <name xml:lang="ca">SilikOS circuit imprès, fosc</name>
+    <name xml:lang="es">SilikOS circuito impreso, oscuro</name>
+    <filename>/usr/share/backgrounds/silikos/silikos-pcb-dark.svg</filename>
+    <options>zoom</options>
+    <shade_type>solid</shade_type>
+    <pcolor>#131416</pcolor>
+    <scolor>#131416</scolor>
+  </wallpaper>
+  <wallpaper deleted="false">
+    <name>SilikOS finite-element mesh</name>
+    <name xml:lang="ca">SilikOS malla d&apos;elements finits</name>
+    <name xml:lang="es">SilikOS malla de elementos finitos</name>
+    <filename>/usr/share/backgrounds/silikos/silikos-mesh-light.svg</filename>
+    <options>zoom</options>
+    <shade_type>solid</shade_type>
+    <pcolor>#f1f0ec</pcolor>
+    <scolor>#f1f0ec</scolor>
+  </wallpaper>
+  <wallpaper deleted="false">
+    <name>SilikOS finite-element mesh, dark</name>
+    <name xml:lang="ca">SilikOS malla d&apos;elements finits, fosc</name>
+    <name xml:lang="es">SilikOS malla de elementos finitos, oscuro</name>
+    <filename>/usr/share/backgrounds/silikos/silikos-mesh-dark.svg</filename>
+    <options>zoom</options>
+    <shade_type>solid</shade_type>
+    <pcolor>#131416</pcolor>
+    <scolor>#131416</scolor>
+  </wallpaper>
+  <wallpaper deleted="false">
+    <name>SilikOS schematic</name>
+    <name xml:lang="ca">SilikOS esquema</name>
+    <name xml:lang="es">SilikOS esquema eléctrico</name>
+    <filename>/usr/share/backgrounds/silikos/silikos-schematic-light.svg</filename>
+    <options>zoom</options>
+    <shade_type>solid</shade_type>
+    <pcolor>#f1f0ec</pcolor>
+    <scolor>#f1f0ec</scolor>
+  </wallpaper>
+  <wallpaper deleted="false">
+    <name>SilikOS schematic, dark</name>
+    <name xml:lang="ca">SilikOS esquema, fosc</name>
+    <name xml:lang="es">SilikOS esquema eléctrico, oscuro</name>
+    <filename>/usr/share/backgrounds/silikos/silikos-schematic-dark.svg</filename>
+    <options>zoom</options>
+    <shade_type>solid</shade_type>
+    <pcolor>#131416</pcolor>
+    <scolor>#131416</scolor>
+  </wallpaper>
+  <wallpaper deleted="false">
+    <name>SilikOS standard cells</name>
+    <name xml:lang="ca">SilikOS cel·les estàndard</name>
+    <name xml:lang="es">SilikOS celdas estándar</name>
+    <filename>/usr/share/backgrounds/silikos/silikos-cells-light.svg</filename>
+    <options>zoom</options>
+    <shade_type>solid</shade_type>
+    <pcolor>#f1f0ec</pcolor>
+    <scolor>#f1f0ec</scolor>
+  </wallpaper>
+  <wallpaper deleted="false">
+    <name>SilikOS standard cells, dark</name>
+    <name xml:lang="ca">SilikOS cel·les estàndard, fosc</name>
+    <name xml:lang="es">SilikOS celdas estándar, oscuro</name>
+    <filename>/usr/share/backgrounds/silikos/silikos-cells-dark.svg</filename>
+    <options>zoom</options>
+    <shade_type>solid</shade_type>
+    <pcolor>#131416</pcolor>
+    <scolor>#131416</scolor>
+  </wallpaper>
+</wallpapers>

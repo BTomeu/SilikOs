@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3840 2160" width="3840" height="2160">
+<!-- SilikOS background (tools/gen_wallpaper.py): paper and the frame of a drawing sheet -->
+<rect width="3840" height="2160" fill="#131416"/>
+<g fill="none" stroke="#ecebe7" stroke-opacity="0.26" stroke-width="2">
+<rect x="70" y="70" width="3700" height="2020"/>
+<rect x="116" y="116" width="3608" height="1928"/>
+<path d="M341.5 70 v46 M341.5 2044 v46"/>
+<path d="M567.0 70 v46 M567.0 2044 v46"/>
+<path d="M792.5 70 v46 M792.5 2044 v46"/>
+<path d="M1018.0 70 v46 M1018.0 2044 v46"/>
+<path d="M1243.5 70 v46 M1243.5 2044 v46"/>
+<path d="M1469.0 70 v46 M1469.0 2044 v46"/>
+<path d="M1694.5 70 v46 M1694.5 2044 v46"/>
+<path d="M1920.0 70 v46 M1920.0 2044 v46"/>
+<path d="M2145.5 70 v46 M2145.5 2044 v46"/>
+<path d="M2371.0 70 v46 M2371.0 2044 v46"/>
+<path d="M2596.5 70 v46 M2596.5 2044 v46"/>
+<path d="M2822.0 70 v46 M2822.0 2044 v46"/>
+<path d="M3047.5 70 v46 M3047.5 2044 v46"/>
+<path d="M3273.0 70 v46 M3273.0 2044 v46"/>
+<path d="M3498.5 70 v46 M3498.5 2044 v46"/>
+<path d="M70 330.2 h46 M3724 330.2 h46"/>
+<path d="M70 544.4 h46 M3724 544.4 h46"/>
+<path d="M70 758.7 h46 M3724 758.7 h46"/>
+<path d="M70 972.9 h46 M3724 972.9 h46"/>
+<path d="M70 1187.1 h46 M3724 1187.1 h46"/>
+<path d="M70 1401.3 h46 M3724 1401.3 h46"/>
+<path d="M70 1615.6 h46 M3724 1615.6 h46"/>
+<path d="M70 1829.8 h46 M3724 1829.8 h46"/>
+</g>
+<g fill="#ecebe7" fill-opacity="0.41" font-family="Cascadia Mono, DejaVu Sans Mono, monospace" font-size="24" text-anchor="middle">
+<text x="93.0" y="231.1">A</text>
+<text x="3747.0" y="231.1">A</text>
+<text x="93.0" y="445.3">B</text>
+<text x="3747.0" y="445.3">B</text>
+<text x="93.0" y="659.6">C</text>
+<text x="3747.0" y="659.6">C</text>
+<text x="93.0" y="873.8">D</text>
+<text x="3747.0" y="873.8">D</text>
+<text x="93.0" y="1088.0">E</text>
+<text x="3747.0" y="1088.0">E</text>
+<text x="93.0" y="1302.2">F</text>
+<text x="3747.0" y="1302.2">F</text>
+<text x="93.0" y="1516.4">G</text>
+<text x="3747.0" y="1516.4">G</text>
+<text x="93.0" y="1730.7">H</text>
+<text x="3747.0" y="1730.7">H</text>
+<text x="93.0" y="1944.9">J</text>
+<text x="3747.0" y="1944.9">J</text>
+</g>
+</svg>

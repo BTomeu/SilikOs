@@ -22,6 +22,8 @@ import time
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 SILIK = os.environ.get("SILIK_BIN") or "silik"
 TERMINAL = os.environ.get("SILIK_TERMINAL") or "gnome-terminal"
+# the sheets of `silik look --wallpaper` (silik-tools; the tests hold the two lists together): look/wallpaper-NAME
+WALLPAPERS = ("wafer", "plain", "grid", "scope", "pcb", "mesh", "schematic", "cells")
 
 TEXT = {
     "en": {"placeholder": "address or name: app/ eda/ dev/ win/ vendor/ sys/ look/ or a path", "run": "run", "complete": "complete", "close": "close", "held": "exit status %s; Enter closes this window",
@@ -48,6 +50,11 @@ TEXT = {
            "accent_volt": "accent: volt violet (what is selected, focused, on)",
            "accent_volt_vivid": "accent: volt violet (what is selected, focused, on, with the title bars)",
            "accent_spark": "accent: spark yellow (what is selected, focused, on)",
+           "wall_wafer": "wallpaper: wafer map (with the SilikVolt mark)", "wall_plain": "wallpaper: plain sheet (paper and the frame: the quietest)",
+           "wall_grid": "wallpaper: dot grid (with the SilikVolt mark)", "wall_scope": "wallpaper: oscilloscope (a graticule and two traces)",
+           "wall_pcb": "wallpaper: printed circuit (buses leaving a package)", "wall_mesh": "wallpaper: finite-element mesh (a plate with a hole)",
+           "wall_schematic": "wallpaper: schematic (a three-phase inverter)", "wall_cells": "wallpaper: standard cells (the dense one)",
+           "wall_dark": "%s, the dark twin",
            "dev_tools": "the embedded-development tools on this system", "dev_try": "the embedded tools do their small jobs", "dev_can": "the CAN interfaces of this system (adapters: PCAN, Kvaser, candleLight, CANable)", "dev_serial": "the serial ports: USB adapters, RS-232 / RS-485, boards' COM ports", "win_usb": "USB devices for the Windows VM (a Vector VN1630: its driver is Windows-only)",
            "power": "power: the profile in use, the power source, what the processor was told", "power_performance": "power: performance (full speed; stops auto)",
            "power_balanced": "power: balanced (fast when there is work, saving when idle; stops auto)", "power_saver": "power: saver (the least power; stops auto)",
@@ -82,6 +89,11 @@ TEXT = {
            "accent_volt": "accent: violeta volt (el que és triat, enfocat, encès)",
            "accent_volt_vivid": "accent: violeta volt (el que és triat, enfocat, encès, amb les barres de títol)",
            "accent_spark": "accent: groc llamp (el que és triat, enfocat, encès)",
+           "wall_wafer": "fons de pantalla: mapa d'oblia (amb la marca SilikVolt)", "wall_plain": "fons de pantalla: full en blanc (paper i el marc: el més tranquil)",
+           "wall_grid": "fons de pantalla: quadrícula de punts (amb la marca SilikVolt)", "wall_scope": "fons de pantalla: oscil·loscopi (una retícula i dues traces)",
+           "wall_pcb": "fons de pantalla: circuit imprès (busos que surten d'un encapsulat)", "wall_mesh": "fons de pantalla: malla d'elements finits (una placa amb un forat)",
+           "wall_schematic": "fons de pantalla: esquema (un inversor trifàsic)", "wall_cells": "fons de pantalla: cel·les estàndard (el dens)",
+           "wall_dark": "%s, el bessó fosc",
            "dev_tools": "les eines de desenvolupament encastat d'aquest sistema", "dev_try": "les eines de desenvolupament encastat fan les seves feines de prova", "dev_can": "les interfícies CAN d'aquest sistema (adaptadors: PCAN, Kvaser, candleLight, CANable)", "dev_serial": "els ports sèrie: adaptadors USB, RS-232 / RS-485, ports COM de les plaques", "win_usb": "dispositius USB per a la màquina de Windows (un Vector VN1630: el seu controlador és només per a Windows)",
            "power": "energia: el perfil en ús, la font d'alimentació, què se li ha dit al processador", "power_performance": "energia: rendiment (a tota velocitat; atura l'automàtic)",
            "power_balanced": "energia: equilibrat (ràpid quan hi ha feina, estalvia en repòs; atura l'automàtic)", "power_saver": "energia: estalvi (el mínim consum; atura l'automàtic)",
@@ -116,6 +128,11 @@ TEXT = {
            "accent_volt": "acento: violeta volt (lo seleccionado, enfocado, encendido)",
            "accent_volt_vivid": "acento: violeta volt (lo seleccionado, enfocado, encendido, con las barras de título)",
            "accent_spark": "acento: amarillo chispa (lo seleccionado, enfocado, encendido)",
+           "wall_wafer": "fondo de pantalla: mapa de oblea (con la marca SilikVolt)", "wall_plain": "fondo de pantalla: hoja en blanco (papel y el marco: el más tranquilo)",
+           "wall_grid": "fondo de pantalla: cuadrícula de puntos (con la marca SilikVolt)", "wall_scope": "fondo de pantalla: osciloscopio (una retícula y dos trazas)",
+           "wall_pcb": "fondo de pantalla: circuito impreso (buses que salen de un encapsulado)", "wall_mesh": "fondo de pantalla: malla de elementos finitos (una placa con un agujero)",
+           "wall_schematic": "fondo de pantalla: esquema (un inversor trifásico)", "wall_cells": "fondo de pantalla: celdas estándar (el denso)",
+           "wall_dark": "%s, el gemelo oscuro",
            "dev_tools": "las herramientas de desarrollo embebido de este sistema", "dev_try": "las herramientas de desarrollo embebido hacen sus trabajos de prueba", "dev_can": "las interfaces CAN de este sistema (adaptadores: PCAN, Kvaser, candleLight, CANable)", "dev_serial": "los puertos serie: adaptadores USB, RS-232 / RS-485, puertos COM de las placas", "win_usb": "dispositivos USB para la máquina de Windows (un Vector VN1630: su controlador es solo para Windows)",
            "power": "energía: el perfil en uso, la fuente de alimentación, qué se le ha dicho al procesador", "power_performance": "energía: rendimiento (a toda velocidad; detiene el automático)",
            "power_balanced": "energía: equilibrado (rápido cuando hay trabajo, ahorra en reposo; detiene el automático)", "power_saver": "energía: ahorro (el mínimo consumo; detiene el automático)",
@@ -369,6 +386,11 @@ def system_items(t, boxes=(), prefixes=(), programs=(), vendors=()):
         Item("look/volt", t["accent_volt"], [SILIK, "look", "--accent", "volt"]),
         Item("look/volt-vivid", t["accent_volt_vivid"], [SILIK, "look", "--accent", "volt-vivid"]),
         Item("look/spark", t["accent_spark"], [SILIK, "look", "--accent", "spark"]),
+    ] + [
+        # the wallpapers of `silik look --wallpaper` (silik-tools 0.8, silikos-branding 0.5): each sheet and its dark twin
+        Item("look/wallpaper-" + k + d, t["wall_dark"] % t["wall_" + k] if d else t["wall_" + k], [SILIK, "look", "--wallpaper", k + d])
+        for k in WALLPAPERS for d in ("", "-dark")
+    ] + [
         Item("eda/check", t["eda_check"], [SILIK, "eda", "check"], True),
         Item("eda/tools", t["eda_tools"], [SILIK, "eda", "tools"], True),
         Item("eda/try", t["eda_try"], [SILIK, "eda", "try"], True),

@@ -33,7 +33,7 @@ prints them and runs nothing. The COMMAND bar (Super+Space) shows the same line 
 | Part | What it is | Commands |
 |---|---|---|
 | Base | AlmaLinux 9.8: its packages and kernel from its own repositories, unchanged. SilikOS carries the base's version number and says SilikOS wherever a person looks; programs still read an EL9 system | `silik status`, `silik identity` |
-| Desktop | GNOME Shell 40 on X11 in three looks of the same shell: **island** (the default), **bar** and **silik**; one ink on paper, or an accent; Cascadia Mono; English, Catalan, Spanish | `silik look`, `silik look --accent`, `silik look --glass` |
+| Desktop | GNOME Shell 40 on X11 in three looks of the same shell: **island** (the default), **bar** and **silik**; one ink on paper, or an accent; a set of eight backgrounds drawn as engineering sheets, each light and dark; Cascadia Mono; English, Catalan, Spanish | `silik look`, `silik look --accent`, `silik look --glass`, `silik look --wallpaper` |
 | Chips | the open EDA tools built here for EL 9 from their authors' sources (Xschem, ngspice, Qucs-S, Magic, KLayout, Netgen, Yosys, NVC, DEVSIM) and Icarus Verilog, Verilator, GTKWave from EPEL; boxes with an EL6 / EL7 / EL8 userland for older releases of the vendors' tools | `silik eda tools`, `silik eda try`, `silik eda bench`, `silik eda create` |
 | Embedded | the GNU ARM compiler with its C library, the base's debugger, OpenOCD, dfu-util, ST-LINK's tools, stm32flash, SDCC; the installer of STM32CubeIDE or Code Composer Studio that you downloaded | `silik dev tools`, `silik dev try`, `silik dev install FILE`, `silik dev ccache` |
 | Bench | CAN through SocketCAN, SavvyCAN, cantools, python-can, serial and RS-485 terminals, sigrok and PulseView | `silik dev can`, `silik dev serial` |

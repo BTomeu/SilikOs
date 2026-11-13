@@ -24,6 +24,8 @@
 #   silik look  [silik | bar | island] [--json]     the desktop's look; no argument: which one is in use
 #   silik look  [LOOK] --accent NAME [--json]       its accent: one colour for what is selected, focused, on
 #   silik look  [LOOK] --glass off|on|clear|crystal|crystal-thin   the floating panes: solid paper, or which glass
+#   silik look  [LOOK] --wallpaper NAME[-dark]      the background: wafer plain grid scope pcb mesh schematic cells;
+#               NAME is the light sheet, NAME-dark its dark twin; a picture of your own is replaced only by this
 #   silik session lock | logout | off             (the last two ask first)
 #   silik update
 #   silik secure status [--json] [--offline] | apply [--keep-ssh]
@@ -47,7 +49,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.7.1"
+VERSION = "0.8.0"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -3531,6 +3533,59 @@ def glass_now(ctx):
     return mode if mode in [k for k, _ in GLASS[1:]] else "on"
 
 
+# The background (silikos-branding 0.5): a set of drawing sheets, each a light sheet and its dark twin, all made by
+# tools/gen_wallpaper.py. The desktop is ink on paper and has no dark style of its own: NAME puts the light sheet on
+# it, NAME-dark its dark twin (to see the glass over a dark ground). The dark twin also goes where the desktop's
+# defaults put the dark wafer, the lock screen's key (org.gnome.desktop.screensaver), and to picture-uri-dark where
+# the desktop has that key (GNOME 42 and later: the shell then takes the dark sheet itself with the dark style [A]).
+# A picture that is not of the set (one chosen in GNOME Settings) is "another picture": said, and replaced only by
+# --wallpaper; the lock screen's key is left alone when it holds one. (GNOME Shell 40 draws its lock screen from the
+# desktop's background, blurred and dimmed, and does not read the screensaver's picture [A: read in its code]; the
+# key is kept in step with the defaults all the same.)
+WALLPAPERS = (
+    ("wafer", "a wafer map with the SilikVolt mark on it"),
+    ("plain", "paper and the frame of a drawing sheet: the quietest"),
+    ("grid", "a dot grid with the SilikVolt mark at its centre"),
+    ("scope", "an oscilloscope's graticule with two traces"),
+    ("pcb", "a printed circuit: four buses leaving a square package"),
+    ("mesh", "a finite-element mesh of a plate with a hole"),
+    ("schematic", "a three-phase inverter in the standard symbols"),
+    ("cells", "rows of standard cells with three macro blocks: the dense one"),
+)
+WALL_CHOICES = [k + d for k, _ in WALLPAPERS for d in ("", "-dark")]
+WALL_DIR = "/usr/share/backgrounds/silikos"
+WALL_PAPER = {False: "#f1f0ec", True: "#131416"}        # the sheets' paper (tools/gen_wallpaper.py): shown until the picture is drawn
+WALL_SCHEMA, SAVER_SCHEMA = "org.gnome.desktop.background", "org.gnome.desktop.screensaver"
+
+
+def wall_file(name):
+    """the file of a sheet ('pcb', 'pcb-dark'); the wafer keeps the names the first two files had"""
+    dark = name.endswith("-dark")
+    base = name[:-5] if dark else name
+    return os.path.join(WALL_DIR, "silikos-%s%s.svg" % ("" if base == "wafer" else base + "-", "dark" if dark else "light"))
+
+
+def wall_of(uri):
+    """the sheet a picture-uri names, or '' when it is not one of the set"""
+    path = uri[len("file://"):] if uri.startswith("file://") else uri
+    return next((k for k in WALL_CHOICES if path == wall_file(k)), "")
+
+
+def gsetting(ctx, schema, key):
+    """a string setting's value, or None when the key is not on this system"""
+    v = ctx.query(["gsettings", "get", schema, key]).strip()
+    if not v:
+        return None
+    return v[1:-1] if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"" else v
+
+
+def wallpaper_now(ctx):
+    """(the sheet in use or '', the picture's address): ('', None) when the desktop has no background setting,
+    ('', ADDRESS) when the picture is not one of the set"""
+    uri = gsetting(ctx, WALL_SCHEMA, "picture-uri")
+    return ("", None) if uri is None else (wall_of(uri), uri)
+
+
 def look_now(ctx):
     """the look in use, or '' when the setting is not on this system (silikos-desktop older than 0.11, or no desktop)"""
     v = ctx.query(["gsettings", "get", LOOK_SCHEMA, "look"]).strip().strip("'")
@@ -3560,14 +3615,17 @@ def cmd_look(ctx, a):
         qt_accent(ctx, acc, accent_icons(ctx, acc))
         return 0
     now = look_now(ctx)
-    if a.which is None and a.accent is None and a.glass is None:
+    if a.which is None and a.accent is None and a.glass is None and a.wallpaper is None:
         acc = accent_now(ctx) if now else ""
         gl = glass_now(ctx) if now else ""
         modes = GLASS if gl and glass_modes(ctx) else GLASS[:2]       # (a silikos-desktop from before the modes: off, on)
+        wall, picture = wallpaper_now(ctx)
         if a.json:
             print(json.dumps({"look": now or None, "looks": [k for k, _ in LOOKS],
                               "accent": acc or None, "accents": [k for k, _ in ACCENTS],
-                              "glass": gl or None, "glass_modes": [k for k, _ in modes] if gl else []}))
+                              "glass": gl or None, "glass_modes": [k for k, _ in modes] if gl else [],
+                              "wallpaper": wall or None, "wallpapers": WALL_CHOICES if picture is not None else [],
+                              "wallpaper_other": picture if picture is not None and not wall else None}))
             return 0 if now else 1
         for k, what in LOOKS:
             print("%s %-7s %s" % ("●" if k == now else " ", k, what))
@@ -3577,12 +3635,26 @@ def cmd_look(ctx, a):
         if gl:
             for k, what in modes:
                 print("%s %-12s glass: %s" % ("●" if k == gl else " ", k, what))
+        if picture is not None:
+            for k, what in WALLPAPERS:
+                dark = wall == k + "-dark"
+                print("%s %-14s wallpaper: %s%s" % ("●" if dark or wall == k else " ", k + "-dark" if dark else k, what, ", its dark twin" if dark else ""))
+            print("  %-14s wallpaper: the dark twin of any of them" % "NAME-dark")
+            if not wall:
+                print("● %-14s wallpaper: another picture, not one of the set: %s" % ("-", picture or "none"))
         if not now:
             print("silik: no setting %s on this system: the looks come with silikos-desktop 0.11" % LOOK_SCHEMA, file=sys.stderr)
             return 1
         return 0
-    if not now and not ctx.dry:
+    if not now and not ctx.dry and (a.which is not None or a.accent is not None or a.glass is not None):
         die("no setting %s on this system: the looks come with silikos-desktop 0.11" % LOOK_SCHEMA)
+    if a.wallpaper is not None and not ctx.dry:
+        if wallpaper_now(ctx)[1] is None:
+            die("no setting %s on this system: the wallpaper is a GNOME desktop's" % WALL_SCHEMA)
+        base = a.wallpaper[:-5] if a.wallpaper.endswith("-dark") else a.wallpaper
+        missing = [p for p in (wall_file(base), wall_file(base + "-dark")) if not os.path.isfile(p)]
+        if missing:
+            die("the wallpaper %s is not on this system (%s): the set comes with silikos-branding 0.5" % (base, ", ".join(missing)))
     if a.accent is not None and not ctx.dry:
         if not accent_now(ctx):
             die("no accent on this system: the accents come with silikos-desktop 0.13")
@@ -3624,6 +3696,24 @@ def cmd_look(ctx, a):
         ctx.run(["gsettings", "set", LOOK_SCHEMA, "glass", "false" if a.glass == "off" else "true"])
         if not ctx.dry and glass_now(ctx) != a.glass:
             die("the glass is still %s: run it as the user, in the desktop session (gsettings could not change the setting)" % (glass_now(ctx) or "unknown"))
+    if a.wallpaper is not None:
+        dark = a.wallpaper.endswith("-dark")
+        base = a.wallpaper[:-5] if dark else a.wallpaper
+        twin = "file://" + wall_file(base + "-dark")
+        ctx.run(["gsettings", "set", WALL_SCHEMA, "picture-uri", "file://" + wall_file(a.wallpaper)])
+        ctx.run(["gsettings", "set", WALL_SCHEMA, "picture-options", "zoom"])       # (a picture of the user's may have left another)
+        ctx.run(["gsettings", "set", WALL_SCHEMA, "primary-color", WALL_PAPER[dark]])
+        if gsetting(ctx, WALL_SCHEMA, "picture-uri-dark") is not None:               # GNOME 42 and later
+            ctx.run(["gsettings", "set", WALL_SCHEMA, "picture-uri-dark", twin])
+        saver = gsetting(ctx, SAVER_SCHEMA, "picture-uri")
+        if (ctx.dry and saver is None) or (saver is not None and wall_of(saver)):
+            ctx.run(["gsettings", "set", SAVER_SCHEMA, "picture-uri", twin])
+        elif saver:
+            print("silik: the lock screen's picture is another picture (%s): left as it is" % saver)
+        if not ctx.dry and wallpaper_now(ctx)[0] != a.wallpaper:
+            wall, picture = wallpaper_now(ctx)
+            die("the wallpaper is still %s: run it as the user, in the desktop session (gsettings could not change the setting)"
+                % (wall or picture or "unknown"))
     return 0
 
 
@@ -7943,7 +8033,9 @@ def manifest_now(ctx, with_host=False):
         "repos": repos_enabled() or [],
         "packages": pk[0],
         "kernel": {"running": os.uname().release, "packages": pk[1], "args": kernel_args()},
+        # (the wallpaper: a sheet of the set, "other" for a picture of the user's (its path is not a manifest's business))
         "settings": {"look": look_now(ctx) or None, "accent": accent_now(ctx) or None, "glass": glass_now(ctx) or None,
+                     "wallpaper": wallpaper_now(ctx)[0] or ("other" if wallpaper_now(ctx)[1] else None),
                      "power": {"auto": ps["auto"], "profile": None if ps["auto"] else ps["profile"],
                                "ac": ps["auto_profiles"]["ac"], "battery": ps["auto_profiles"]["battery"]},
                      "update_auto": update_auto_now(ctx) or None},
@@ -8056,6 +8148,8 @@ def manifest_diff(have, want):
     for sect in ("settings", "tools"):
         fh, fw = flat(have.get(sect)), flat(want.get(sect))
         for k in sorted(set(fh) | set(fw)):
+            if k == "wallpaper" and k not in fw:
+                continue                                   # (a manifest made before the wallpapers says nothing of it)
             if fh.get(k) != fw.get(k):
                 add(sect, "~ %s: %s here, %s in the file" % (k, fh.get(k), fw.get(k)))
     hx = {b["name"]: b for b in have.get("boxes") or []}
@@ -8141,6 +8235,12 @@ def manifest_plan(have, want, prune=False, kernel=False):
         look += ["--accent", ws["accent"]]
     if ws.get("glass") and ws.get("glass") != hs.get("glass") and ws["glass"] in [k for k, _ in GLASS]:
         look += ["--glass", ws["glass"]]
+    if ws.get("wallpaper") and ws.get("wallpaper") != hs.get("wallpaper") and ws["wallpaper"] in WALL_CHOICES:
+        if hs.get("wallpaper") == "other":
+            steps.append(("say", "the wallpaper here is a picture of your own (the manifest has %s): kept (silik look --wallpaper %s)" % (
+                ws["wallpaper"], ws["wallpaper"])))
+        else:
+            look += ["--wallpaper", ws["wallpaper"]]
     if look:
         steps.append(("silik", ["look"] + look))
     hp, wp = hs.get("power") or {}, ws.get("power") or {}
@@ -8403,11 +8503,13 @@ def parser(only=None):
     x.set_defaults(fn=cmd_rollback)
     x = s.add_parser("identity", help="the names the system shows: silikos | base | show")
     x.add_argument("which", nargs="?", default="show", choices=["show", "silikos", "base"]); x.set_defaults(fn=cmd_identity)
-    x = s.add_parser("look", help="the desktop's look: silik | bar | island, its accent and its glass (no argument: which are in use)")
+    x = s.add_parser("look", help="the desktop's look: silik | bar | island, its accent, its glass and its wallpaper (no argument: which are in use)")
     x.add_argument("which", nargs="?", choices=[k for k, _ in LOOKS])
     x.add_argument("--accent", choices=[k for k, _ in ACCENTS], help="one colour for what is selected, focused, on or running (ink: none)")
     x.add_argument("--glass", choices=[k for k, _ in GLASS], help="the floating panes: off (solid paper), on (paper over the blurred wallpaper), clear (thinner paper), "
                         "crystal (the windows behind too), crystal-thin (thinner, blurred more)")
+    x.add_argument("--wallpaper", choices=WALL_CHOICES, metavar="NAME[-dark]",
+                   help="the background: %s; NAME is the light sheet, NAME-dark its dark twin" % " ".join(k for k, _ in WALLPAPERS))
     x.add_argument("--qt", action="store_true", help="Qt 5 programs take the accent in use (the shell runs it)")
     x.add_argument("--json", action="store_true"); x.set_defaults(fn=cmd_look)
     x = s.add_parser("doctor", help="is this workstation healthy, and what to do: ok / warn / bad / unknown and the command that fixes each")
