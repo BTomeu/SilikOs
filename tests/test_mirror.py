@@ -728,5 +728,22 @@ class RecordedRun(unittest.TestCase):
         self.assertNotRegex(log, r"(?i)https?_proxy|ca-bundle|127\.0\.0\.1:\d{5}|/home/")     # (nothing of the build machine's own)
 
 
+class EmulatedInstall(unittest.TestCase):
+    """the reduced offline ISO installed in QEMU without KVM and without a network device (13/11/2026): what it printed"""
+
+    def test_what_the_installer_and_the_installed_system_said(self):
+        log = read("tests/offline/emulated-2026-11-13.log")
+        for line in ("OFFLINE-TEST|net-devices|lo", "OFFLINE-TEST|installed-packages|337", "OFFLINE-TEST|repo-mount|/dev/sr0 iso9660",
+                     "0 of 424 differ from the manifest", "everything is as the manifest and the keys say", "OFFLINE-TEST|DONE",
+                     "Enforcing", "BOOT-TEST-DONE"):
+            self.assertIn(line, log, line)
+        self.assertNotIn("▼", log)
+        s = read("tests/offline/emulated_install.sh")
+        self.assertEqual(subprocess.run(["bash", "-n", os.path.join(ROOT, "tests/offline/emulated_install.sh")]).returncode, 0)
+        self.assertIn("-nic none", s)
+        self.assertIn("THIS FILE AS A WHOLE HAS NOT BEEN RUN", s)
+        self.assertIn("-nic\", \"none\"", read("tests/offline/emulated_boot.py").replace("'", '"'))
+
+
 if __name__ == "__main__":
     unittest.main()

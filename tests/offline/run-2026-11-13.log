@@ -1,4 +1,4 @@
-SilikOS offline test, 2026-11-13T08:43Z, commit bdb1eee, docker 29.9.2
+SilikOS offline test, 2026-11-13T09:15Z, commit b211f59, docker 29.9.2
 
 === 0 the tools image (silik-offline-tools) ===
 AlmaLinux release 9.8 (Olive Jaguar)
@@ -32,12 +32,12 @@ Added CRB repo from https://repo.almalinux.org/almalinux/9/CRB/x86_64/os/
 Added extras repo from https://repo.almalinux.org/almalinux/9/extras/x86_64/os/
 Added epel repo from https://dl.fedoraproject.org/pub/epel/9/Everything/x86_64/
 Added silikos repo from file:///mirrors/full/silikos
-BaseOS                                           43 MB/s |  57 MB     00:01
-AppStream                                        68 MB/s |  34 MB     00:00
-CRB                                              18 MB/s | 6.7 MB     00:00
-extras                                          109 kB/s |  33 kB     00:00
-epel                                             13 MB/s |  20 MB     00:01
-silikos                                         2.0 MB/s | 9.6 kB     00:00
+BaseOS                                           19 MB/s |  57 MB     00:02
+AppStream                                        49 MB/s |  34 MB     00:00
+CRB                                              16 MB/s | 6.7 MB     00:00
+extras                                           89 kB/s |  33 kB     00:00
+epel                                            4.1 MB/s |  20 MB     00:05
+silikos                                         3.8 MB/s | 9.6 kB     00:00
 Metadata cache created.
 $ dnf --installroot=/mirrors/full/.root --releasever=9 --setopt=module_platform_id=platform:el9 --setopt=reposdir=/mirrors/full/.root/etc/yum.repos.d --setopt=keepcache=1 --nogpgcheck --repofrompath=BaseOS,https://repo.almalinux.org/almalinux/9/BaseOS/x86_64/os/ --repo=BaseOS --repofrompath=AppStream,https://repo.almalinux.org/almalinux/9/AppStream/x86_64/os/ --repo=AppStream --repofrompath=CRB,https://repo.almalinux.org/almalinux/9/CRB/x86_64/os/ --repo=CRB --repofrompath=extras,https://repo.almalinux.org/almalinux/9/extras/x86_64/os/ --repo=extras --repofrompath=epel,https://dl.fedoraproject.org/pub/epel/9/Everything/x86_64/ --repo=epel --repofrompath=silikos,file:///mirrors/full/silikos --repo=silikos install --downloadonly -y @workstation-product-environment epel-release silikos-branding silikos-desktop silik-tools silik-command silik-eda-compat silik-eda-open silik-dev silik-win silikos-security silikos-power @core kernel grub2-tools efibootmgr langpacks-en langpacks-ca langpacks-es glibc-langpack-en glibc-langpack-ca glibc-langpack-es chrony firewalld authselect lvm2 xfsprogs e2fsprogs dosfstools cryptsetup mdadm kexec-tools dnf-plugins-core createrepo_c grub2-pc grub2-pc-modules grub2-efi-x64 shim-x64
 Added BaseOS repo from https://repo.almalinux.org/almalinux/9/BaseOS/x86_64/os/
@@ -46,7 +46,7 @@ Added CRB repo from https://repo.almalinux.org/almalinux/9/CRB/x86_64/os/
 Added extras repo from https://repo.almalinux.org/almalinux/9/extras/x86_64/os/
 Added epel repo from https://dl.fedoraproject.org/pub/epel/9/Everything/x86_64/
 Added silikos repo from file:///mirrors/full/silikos
-Last metadata expiration check: 0:00:02 ago on Fri Nov 13 08:43:44 2026.
+Last metadata expiration check: 0:00:04 ago on Fri Nov 13 09:15:39 2026.
 Dependencies resolved.
 ===========================================================================================================
  Package                                     Arch    Version                               Repo        Size
@@ -71,7 +71,7 @@ Installing:
  silik-dev                                   noarch  0.5.0-1.el9                           silikos     12 k
  silik-eda-compat                            noarch  0.2.1-1.el9                           silikos    8.0 k
  silik-eda-open                              noarch  0.3.0-1.el9                           silikos     12 k
- silik-tools                                 noarch  0.6.14-1.el9                          silikos    178 k
+ silik-tools                                 noarch  0.6.14-1.el9                          silikos    179 k
  silik-win                                   noarch  0.4.2-1.el9                           silikos     12 k
  silikos-branding                            noarch  0.4.0-1.el9                           silikos     18 k
  silikos-desktop                             noarch  0.15.0-1.el9                          silikos    231 k
@@ -1653,14 +1653,14 @@ Installed size: 7.1 G
 DNF will only download packages for the transaction.
 Downloading Packages:
 --------------------------------------------------------------------------------
-Total                                            25 MB/s | 2.5 GB     01:42
+Total                                            22 MB/s | 2.5 GB     01:57
 Complete!
-$ rpmkeys --dbpath /tmp/silik-mirror-keys-almalinux-iold2xc9 --import /etc/pki/rpm-gpg/RPM-GPG-KEY-AlmaLinux-9
-$ rpmkeys --dbpath /tmp/silik-mirror-keys-almalinux-iold2xc9 --checksig <543 packages of BaseOS>
-$ rpmkeys --dbpath /tmp/silik-mirror-keys-almalinux-iold2xc9 --checksig <979 packages of AppStream>
-$ rpmkeys --dbpath /tmp/silik-mirror-keys-almalinux-iold2xc9 --checksig <1 packages of CRB>
-$ rpmkeys --dbpath /tmp/silik-mirror-keys-epel-_lhymupx --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-9
-$ rpmkeys --dbpath /tmp/silik-mirror-keys-epel-_lhymupx --checksig <39 packages of epel>
+$ rpmkeys --dbpath /tmp/silik-mirror-keys-almalinux-w14isswy --import /etc/pki/rpm-gpg/RPM-GPG-KEY-AlmaLinux-9
+$ rpmkeys --dbpath /tmp/silik-mirror-keys-almalinux-w14isswy --checksig <543 packages of BaseOS>
+$ rpmkeys --dbpath /tmp/silik-mirror-keys-almalinux-w14isswy --checksig <979 packages of AppStream>
+$ rpmkeys --dbpath /tmp/silik-mirror-keys-almalinux-w14isswy --checksig <1 packages of CRB>
+$ rpmkeys --dbpath /tmp/silik-mirror-keys-epel-uphxo24i --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-9
+$ rpmkeys --dbpath /tmp/silik-mirror-keys-epel-uphxo24i --checksig <39 packages of epel>
 $ createrepo_c --quiet --groupfile /mirrors/full/AppStream/comps.xml /mirrors/full/AppStream
 $ modifyrepo_c --mdtype=modules /mirrors/full/.root/modules.yaml /mirrors/full/AppStream/repodata
 $ modifyrepo_c --mdtype=updateinfo /mirrors/full/.root/updateinfo.xml /mirrors/full/AppStream/repodata
@@ -1672,10 +1672,10 @@ $ modifyrepo_c --mdtype=updateinfo /mirrors/full/.root/updateinfo.xml /mirrors/f
 $ createrepo_c --quiet --groupfile /mirrors/full/epel/comps.xml /mirrors/full/epel
 $ modifyrepo_c --mdtype=updateinfo /mirrors/full/.root/updateinfo.xml /mirrors/full/epel/repodata
 $ createrepo_c --quiet /mirrors/full/silikos
-generation 1: 1572 packages added (2688.2 MB), 0 old versions removed; the mirror holds 1572 packages, 2688.2 MB, in AppStream BaseOS CRB epel silikos; 161 s
+generation 1: 1572 packages added (2688.2 MB), 0 old versions removed; the mirror holds 1572 packages, 2688.2 MB, in AppStream BaseOS CRB epel silikos; 180 s
 silikos: SilikOS's own packages are not signed today: the manifest's sha256 is what holds them
 · in use      no: dnf takes its packages from the repositories of /etc/yum.repos.d
-● mirror      file:///mirrors/full: generation 1 of 2026-11-13T08:46:00Z, x86_64, 1572 packages, 2688.2 MB (AppStream 979, BaseOS 543, CRB 1, epel 39, silikos 10); the last 3 versions of each stay
+● mirror      file:///mirrors/full: generation 1 of 2026-11-13T09:18:12Z, x86_64, 1572 packages, 2688.2 MB (AppStream 979, BaseOS 543, CRB 1, epel 39, silikos 10); the last 3 versions of each stay
 ● metadata    as its manifest says
 · signatures  packages: checked by dnf against this machine's keys of the base at every installation; metadata: not signed
 2.6G	/mirrors/full
@@ -1683,12 +1683,12 @@ silikos: SilikOS's own packages are not signed today: the manifest's sha256 is w
 
 === 1c verify, in a container with no network device (--network none) ===
 network devices: lo
-$ rpmkeys --dbpath /tmp/silik-mirror-keys-almalinux-pj1l5k2w --import /etc/pki/rpm-gpg/RPM-GPG-KEY-AlmaLinux-9
-$ rpmkeys --dbpath /tmp/silik-mirror-keys-almalinux-pj1l5k2w --checksig <979 packages of AppStream>
-$ rpmkeys --dbpath /tmp/silik-mirror-keys-almalinux-pj1l5k2w --checksig <543 packages of BaseOS>
-$ rpmkeys --dbpath /tmp/silik-mirror-keys-almalinux-pj1l5k2w --checksig <1 packages of CRB>
-$ rpmkeys --dbpath /tmp/silik-mirror-keys-epel-r0esvxv2 --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-9
-$ rpmkeys --dbpath /tmp/silik-mirror-keys-epel-r0esvxv2 --checksig <39 packages of epel>
+$ rpmkeys --dbpath /tmp/silik-mirror-keys-almalinux-cbmdozrd --import /etc/pki/rpm-gpg/RPM-GPG-KEY-AlmaLinux-9
+$ rpmkeys --dbpath /tmp/silik-mirror-keys-almalinux-cbmdozrd --checksig <979 packages of AppStream>
+$ rpmkeys --dbpath /tmp/silik-mirror-keys-almalinux-cbmdozrd --checksig <543 packages of BaseOS>
+$ rpmkeys --dbpath /tmp/silik-mirror-keys-almalinux-cbmdozrd --checksig <1 packages of CRB>
+$ rpmkeys --dbpath /tmp/silik-mirror-keys-epel-5h28gfsh --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-9
+$ rpmkeys --dbpath /tmp/silik-mirror-keys-epel-5h28gfsh --checksig <39 packages of epel>
 ● files                  0 of 1627 missing
 ● sha256                 0 of 1627 differ from the manifest
 ● strangers              0 file(s) the manifest does not list
@@ -1698,7 +1698,7 @@ $ rpmkeys --dbpath /tmp/silik-mirror-keys-epel-r0esvxv2 --checksig <39 packages 
 ● signatures epel        0 of 39 without a good signature of RPM-GPG-KEY-EPEL-9 (FF8AD1344597106ECE813B918A3872BF3228467C)
 · signatures silikos     10 packages of SilikOS's own: not signed today, held by the manifest's sha256 only
 · metadata signature     none: repomd.xml and the manifest are not signed (silik mirror create --sign KEYID)
-/mirrors/full: generation 1 of 2026-11-13T08:46:00Z, 1572 packages, 2702.4 MB, checked in 12.0 s: everything is as the manifest and the keys say
+/mirrors/full: generation 1 of 2026-11-13T09:18:12Z, 1572 packages, 2702.4 MB, checked in 11.7 s: everything is as the manifest and the keys say
 
 === 2a an internal network (docker network create --internal: no route out), the mirror served on it ===
 http://0.0.0.0:8080/ serves /mirrors/full, read-only (GET and HEAD).
@@ -1723,14 +1723,14 @@ dnf-plugins-core-4.3.0-26.el9.noarch
 $ install -d -m 0755 /etc/silikos/mirror/backup
 $ cp -p /etc/yum.repos.d/almalinux-appstream.repo /etc/yum.repos.d/almalinux-baseos.repo /etc/yum.repos.d/almalinux-crb.repo /etc/yum.repos.d/almalinux-extras.repo /etc/yum.repos.d/almalinux-highavailability.repo /etc/yum.repos.d/almalinux-nfv.repo /etc/yum.repos.d/almalinux-plus.repo /etc/yum.repos.d/almalinux-resilientstorage.repo /etc/yum.repos.d/almalinux-rt.repo /etc/yum.repos.d/almalinux-sap.repo /etc/yum.repos.d/almalinux-saphana.repo /etc/silikos/mirror/backup/
 $ dnf config-manager --set-disabled appstream baseos extras
-$ install -m 0644 /tmp/silik-mirror-keyfmlow5o0 /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-9
+$ install -m 0644 /tmp/silik-mirror-keyfa20wfo4 /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-9
 RPM-GPG-KEY-EPEL-9 was not on this machine: taken from the mirror, its fingerprint is the known FF8AD1344597106ECE813B918A3872BF3228467C
-$ install -m 0644 /tmp/silik-mirrorhqy4304j /etc/yum.repos.d/silikos-mirror.repo
-$ install -m 0644 /tmp/silik-mirrorguxdjnsw /etc/silikos/mirror/state.json
+$ install -m 0644 /tmp/silik-mirror0hm95uja /etc/yum.repos.d/silikos-mirror.repo
+$ install -m 0644 /tmp/silik-mirroriswpru5g /etc/silikos/mirror/state.json
 $ dnf clean metadata
 Cache was expired
 8 files removed
-dnf now takes its packages from http://silik-offline-server:8080 (generation 1, 2026-11-13T08:46:00Z); 3 repositories disabled, not deleted: appstream baseos extras
+dnf now takes its packages from http://silik-offline-server:8080 (generation 1, 2026-11-13T09:18:12Z); 3 repositories disabled, not deleted: appstream baseos extras
 
 # written by `silik mirror use http://silik-offline-server:8080`; `silik mirror use off` removes it and puts the other repositories back
 
@@ -1789,8 +1789,8 @@ silikos-mirror-BaseOS                  SilikOS mirror - BaseOS
 silikos-mirror-CRB                     SilikOS mirror - CRB
 silikos-mirror-epel                    SilikOS mirror - epel
 silikos-mirror-silikos                 SilikOS mirror - silikos
-● in use      http://silik-offline-server:8080 since 2026-11-13T08:46:18; disabled meanwhile: appstream baseos extras
-● mirror      http://silik-offline-server:8080: generation 1 of 2026-11-13T08:46:00Z, x86_64, 1572 packages, 2688.2 MB (AppStream 979, BaseOS 543, CRB 1, epel 39, silikos 10); the last 3 versions of each stay
+● in use      http://silik-offline-server:8080 since 2026-11-13T09:18:29; disabled meanwhile: appstream baseos extras
+● mirror      http://silik-offline-server:8080: generation 1 of 2026-11-13T09:18:12Z, x86_64, 1572 packages, 2688.2 MB (AppStream 979, BaseOS 543, CRB 1, epel 39, silikos 10); the last 3 versions of each stay
 ● metadata    as its manifest says
 · signatures  packages: checked by dnf against this machine's keys of the base at every installation; metadata: not signed
 
@@ -1801,7 +1801,7 @@ Installed size: 2.1 G
 Importing GPG key 0x3228467C:
  From       : /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-9
 Complete!
-dnf exit 0, 25 s
+dnf exit 0, 26 s
     126 silikos-mirror-AppStream      57 silikos-mirror-BaseOS      16 silikos-mirror-epel       2 silikos-mirror-silikos
 silik-tools-0.6.14-1.el9.noarch
 silik-dev-0.5.0-1.el9.noarch
@@ -1819,18 +1819,18 @@ the mirror is off: 11 of 11 repository files are byte for byte as before
 sha256sum -c: every repository file of before is as it was
 almalinux-appstream.repo almalinux-baseos.repo almalinux-crb.repo almalinux-extras.repo almalinux-highavailability.repo almalinux-nfv.repo almalinux-plus.repo almalinux-resilientstorage.repo almalinux-rt.repo almalinux-sap.repo almalinux-saphana.repo
 appstream baseos extras
-dnf now takes its packages from http://silik-offline-server:8080 (generation 1, 2026-11-13T08:46:00Z); 3 repositories disabled, not deleted: appstream baseos extras
+dnf now takes its packages from http://silik-offline-server:8080 (generation 1, 2026-11-13T09:18:12Z); 3 repositories disabled, not deleted: appstream baseos extras
 
 === 3 from a folder, in a container started with --network none ===
 network devices: lo
   dnf-plugins-core-4.3.0-26.el9.noarch
 
 8 files removed
-dnf now takes its packages from file:///mirrors/full (generation 1, 2026-11-13T08:46:00Z); 3 repositories disabled, not deleted: appstream baseos extras
+dnf now takes its packages from file:///mirrors/full (generation 1, 2026-11-13T09:18:12Z); 3 repositories disabled, not deleted: appstream baseos extras
 Install  201 Packages
 Total size: 431 M
 Complete!
-dnf exit 0, 23 s
+dnf exit 0, 22 s
 silik-tools-0.6.14-1.el9.noarch
 silik-dev-0.5.0-1.el9.noarch
 
@@ -1845,9 +1845,9 @@ tampered: byte 60482 of build/offline-test/t1/BaseOS/Packages/bc-1.07.1-14.el9.x
 ● signatures epel        0 of 39 without a good signature of RPM-GPG-KEY-EPEL-9 (FF8AD1344597106ECE813B918A3872BF3228467C)
 · signatures silikos     10 packages of SilikOS's own: not signed today, held by the manifest's sha256 only
 · metadata signature     none: repomd.xml and the manifest are not signed (silik mirror create --sign KEYID)
-/w/t1: generation 1 of 2026-11-13T08:46:00Z, 1572 packages, 2702.4 MB, checked in 12.5 s: NOT VERIFIED
+/w/t1: generation 1 of 2026-11-13T09:18:12Z, 1572 packages, 2702.4 MB, checked in 12.4 s: NOT VERIFIED
 silik mirror verify: exit 1
-dnf now takes its packages from http://silik-offline-server2:8081 (generation 1, 2026-11-13T08:46:00Z); 3 repositories disabled, not deleted: appstream baseos extras
+dnf now takes its packages from http://silik-offline-server2:8081 (generation 1, 2026-11-13T09:18:12Z); 3 repositories disabled, not deleted: appstream baseos extras
 dnf install bc: exit 1
 [MIRROR] bc-1.07.1-14.el9.x86_64.rpm: Downloading successful, but checksum doesn't match. Calculated: cd56fe3455813ad2bd5862cb5dee6d091c684b399eec77b5978cd7b31789952e(sha256)  Expected: a5c6b25b63d23107e3260c0792f2e25e8db4715841d5428c401cd18a52081af5(sha256)
 [MIRROR] bc-1.07.1-14.el9.x86_64.rpm: Downloading successful, but checksum doesn't match. Calculated: cd56fe3455813ad2bd5862cb5dee6d091c684b399eec77b5978cd7b31789952e(sha256)  Expected: a5c6b25b63d23107e3260c0792f2e25e8db4715841d5428c401cd18a52081af5(sha256)
@@ -1869,9 +1869,9 @@ forged: /w/t2/silik-mirror.json now lists 1624 files as they are
 ● signatures epel        0 of 39 without a good signature of RPM-GPG-KEY-EPEL-9 (FF8AD1344597106ECE813B918A3872BF3228467C)
 · signatures silikos     10 packages of SilikOS's own: not signed today, held by the manifest's sha256 only
 · metadata signature     none: repomd.xml and the manifest are not signed (silik mirror create --sign KEYID)
-/w/t2: generation 1 of 2026-11-13T08:46:00Z, 1572 packages, 2701.5 MB, checked in 11.5 s: NOT VERIFIED
+/w/t2: generation 1 of 2026-11-13T09:18:12Z, 1572 packages, 2701.5 MB, checked in 12.5 s: NOT VERIFIED
 silik mirror verify: exit 1
-dnf now takes its packages from http://silik-offline-server2:8081 (generation 1, 2026-11-13T08:46:00Z); 3 repositories disabled, not deleted: appstream baseos extras
+dnf now takes its packages from http://silik-offline-server2:8081 (generation 1, 2026-11-13T09:18:12Z); 3 repositories disabled, not deleted: appstream baseos extras
 dnf install bc: exit 1
 Error: GPG check FAILED
 package bc is not installed
@@ -1882,7 +1882,7 @@ tampered: byte 231 of build/offline-test/t3/BaseOS/repodata/repomd.xml (4333 byt
 ▼ sha256                 1 of 1627 differ from the manifest: BaseOS/repodata/repomd.xml
 · signatures silikos     10 packages of SilikOS's own: not signed today, held by the manifest's sha256 only
 · metadata signature     none: repomd.xml and the manifest are not signed (silik mirror create --sign KEYID)
-/w/t3: generation 1 of 2026-11-13T08:46:00Z, 1572 packages, 2702.4 MB, checked in 11.6 s: NOT VERIFIED
+/w/t3: generation 1 of 2026-11-13T09:18:12Z, 1572 packages, 2702.4 MB, checked in 13.0 s: NOT VERIFIED
 silik mirror verify: exit 1
 ▼ metadata    NOT what its manifest says: BaseOS
 · signatures  packages: checked by dnf against this machine's keys of the base at every installation; metadata: not signed
@@ -1890,9 +1890,9 @@ silik: the mirror at http://silik-offline-server2:8081 does not serve what its m
 silik mirror use: exit 3
 dnf alone, pointed at it by hand: exit 1
 Errors during downloading metadata for repository 't3':
-  - Downloading successful, but checksum doesn't match. Calculated: 3fc1d4e06d2031eb4ddcc91df4e6d1eb6b7574cb70803311434e898215f7dcae(sha256)  Expected: 3fc1d4d06d2031eb4ddcc91df4e6d1eb6b7574cb70803311434e898215f7dcae(sha256)
-Error: Failed to download metadata for repo 't3': Yum repo downloading error: Downloading error(s): repodata/3fc1d4e06d2031eb4ddcc91df4e6d1eb6b7574cb70803311434e898215f7dcae-primary.xml.gz - Cannot download, all mirrors were already tried without success
-dnf now takes its packages from http://silik-offline-server:8080 (generation 1, 2026-11-13T08:46:00Z); 3 repositories disabled, not deleted: appstream baseos extras
+  - Downloading successful, but checksum doesn't match. Calculated: 645b580f0513ec81d00ea83184274435655fff82b810fb539aa58c5cfb96bb5e(sha256)  Expected: 645b581f0513ec81d00ea83184274435655fff82b810fb539aa58c5cfb96bb5e(sha256)
+Error: Failed to download metadata for repo 't3': Yum repo downloading error: Downloading error(s): repodata/645b580f0513ec81d00ea83184274435655fff82b810fb539aa58c5cfb96bb5e-primary.xml.gz - Cannot download, all mirrors were already tried without success
+dnf now takes its packages from http://silik-offline-server:8080 (generation 1, 2026-11-13T09:18:12Z); 3 repositories disabled, not deleted: appstream baseos extras
 
 === 5 a newer package of SilikOS's own (silik-tools release 2, built in a copy): update, the client upgrades and goes back ===
 silik-tools-0.6.14-2.el9.noarch.rpm
@@ -1904,7 +1904,7 @@ $ dnf --installroot=/mirrors/full/.root --releasever=9 --setopt=module_platform_
 Total size: 2.5 G
 generation 2: 1 packages added (0.2 MB), 0 old versions removed; the mirror holds 1573 packages, 2688.4 MB, in AppStream BaseOS CRB epel silikos; 8 s
 silikos: SilikOS's own packages are not signed today: the manifest's sha256 is what holds them
-● mirror      http://silik-offline-server:8080: generation 2 of 2026-11-13T08:48:23Z, x86_64, 1573 packages, 2688.4 MB (AppStream 979, BaseOS 543, CRB 1, epel 39, silikos 11); the last 3 versions of each stay
+● mirror      http://silik-offline-server:8080: generation 2 of 2026-11-13T09:20:40Z, x86_64, 1573 packages, 2688.4 MB (AppStream 979, BaseOS 543, CRB 1, epel 39, silikos 11); the last 3 versions of each stay
 dnf upgrade: exit 1
  Problem: cannot install both glibc-2.34-284.el9_8.4.x86_64 from silikos-mirror-BaseOS and glibc-2.34-283.el9_8.x86_64 from @System
 silik-tools-0.6.14-1.el9.noarch
@@ -1915,8 +1915,8 @@ Upgrade  6 Packages
 silik-tools-0.6.14-2.el9.noarch
 glibc-2.34-284.el9_8.4.x86_64
 the installed package carries the plugin:
-● in use      http://silik-offline-server:8080 since 2026-11-13T08:46:46; disabled meanwhile: appstream baseos extras
-● mirror      http://silik-offline-server:8080: generation 3 of 2026-11-13T08:48:34Z, x86_64, 1574 packages, 2688.4 MB (AppStream 979, BaseOS 544, CRB 1, epel 39, silikos 11); the last 3 versions of each stay
+● in use      http://silik-offline-server:8080 since 2026-11-13T09:18:58; disabled meanwhile: appstream baseos extras
+● mirror      http://silik-offline-server:8080: generation 3 of 2026-11-13T09:20:51Z, x86_64, 1574 packages, 2688.4 MB (AppStream 979, BaseOS 544, CRB 1, epel 39, silikos 11); the last 3 versions of each stay
 Updates Information Summary: available
     1 Security notice(s)
         1 Moderate Security notice(s)
@@ -1937,36 +1937,36 @@ gpg: marginals needed: 3  completes needed: 1  trust model: pgp
 gpg: depth: 0  valid:   1  signed:   0  trust: 0-, 0q, 0n, 0m, 0f, 1u
 --- create (generation 1: tzdata 2026a)
 key almalinux  BF18AC2876178908D6E71267D36CB86CB86B3716  /etc/pki/rpm-gpg/RPM-GPG-KEY-AlmaLinux-9
-tzdata-2026a-1.el9.noarch.rpm                    97 MB/s | 496 kB     00:00
-$ gpg --batch --yes --detach-sign --armor -u B7AA5D68BAC175205E77DEC34E8067F46DC44A59 /w/tz/BaseOS/repodata/repomd.xml
-$ gpg --batch --armor --export B7AA5D68BAC175205E77DEC34E8067F46DC44A59
-$ gpg --batch --yes --detach-sign --armor -u B7AA5D68BAC175205E77DEC34E8067F46DC44A59 /w/tz/silik-mirror.json
+tzdata-2026a-1.el9.noarch.rpm                   110 MB/s | 496 kB     00:00
+$ gpg --batch --yes --detach-sign --armor -u 69F0DD27D78047F7516A6D6F7BCBB903FC9BC7E5 /w/tz/BaseOS/repodata/repomd.xml
+$ gpg --batch --armor --export 69F0DD27D78047F7516A6D6F7BCBB903FC9BC7E5
+$ gpg --batch --yes --detach-sign --armor -u 69F0DD27D78047F7516A6D6F7BCBB903FC9BC7E5 /w/tz/silik-mirror.json
 generation 1: 1 packages added (0.5 MB), 0 old versions removed; the mirror holds 1 packages, 0.5 MB, in BaseOS; 0 s
 no SilikOS packages in this mirror (--silikos FOLDER): it serves the base's updates only
 --- the source gets 2026b: update
 key almalinux  BF18AC2876178908D6E71267D36CB86CB86B3716  /etc/pki/rpm-gpg/RPM-GPG-KEY-AlmaLinux-9
-tzdata-2026b-1.el9.noarch.rpm                   110 MB/s | 497 kB     00:00
-$ gpg --batch --yes --detach-sign --armor -u B7AA5D68BAC175205E77DEC34E8067F46DC44A59 /w/tz/BaseOS/repodata/repomd.xml
-$ gpg --batch --armor --export B7AA5D68BAC175205E77DEC34E8067F46DC44A59
-$ gpg --batch --yes --detach-sign --armor -u B7AA5D68BAC175205E77DEC34E8067F46DC44A59 /w/tz/silik-mirror.json
+tzdata-2026b-1.el9.noarch.rpm                   108 MB/s | 497 kB     00:00
+$ gpg --batch --yes --detach-sign --armor -u 69F0DD27D78047F7516A6D6F7BCBB903FC9BC7E5 /w/tz/BaseOS/repodata/repomd.xml
+$ gpg --batch --armor --export 69F0DD27D78047F7516A6D6F7BCBB903FC9BC7E5
+$ gpg --batch --yes --detach-sign --armor -u 69F0DD27D78047F7516A6D6F7BCBB903FC9BC7E5 /w/tz/silik-mirror.json
 generation 2: 1 packages added (0.5 MB), 0 old versions removed; the mirror holds 2 packages, 1.0 MB, in BaseOS; 0 s
 no SilikOS packages in this mirror (--silikos FOLDER): it serves the base's updates only
 tzdata-2026a-1.el9.noarch.rpm
 tzdata-2026b-1.el9.noarch.rpm
 --- across the air gap: the whole mirror (generation 2) packed, and unpacked in the lab
 the whole mirror: 2 of 2 packages, 1.1 MB
-$ tar -cf /w/tz-gen2.tar -C /w/tz --owner=0 --group=0 --numeric-owner --verbatim-files-from -T /tmp/silik-mirror6v53tdgz
-/w/tz-gen2.tar: 1.1 MB, sha256 71a415b8e9ef1c357331f06d10b23eecab25c38770ced15d10ce7ab7b14e9f01 (also in /w/tz-gen2.tar.sha256: carry it another way and compare)
+$ tar -cf /w/tz-gen2.tar -C /w/tz --owner=0 --group=0 --numeric-owner --verbatim-files-from -T /tmp/silik-mirrore66ycg3g
+/w/tz-gen2.tar: 1.1 MB, sha256 8a1017aed431fb9c2d4df3892e93c0a9b020a361792670354a766b94d062a0fb (also in /w/tz-gen2.tar.sha256: carry it another way and compare)
 ● metadata signature     0 of 2 not signed by the key in /w/lab-key.asc
-/w/lab: generation 2 of 2026-11-13T08:48:46Z, 2 packages, 1.1 MB, checked in 0.1 s: everything is as the manifest and the keys say
+/w/lab: generation 2 of 2026-11-13T09:21:06Z, 2 packages, 1.1 MB, checked in 0.1 s: everything is as the manifest and the keys say
 tzdata-2026a-1.el9.noarch.rpm
 tzdata-2026b-1.el9.noarch.rpm
 --- the source gets 2026c: update (--keep 2: the oldest goes)
 key almalinux  BF18AC2876178908D6E71267D36CB86CB86B3716  /etc/pki/rpm-gpg/RPM-GPG-KEY-AlmaLinux-9
-tzdata-2026c-1.el9_8.noarch.rpm                 115 MB/s | 497 kB     00:00
-$ gpg --batch --yes --detach-sign --armor -u B7AA5D68BAC175205E77DEC34E8067F46DC44A59 /w/tz/BaseOS/repodata/repomd.xml
-$ gpg --batch --armor --export B7AA5D68BAC175205E77DEC34E8067F46DC44A59
-$ gpg --batch --yes --detach-sign --armor -u B7AA5D68BAC175205E77DEC34E8067F46DC44A59 /w/tz/silik-mirror.json
+tzdata-2026c-1.el9_8.noarch.rpm                 100 MB/s | 497 kB     00:00
+$ gpg --batch --yes --detach-sign --armor -u 69F0DD27D78047F7516A6D6F7BCBB903FC9BC7E5 /w/tz/BaseOS/repodata/repomd.xml
+$ gpg --batch --armor --export 69F0DD27D78047F7516A6D6F7BCBB903FC9BC7E5
+$ gpg --batch --yes --detach-sign --armor -u 69F0DD27D78047F7516A6D6F7BCBB903FC9BC7E5 /w/tz/silik-mirror.json
 generation 3: 1 packages added (0.5 MB), 1 old versions removed; the mirror holds 2 packages, 1.0 MB, in BaseOS; 0 s
 no SilikOS packages in this mirror (--silikos FOLDER): it serves the base's updates only
 tzdata-2026b-1.el9.noarch.rpm
@@ -1977,13 +1977,13 @@ tzdata-2026c-1.el9_8.noarch.rpm
 ● strangers              0 file(s) the manifest does not list
 ● signatures BaseOS      0 of 2 without a good signature of RPM-GPG-KEY-AlmaLinux-9 (BF18AC2876178908D6E71267D36CB86CB86B3716)
 ● metadata signature     0 of 2 not signed by the key in /w/lab-key.asc
-/w/tz: generation 3 of 2026-11-13T08:48:47Z, 2 packages, 1.1 MB, checked in 0.1 s: everything is as the manifest and the keys say
+/w/tz: generation 3 of 2026-11-13T09:21:07Z, 2 packages, 1.1 MB, checked in 0.1 s: everything is as the manifest and the keys say
 --- next week's stick: the delta since generation 2, unpacked over the lab's mirror
 a delta: 1 of 2 packages, 0.6 MB (it unpacks only over a mirror that holds the rest)
-$ tar -cf /w/tz-delta.tar -C /w/tz --owner=0 --group=0 --numeric-owner --verbatim-files-from -T /tmp/silik-mirrorv4j3pska
-/w/tz-delta.tar: 0.6 MB, sha256 caf1e2c16ba623e424743b3fa1c9a8c126d7e6b6146ff89109ff5e6245504772 (also in /w/tz-delta.tar.sha256: carry it another way and compare)
+$ tar -cf /w/tz-delta.tar -C /w/tz --owner=0 --group=0 --numeric-owner --verbatim-files-from -T /tmp/silik-mirrora6300yg_
+/w/tz-delta.tar: 0.6 MB, sha256 629fc6c51791e8b09ede6f9c66763555deb3ea87b38eab5e3c314a61d98c519f (also in /w/tz-delta.tar.sha256: carry it another way and compare)
 ● metadata signature     0 of 2 not signed by the key in /w/lab-key.asc
-/w/lab: generation 3 of 2026-11-13T08:48:47Z, 2 packages, 1.1 MB, checked in 0.1 s: everything is as the manifest and the keys say
+/w/lab: generation 3 of 2026-11-13T09:21:07Z, 2 packages, 1.1 MB, checked in 0.1 s: everything is as the manifest and the keys say
 tzdata-2026b-1.el9.noarch.rpm
 tzdata-2026c-1.el9_8.noarch.rpm
 --- the delta over nothing
@@ -1991,12 +1991,12 @@ silik: /w/tz-delta.tar is a delta and this mirror lacks 1 of the files it builds
 silik mirror unpack: exit 3
 --- a client that checks the metadata's signature (silik mirror use DIR --key): dnf sees the versions that stay, and can go back
 tzdata-2026e-1.el9_8.noarch
-dnf now takes its packages from file:///w/lab (generation 3, 2026-11-13T08:48:47Z); 6 repositories disabled, not deleted: appstream baseos crb epel epel-cisco-openh264 extras
+dnf now takes its packages from file:///w/lab (generation 3, 2026-11-13T09:21:07Z); 6 repositories disabled, not deleted: appstream baseos crb epel epel-cisco-openh264 extras
 repo_gpgcheck=1
 gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-AlmaLinux-9 file:///etc/pki/rpm-gpg/RPM-GPG-KEY-silik-mirror
 Importing GPG key 0xB86B3716:
  From       : /etc/pki/rpm-gpg/RPM-GPG-KEY-AlmaLinux-9
-Importing GPG key 0x6DC44A59:
+Importing GPG key 0xFC9BC7E5:
  From       : /etc/pki/rpm-gpg/RPM-GPG-KEY-silik-mirror
 tzdata.noarch                2026e-1.el9_8                 @baseos
 tzdata.noarch                2026b-1.el9                   silikos-mirror-BaseOS
@@ -2006,7 +2006,7 @@ tzdata-2026c-1.el9_8.noarch
 --- somebody removes the newest version from the lab's mirror and makes it agree with itself (createrepo_c, manifest): a freeze
 forged: /w/lab/silik-mirror.json now lists 10 files as they are
 ▼ metadata signature     2 of 2 not signed by the key in /w/lab-key.asc: BaseOS/repodata/repomd.xml silik-mirror.json
-/w/lab: generation 3 of 2026-11-13T08:48:47Z, 1 packages, 0.5 MB, checked in 0.1 s: NOT VERIFIED
+/w/lab: generation 3 of 2026-11-13T09:21:07Z, 1 packages, 0.5 MB, checked in 0.0 s: NOT VERIFIED
 dnf, with repo_gpgcheck: exit 1
 Error: Failed to download metadata for repo 'silikos-mirror-BaseOS': GPG verification is enabled, but GPG signature is not available. This may be an error or the repository does not support GPG verification: Curl error (37): Couldn't read a file:// file for file:///w/lab/BaseOS/repodata/repomd.xml.asc [Couldn't open file /w/lab/BaseOS/repodata/repomd.xml.asc]
 the mirror is off: 14 of 14 repository files are byte for byte as before
@@ -2020,4 +2020,4 @@ silik mirror create: exit 3
 573440 bytes /w/tz-delta.tar
 1085440 bytes /w/tz-gen2.tar
 
-=== done: 08:48Z ===
+=== done: 09:21Z ===

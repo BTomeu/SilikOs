@@ -181,11 +181,23 @@ its whole output: `tests/offline/run-2026-11-13.log`):
    with itself (a freeze): `verify --key` fails on the metadata signature and dnf refuses the repository. A source
    with an unsigned package: `create` exit 3, the package nowhere in the mirror.
 
-The log's first line names the commit the tree was based on (bdb1eee): it ran before this work was committed.
+The log kept is of the last of five runs (commit b211f59); the numbers above are the ranges over them.
 
 In an emulated machine (QEMU without KVM, **no network device**: `-nic none`), the offline ISO of the reduced set:
 
-(running when this was written: see the next commit)
+- The reduced mirror: 400 packages, 1085.7 MB, made in 73 s; its ISO: 2 612 461 568 bytes, built in 32 s.
+- The installer booted from the ISO with **only `lo`** as a network device, took the kickstart, and its `%pre` verified
+  the medium: 424 files as the manifest says, 400 signatures good against the installer image's own AlmaLinux key
+  (77.6 s, emulated). Then it installed **337 packages** from `file:///run/install/repo/mirror` (the medium,
+  `/dev/sr0`), the boot loader among them (`grub2-pc`: not in the group `core`, in the mirror because the plugin adds
+  what the installer adds), and powered off: 52 minutes in all, QEMU exit 0.
+- The installed disk boots, again without a network device, to a login prompt in about 90 s: 337 packages, SELinux
+  enforcing, firewalld running, `/root/silikos-mirror-verify.log` there.
+
+What it printed: `tests/offline/emulated-2026-11-13.log`; the commands, in order: `tests/offline/emulated_install.sh`
+(typed one by one that day; the file as a whole has not been run). This is the base's `core`, in text mode, on a
+BIOS machine: it shows the medium's kickstart forms, the verification inside the installer and an installation with
+no network; it does not show the SilikOS desktop installed from the whole ISO.
 
 ## Not verified
 
