@@ -1,5 +1,5 @@
 Name:           silik-dev
-Version:        0.5.0
+Version:        0.5.1
 Release:        1%{?dist}
 Summary:        Embedded development and the lab bench on SilikOS: ARM compiler, debugger, flashing, CAN, serial / RS-485, buses
 License:        LicenseRef-SilikVolt

@@ -1,5 +1,5 @@
 Name:           silik-command
-Version:        0.4.7
+Version:        0.5.0
 Release:        1%{?dist}
 Summary:        The SilikOS COMMAND bar: type an address, run it, see its command line
 License:        LicenseRef-SilikVolt
@@ -8,7 +8,7 @@ Requires:       python3
 Requires:       python3-gobject
 Requires:       gtk3
 # look/ink, look/cobalt, look/cobalt-vivid ... run `silik look --accent`
-Requires:       silik-tools >= 0.6.9
+Requires:       silik-tools >= 0.7.0
 Recommends:     gnome-terminal
 Recommends:     xdg-utils
 
