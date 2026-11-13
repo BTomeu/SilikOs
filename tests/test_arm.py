@@ -271,7 +271,7 @@ class WinRoutes(OnArch):
 
     def test_the_completion_and_the_command_bar(self):
         comp = text("packages/silik-tools/files/silik.bash-completion")
-        self.assertIn('win) COMPREPLY=($(compgen -W "list open create run install stop rm sync apps routes vm"', comp)
+        self.assertIn('win) COMPREPLY=($(compgen -W "list open create run install isolate stop rm sync apps routes vm"', comp)
         for lang in ("en", "ca", "es"):
             t = bar.TEXT[lang]
             i = [x for x in bar.match(bar.system_items(t), "win/routes", t) if x.address == "win/routes"]

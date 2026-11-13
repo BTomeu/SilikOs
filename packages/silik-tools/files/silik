@@ -1905,8 +1905,8 @@ def win_open(ctx, a):
     win_gate(ctx, a, f, a.prefix or WIN_DEFAULT)
     # an isolated program never goes into "default", where the trusted ones are: the prefix "isolated" is for those
     name = a.prefix or (WIN_ISOLATED if getattr(a, "isolated", False) and win_boxed(a) else WIN_DEFAULT)
-    if getattr(a, "isolated", False) and win_boxed(a) and not os.path.isdir(prefix_dir(name)):
-        win_mark(ctx, name)                 # a prefix made isolated stays so
+    if getattr(a, "isolated", False) and win_boxed(a) and (name == WIN_ISOLATED or not os.path.isdir(prefix_dir(name))):
+        win_mark(ctx, name)                 # a prefix made isolated stays so (the prefix "isolated" always is)
     d, shared = win_prepare(ctx, name, a, create=True), win_shared()
     show = win_show(f, d) if win_boxed(a) else []
     if show:

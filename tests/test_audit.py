@@ -71,7 +71,7 @@ class Completion(unittest.TestCase):
     def test_a_name_is_text_never_a_command(self):
         out, ran, err = self.complete(["silik", "win", "run", ""], ["default", "office", "$(touch MARK)", "`touch MARK`", "a b"])
         self.assertFalse(ran, err)
-        self.assertEqual(out, ["default", "office", "--no-net", "--no-sandbox"])
+        self.assertEqual(out, ["default", "office", "--isolated", "--sound", "--no-net", "--no-sandbox", "--yes"])
         out, ran, _ = self.complete(["silik", "win", "run", "of"], ["default", "office", "$(touch MARK)"])
         self.assertEqual((out, ran), (["office"], False))
         out, ran, _ = self.complete(["silik", "eda", "enter", ""], ["ic616", "$(touch MARK)"])
