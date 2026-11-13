@@ -121,6 +121,10 @@ def flat(cmds):
 
 CHECKS = ["selinux", "firewall", "incoming", "sshd", "updates-auto", "updates-pending", "disk", "secureboot",
           "screenlock", "autologin", "sysctl", "vsyscall", "sandbox"]
+# the rows of the boot chain, the firmware and what listens (tests/test_secure_level.py feeds them made-up systems);
+# "unlock" is there only on an encrypted disk
+MORE = ["lockdown", "modsig", "kernel", "firmware", "cpu", "listening", "tpm", "swap", "iommu", "thunderbolt",
+        "coredump", "ptrace", "bpf", "kexec", "sysrq", "usb", "root"]
 # real output, firewalld 1.3.4 on AlmaLinux 9.8 (10/11/2026)
 LIST_PUBLIC = """public
   target: default
@@ -483,7 +487,7 @@ class Cli(unittest.TestCase):
         self.assertIn(rc, (0, 1))
         lines = o.splitlines()
         heads = [l for l in lines if l[:1] in silik.SEC_MARK.values()]
-        self.assertEqual(len(heads), len(CHECKS))
+        self.assertIn(len(heads), (len(CHECKS + MORE), len(CHECKS + MORE) + 1))
         for l in heads:
             self.assertRegex(l, "^(● ok|◆ warn|▼ bad|\\? unknown) ")
         self.assertRegex(lines[-1], r"^\d+ ok, \d+ warn, \d+ bad, \d+ unknown$")
@@ -492,8 +496,8 @@ class Cli(unittest.TestCase):
     def test_status_json(self):
         rc, o = run("secure", "status", "--json", "--offline")
         d = json.loads(o)
-        self.assertEqual([c["id"] for c in d["checks"]], CHECKS)
-        self.assertEqual(sum(d["summary"].values()), len(CHECKS))
+        self.assertEqual([c["id"] for c in d["checks"] if c["id"] != "unlock"], CHECKS + MORE)
+        self.assertEqual(sum(d["summary"].values()), len(d["checks"]))
         self.assertTrue(all(c["fix"] for c in d["checks"] if c["state"] in ("warn", "bad")))
 
     def test_status_without_any_tool(self):
@@ -520,7 +524,7 @@ class Cli(unittest.TestCase):
             rc = silik.main(["secure", "status", "--offline"])
         out.flush()
         lines = buf.getvalue().decode("ascii").splitlines()          # the shapes became "?", the words are all there
-        self.assertEqual(sum(1 for l in lines if re.match(r"^\? (ok|warn|bad|unknown) ", l)), len(CHECKS))
+        self.assertIn(sum(1 for l in lines if re.match(r"^\? (ok|warn|bad|unknown) ", l)), (len(CHECKS + MORE), len(CHECKS + MORE) + 1))
         self.assertRegex(lines[-1], r"^\d+ ok, ")
 
     def test_dry_run_apply_runs_nothing(self):
@@ -548,7 +552,7 @@ class Cli(unittest.TestCase):
 
     def test_apply_prints_each_command(self):
         old = silik.sec_probe
-        silik.sec_probe = lambda pending=True, offline=False: weak()
+        silik.sec_probe = lambda pending=True, offline=False, more=True: weak()
         try:
             rc, o = run("--dry-run", "secure", "apply")
         finally:
@@ -578,7 +582,7 @@ class Cli(unittest.TestCase):
 
     def test_completion_and_usage(self):
         comp = text("packages/silik-tools/files/silik.bash-completion")
-        self.assertIn("secure) COMPREPLY=($(compgen -W \"status apply\"", comp)
+        self.assertIn("secure) COMPREPLY=($(compgen -W \"status apply level\"", comp)
         self.assertRegex(comp, r'1\) COMPREPLY=.*\bsecure\b')
         self.assertIn("silik secure status [--json] [--offline] | apply [--keep-ssh]", text("packages/silik-tools/files/silik"))
 

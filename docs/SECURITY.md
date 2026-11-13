@@ -5,6 +5,7 @@ two commands:
 
 ```bash
 silik secure status          # read-only audit: ● ok / ◆ warn / ▼ bad / ? unknown, and the command that fixes each row
+silik secure level           # default / hardened / mixed; `level hardened`, `level default` (docs/HARDENED.md)
 sudo silik secure status     # the same with what only root may read (what the firewall zone opens)
 silik secure apply           # sets the SilikOS defaults; prints every command; --dry-run runs nothing
 silik secure apply --keep-ssh    # the same, leaving sshd on and its port open
@@ -91,10 +92,19 @@ repository of the installation medium is not kept on the installed system.
   a GitHub environment that only main may use; never in the repository (the tests refuse a private key in the
   tree). The workflow's job that sees it holds no token that writes and is never started by a pull request. A key
   that is not the committed public one signs nothing; a committed key without the private one publishes nothing.
-- **What this does not answer.** Whoever controls the GitHub account can sign. Metadata have no expiry: someone
-  between the machine and the server can serve old, well signed metadata and so hold an update back [A: dnf's
-  behaviour, not run]; they cannot make the system install something the key did not sign. GitHub is a single
-  point: without it SilikOS's own packages are not updated (the base's are).
+- **Old metadata served again.** Every `repomd.xml` carries, under the signature, a revision (the time it was
+  made) and its channel's name. A dnf plugin of the package `silikos-repos` remembers the highest revision this
+  system has seen (`/var/lib/silikos/repo-revision`) and takes nothing from metadata that are older, that are the
+  other channel's, or that were loaded with the signature check off; `silik update` then ends with 1 and `silik
+  doctor` says bad (run in an EL 9 container: revision 2 seen, revision 1 served again, refused by dnf, `silik
+  update` and dnf-automatic; without the plugin dnf installed the old package). Metadata older than 45 days
+  [PROPOSAL], or a channel not reached for that long, are a warning: holding updates back can be noticed, not
+  prevented. A new installation has no memory; programs that do not use dnf's Python (PackageKit) are not covered
+  [A]. The base's own repositories use a mirror list and do not check their metadata's signature (read): the plugin
+  only warns about them.
+- **What this does not answer.** Whoever holds the key can sign: `docs/SIGNING.md` says where it should live
+  (recommended: with the owner, on a token, for `stable`). GitHub is a single point: without it SilikOS's own
+  packages are not updated (the base's are).
 
 ### The firewall zone
 
@@ -167,6 +177,22 @@ for example `/etc/sysctl.d/90-local.conf` with `kernel.yama.ptrace_scope = 0`.
   [A] AlmaLinux 9 gives no updates to an old minor release: when 9.x+1 is out, the security updates are its packages.
 - **Remote access.** `--keep-ssh`; use keys, not passwords.
 
+## The hardened level
+
+`silik secure level hardened` sets, on the owner's command, what a laptop that travels can afford and a bench
+machine may not (`docs/HARDENED.md` has each item, what stops working with it, and `--without ITEM` to leave it
+out): the kernel locked down with module signatures enforced, memory zeroed on allocation, strict IOMMU, no
+debugfs, stricter kernel settings, the screen-lock settings locked, wrong passwords counted, no user list at login,
+a Wi-Fi address per network, the base's audit rules for module loading, sshd without passwords. It requires Secure
+Boot and an encrypted `/` and cannot give them: without them it says `hardened, except: …` and `silik secure
+status` shows those rows as bad. Preconditions are checked and said, never forced: an unsigned kernel module in use
+(NVIDIA through DKMS before its MOK step, VirtualBox, a vendor's dongle driver) leaves the lockdown out and the rest
+is done. `silik secure level default` puts back exactly what was changed; an argument the owner had before is never
+taken off. `silik secure level` says where the system is. Run so far in an EL 9 container only (the files, each
+through the base's own tool, and the way back); on an installed system with a restart: CI job `hardened-test`,
+not run yet. It is not GrapheneOS: the session is X11, the kernel and glibc are RHEL's, nothing verifies user
+space, and programs are not sandboxed by default.
+
 ## The assistant (`silik ask`)
 
 `silik ask QUESTION` answers from what the system knows about itself and sends nothing anywhere; it runs no command
@@ -196,11 +222,11 @@ signing key or a signed package; a secret in the repository or its history.
 | Id | What was found | How bad | State |
 |---|---|---|---|
 | S1 | `silik mirror use`: the mirror's own manifest said which repositories dnf checks, and the unsigned repository of SilikOS's packages could replace any package. Run: a hand-made mirror installed an unsigned `tzdata-9999` as root | high | **fixed**: this machine's table decides; the own repository is off without the mirror's key (or `--unsigned`, said) and brings only SilikOS's own names. The attack run again: refused |
-| S2 | The releases are where built packages wait, and whatever lies there is signed and put on the ISO: anything that can write a release (a stolen token, a compromised action in a writing job) gets a signed package onto every machine. Run with a stand-in key | high | **open, the owner's**: provenance attestations in the workflows, and never signing what is already published unsigned (below) |
+| S2 | The releases are where built packages wait, and whatever lies there is signed and put on the ISO: anything that can write a release (a stolen token, a compromised action in a writing job) gets a signed package onto every machine. Run with a stand-in key | high | **fixed in the workflows, not run on GitHub yet**: every kept or released package gets a build provenance attestation, and the package repository signs a tool's or an already published package only with an attestation of this repository's workflows on main; what has none is left out, never signed (`docs/SIGNING.md`) |
 | S3 | `main` is not protected, and the signing step runs `main`'s scripts with the private key | high | **open, the owner's**: GitHub settings (below) |
 | S4 | A network installation trusts TLS alone for its 1570 packages (the installer checks no signature) | medium | said here and in `docs/OFFLINE.md`; the offline ISO checks every package before installing |
-| S5 | Actions named by tag in the jobs that hold the write token and the key; the key stayed in the environment of what parsed foreign packages | medium | **fixed**: every action by its commit (99 references; a test holds it); the key leaves the environment once imported. The container image by digest: open |
-| S6 | Well-signed metadata can be served again later, or one channel's as the other's | medium | open: a revision in the signed metadata and a check in `silik update` |
+| S5 | Actions named by tag in the jobs that hold the write token and the key; the key stayed in the environment of what parsed foreign packages | medium | **fixed**: every action by its commit (99 references; a test holds it); the key leaves the environment once imported. The signing step's container image by its digest |
+| S6 | Well-signed metadata can be served again later, or one channel's as the other's | medium | **fixed**: a revision and the channel's name under the signature; a dnf plugin refuses older metadata and the other channel's (run: refused). Holding updates back is noticed (45 days), not prevented |
 | P1 | `silik manifest apply FILE --kernel` gave the file's kernel arguments to the boot loader: `init=FILE`, `selinux=0`, `systemd.debug_shell`. Run | medium | **fixed**: a list of what a manifest may set, by name and value; the rest is said, never set |
 | P2 | `silik manifest apply FILE` turned automatic updates off, took packages back to old versions, made a box from any registry | medium | **fixed**: updates are never lowered, no downgrade without `--downgrade`, no image a file names |
 | B1 | `--no-net` reads as isolation and takes only the network: the program keeps the X11 display, so the keyboard | medium | said plainly (`docs/WINDOWS.md`, the option's help); a display of its own for such a program: open |
@@ -211,10 +237,10 @@ signing key or a signed package; a secret in the repository or its history.
 | P5 | A plugin file writable by a group was loaded | low | **fixed** |
 | B4 | A command line typed after `$` in the bar, secrets and all, went to the session log; the log's mode followed the umask | low | **fixed**: the line is not kept; 0700 / 0600 always |
 | B5 | `silik dev install` runs ST's installer as root, chosen by its file name | low | open: show the path and ask |
-| S7 | A fork's pull request could start hours of CI here by naming its branch `main` | low | **fixed** in the CI's jobs; the repository workflow's choice of run: open |
-| S8 | Released packages restored from the build cache without a check | low | open (with S2) |
+| S7 | A fork's pull request could start hours of CI here by naming its branch `main` | low | **fixed** in the CI's jobs; the repository workflow checks the run through the API (the workflow file, green, this repository, main or a tag on main): not run on GitHub yet |
+| S8 | Released packages restored from the build cache without a check | low | **fixed, not run on GitHub yet**: a build the cache gives back is used only when it is byte for byte a release's own file (`tools/cache_check.py`, run against the real releases) |
 | S9 | The ISO release had no checksum | low | **fixed**: `SHA256SUMS` in the release (not signed: no key yet) |
-| S10 | NVIDIA's repository key and the old CentOS images are trusted on first use | low | open |
+| S10 | NVIDIA's repository key and the old CentOS images are trusted on first use | low | partly: the signing image by digest; the table of every download and how it is checked is in `docs/SIGNING.md`; NVIDIA's key (not readable from here) and the EDA boxes' images still on first use |
 | — | SilikOS's three root services had the whole machine in reach (`systemd-analyze security`: 9.6) | — | **fixed**: 1.5 to 1.7, each still doing its work |
 
 **What only the owner can do**, before the signing key goes to GitHub:
@@ -225,10 +251,12 @@ signing key or a signed package; a secret in the repository or its history.
    owner; no bypass for administrators.
 3. Settings → Actions → General: workflow permissions "Read"; fork pull requests "Require approval for all
    external contributors".
-4. Delete the release `repo-el9-next` before the first signed run: its 87 packages are unsigned and would be signed
-   as they lie.
-5. PROPOSAL: keep the key of the `stable` channel off GitHub (`tools/build_pkgrepo.sh --gpg-name` signs on the
-   owner's PC), so that whoever gets into GitHub reaches `next` only.
+4. Nothing to delete any more: an already published package without an attestation leaves the channel by itself
+   and is never signed. Run *EDA tools*, *Dev tools* and *Wine* once (Run workflow), so that their packages get
+   their attestation; until then the channel holds SilikOS's own packages only.
+5. Decide where the key lives (`docs/SIGNING.md`): recommended, the `stable` key with the owner on a token
+   (`tools/sign_release.sh` signs with what gpg-agent holds, `tools/check_signed.sh` checks without a key), so that
+   whoever gets into GitHub reaches `next` only.
 
 **Beside a hardened system.** Measured with the base's own OpenSCAP content in a container made to be judged as a
 machine: CIS Workstation level 1, 148 rules pass and 113 fail (the base alone: 144 and 117); ANSSI BP-028
@@ -248,12 +276,9 @@ What a system like GrapheneOS has and SilikOS does not, and why:
 | USB refused while locked | yes | not yet: the base ships USBGuard and GNOME 40 knows how to use it, and nothing here installs or configures it. First on the list, after a run with a real device |
 | Fast patches | frequent releases, installed in the background and in effect at the next restart | daily, automatic, with a snapshot to go back to; a kernel fix protects after a restart the owner does (the base has no live patches) |
 
-**Proposed and not done** (each has a cost an engineer pays; the owner decides): a `hardened` level of `silik
-secure` for a laptop that travels — Secure Boot and encryption required, the kernel locked down and module
-signatures enforced (unsigned kernel modules stop: NVIDIA through DKMS, VirtualBox), memory zeroed on allocation,
-strict IOMMU, TPM unlock with a PIN, the screen-lock settings locked, login attempts limited, the Wi-Fi address
-per network (a licence bound to it stops matching); USBGuard at GNOME's "locked screen" level; encryption ticked in
-the installer; nothing listening beyond this machine (`rpcbind.socket` and avahi are the base's, and listen).
+**The hardened level** exists (`silik secure level hardened`, below and `docs/HARDENED.md`). **Proposed and not
+done yet**: USBGuard at GNOME's "locked screen" level; encryption ticked in the installer and TPM unlock with a PIN;
+nothing listening beyond this machine (`rpcbind.socket` and avahi are the base's, and listen).
 
 Seen on an installed system (CI run 43509961201): the only things listening beyond the machine are the base's
 `rpcbind.socket` (port 111) and avahi (mDNS, which also announces the machine's name on every network it joins); the
@@ -266,8 +291,9 @@ are made of them); `noexec` on `/tmp` (vendor installers); kernel lockdown at "c
 
 ## What SilikOS does not do
 
-No antivirus, no USBGuard, no audit rules, no FIPS mode or CIS / STIG profile, no kernel lockdown beyond the base's,
-no TPM unlock of the disk, no confinement of the vendor tools. `silik secure` reads and sets what is listed above.
+No antivirus, no USBGuard, no FIPS mode or CIS / STIG profile, no TPM unlock of the disk, no confinement of the
+vendor tools; at the default level no audit rules and no kernel lockdown beyond the base's (the hardened level
+sets both). `silik secure` reads and sets what is listed above.
 `silik audit` evaluates the system against a CIS, ANSSI or STIG profile of the base's own content and changes nothing;
 `silik cve` lists the advisories that wait with their CVEs (`docs/COMPLIANCE.md`).
 
