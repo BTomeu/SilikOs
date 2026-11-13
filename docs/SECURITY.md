@@ -255,6 +255,11 @@ strict IOMMU, TPM unlock with a PIN, the screen-lock settings locked, login atte
 per network (a licence bound to it stops matching); USBGuard at GNOME's "locked screen" level; encryption ticked in
 the installer; nothing listening beyond this machine (`rpcbind.socket` and avahi are the base's, and listen).
 
+Seen on an installed system (CI run 43509961201): the only things listening beyond the machine are the base's
+`rpcbind.socket` (port 111) and avahi (mDNS, which also announces the machine's name on every network it joins); the
+firewall zone drops what comes for both. Turning them off by default costs NFSv3 mounts and the discovery of network
+printers a command each: proposed, the owner's call.
+
 Refused, with the reason: a different kernel or glibc (the product is binary identity with RHEL 9); application
 allowlisting by default (it stops compiled programs and tools in `/opt`); no user namespaces (podman and bubblewrap
 are made of them); `noexec` on `/tmp` (vendor installers); kernel lockdown at "confidentiality" (no kernel tracing).
