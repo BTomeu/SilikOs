@@ -326,6 +326,23 @@ class Started(unittest.TestCase):
             self.assertFalse(bar.launch(bar.Item("app/x", "X", ["x-program"])))
 
 
+class Width(unittest.TestCase):
+    def test_a_long_title_does_not_widen_the_window(self):
+        """a label that may be cut asks for little and takes the room left: the window keeps its width (seen in the
+        rig at 1232 px of a 1280 px screen with the long titles of 13/11/2026; 820 px with this)"""
+        text = read(os.path.join(ROOT, "packages/silik-command/files/silik-command"))
+        self.assertEqual((bar.WIDTH, bar.WIDE), (820, 20))
+        self.assertIn("win.set_default_size(WIDTH, -1)", text)
+        self.assertIn("win.set_resizable(False)", text)
+        for label in ("b", "twin"):
+            cut = text.index("%s.set_ellipsize(Pango.EllipsizeMode.END)" % label)
+            self.assertIn("%s.set_max_width_chars(WIDE)" % label, text[cut:cut + 120])
+        # every label that is cut at the end is one of those two (a new one must ask for little too)
+        self.assertEqual(text.count("set_ellipsize(Pango.EllipsizeMode.END)"), 2)
+        longest = max(len(i.title) for lang in bar.TEXT for i in bar.system_items(bar.TEXT[lang]))
+        self.assertGreater(longest, 60)         # (the titles that widened it are still there: the case is real)
+
+
 class Package(unittest.TestCase):
     def test_the_launcher_and_the_module(self):
         spec = read(SPEC)

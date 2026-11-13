@@ -700,6 +700,11 @@ GLASS = {
                      "dark": {"bg": "rgba(23, 24, 27, 0.67)", "bg2": "rgba(236, 235, 231, 0.04)", "muted": "#eae9e6"}},
 }
 RADIUS = 6
+# The window is WIDTH wide. A label that may be cut (a title, the command line at the foot) would otherwise ask for
+# the width of its whole text, and the window, which is not resizable, would grow to it: with the long titles of
+# 13/11/2026 it was 1232 px on a 1280 px screen. Such a label asks for WIDE characters and is given the room left.
+WIDTH = 820
+WIDE = 20
 
 
 def glass_mode():
@@ -778,7 +783,7 @@ def run_window(query, theme, lang, started=None, path=None, given=(None, None)):
 
     win = Gtk.Window(title="SilikOS COMMAND")
     win.set_decorated(False)
-    win.set_default_size(820, -1)
+    win.set_default_size(WIDTH, -1)
     win.set_resizable(False)
     win.set_keep_above(True)
     win.set_skip_taskbar_hint(True)
@@ -807,6 +812,7 @@ def run_window(query, theme, lang, started=None, path=None, given=(None, None)):
     twin = Gtk.Label(xalign=0)
     twin.get_style_context().add_class("twin")
     twin.set_ellipsize(Pango.EllipsizeMode.END)
+    twin.set_max_width_chars(WIDE)
     twin.set_hexpand(True)
     keys = Gtk.Label(label="Enter %s   Tab %s   Esc %s" % (t["run"], t["complete"], t["close"]))
     foot.pack_start(twin, True, True, 0)
@@ -828,6 +834,7 @@ def run_window(query, theme, lang, started=None, path=None, given=(None, None)):
             b = Gtk.Label(label=it.title, xalign=0)
             b.get_style_context().add_class("meta")
             b.set_ellipsize(Pango.EllipsizeMode.END)
+            b.set_max_width_chars(WIDE)     # (it takes the room the row has, and asks for little: see WIDE)
             row.pack_start(a, False, False, 0)
             row.pack_start(b, True, True, 0)
             lst.add(row)
