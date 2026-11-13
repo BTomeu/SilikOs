@@ -2562,6 +2562,73 @@ def par(fns, timeout=None):
     return res
 
 
+# ---- r7 (listen, usb): rows and commands of `silik secure` that live in plugins -------------------------------------
+# A plugin of SEC_PLUGINS gives three functions: secure_probe(silik) reads, secure_rows(silik, probe) judges what was
+# read ([{id, name, state, value, fix}]), secure_plan(silik, probe, dry) lists apply's commands ((commands, notes)).
+# One that is not installed gives nothing; one that fails gives an unknown row, never an ok one.
+SEC_PLUGINS = ("listen", "usb")
+_sec_plugins = {}
+
+
+class _Self:
+    """this program's own names as attributes: what a plugin is handed as `silik` (however this file was loaded)"""
+    def __getattr__(self, k):
+        try:
+            return globals()[k]
+        except KeyError:
+            raise AttributeError(k)
+
+
+def sec_plugin(name):
+    """the plugin NAME when it is installed and takes part in `silik secure`, else None"""
+    if name not in plugins():
+        return None
+    if name not in _sec_plugins:
+        _sec_plugins[name] = load_plugin(name)
+    mod = _sec_plugins[name]
+    return mod if all(hasattr(mod, f) for f in ("secure_probe", "secure_rows", "secure_plan")) else None
+
+
+def sec_plugins_probe(parallel=False):
+    """{plugin: what it read}; {"failed": why} for one that raised"""
+    me, names = _Self(), [n for n in SEC_PLUGINS if sec_plugin(n)]
+
+    def one(n):
+        try:
+            return sec_plugin(n).secure_probe(me)
+        except Exception as e:      # (a plugin's fault is that row's, not the audit's)
+            return {"failed": "%s: %s" % (type(e).__name__, e)}
+    fns = [lambda n=n: one(n) for n in names]
+    return dict(zip(names, par(fns) if parallel else [f() for f in fns]))
+
+
+def sec_plugins_rows(st):
+    rows = []
+    for n, got in (st.get("plugins") or {}).items():
+        try:
+            if not isinstance(got, dict) or "failed" in got:
+                raise RuntimeError(got.get("failed", "no answer") if isinstance(got, dict) else "no answer")
+            rows += sec_plugin(n).secure_rows(_Self(), got)
+        except Exception as e:
+            rows.append({"id": n, "name": n, "state": "unknown", "value": "`silik %s` could not read it: %s" % (n, e), "fix": ["silik " + n]})
+    return rows
+
+
+def sec_plugins_plan(st, dry=False):
+    cmds, notes = [], []
+    for n, got in (st.get("plugins") or {}).items():
+        try:
+            if not isinstance(got, dict) or "failed" in got:
+                raise RuntimeError(got.get("failed", "no answer") if isinstance(got, dict) else "no answer")
+            c, m = sec_plugin(n).secure_plan(_Self(), got, dry)
+            cmds += c
+            notes += m
+        except Exception as e:
+            notes.append("%s: not changed, `silik %s` could not read it: %s" % (n, n, e))
+    return cmds, notes
+# ---- r7 (listen, usb): end ----------------------------------------------------------------------------------------
+
+
 def sec_probe(pending=True, offline=False, parallel=False):
     """what the audit reads; PARALLEL: its parts at once (silik doctor), else one after the other"""
     cont = sec_container()
@@ -2585,6 +2652,7 @@ def sec_probe(pending=True, offline=False, parallel=False):
         "pending": got["pending"], "disk": got["disk"], "secureboot": got["secureboot"], "lock": got["lock"], "lock_user": su,
         "autologin": got["autologin"], "sysctl": got["sysctl"], "sysctl_file": os.path.isfile(SEC_SYSCTL_FILE),
         "vsyscall": kernel_vsyscall() if x86() else "n/a", "bwrap": {"path": bw or "", "version": got["bwrap"], "userns": int(ns) if ns.isdigit() else None},
+        "plugins": sec_plugins_probe(parallel),      # (r7: listen, usb)
     }
 
 
@@ -2793,6 +2861,7 @@ def sec_checks(st):
             ["grep -rs max_user_namespaces /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d   # the file that turns them off"])
     else:
         row("sandbox", "sandbox", "ok", "bubblewrap %s, user namespaces on" % bw["version"])
+    rows += sec_plugins_rows(st)                      # (r7: listen, usb)
     return rows
 
 
@@ -2883,6 +2952,9 @@ def sec_plan(st, keep_ssh=False, dry=False):
         notes.append("screen lock: the desktop's settings are not readable from here, nothing changed")
     else:
         cmds += sec_lock_fix(lk)
+
+    pc, pn = sec_plugins_plan(st, dry)                # (r7: listen, usb)
+    cmds, notes = cmds + pc, notes + pn
 
     notes.append("not changed by apply, the owner's choice (docs/SECURITY.md): disk encryption, Secure Boot, the vsyscall page; updates that wait: silik update")
     return cmds, notes

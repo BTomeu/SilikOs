@@ -64,6 +64,19 @@ _silik() {
     esac
     return
   fi
+  # usb allow / block: a device's number as `silik usb` lists them (allow: or all-present); usb level: its three;
+  # listen on / off: the services, in any number
+  if [ "$g" = usb ] && [ "$COMP_CWORD" -eq 3 ]; then
+    case ${COMP_WORDS[2]} in
+      level) COMPREPLY=($(compgen -W "lockscreen always off" -- "$cur"));;
+      allow) _silik_names "$cur" "all-present" < <(silik -q usb --json 2>/dev/null | sed -n 's/^ *"id": \([0-9][0-9]*\),$/\1/p');;
+      block) _silik_names "$cur" "" < <(silik -q usb --json 2>/dev/null | sed -n 's/^ *"id": \([0-9][0-9]*\),$/\1/p');;
+    esac
+    return
+  fi
+  if [ "$g" = listen ] && [ "$COMP_CWORD" -ge 3 ] && { [ "${COMP_WORDS[2]}" = on ] || [ "${COMP_WORDS[2]}" = off ]; }; then
+    COMPREPLY=($(compgen -W "nfs mdns printers" -- "$cur")); return
+  fi
   # the plugins (/usr/share/silikos/python/plugins/NAME.py): their groups, and each one's words from its head
   local pd=${SILIK_PLUGIN_DIR:-/usr/share/silikos/python/plugins} pl=
   [ -d "$pd" ] && pl=$(sed -n 's/^# silik-plugin: \([a-z][a-z0-9-]*\)$/\1/p' "$pd"/*.py 2>/dev/null | tr '\n' ' ')

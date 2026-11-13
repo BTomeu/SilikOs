@@ -1,0 +1,28 @@
+// SilikOS (package silikos-security; docs/USB.md): the desktop may switch USBGuard when the screen locks.
+//
+// GNOME's own USB protection (gsd-usb-protection of gnome-settings-daemon 40, a program of the user's session)
+// asks USBGuard's D-Bus service (usbguard-dbus, org.usbguard1) for exactly this:
+//   org.usbguard1.setParameter                 InsertedDevicePolicy = block when the screen locks,
+//                                               apply-policy when it is unlocked
+//   org.usbguard.Devices1.applyDevicePolicy    a keyboard, a mouse or a hub plugged in while locked is accepted
+//                                               (nobody is locked out), and a device the machine has built in
+// and reads with getParameter and listRules, which usbguard-dbus's own policy already gives an active session.
+// Without this file the two calls above ask for an administrator's password at every login and every lock.
+//
+// Not given: appendRule and removeRule (the rules stay root's: /etc/usbguard/rules.d/90-silikos-gnome.conf is the
+// rule the desktop looks for, so it has none to add), and nothing to a session that is not the one at the
+// machine's own screen and keyboard (remote, or switched away from). The login screen's own user is refused
+// outright: after "log in as another user" from a locked session it must not be the one that opens USB again.
+polkit.addRule(function(action, subject) {
+    if (action.id !== "org.usbguard1.setParameter" &&
+        action.id !== "org.usbguard.Devices1.applyDevicePolicy") {
+        return polkit.Result.NOT_HANDLED;
+    }
+    if (subject.user === "gdm") {
+        return polkit.Result.NO;
+    }
+    if (subject.active === true && subject.local === true) {
+        return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
+});

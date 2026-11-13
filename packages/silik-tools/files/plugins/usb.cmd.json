@@ -1,0 +1,22 @@
+[
+ {"address": "usb/status", "argv": ["usb"],
+  "en": "USB devices: which are allowed, which blocked, and when a new one is refused",
+  "ca": "Dispositius USB: quins són permesos, quins blocats, i quan se'n refusa un de nou",
+  "es": "Dispositivos USB: cuáles están permitidos, cuáles bloqueados, y cuándo se rechaza uno nuevo", "terminal": true},
+ {"address": "usb/allow-present", "argv": ["usb", "allow", "all-present"],
+  "en": "USB: accept the devices that were refused while the screen was locked",
+  "ca": "USB: accepta els dispositius refusats mentre la pantalla era blocada",
+  "es": "USB: acepta los dispositivos rechazados mientras la pantalla estaba bloqueada", "terminal": true},
+ {"address": "usb/level-lockscreen", "argv": ["usb", "level", "lockscreen"],
+  "en": "USB: refuse new devices while the screen is locked (the default)",
+  "ca": "USB: refusa els dispositius nous mentre la pantalla és blocada (per defecte)",
+  "es": "USB: rechaza los dispositivos nuevos mientras la pantalla está bloqueada (por defecto)", "terminal": true},
+ {"address": "usb/level-always", "argv": ["usb", "level", "always"],
+  "en": "USB: refuse every new device, locked or not, except a keyboard or a mouse",
+  "ca": "USB: refusa qualsevol dispositiu nou, blocada o no, tret d'un teclat o un ratolí",
+  "es": "USB: rechaza cualquier dispositivo nuevo, bloqueada o no, salvo un teclado o un ratón", "terminal": true},
+ {"address": "usb/level-off", "argv": ["usb", "level", "off"],
+  "en": "USB: accept every device, also while the screen is locked",
+  "ca": "USB: accepta qualsevol dispositiu, també amb la pantalla blocada",
+  "es": "USB: acepta cualquier dispositivo, también con la pantalla bloqueada", "terminal": true}
+]

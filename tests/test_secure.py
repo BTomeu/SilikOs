@@ -121,6 +121,8 @@ def flat(cmds):
 
 CHECKS = ["selinux", "firewall", "incoming", "sshd", "updates-auto", "updates-pending", "disk", "secureboot",
           "screenlock", "autologin", "sysctl", "vsyscall", "sandbox"]
+# on a real system, after them: the rows of the plugins that take part in `silik secure` (tests/test_listen.py, test_usb.py)
+LIVE = CHECKS + ["listening", "usb"]
 # real output, firewalld 1.3.4 on AlmaLinux 9.8 (10/11/2026)
 LIST_PUBLIC = """public
   target: default
@@ -483,7 +485,7 @@ class Cli(unittest.TestCase):
         self.assertIn(rc, (0, 1))
         lines = o.splitlines()
         heads = [l for l in lines if l[:1] in silik.SEC_MARK.values()]
-        self.assertEqual(len(heads), len(CHECKS))
+        self.assertEqual(len(heads), len(LIVE))
         for l in heads:
             self.assertRegex(l, "^(● ok|◆ warn|▼ bad|\\? unknown) ")
         self.assertRegex(lines[-1], r"^\d+ ok, \d+ warn, \d+ bad, \d+ unknown$")
@@ -492,8 +494,8 @@ class Cli(unittest.TestCase):
     def test_status_json(self):
         rc, o = run("secure", "status", "--json", "--offline")
         d = json.loads(o)
-        self.assertEqual([c["id"] for c in d["checks"]], CHECKS)
-        self.assertEqual(sum(d["summary"].values()), len(CHECKS))
+        self.assertEqual([c["id"] for c in d["checks"]], LIVE)
+        self.assertEqual(sum(d["summary"].values()), len(LIVE))
         self.assertTrue(all(c["fix"] for c in d["checks"] if c["state"] in ("warn", "bad")))
 
     def test_status_without_any_tool(self):
@@ -520,7 +522,7 @@ class Cli(unittest.TestCase):
             rc = silik.main(["secure", "status", "--offline"])
         out.flush()
         lines = buf.getvalue().decode("ascii").splitlines()          # the shapes became "?", the words are all there
-        self.assertEqual(sum(1 for l in lines if re.match(r"^\? (ok|warn|bad|unknown) ", l)), len(CHECKS))
+        self.assertEqual(sum(1 for l in lines if re.match(r"^\? (ok|warn|bad|unknown) ", l)), len(LIVE))
         self.assertRegex(lines[-1], r"^\d+ ok, ")
 
     def test_dry_run_apply_runs_nothing(self):
@@ -529,7 +531,11 @@ class Cli(unittest.TestCase):
         reads = [["systemctl", "is-enabled"], ["systemctl", "is-active"], ["systemd-detect-virt"], ["firewall-cmd", "--state"],
                  ["firewall-cmd", "--get-default-zone"], ["firewall-cmd", "--get-zones"], ["firewall-cmd", "--get-active-zones"],
                  ["firewall-cmd", "--list-all"], ["findmnt"], ["lsblk"], ["mokutil", "--sb-state"], ["gsettings", "get"],
-                 ["runuser", "-l"], ["bwrap", "--version"], ["lspci"]]
+                 ["runuser", "-l"], ["bwrap", "--version"], ["lspci"],
+                 # the plugins' part (listen, usb): the units' states, the sockets, USBGuard's own answers, one property
+                 # of the session's gsd-usb-protection
+                 ["systemctl", "list-unit-files"], ["ss", "-H", "-tulnp"], ["usbguard", "get-parameter"], ["usbguard", "list-devices"],
+                 ["gdbus", "call", "--session", "--dest", "org.gnome.SettingsDaemon.UsbProtection"], ["runuser", "-u"]]
 
         def spy(argv, **kw):
             asked.append(list(argv))
