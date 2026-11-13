@@ -16,6 +16,9 @@
 #   - Metadata older than warn_days although the server was just asked get a WARNING: either nothing was published
 #     in that time, or someone holds the updates back. The plugin cannot tell which; the owner publishes the
 #     metadata again at least twice a month so that it is the second (docs/SIGNING.md).
+#   - A repository that does not answer at all is left out by dnf itself and never reaches this plugin; the file
+#     keeps when each repository was last taken ("seen"), and `silik update` and `silik doctor` say from it when
+#     SilikOS's repository was not reached.
 #   - The base's repositories named in `watch` (baseos, appstream) are not signed as a whole and are served by
 #     mirrors: for them the plugin only WARNS (a revision lower than one seen before, or older than
 #     base_warn_days), and never takes anything out. Their files and /etc/dnf/dnf.conf are not touched.
@@ -148,16 +151,21 @@ def write_state(state, path=None):
         raise
 
 
-def note(state, rid, verdict, why, text, mark, revision, now):
-    """the row of RID after this run: the mark, when it was seen, and the refusal or warning of this run if any"""
+def note(state, rid, verdict, why, text, mark, revision, now, reached=None):
+    """the row of RID after this run: the mark, when the server last gave metadata that were taken (REACHED: now
+    less the age of dnf's copy, so that a run from the cache does not count as an answer of the server), and the
+    refusal or warning of this run if any"""
+    reached = now if reached is None else reached
     row = dict(state.get(rid) or {})
     changed = False
     if mark != row.get("revision", 0):
         row["revision"] = mark
         changed = True
     if verdict == "ok" or (verdict == "warn" and why == "stale"):
-        if "seen" not in row or now - row.get("seen", 0) >= 3600:     # (not a write for every dnf of the day)
-            row["seen"] = now
+        # when the repository last gave metadata that were taken: `silik update` and `silik doctor` read from it
+        # that a repository was not reached (it does not answer, or is blocked: dnf then leaves it out in silence)
+        if reached > row.get("seen", 0):
+            row["seen"] = reached
             changed = True
     said = {"verdict": verdict, "why": why, "text": text, "revision": as_revision(revision), "when": now} if verdict != "ok" else None
     key = (verdict, why, as_revision(revision))
@@ -228,6 +236,6 @@ class SilikosRepo(_Plugin):
                              "the other repositories go on.", text, n)
             elif verdict == "warn":
                 logger.warning("silikos-repo: %s.", text)
-            changed = note(state, rid, verdict, why, text, new, revision, now) or changed
+            changed = note(state, rid, verdict, why, text, new, revision, now, now - max(0, age)) or changed
         if changed and os.geteuid() == 0:
             write_state(state)

@@ -2104,6 +2104,7 @@ REPO_CHECKS = ("gpgcheck", "repo_gpgcheck")       # the package's signature, the
 # REPO_SEEN the highest revision of each channel's metadata this system has seen and takes nothing from older ones,
 # inside every dnf (this command's and the daily update's). Here its notes are read and said; nothing is judged twice.
 REPO_SEEN = "/var/lib/silikos/repo-revision"
+REPO_QUIET_DAYS = 45        # [PROPOSAL] as the plugin's warn_days: a channel that is on and was not reached for this long is said
 REPO_PLUGIN = "/usr/lib/python3.9/site-packages/dnf-plugins/silikos_repo.py"
 
 
@@ -2117,6 +2118,20 @@ def repo_seen():
     if not isinstance(data, dict):
         return {}
     return dict((k, v) for k, v in data.items() if isinstance(v, dict) and isinstance(v.get("revision", 0), int))
+
+
+def repo_quiet(st, now=None, days=REPO_QUIET_DAYS):
+    """[(channel, when it last gave metadata that were taken)] of the channels that are on and were last reached more
+    than DAYS ago. A repository that does not answer (or is blocked on the way) is left out by dnf with one line
+    and no error: this is where that is noticed. A channel never reached yet is not in it"""
+    now = time.time() if now is None else now
+    ids = dict((name, rid) for name, rid, _ in CHANNELS)
+    out = []
+    for name in st["on"]:
+        seen = ((st.get("seen") or {}).get(ids[name]) or {}).get("seen")
+        if isinstance(seen, int) and seen > 0 and now - seen > days * 86400:
+            out.append((name, seen))
+    return out
 
 
 def repo_said(st, since=0):
@@ -2270,13 +2285,23 @@ def cmd_update(ctx, a):
     if not ctx.dry:
         if not st["plugin"]:
             print("silik: old metadata served again would not be noticed: the dnf plugin of the package silikos-repos is not installed")
-        for name, verdict, text in repo_said(st, t0 - 5):
+        said = repo_said(st, t0)
+        for name, verdict, text in said:
             if verdict == "refuse":
                 print("silik: REFUSED: %s. Nothing of SilikOS's own was updated; the base's updates went on. Run `silik update` "
                       "again on another network; if it stays: docs/SIGNING.md" % text)
                 rc = 1
             else:
                 print("silik: warning: %s" % text)
+        # a repository that did not answer: dnf left it out with a line of its own and no error
+        ids = dict((name, rid) for name, rid, _ in CHANNELS)
+        for name in st["on"]:
+            row = st["seen"].get(ids[name]) or {}
+            # (two seconds of slack: the plugin notes the time less the age of dnf's copy, each read at its own moment)
+            if st["plugin"] and name not in [x[0] for x in said] and row.get("seen", 0) < t0 - 2:
+                last = time.strftime("%Y-%m-%d", time.gmtime(row["seen"])) if row.get("seen") else "never"
+                print("silik: SilikOS's repository (channel %s) was not reached in this run (dnf says why above): nothing of "
+                      "SilikOS's own was updated. Last reached: %s" % (name, last))
     return rc
 
 
@@ -6573,6 +6598,11 @@ def doc_channel(st, rows):
                 % " and ".join(ch["on"]), ["sudo dnf -y upgrade silikos-repos"])
     elif ch["on"] and repo_said(ch):
         doc_row(rows, "system", "channel", name, "warn", repo_said(ch)[0][2], ["silik update   # asks again"])
+    elif ch["on"] and repo_quiet(ch):
+        q = repo_quiet(ch)[0]
+        doc_row(rows, "system", "channel", name, "warn", "channel %s was last reached %s (%d days ago): it does not answer from here, or it is "
+                "blocked on the way; SilikOS's own packages are not updated meanwhile" % (q[0], time.strftime("%Y-%m-%d", time.gmtime(q[1])),
+                                                                                         (time.time() - q[1]) // 86400), ["silik update   # asks again"])
     elif ch["on"]:
         new = "; a newer %s of the package waits" % os.path.basename(REPO_FILE) if ch["new"] else ""
         doc_row(rows, "system", "channel", name, "warn" if new else "ok", "channel %s; packages and metadata are signature-checked%s" % (" and ".join(ch["on"]), new),

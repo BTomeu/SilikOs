@@ -120,6 +120,9 @@ days [A]: the warning is then what says so.
   mirror), `enabled = 0` in its file for all. Removing `/var/lib/silikos/repo-revision` makes the machine forget
   (the way out if a wrong revision was ever signed and published).
 - Holding updates back cannot be refused, only noticed: a signed "nothing new" has to be renewed by whoever signs.
+- A repository that is simply blocked never reaches the plugin: `dnf` leaves it out with one line and no error (run),
+  as it does for one that is down. The note file keeps when each channel last gave metadata that were taken:
+  `silik update` says "was not reached in this run", and `silik doctor` warns after 45 days [PROPOSAL] without it.
 
 **The base's repositories.** Read on AlmaLinux 9.8: `baseos` and `appstream` use
 `mirrorlist=https://mirrors.almalinux.org/mirrorlist/…` (a plain list of mirrors, not a metalink), `gpgcheck=1`

@@ -155,9 +155,14 @@ class Notes(unittest.TestCase):
         state = {}
         self.assertTrue(plug.note(state, "silikos", "ok", "", "", 100, "100", NOW))
         self.assertEqual(state, {"silikos": {"revision": 100, "seen": NOW}})
-        self.assertFalse(plug.note(state, "silikos", "ok", "", "", 100, "100", NOW + 60))        # not a write per dnf
+        self.assertFalse(plug.note(state, "silikos", "ok", "", "", 100, "100", NOW))             # nothing new, nothing written
+        self.assertTrue(plug.note(state, "silikos", "ok", "", "", 100, "100", NOW + 60))          # when it was last taken
+        self.assertEqual(state["silikos"]["seen"], NOW + 60)
+        # a run from dnf's own copy, checked against the server two hours ago, is not an answer of the server now
+        self.assertFalse(plug.note(state, "silikos", "ok", "", "", 100, "100", NOW + 7200, NOW))
+        self.assertEqual(state["silikos"]["seen"], NOW + 60)
         self.assertTrue(plug.note(state, "silikos", "refuse", "rollback", "old", 100, "50", NOW + 61))
-        self.assertEqual(state["silikos"]["revision"], 100)
+        self.assertEqual((state["silikos"]["revision"], state["silikos"]["seen"]), (100, NOW + 60))   # a refusal is not "taken"
         self.assertEqual(state["silikos"]["said"], {"verdict": "refuse", "why": "rollback", "text": "old", "revision": 50, "when": NOW + 61})
         self.assertFalse(plug.note(state, "silikos", "refuse", "rollback", "old", 100, "50", NOW + 62))
         self.assertTrue(plug.note(state, "silikos", "refuse", "rollback", "old", 100, "50", NOW + 4000))   # an hour on: its time
@@ -235,6 +240,8 @@ class Plugin(unittest.TestCase):
         base, said, state = self.sack(FakeRepo("silikos", str(NOW - 5), STABLE))
         self.assertEqual((base.excluded, said), ([], []))
         self.assertEqual(state, {"silikos": {"revision": NOW - 5, "seen": NOW}})
+        base, said, state = self.sack(FakeRepo("silikos-next", str(NOW - 5), NEXT, age=7000))     # dnf's copy, 7000 s old
+        self.assertEqual(state["silikos-next"], {"revision": NOW - 5, "seen": NOW - 7000})
 
     def test_an_old_repository_served_again_is_taken_out_of_the_run(self):
         base, said, state = self.sack(FakeRepo("silikos", str(NOW - 500), STABLE), FakeRepo("baseos", str(NOW - 9)),
@@ -360,10 +367,23 @@ class Silik(unittest.TestCase):
                 self.assertEqual(run("update", dry=False)[0], 0)
             seen = refused(when=NOW + 2)
             seen["silikos"]["said"].update(verdict="warn", why="stale", text="silikos: the newest metadata are of X, 60 days ago")
+            seen["silikos"]["seen"] = NOW + 2                                     # (old metadata, but taken: reached)
             with System(repo=on(REPO, "silikos"), seen=seen):
                 rc, out, _ = run("update", dry=False)
             self.assertEqual(rc, 0)
             self.assertIn("silik: warning: silikos: the newest metadata are of X, 60 days ago", out)
+            self.assertNotIn("was not reached", out)
+            # a repository that did not answer: dnf left it out without an error, and here it is said
+            with System(repo=on(REPO, "silikos"), seen={"silikos": {"revision": 5, "seen": NOW - 3 * DAY}}):
+                rc, out, _ = run("update", dry=False)
+            self.assertEqual(rc, 0)
+            self.assertIn("silik: SilikOS's repository (channel stable) was not reached in this run (dnf says why above)", out)
+            self.assertIn("Last reached: 2026-11-10", out)
+            with System(repo=on(REPO, "silikos")):                                # never reached
+                self.assertIn("Last reached: never", run("update", dry=False)[1])
+            with System(repo=on(REPO, "silikos"), seen={"silikos": {"revision": 5, "seen": NOW + 1}}):      # reached in this run
+                rc, out, _ = run("update", dry=False)
+            self.assertEqual((rc, "not reached" in out), (0, False))
             with System(repo=on(REPO, "silikos"), plugin=False):
                 rc, out, _ = run("update", dry=False)
             self.assertIn("old metadata served again would not be noticed", out)
@@ -379,7 +399,8 @@ class Silik(unittest.TestCase):
                 rows = []
                 silik.doc_channel({"channel": silik.channel_read()}, rows)
             return rows[0]
-        r = row(repo=on(REPO, "silikos"), seen={"silikos": {"revision": 5, "seen": 9}})
+        import time
+        r = row(repo=on(REPO, "silikos"), seen={"silikos": {"revision": 5, "seen": int(time.time()) - 3600}})
         self.assertEqual(r["state"], "ok")
         r = row(repo=on(REPO, "silikos"), seen=refused())
         self.assertEqual(r["state"], "bad")
@@ -391,6 +412,14 @@ class Silik(unittest.TestCase):
         seen["silikos"]["said"].update(verdict="warn", why="stale", text="silikos: old news")
         r = row(repo=on(REPO, "silikos"), seen=seen)
         self.assertEqual((r["state"], r["value"]), ("warn", "silikos: old news"))
+        # on, and not reached for longer than the days: the repository does not answer from here, or is blocked
+        with mock.patch.object(silik.time, "time", return_value=NOW):
+            r = row(repo=on(REPO, "silikos"), seen={"silikos": {"revision": 5, "seen": NOW - 50 * DAY}})
+            self.assertEqual(r["state"], "warn")
+            self.assertIn("channel stable was last reached 2026-09-24 (50 days ago)", r["value"])
+            self.assertEqual(row(repo=on(REPO, "silikos"), seen={"silikos": {"revision": 5, "seen": NOW - 40 * DAY}})["state"], "ok")
+            self.assertEqual(row(repo=on(REPO, "silikos-next"), seen={"silikos": {"revision": 5, "seen": NOW - 50 * DAY}})["state"], "ok")
+        self.assertEqual(silik.REPO_QUIET_DAYS, plug.WARN_DAYS)
         # a signature check that is off, or no key, is said before any of this
         r = row(repo=on(REPO, "silikos").replace("gpgcheck=1", "gpgcheck=0", 1), seen=refused())
         self.assertIn("signature check off", r["value"])
