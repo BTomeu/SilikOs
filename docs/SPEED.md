@@ -93,7 +93,11 @@ GNOME Shell: the system's dconf default enables two extensions, `user-theme` and
 (`packages/silikos-desktop/files/00-silikos`); the six others the base installs stay off. At `enable()` ours builds
 its pieces, connects to settings and file monitors, starts `silik look --qt -q` once (Qt's palette) and, two seconds
 later and in idle slices, the rows of Start. It has no repeating timer (read 13/11/2026; its idle CPU was measured
-in the rig on 12/11/2026: `docs/STATUS.md`). Its part of the session's start is **not measured**.
+in the rig on 12/11/2026: `docs/STATUS.md`). Compiling its two files, as the shell does when it loads them (the top
+level parsed, the functions' bodies left for their first call, nothing run), took 1.2 to 2.3 ms for `extension.js`
+and 0.5 to 1.0 ms for `flow.js` (medians of 15, three runs; gjs 1.68.6 in an AlmaLinux 9.8 container on the build
+machine, a shared 2.1 GHz Xeon, 13/11/2026): reading the extension is not where a session's start goes. What
+`enable()` costs in the shell (building its pieces) is **not measured**.
 
 ## Left to the owner
 
