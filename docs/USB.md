@@ -77,6 +77,9 @@ again; `silik secure status` has the row "USB devices".
 - **A restart of the USBGuard daemon** accepts what is plugged in at that moment and starts from
   `apply-policy`, also while the screen is locked; the desktop sets `block` again at the next lock. Restarting it
   takes root.
+- **A session that ends while it is locked** (it crashed) leaves USBGuard refusing new devices until somebody logs in
+  or the machine restarts: what is plugged in keeps working, a keyboard plugged in at that login screen does not
+  [A: from gsd's source, which sets the value back only on an unlock; not seen].
 - **A laptop that resumes from sleep** with a device whose USB link was reset may see it as newly plugged in while
   locked [A: not seen here; USB's own "persist" normally keeps the device]: `silik usb allow all-present`.
 - **Thunderbolt and PCIe (DMA)**: another mechanism (`boltd`, the IOMMU), another item of docs/SECURITY.md.
@@ -126,7 +129,7 @@ drop-in; `silik usb` against that daemon. The polkit rule's decisions were run i
 (`tests/test_usb.py`). The host side of the CI's hot-plug was run against QEMU 8.2.2 with the machine stopped.
 
 Not verified (no KVM, no USB bus, no GNOME session, no SELinux on the build machine): everything with a device. The
-installed-system test of the CI does it (`tests/install/run.sh`, `check.sh`, rows `usb.*`): an xHCI controller
+installed-system test of the CI does it (its `run.sh` and `check.sh`, rows `usb.*`): an xHCI controller
 with a disk from the start, then a keyboard and a disk plugged in through QEMU's monitor with the session unlocked
 (must be allowed), the session locked with `loginctl lock-session` (`InsertedDevicePolicy` must read `block`), a
 disk plugged in (must be blocked), a keyboard (must be allowed), unlocked again (must read `apply-policy`, the

@@ -31,12 +31,14 @@ udev() { ug list-devices | grep -F "serial \"$1\"" | tail -1; }
 uline() { echo "$1" | sed -E 's/ hash "[^"]*"//; s/ parent-hash "[^"]*"//' | cut -c1-210; }
 # plug WORD SERIAL: asks the host, waits up to 90 s for the device, then 4 s more (the desktop may still accept it:
 # a keyboard while locked); prints USBGuard's line for it, nothing when it never came
-plug() { local i l; say usb.host info "$1"; for i in $(seq 1 45); do l=$(udev "$2"); if [ -n "$l" ]; then sleep 4; udev "$2"; return; fi; sleep 2; done; }
+plug() { local i l; [ "$usbup" = 1 ] || return 0; say usb.host info "$1"; for i in $(seq 1 45); do l=$(udev "$2"); if [ -n "$l" ]; then sleep 4; udev "$2"; return; fi; sleep 2; done; }
 saver() { asuser gdbus call --session --dest org.gnome.ScreenSaver --object-path /org/gnome/ScreenSaver --method org.gnome.ScreenSaver.GetActive | head -1; }
 never="never appeared in USBGuard's list within 90 s (the host's side: usb-monitor.log; the list: $(ug list-devices | grep -c .) devices)"
 d="$(systemctl is-active usbguard.service 2>&1) $(systemctl is-active usbguard-dbus.service 2>&1)"
+usbup=1
 if [ "$d" = "active active" ]; then say usb.daemon ok "usbguard and usbguard-dbus run ($(rpm -q usbguard 2>&1))"
-else say usb.daemon FAIL "usbguard, usbguard-dbus: $d; $(systemctl status usbguard.service usbguard-dbus.service --no-pager 2>&1 | grep -iE 'Active:|error|denied|permission' | tail -4 | tr '\n' ';') AVC denials naming usbguard: $(ausearch -m avc -ts boot 2> /dev/null | grep -c usbguard)"; fi
+else usbup=0; never="was not plugged in: USBGuard does not run (usb.daemon)"   # (no device is asked for: each would be 90 s of waiting)
+     say usb.daemon FAIL "usbguard, usbguard-dbus: $d; $(systemctl status usbguard.service usbguard-dbus.service --no-pager 2>&1 | grep -iE 'Active:|error|denied|permission' | tail -4 | tr '\n' ';') AVC denials naming usbguard: $(ausearch -m avc -ts boot 2> /dev/null | grep -c usbguard)"; fi
 is usb.config "$(systemctl show usbguard.service -p ExecStart --value 2>&1 | grep -o -- '-c [^ ;]*' | head -1) $(ug get-parameter ImplicitPolicyTarget) $(ug get-parameter InsertedDevicePolicy)" "-c /etc/usbguard/silikos-daemon.conf allow apply-policy"
 # the desktop's own word on whether it reaches USBGuard (gsd-usb-protection), and the rules: the one rule the
 # package ships, which the desktop looks for; it must not have tried to add its own
@@ -58,7 +60,7 @@ act=$(saver); k=$(plug kbd-in-1 SILIKKBD1); s=$(plug disk-in-1 SILIKDISK1)
 case "$act|$k" in "(false,)|"*": allow "*) case "$s" in
     *": allow "*) say usb.unlocked-accepts ok "session unlocked; keyboard: $(uline "$k" | cut -c1-90); disk: $(uline "$s" | cut -c1-90)";;
     *) say usb.unlocked-accepts FAIL "session unlocked, the keyboard was accepted; the disk: ${s:-$never}";; esac;;
-  *) say usb.unlocked-accepts FAIL "screen saver active: $act (wanted false); the keyboard: ${k:-$never}; the disk: ${s:-$never}";;
+  *) say usb.unlocked-accepts FAIL "the session was $([ "$act" = "(false,)" ] && echo unlocked || echo "not unlocked (screen saver active: $act)"); the keyboard: ${k:-$never}; the disk: ${s:-$never}";;
 esac
 say usb.host info kbd-out-1
 # locked (logind's lock, what Super+L and the idle lock end in): the desktop tells USBGuard to refuse new devices;
@@ -87,9 +89,10 @@ loginctl unlock-session "$usid"
 for i in $(seq 1 15); do [ "$(saver)" = "(false,)" ] && break; sleep 2; done
 sleep 3
 is usb.unlocked-policy "$(saver) $(ug get-parameter InsertedDevicePolicy)" "(false,) apply-policy"
-case "$(udev SILIKDISK2)" in *": block "*) say usb.stays-blocked ok "after unlocking, still: $(uline "$(udev SILIKDISK2)" | cut -c1-120)";; *) say usb.stays-blocked FAIL "after unlocking: $(uline "$(udev SILIKDISK2)")";; esac
-o=$(asuser silik usb allow all-present | tr '\n' ';')
-case "$(udev SILIKDISK2)" in *": allow "*) say usb.allow-present ok "$o";; *) say usb.allow-present FAIL "$o -> $(uline "$(udev SILIKDISK2)")";; esac
+s=$(udev SILIKDISK2)
+case "$s" in *": block "*) say usb.stays-blocked ok "after unlocking, still: $(uline "$s" | cut -c1-120)";; *) say usb.stays-blocked FAIL "after unlocking, the disk that was plugged in while locked: $(uline "${s:-not in USBGuard's list}")";; esac
+o=$(asuser silik usb allow all-present | tr '\n' ';'); s=$(udev SILIKDISK2)
+case "$s" in *": allow "*) say usb.allow-present ok "$o";; *) say usb.allow-present FAIL "silik usb allow all-present said: $o the disk: $(uline "${s:-not in USBGuard's list}")";; esac
 say usb.status info "$(asuser silik usb | head -8 | tr -s ' ' | tr '\n' ';')"
 is usb.desktop-errors "$(journalctl -b --no-pager -o cat 2> /dev/null | grep -cE 'USBGuard DBus|appending USBGuard rule|Failed to (contact|fetch) USBGuard')" 0
 
