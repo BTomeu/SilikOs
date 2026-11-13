@@ -23,7 +23,8 @@ on:
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: false
-# read-only by default; the job results writes the branch ci-results, a tag's release job the release
+# read-only by default; the job results writes the branch ci-results, a tag's release job the release and its
+# attestation (id-token, attestations: that job's alone, never a job a pull request starts)
 permissions:
   contents: read
 jobs:
@@ -221,28 +222,46 @@ jobs:
           git commit -q -m "Installation test of $GITHUB_SHA"
           git push -q -f "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git" ci-results
 
+  # (docs/SIGNING.md) What a release holds is listed by its sha256 (SHA256SUMS) and that list is attested: GitHub
+  # signs, with this run's identity (this workflow, this tag, this commit; an OIDC token, no key of ours), the
+  # statement that this run made those files. `tools/verify_release.sh DIR` checks a download against both. It says
+  # where the files were made, not that the commit is good. The two permissions it needs are this job's only: it runs
+  # for a tag v* of this repository, never for a pull request, and has no checkout.
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [install, arm]
     runs-on: ubuntu-24.04
     permissions:
       contents: write        # (the release)
+      id-token: write        # (the run's identity, for the attestation)
+      attestations: write    # (the attestation is kept by GitHub, for `gh attestation verify`)
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           path: dist
           merge-multiple: true
+      - name: What the release holds, by its sha256
+        run: |
+          set -euo pipefail
+          ls -la dist
+          (cd dist && sha256sum SilikOS-*-netinstall.iso *.rpm > SHA256SUMS && cat SHA256SUMS)
+      # (before the release exists: a release whose files could not be attested is not made)
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4
+        id: attest
+        with:
+          subject-checksums: dist/SHA256SUMS
       - name: Release with the ISO and the packages
         env:
           GH_TOKEN: ${{ github.token }}
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
         run: |
-          ls -la dist
-          # what the release holds, by its sha256: a download can be checked against it (not signed: the key is the
-          # owner's to make, docs/REPO.md)
-          (cd dist && sha256sum SilikOS-*-netinstall.iso *.rpm > SHA256SUMS && cat SHA256SUMS)
+          set -euo pipefail
+          # the attestation itself beside the files: `gh attestation verify --bundle` then needs no API of GitHub's
+          # (SHA256SUMS is not signed with SilikOS's key: the key is the owner's to make, docs/REPO.md)
+          cp "$BUNDLE" dist/SHA256SUMS.attestation.jsonl
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "SilikOS $GITHUB_REF_NAME" \
-            --notes "The ISO installs the system from the base's own package sources (network). What has and has not been run: docs/STATUS.md; the installation test of this tag: branch ci-results. Source packages (*.src.rpm): SilikOS's own here; those of the tools the ISO carries in the releases eda-tools, dev-tools and wine-* (older builds in sources-archive); those of the base's packages in the ISO's installer at vault.almalinux.org (tools/fetch_base_sources.sh lists and fetches them)." \
-            dist/SilikOS-*-netinstall.iso dist/*.rpm dist/SHA256SUMS
+            --notes "The ISO installs the system from the base's own package sources (network). What has and has not been run: docs/STATUS.md; the installation test of this tag: branch ci-results. Checking a download: SHA256SUMS, and where the files were built: tools/verify_release.sh (docs/SIGNING.md). Source packages (*.src.rpm): SilikOS's own here; those of the tools the ISO carries in the releases eda-tools, dev-tools and wine-* (older builds in sources-archive); those of the base's packages in the ISO's installer at vault.almalinux.org (tools/fetch_base_sources.sh lists and fetches them)." \
+            dist/SilikOS-*-netinstall.iso dist/*.rpm dist/SHA256SUMS dist/SHA256SUMS.attestation.jsonl
 
   # The way back from an update (docs/ROLLBACK.md, its test plan's steps 1-6, 8 and 10), in virtual machines with the
   # ISO: an unattended installation whose kickstart names no partitioning scheme (the installer's default on this

@@ -116,11 +116,18 @@ class Workflows(unittest.TestCase):
             self.assertRegex(head, r"\npermissions:\n  contents: read\n", wf)
             self.assertNotIn("write-all", s, wf)
             for name, body in jobs(s).items():
-                for perm in re.findall(r"^\s+([a-z-]+): write\b", body, re.M):
+                perms = re.findall(r"^\s+([a-z-]+): write\b", body, re.M)
+                for perm in perms:
                     if os.path.basename(wf) == "repo.yml" and name == "deploy":      # (the Pages site, and nothing else)
                         self.assertIn(perm, ("pages", "id-token"), wf)
+                    elif "actions/attest-build-provenance@" in body:                 # (a job that attests what it made)
+                        self.assertIn(perm, ("contents", "id-token", "attestations"), "%s: job %s" % (wf, name))
                     else:
                         self.assertEqual(perm, "contents", "%s: job %s" % (wf, name))
+                # the run's identity (id-token) only where it is used: to attest, or to deploy the Pages site
+                if "id-token" in perms or "attestations" in perms:
+                    self.assertTrue("actions/attest-build-provenance@" in body or (os.path.basename(wf) == "repo.yml" and name == "deploy"),
+                                    "%s: job %s" % (wf, name))
             self.assertNotRegex(s.split("\njobs:\n", 1)[0], r": write\b", wf)
 
     def test_a_job_that_a_pull_request_starts_has_no_token_that_writes(self):

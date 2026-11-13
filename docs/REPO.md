@@ -103,9 +103,14 @@ silik update channel stable
 - **Tot signat**: cada paquet (`rpmsign`) i el `repomd.xml` de cada arquitectura (`repomd.xml.asc`). El sistema
   instal·lat comprova les dues coses sempre (`gpgcheck=1`, `repo_gpgcheck=1`).
 - **El workflow** `.github/workflows/repo.yml`: `packages` (l'únic job que veu la clau; no té cap token que
-  escrigui; mai l'engega un pull request) → `release` (puja els paquets signats) → `deploy` (la carpeta `site/` a
-  l'arrel de Pages i el repositori a `/repo/`) → `prune` (treu les versions velles). A mà fa el mateix
-  `tools/build_pkgrepo.sh`.
+  escrigui; mai l'engega un pull request) → `attest` (GitHub signa d'on surt cada fitxer: `docs/SIGNING.md`) →
+  `release` (puja els paquets signats) → `deploy` (la carpeta `site/` a l'arrel de Pages i el repositori a `/repo/`;
+  se salta, sense fallar, mentre Pages no estigui activat) → `prune` (treu les versions velles). A mà fa el mateix
+  `tools/build_pkgrepo.sh`. Els dies 1 i 15 de cada mes torna a publicar les metadades amb una revisió nova, quan hi
+  ha clau.
+- **D'on surt cada paquet**: un paquet d'una eina (KiCad, Wine, OpenOCD...) només entra al repositori si té
+  l'atestació del workflow que l'ha fet (`docs/SIGNING.md`). La primera vegada cal engegar una vegada *EDA tools*,
+  *Dev tools* i *Wine* (Actions → Run workflow): fins llavors el repositori només porta els paquets propis.
 - **Al sistema instal·lat**: el paquet `silikos-repos` porta `/etc/yum.repos.d/silikos.repo` (els dos canals
   apagats) i, quan n'hi ha, la clau a `/etc/pki/rpm-gpg/RPM-GPG-KEY-SilikOS`. No toca els repositoris de la base ni
   `/etc/dnf/dnf.conf`, i no té cap script.
@@ -127,11 +132,16 @@ silik update channel stable
 - **Pages no és per fer-hi negoci**: les seves condicions diuen que no és un allotjament gratuït per a un negoci en
   línia. Un repositori de paquets d'un sistema obert hi cap [A ⚖️]; si SilikOS es ven, mou-lo (a sota).
 - **La clau val el que val el compte de GitHub.** Qui pugui canviar el workflow de `main` o l'environment pot signar
-  el que vulgui: 2FA al compte, i els "Required reviewers". Si no vols la clau a GitHub de cap manera, signa al teu
-  PC amb `tools/build_pkgrepo.sh --gpg-name FPR` i puja l'arbre tu.
+  el que vulgui: 2FA al compte, i els "Required reviewers". Si no vols la clau a GitHub de cap manera (és el que
+  recomana `docs/SIGNING.md` per al canal `stable`), signa al teu PC amb `tools/sign_release.sh --key FPR` (crida
+  `tools/build_pkgrepo.sh --gpg-name FPR`, verifica el resultat només amb la clau pública i no accepta cap clau de
+  l'entorn) i puja l'arbre tu.
 - **`next` no és una release provada**: és cada build de `main` que ha passat el CI.
-- **Metadades velles**: qui controli la xarxa pot servir metadades antigues ben signades i amagar una actualització
-  [A: dnf no mira l'edat de les metadades]. No pot fer instal·lar res que tu no hagis signat.
+- **Metadades velles**: `dnf` sol no mira si les metadades són les últimes (provat: amb un arbre antic ben signat
+  instal·la el paquet antic). Ara cada `repomd.xml` porta una revisió sota la signatura, i el plugin de `dnf` del
+  paquet `silikos-repos` rebutja les que siguin més velles que les que el sistema ja ha vist, o les de l'altre
+  canal (provat; `docs/SIGNING.md`). El que queda: retenir actualitzacions no es pot impedir, només avisar (als 45
+  dies [PROPOSTA]), i un sistema acabat d'instal·lar no té memòria. No pot fer instal·lar res que tu no hagis signat.
 - Una versió ja publicada no es torna a publicar amb un altre contingut: si canvies un paquet sense pujar-li la
   versió, el workflow avisa i deixa el publicat.
 

@@ -41,6 +41,9 @@ is update.auto "$(asuser silik update --auto | grep "^●" | awk "{print \$2}")"
 if grep -rqs "file:///run/install" /etc/yum.repos.d; then say update.repo-medium FAIL "$(grep -rls "file:///run/install" /etc/yum.repos.d)"; else say update.repo-medium ok "no repository of the installation medium is kept"; fi
 if grep -qs "BEGIN PGP PUBLIC KEY BLOCK" /etc/pki/rpm-gpg/RPM-GPG-KEY-SilikOS; then want=stable; else want=off; fi
 is update.channel "$(asuser silik update channel | grep "^●" | awk "{print \$2}")" $want
+# the dnf plugin of silikos-repos (docs/SIGNING.md: old metadata of SilikOS's repository served again are refused) is
+# one this system's dnf loads, as root, under SELinux
+has update.replay-check "$(dnf -v --cacheonly repolist 2>&1 | grep -i '^Loaded plugins' | head -1)" silikos-repo
 # power: the automatic choice on, the SSD trimmed weekly; a virtual machine on mains power: performance
 is power.auto "$(systemctl is-enabled silikos-power-auto 2>&1) $(systemctl is-active silikos-power-auto 2>&1)" "enabled active"
 is power.trim "$(systemctl is-enabled fstrim.timer 2>&1)" enabled

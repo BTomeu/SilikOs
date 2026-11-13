@@ -4,12 +4,18 @@
 #
 #   tools/build_pkgrepo.sh --out DIR [--channel next|stable] --in DIR [--in DIR ...] [--published DIR]
 #                          [--pool DIR --baseurl URL] [--keep N] [--key-file FILE] [--gpg-name NAME] [--unsigned]
+#                          [--revision N] [--after N] [--unvouched FILE]
 #
 #   --in DIR         packages to publish (*.rpm; a *.src.rpm is kept beside them, outside the metadata)
 #   --published DIR  the channel's packages as they are published now. A file name once published is never given
 #                    other contents (dnf holds metadata that names its checksum): the published file stays and the
 #                    one of --in is left out, and said when its contents are not the same. The one exception: a
 #                    published file that carries no good signature of the key in use is signed and replaced.
+#   --unvouched FILE names of published files (one a line) that nothing vouches for: no build provenance attestation
+#                    says a workflow of the repository made them (.github/workflows/repo.yml asks). Such a file
+#                    stays only if it already carries a good signature of the key in use (the owner signed it);
+#                    otherwise it leaves the channel. It is never signed here: whatever lies in a release would
+#                    otherwise get SilikOS's signature (the audit of 13/11/2026, S2).
 #   --keep N         versions of each package and architecture that stay (default 3; 0: all). Older ones leave.
 #   --out DIR        the tree: DIR/el9/CHANNEL/{x86_64,aarch64}/repodata (noarch packages are in both), DIR/el9/CHANNEL/STATE
 #                    (signed or not, the key, the counts), DIR/silikos.repo, DIR/README.txt and, signed,
@@ -20,6 +26,17 @@
 #                    metadata only, which names URL for every package. --pool DIR then receives the channel's
 #                    packages as they must be at URL, with DIR/UPLOAD (the file names to put there, new or signed
 #                    again) and DIR/DELETE (the names to remove from there once the metadata is live).
+#
+#   --revision N     the metadata's revision (default: the time now, seconds since 1970 UTC). It is written into every
+#                    repomd.xml (createrepo_c --revision), under the signature, with the channel's name and the
+#                    architecture (content tags silikos-channel=, silikos-arch=, and silikos-commit= when GITHUB_SHA
+#                    is set). An installed system remembers the highest revision it has seen of a channel and takes
+#                    nothing from metadata with a lower one, with another channel's name or with none (the dnf plugin
+#                    silikos-repo of the package silikos-repos): old, well signed metadata cannot be served again,
+#                    nor one channel's as the other's. The time is the number so that the same system can say how
+#                    old the metadata are (docs/SIGNING.md).
+#   --after N        the revision that is published now (the channel's STATE on the site: revision=N). The new one
+#                    must be higher: with a clock that is behind, N + 1 is used and said.
 #
 # Signing. Every package is signed (rpmsign --addsign) and each repodata/repomd.xml gets its detached signature
 # repomd.xml.asc when a key is given:
@@ -37,7 +54,7 @@
 # (repomanage) for --keep. Exit: 0 made, 2 usage, 3 refused (keys), 1 anything else.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
-channel=next; out=; pool=; baseurl=; keep=3; published=; gpgname=; unsigned=0
+channel=next; out=; pool=; baseurl=; keep=3; published=; gpgname=; unsigned=0; revision=; after=; unvouched=
 keyfile=$root/packages/silikos-repos/files/RPM-GPG-KEY-SilikOS
 ins=()
 usage() { sed -n '2,/^# Needs/p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
@@ -53,11 +70,17 @@ while [ $# -gt 0 ]; do
     --key-file) keyfile=${2:?}; shift 2 ;;
     --gpg-name) gpgname=${2:?}; shift 2 ;;
     --unsigned) unsigned=1; shift ;;
+    --revision) revision=${2:?}; shift 2 ;;
+    --after) after=${2:?}; shift 2 ;;
+    --unvouched) unvouched=${2:?}; shift 2 ;;
     *) usage ;;
   esac
 done
 case $channel in next|stable) ;; *) echo "error: --channel is next or stable" >&2; exit 2 ;; esac
 case $keep in ''|*[!0-9]*) echo "error: --keep takes a number" >&2; exit 2 ;; esac
+case $revision in *[!0-9]*) echo "error: --revision takes a number" >&2; exit 2 ;; esac
+case $after in *[!0-9]*) echo "error: --after takes a number (the revision published now)" >&2; exit 2 ;; esac
+[ -z "$unvouched" ] || [ -f "$unvouched" ] || { echo "error: --unvouched $unvouched is not a file" >&2; exit 2; }
 [ -n "$out" ] || usage
 [ -z "$baseurl" ] || [ -n "$pool" ] || { echo "error: --baseurl needs --pool DIR (where the packages for that address go)" >&2; exit 2; }
 [ -z "$baseurl" ] || baseurl=${baseurl%/}/
@@ -84,7 +107,7 @@ if [ -n "${SILIKOS_GPG_PRIVATE_KEY:-}" ]; then
   passargs=(--batch --pinentry-mode loopback --passphrase-file "$tmp/pass")
   signing=1
 elif [ -n "$gpgname" ]; then
-  fpr=$(gpg --with-colons --list-secret-keys "$gpgname" 2> /dev/null | awk -F: '$1 == "fpr" { print $10; exit }')
+  fpr=$(gpg --with-colons --list-secret-keys "$gpgname" 2> /dev/null | awk -F: '$1 == "fpr" { print $10; exit }' || true)
   [ -n "$fpr" ] || { echo "error: no private key \"$gpgname\" in this keyring (gpg --list-secret-keys)" >&2; exit 3; }
   if [ -n "${SILIKOS_GPG_PASSPHRASE:-}" ]; then
     (umask 077; printf '%s' "$SILIKOS_GPG_PASSPHRASE" > "$tmp/pass"); passargs=(--batch --pinentry-mode loopback --passphrase-file "$tmp/pass")
@@ -114,11 +137,17 @@ signed_ok() { [ "$signing" = 1 ] && rpm --dbpath "$tmp/rpmdb" -K "$1" 2> /dev/nu
 contents() { rpm -qp --nosignature --qf '[%{FILEDIGESTS} %{FILEMODES:octal} %{FILENAMES}\n]' "$1" 2> /dev/null; rpm -qp --nosignature --scripts --triggers -R "$1" 2> /dev/null; }
 
 # ---- the pool: what is published, then what is new
-: > "$tmp/upload"; : > "$tmp/delete"; : > "$tmp/was"
+: > "$tmp/upload"; : > "$tmp/delete"; : > "$tmp/was"; dropped=0
 if [ -n "$published" ] && [ -d "$published" ]; then
   for f in "$published"/*.rpm; do
     [ -f "$f" ] || continue
-    cp "$f" "$pool/"; basename "$f" >> "$tmp/was"
+    b=$(basename "$f")
+    if [ -n "$unvouched" ] && grep -qxF "$b" "$unvouched" && ! signed_ok "$f"; then
+      # (published, of unknown origin, and not signed by our key: it leaves the channel and the release)
+      warn "$b is published without provenance and without a good signature of the key: it leaves the channel, unsigned"
+      echo "$b" >> "$tmp/delete"; dropped=$((dropped + 1)); continue
+    fi
+    cp "$f" "$pool/"; echo "$b" >> "$tmp/was"
   done
 fi
 new=0; same=0
@@ -168,6 +197,18 @@ if [ "$signing" = 1 ]; then
   done
 fi
 
+# ---- the revision: one number for the channel's two architectures, higher than what is published
+[ -n "$revision" ] || revision=$(date -u +%s)
+# (as a number: no leading zeros, and never more digits than a date has, so that no system reads it otherwise)
+revision=$((10#$revision))
+if [ -n "$after" ] && [ "$revision" -le "$((10#$after))" ]; then
+  warn "the revision $revision is not after the published one ($after): a clock that is behind, or two runs in one second. $((10#$after + 1)) is used"
+  revision=$((10#$after + 1))
+fi
+[ "$revision" -gt 0 ] && [ "${#revision}" -le 12 ] || { echo "error: the revision $revision is not a time in seconds" >&2; exit 2; }
+tags=(--revision "$revision" --content "silikos-channel=$channel")
+case ${GITHUB_SHA:-} in *[!0-9a-f]*|'') ;; *) tags+=(--content "silikos-commit=$GITHUB_SHA") ;; esac
+
 # ---- the metadata, per architecture
 tree=$out/el9/$channel
 rm -rf "$tree"; mkdir -p "$tree"
@@ -175,6 +216,7 @@ state=$tree/STATE
 {
   echo "channel=$channel"
   if [ "$signing" = 1 ]; then echo "signed=yes"; echo "key=$fpr"; else echo "signed=no"; fi
+  echo "revision=$revision"
 } > "$state"
 for arch in x86_64 aarch64; do
   case $arch in x86_64) archs="x86_64 i686 noarch" ;; *) archs="$arch noarch" ;; esac
@@ -187,16 +229,20 @@ for arch in x86_64 aarch64; do
   done
   d=$tree/$arch; mkdir -p "$d"
   if [ -n "$baseurl" ]; then
-    createrepo_c --quiet --no-database --baseurl "$baseurl" --pkglist "$tmp/list.$arch" --outputdir "$d" "$pool"
+    createrepo_c --quiet --no-database "${tags[@]}" --content "silikos-arch=$arch" --baseurl "$baseurl" --pkglist "$tmp/list.$arch" --outputdir "$d" "$pool"
   else
     mkdir -p "$d/Packages"
     while read -r b; do ln "$pool/$b" "$d/Packages/$b" 2> /dev/null || cp "$pool/$b" "$d/Packages/$b"; done < "$tmp/list.$arch"
-    createrepo_c --quiet --no-database "$d"
+    createrepo_c --quiet --no-database "${tags[@]}" --content "silikos-arch=$arch" "$d"
   fi
   if [ "$signing" = 1 ]; then
     gpg ${passargs[@]+"${passargs[@]}"} --yes --local-user "$fpr" --digest-algo SHA256 --armor --detach-sign --output "$d/repodata/repomd.xml.asc" "$d/repodata/repomd.xml"
-    gpg --batch --quiet --no-default-keyring --keyring "$tmp/verify.kbx" --import "$pub" 2> /dev/null
-    gpg --batch --quiet --no-default-keyring --keyring "$tmp/verify.kbx" --verify "$d/repodata/repomd.xml.asc" "$d/repodata/repomd.xml" 2> /dev/null \
+    # (checked in a gpg home of this run that holds the public half and nothing else. With --gpg-name the home is the
+    # owner's: its trust database names keys this keyring does not hold, and gpg then ends with an error although
+    # the import was done; seen 13/11/2026 with two keys in the home)
+    mkdir -p "$tmp/vhome"; chmod 700 "$tmp/vhome"
+    GNUPGHOME=$tmp/vhome gpg --batch --quiet --no-default-keyring --keyring "$tmp/verify.kbx" --import "$pub" 2> /dev/null
+    GNUPGHOME=$tmp/vhome gpg --batch --quiet --no-default-keyring --keyring "$tmp/verify.kbx" --verify "$d/repodata/repomd.xml.asc" "$d/repodata/repomd.xml" 2> /dev/null \
       || { echo "error: $d/repodata/repomd.xml.asc does not verify with $fpr" >&2; exit 1; }
   fi
   echo "packages.$arch=$(wc -l < "$tmp/list.$arch")" >> "$state"
@@ -234,7 +280,8 @@ ES  Los paquetes que SilikOS añade a su base: silik, el escritorio, Wine, las h
     sistema instalado. La clave: RPM-GPG-KEY-SilikOS, aquí, cuando la hay.
 EOF
 sort -u "$tmp/upload" > "$pool/UPLOAD"; sort -u "$tmp/delete" > "$pool/DELETE"
-say "$(grep -c . "$tmp/list.x86_64" || :) packages for x86_64, $(grep -c . "$tmp/list.aarch64" || :) for aarch64; $new new, $same already published under their name, $resigned signed again, $pruned older left out"
+say "$(grep -c . "$tmp/list.x86_64" || :) packages for x86_64, $(grep -c . "$tmp/list.aarch64" || :) for aarch64; $new new, $same already published under their name, $resigned signed again, $pruned older left out, $dropped of unknown origin left out"
+say "revision $revision ($(date -u -d "@$revision" +%Y-%m-%dT%H:%M:%SZ 2> /dev/null || echo "seconds since 1970")), in every repomd.xml with the channel's name"
 if [ "$signing" = 1 ]; then say "signed with $fpr: every package, and repomd.xml.asc of each architecture"
 else say "NOT SIGNED (no key was given): no installed system accepts this tree"; fi
 say "tree: $tree$([ -z "$baseurl" ] || echo "; packages for $baseurl in $pool ($(wc -l < "$pool/UPLOAD") to put there, $(wc -l < "$pool/DELETE") to remove after)")"
