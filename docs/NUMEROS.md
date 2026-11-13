@@ -239,7 +239,7 @@ a la mateixa màquina virtual (4 CPU, 4096 MB, KVM) del mateix runner, dues arre
 - **Arrencada: SilikOS arriba a l'escriptori 0,65 a 0,85 s més tard** (11,26-11,41 contra 10,56-10,61 s), i l'espai
   d'usuari li costa 0,3 a 0,7 s més. No és més ràpid que la base en arrencar: és més lent.
 - On és la diferència (segona execució, 43461175134, commit acc8cd1, que ja apunta com arrenca la sessió; dona el
-  mateix quadre: memòria 991 / 976 contra 1145 / 1153 MB, escriptori a 11,45 / 11,35 contra 10,03 / 10,6 s). Les
+  mateix quadre: memòria 991 / 976 contra 1145 / 1150 MB, escriptori a 11,45 / 11,35 contra 10,03 / 10,69 s). Les
   dues màquines entren a la sessió soles (`AutomaticLogin`): **no hi ha pantalla d'inici**. La sessió de SilikOS és
   X11 (`WaylandEnable=false`, per les eines EDA, que són programes X11); la de l'AlmaLinux és Wayland.
 
