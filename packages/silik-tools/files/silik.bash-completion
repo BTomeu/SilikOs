@@ -19,7 +19,19 @@ _silik() {
   fi
   # doctor: its areas, in any number
   if [ "$g" = doctor ] && [ "$COMP_CWORD" -ge 2 ]; then
-    COMPREPLY=($(compgen -W "system security graphics bench eda windows network --json --verbose" -- "$cur")); return
+    COMPREPLY=($(compgen -W "system security graphics hardware bench eda windows network --json --verbose" -- "$cur")); return
+  fi
+  # hw check --from FILE; hw driver add NAME; hw nvidia install --source WHICH
+  if [ "$g" = hw ] && [ "$COMP_CWORD" -ge 4 ]; then
+    case "${COMP_WORDS[2]} ${COMP_WORDS[COMP_CWORD-1]}" in
+      "check --from") COMPREPLY=($(compgen -f -- "$cur"));;
+      "check --arch") COMPREPLY=($(compgen -W "x86_64 aarch64" -- "$cur"));;
+      check*) COMPREPLY=($(compgen -W "--from --arch --json --all" -- "$cur"));;
+      "driver add") COMPREPLY=($(compgen -W "wl r8127 rtw88_usb rtw89_usb" -- "$cur"));;
+      "nvidia --source") COMPREPLY=($(compgen -W "nvidia almalinux" -- "$cur"));;
+      nvidia*) COMPREPLY=($(compgen -W "--source" -- "$cur"));;
+    esac
+    return
   fi
   # vendor check / prepare: the tools of the vendors' data, in any number; vendor lib: library names (none to offer)
   if [ "$g" = vendor ] && [ "$COMP_CWORD" -ge 3 ]; then
@@ -49,7 +61,7 @@ _silik() {
     2) case $g in
          eda) COMPREPLY=($(compgen -W "list create setup enter run import-vm rm check kernel-arg tools try bench tune" -- "$cur"));;
          win) COMPREPLY=($(compgen -W "list open create run install stop rm sync apps vm" -- "$cur"));;
-         hw)  COMPREPLY=($(compgen -W "probe nvidia" -- "$cur"));;
+         hw)  COMPREPLY=($(compgen -W "probe check nvidia driver" -- "$cur"));;
          dev) COMPREPLY=($(compgen -W "tools try install can serial ccache" -- "$cur"));;
          power) COMPREPLY=($(compgen -W "show performance balanced saver auto apply zram trim --json" -- "$cur"));;
          speed) COMPREPLY=($(compgen -W "show apply undo --json" -- "$cur"));;
@@ -68,7 +80,9 @@ _silik() {
          "win run"|"win install"|"win stop"|"win rm") COMPREPLY=($(compgen -W "$(silik -q win list 2>/dev/null | grep -v '^no ') --no-net --no-sandbox" -- "$cur"));;
          "win open") COMPREPLY=($(compgen -W "--prefix --no-net --no-sandbox" -- "$cur") $(compgen -f -- "$cur"));;
          "win vm") COMPREPLY=($(compgen -W "create start stop app usb" -- "$cur"));;
-         "hw nvidia") COMPREPLY=($(compgen -W "install status" -- "$cur"));;
+         "hw nvidia") COMPREPLY=($(compgen -W "install status --source" -- "$cur"));;
+         "hw check") COMPREPLY=($(compgen -W "--from --arch --json --all" -- "$cur") $(compgen -f -- "$cur"));;
+         "hw driver") COMPREPLY=($(compgen -W "list add" -- "$cur"));;
          "eda try") COMPREPLY=($(compgen -W "all sim schematic layout postlayout gds digital waves gates verilate vhdl lint synth device" -- "$cur"));;
          "eda tune") COMPREPLY=($(compgen -W "--threads --undo" -- "$cur"));;
          "dev try") COMPREPLY=($(compgen -W "all build libc cxx debug probe dfu stlink" -- "$cur"));;

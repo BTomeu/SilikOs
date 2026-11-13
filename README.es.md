@@ -83,7 +83,8 @@ bash tools/build_iso.sh           # la ISO de instalación por red (necesita rep
 ```
 
 [`docs/BUILD.md`](docs/BUILD.md) tiene los pasos y qué necesita cada uno. También: `docs/PLAN.md` (decisiones y
-fases), `docs/HARDWARE.md` (Ryzen 7 5800HS + RTX 3050, Snapdragon X, SilikOS en ARM / aarch64), `docs/EDA.md`,
+fases), `docs/HARDWARE.md` (Ryzen 7 5800HS + RTX 3050, Snapdragon X, SilikOS en ARM / aarch64), `docs/DRIVERS.md` (para qué hardware
+tiene controlador el núcleo de la base; `silik hw check`), `docs/EDA.md`,
 `docs/DEV.md`, `docs/WINDOWS.md`, `docs/POWER.md`, `docs/CONCEPTE.md` (la idea desde cero, en catalán). `site/` es un
 sitio estático con el mismo contenido (`tools/gen_site.py`; todavía no está desplegado).
 

@@ -101,7 +101,7 @@ CAN amb el seu estat i errors del bus, i els adaptadors USB que SilikOS coneix: 
 eines de xips, Windows (Wine, la capsa, la màquina virtual) i la xarxa (si es troben els servidors d'actualitzacions,
 el proxy). Cada línia diu **ok**, **avís**, **malament** o **desconegut** —desconegut quan no ho pot veure, mai ok— i
 l'ordre exacta que ho arregla. No canvia res. Tarda unes dècimes de segon (0,14–0,27 s en un EL 9 net). La llista
-d'adaptadors (`hardware.tsv`, 137 dispositius) surt de les taules dels controladors del nucli i de les regles dels
+d'adaptadors (`hardware.tsv`, 143 dispositius) surt de les taules dels controladors del nucli i de les regles dels
 projectes originals, amb la font a cada línia; cap no s'ha provat encara amb un aparell de veritat.
 
 ## 4. Què porta

@@ -1,0 +1,60 @@
+# SilikOS: the PCI drivers built into EL 9.8's kernel (x86_64 5.14.0-687.66.2.el9_8: modules.builtin). A built-in driver has no
+# line in modules.alias, so its ID table is written here, read from the kernel's source. Input of tools/gen_hwdb.py.
+# alias: a PCI modalias pattern, as modules.alias has them; module; arch: both, x86_64 or aarch64; source: the table read.
+# The thunderbolt and vmd rows are the aliases of the same drivers in Fedora 45's kernel 7.2.11 (where they are modules)
+# whose device ID is also in the EL 9 source file named (checked by text on 2026-11-13); the others are class matches.
+alias	module	arch	source
+pci:v*d*sv*sd*bc0Csc03i40*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d00001513sv00002222sd00001111bc08sc80i00*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d00001547sv00002222sd00001111bc08sc80i00*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d0000156Asv*sd*bc08sc80i00*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d0000156Csv*sd*bc08sc80i00*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d00001575sv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d00001577sv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d000015BFsv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d000015D2sv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d000015D9sv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d000015DCsv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d000015DDsv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d000015DEsv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d000015E8sv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d000015EBsv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d0000463Esv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d0000466Dsv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d00004D33sv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d00005781sv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d00005784sv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d00007EB2sv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d00007EC2sv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d00007EC3sv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d00008A0Dsv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d00008A17sv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d00009A1Bsv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d00009A1Dsv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d00009A1Fsv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d00009A21sv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d0000A73Esv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d0000A76Dsv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d0000A833sv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d0000A834sv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d0000E333sv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d0000E334sv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d0000E433sv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d0000E434sv*sd*bc*sc*i*	thunderbolt	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/thunderbolt/nhi.c (nhi_ids), nhi.h, include/linux/pci_ids.h
+pci:v00008086d0000201Dsv*sd*bc*sc*i*	vmd	x86_64	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/pci/controller/vmd.c (vmd_ids)
+pci:v00008086d000028C0sv*sd*bc*sc*i*	vmd	x86_64	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/pci/controller/vmd.c (vmd_ids)
+pci:v00008086d0000467Fsv*sd*bc*sc*i*	vmd	x86_64	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/pci/controller/vmd.c (vmd_ids)
+pci:v00008086d00004C3Dsv*sd*bc*sc*i*	vmd	x86_64	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/pci/controller/vmd.c (vmd_ids)
+pci:v00008086d00007D0Bsv*sd*bc*sc*i*	vmd	x86_64	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/pci/controller/vmd.c (vmd_ids)
+pci:v00008086d00009A0Bsv*sd*bc*sc*i*	vmd	x86_64	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/pci/controller/vmd.c (vmd_ids)
+pci:v00008086d0000A77Fsv*sd*bc*sc*i*	vmd	x86_64	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/pci/controller/vmd.c (vmd_ids)
+pci:v00008086d0000AD0Bsv*sd*bc*sc*i*	vmd	x86_64	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/pci/controller/vmd.c (vmd_ids)
+pci:v00008086d0000B06Fsv*sd*bc*sc*i*	vmd	x86_64	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/pci/controller/vmd.c (vmd_ids)
+pci:v00008086d0000B60Bsv*sd*bc*sc*i*	vmd	x86_64	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/pci/controller/vmd.c (vmd_ids)
+pci:v*d*sv*sd*bc0Csc03i30*	xhci_pci	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/usb/host/xhci-pci.c (pci_ids: PCI_CLASS_SERIAL_USB_XHCI)
+pci:v*d*sv*sd*bc0Csc03i20*	ehci_pci	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/usb/host/ehci-pci.c (PCI_CLASS_SERIAL_USB_EHCI)
+pci:v*d*sv*sd*bc0Csc03i10*	ohci_pci	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/usb/host/ohci-pci.c (PCI_CLASS_SERIAL_USB_OHCI)
+pci:v*d*sv*sd*bc0Csc03i00*	uhci_hcd	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/usb/host/uhci-pci.c (PCI_CLASS_SERIAL_USB_UHCI)
+pci:v*d*sv*sd*bc06sc04i00*	pcieport	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/pci/pcie/portdrv.c (PCI_CLASS_BRIDGE_PCI_NORMAL; part of the PCI core, CONFIG_PCIEPORTBUS=y)
+pci:v*d*sv*sd*bc06sc04i01*	pcieport	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/pci/pcie/portdrv.c (PCI_CLASS_BRIDGE_PCI_SUBTRACTIVE)
+pci:v00001AF4d*sv*sd*bc*sc*i*	virtio_pci	both	CentOS Stream 9 kernel, tag kernel-5.14.0-687.el9: drivers/virtio/virtio_pci_common.c (PCI_DEVICE(PCI_VENDOR_ID_REDHAT_QUMRANET, PCI_ANY_ID))

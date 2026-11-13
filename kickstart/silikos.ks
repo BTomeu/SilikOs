@@ -35,6 +35,9 @@ bootloader --append="vsyscall=xonly"
 %packages
 @^workstation-product-environment
 epel-release
+# the base's own package, which its Workstation set leaves out: the kernel's vcan (the virtual CAN bus), slcan
+# (serial-line CAN adapters) and ems_usb are in it. An update of the kernel brings its kernel-modules-extra too
+kernel-modules-extra
 silikos-branding
 silikos-desktop
 silik-tools

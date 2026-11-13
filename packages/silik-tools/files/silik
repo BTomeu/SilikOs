@@ -16,7 +16,9 @@
 #               | zram [on | off] | trim [on | off]   the power profile (tuned), zram swap, SSD trim
 #   silik speed [show [--json] | apply [ITEM...] | undo [ITEM...]]   what a start and a session do not need, off
 #   silik bench system [--json] [--label L] [--wait S] | compare FILE...   how this system started, what it holds at rest
-#   silik hw    probe | nvidia install | nvidia status
+#   silik hw    probe | nvidia install [--source nvidia | almalinux] | nvidia status
+#               | check [--from FILE] [--arch A] [--json] [--all]   every device and its driver; FILE: lspci -nn / lsusb
+#               | driver [list | add NAME]                a driver the base's kernel lacks, from ELRepo
 #   silik identity show | silikos | base
 #   silik look  [silik | bar | island] [--json]     the desktop's look; no argument: which one is in use
 #   silik look  [LOOK] --accent NAME [--json]       its accent: one colour for what is selected, focused, on
@@ -25,7 +27,7 @@
 #   silik update
 #   silik secure status [--json] [--offline] | apply [--keep-ssh]
 #   silik doctor [--json] [--verbose] [AREA...]       is this workstation healthy, and what to do: system security
-#               graphics bench eda windows network (default: all); exit 0 all ok, 1 warn or unknown, 2 bad
+#               graphics hardware bench eda windows network (default: all); exit 0 all ok, 1 warn or unknown, 2 bad
 #   silik vendor list [--json] | check TOOL... | check --all [--json] | prepare TOOL... | lib LIBRARY...
 #               a vendor's tool (Vivado, MATLAB, Virtuoso, J-Link...): what its vendor says of EL 9, this system
 #               against its published requirements, and the commands that prepare it (no vendor software is run)
@@ -1924,6 +1926,15 @@ def hw_nvidia(ctx, a):
         v = read("/proc/driver/nvidia/version")
         print(v.strip() or "the NVIDIA kernel module is not loaded")
         return 0 if v else 1
+    if getattr(a, "source", "nvidia") == "almalinux":
+        # AlmaLinux's own packages (wiki.almalinux.org/documentation/nvidia.html): NVIDIA's open kernel modules built
+        # by AlmaLinux for the base's kernel (no compiler, no DKMS) and signed with a key whose certificate is in its
+        # kernel, so Secure Boot needs no key enrolled; x86_64 and aarch64. docs/DRIVERS.md has what was read.
+        ctx.run(["sudo", "dnf", "-y", "install", "almalinux-release-nvidia-driver"])
+        ctx.run(["sudo", "dnf", "-y", "install", "nvidia-open-kmod", "nvidia-driver"])
+        print("restart. These are NVIDIA's open modules: GeForce GTX 16xx / RTX 20xx (Turing) and newer cards; an older card\n"
+              "needs the other source (silik hw nvidia install). nvidia-smi and CUDA: sudo dnf -y install nvidia-driver-cuda")
+        return 0
     if not x86():
         # (NVIDIA has an EL 9 repository for ARM servers with its cards, "sbsa": not set up or tried by silik; a
         # Snapdragon laptop, or a virtual machine on one, has no NVIDIA graphics)
@@ -5319,8 +5330,8 @@ def doc_rollback(st, rows):
 # read the system (the areas at once, in threads: the slow parts are other programs) and doc_check_* judge what was
 # read and run nothing, so the tests feed them made-up systems and command outputs. Nothing is changed; the read-only
 # commands it ran are listed with --verbose and in --json.
-DOCTOR_AREAS = ("system", "security", "graphics", "bench", "eda", "windows", "network")
-DOCTOR_ALIASES = {"sys": "system", "secure": "security", "gpu": "graphics", "dev": "bench", "can": "bench",
+DOCTOR_AREAS = ("system", "security", "graphics", "hardware", "bench", "eda", "windows", "network")
+DOCTOR_ALIASES = {"sys": "system", "secure": "security", "gpu": "graphics", "hw": "hardware", "drivers": "hardware", "dev": "bench", "can": "bench",
                   "win": "windows", "net": "network"}
 # the SilikOS packages the kickstart installs
 SILIKOS_PKGS = ("silikos-branding", "silikos-desktop", "silikos-security", "silik-tools", "silik-command",
@@ -6124,8 +6135,598 @@ def doc_check_network(st):
     return rows
 
 
+# ------------------------------------------------------------------ hw check: which devices have a driver
+# `silik hw check`: every PCI and USB device of this machine with the driver bound to it, or the driver of this
+# kernel that claims its ID, or "no driver in this kernel" and what to do. `--from FILE` asks the same of a list
+# saved on another system (`lspci -nn`, `lspci -nnk`, `lsusb`, `lsusb -v`, or Windows' hardware IDs): will this
+# computer's hardware have drivers on SilikOS, before installing it.
+# The facts are the kernel's own: /lib/modules/KERNEL/modules.alias on this machine, and kernel-aliases.tsv (the
+# same table of EL 9.8's kernel for x86_64 and aarch64, read from its packages by tools/gen_hwdb.py) for a list
+# from elsewhere. A match says a driver claims the ID; it never says the device works (docs/DRIVERS.md).
+KERNEL_ALIASES = "/usr/share/silikos/kernel-aliases.tsv"
+PCI_TABLE = "/usr/share/silikos/pci.tsv"
+# (the patterns are compiled when `silik hw check` or the doctor's hardware area first asks: not at every start)
+HW_RX = {
+    "pci": (r"^pci:v(\*|[0-9A-F]{8})d(\*|[0-9A-F]{8})sv(\*|[0-9A-F]{8})sd(\*|[0-9A-F]{8})bc(\*|[0-9A-F]{2})sc(\*|[0-9A-F]{2})i(\*|[0-9A-F]{2})\*?$", 0),
+    "usb": (r"^usb:v(\*|[0-9A-F]{4})p(\*|[0-9A-F]{4})d(.*?)dc(\*|[0-9A-F]{2})dsc(\*|[0-9A-F]{2})dp(\*|[0-9A-F]{2})ic(\*|[0-9A-F]{2})isc(\*|[0-9A-F]{2})ip(\*|[0-9A-F]{2})in(\*|[0-9A-F]{2})\*?$", 0),
+    "lspci": (r"^((?:[0-9a-f]{4}:)?[0-9a-f]{2}:[0-9a-f]{2}\.[0-9a-f]) (.*?) ?\[([0-9a-f]{4})\]: (.*) \[([0-9a-f]{4}):([0-9a-f]{4})\](.*)$", 0),
+    "lspci-n": (r"^((?:[0-9a-f]{4}:)?[0-9a-f]{2}:[0-9a-f]{2}\.[0-9a-f]) ([0-9a-f]{4}): ([0-9a-f]{4}):([0-9a-f]{4})(.*)$", 0),
+    "lsusb": (r"^Bus (\d+) Device (\d+): ID ([0-9a-f]{4}):([0-9a-f]{4}) ?(.*)$", 0),
+    "win-pci": (r"PCI\\VEN_([0-9A-F]{4})&DEV_([0-9A-F]{4})((?:&[A-Z]+_[0-9A-F]+)*)", re.I),
+    "win-usb": (r"USB\\VID_([0-9A-F]{4})&PID_([0-9A-F]{4})", re.I),
+}
+HW_RX_DONE = {}
+
+
+def hw_rx(name):
+    r = HW_RX_DONE.get(name)
+    if r is None:
+        r = HW_RX_DONE[name] = re.compile(*HW_RX[name])
+    return r
+
+
+# the PCI classes, as pci.ids names them (the ones a workstation has)
+PCI_CLASSES = {"0100": "SCSI storage controller", "0101": "IDE interface", "0104": "RAID bus controller", "0106": "SATA controller",
+               "0107": "Serial Attached SCSI controller", "0108": "Non-Volatile memory controller", "0200": "Ethernet controller",
+               "0280": "Network controller", "0300": "VGA compatible controller", "0302": "3D controller", "0380": "Display controller",
+               "0400": "Multimedia video controller", "0401": "Multimedia audio controller", "0403": "Audio device",
+               "0480": "Multimedia controller", "0500": "RAM memory", "0580": "Memory controller", "0600": "Host bridge",
+               "0601": "ISA bridge", "0604": "PCI bridge", "0680": "Bridge", "0700": "Serial controller", "0780": "Communication controller",
+               "0800": "PIC", "0805": "SD Host controller", "0806": "IOMMU", "0880": "System peripheral", "0c03": "USB controller",
+               "0c04": "Fibre Channel", "0c05": "SMBus", "0c80": "Serial bus controller", "0d11": "Bluetooth", "0d80": "Wireless controller",
+               "1080": "Encryption controller", "1180": "Signal processing controller", "1200": "Processing accelerators",
+               "1300": "Non-Essential Instrumentation", "ff00": "Unassigned class"}
+# PCI devices of these classes are often there with no driver (bridges, memory, system peripherals, telemetry):
+# said, not counted as a part without a driver. The SD host (0805) is not one of them.
+HW_QUIET = ("0500", "0580", "0600", "0601", "0680", "0800", "0806", "0880", "1180", "1300")
+USB_CLASSES = {"01": "audio", "02": "communications", "03": "keyboard, mouse or other HID", "06": "still image", "07": "printer",
+               "08": "storage", "09": "hub", "0a": "CDC data", "0b": "smart card", "0e": "video", "e0": "wireless (Bluetooth)",
+               "ef": "miscellaneous", "fe": "application specific", "ff": "vendor specific"}
+# USB classes a class driver of the kernel takes; a device of another class (vendor specific) may be a program's
+USB_KEY = ("01", "02", "03", "06", "07", "08", "0a", "0e", "e0")
+HW_BUS_ONLY = ("bcma", "ssb")           # drivers of a bus inside a card: the part on it needs its own driver
+HW_STATES = ("ok", "driver", "maybe", "unbound", "none", "partial", "program", "quiet", "unknown")
+HW_NOTE = "a match says a driver of the kernel claims the device's ID, not that the device was tried (docs/DRIVERS.md)"
+
+
+def hw_data(name, installed):
+    """a data file of silik-tools: $SILIK_HWDATA/NAME, the installed one, or the one next to the command"""
+    for p in (os.path.join(os.environ.get("SILIK_HWDATA") or "/nonexistent", name), installed,
+              os.path.join(os.path.dirname(os.path.abspath(__file__)), name)):
+        if os.path.isfile(p):
+            return p
+    return ""
+
+
+def hw_fields(alias):
+    m = hw_rx("pci").match(alias)
+    if m:
+        return "pci", m.groups()
+    m = hw_rx("usb").match(alias)
+    return ("usb", m.groups()) if m else (None, None)
+
+
+class HwTable:
+    """which module claims which device: the patterns of a modules.alias, by bus and vendor"""
+
+    def __init__(self):
+        self.by = {}
+        self.n = 0
+        self.kernel = ""
+
+    def add(self, alias, module, src):
+        bus, f = hw_fields(alias)
+        if bus:
+            self.by.setdefault((bus, f[0]), []).append((f, module.replace("-", "_"), src))
+            self.n += 1
+
+    def claim(self, bus, dev, srcs):
+        """the modules (of the sources SRCS) whose pattern DEV satisfies. DEV: the fields of the pattern, None for one
+        that is not known. (sure, maybe): maybe = a pattern for this very ID that asks for a field DEV does not have"""
+        sure, maybe = [], []
+        for f, mod, src in self.by.get((bus, dev[0]), []) + self.by.get((bus, "*"), []):
+            if src not in srcs:
+                continue
+            unknown = False
+            for i, (p, v) in enumerate(zip(f, dev)):
+                if p == "*":
+                    continue
+                if bus == "usb" and i == 2:           # bcdDevice: a glob (d0[0-3]*)
+                    import fnmatch
+                    if v is None or fnmatch.fnmatchcase(v, p):
+                        continue
+                    break
+                if v is None:
+                    unknown = True
+                elif p != v:
+                    break
+            else:
+                if not unknown:
+                    if mod not in sure:
+                        sure.append(mod)
+                elif f[0] != "*" and f[1] != "*" and mod not in maybe:
+                    maybe.append(mod)
+        return sure, [m for m in maybe if m not in sure]
+
+
+def hw_tables(arch, local_alias=""):
+    """the table for ARCH: sources "el" (EL 9.8's modules, from kernel-aliases.tsv), "builtin", "program" (libfprint),
+    "up" (the upstream kernel, for what EL lacks) and, with LOCAL_ALIAS (this kernel's modules.alias), "local".
+    Returns (table, {module: package}, the file read or ""); table.kernel: the kernel the shipped table is of"""
+    t, pkg = HwTable(), {}
+    path = hw_data("kernel-aliases.tsv", KERNEL_ALIASES)
+    for l in read(path).splitlines() if path else []:
+        if l.startswith("#") or l.startswith("alias\t"):
+            m = re.search(r"kernel (5\.14\.0-[\w.]+)", l) if not t.kernel else None
+            if m:
+                t.kernel = m.group(1)
+            continue
+        f = l.split("\t")
+        if len(f) < 4:
+            continue
+        if f[2] == "upstream":
+            t.add(f[0], f[1], "up")
+        elif f[2] in ("both", arch):
+            t.add(f[0], f[1], "builtin" if f[3] == "builtin" else "program" if f[3] == "userspace" else "el")
+            pkg[f[1]] = f[3]
+    for l in read(local_alias).splitlines() if local_alias else []:
+        f = l.split()
+        if len(f) == 3 and f[0] == "alias" and f[1][:4] in ("pci:", "usb:"):
+            t.add(f[1], f[2], "local")
+    return t, pkg, path
+
+
+def hw_families(path=None):
+    """pci.tsv: {(bus, id): row}"""
+    p = path or hw_data("pci.tsv", PCI_TABLE)
+    return {(r["bus"], r["id"]): r for r in hw_known(p)} if p else {}
+
+
+# ---- the devices: of this machine, or of a saved list
+def hw_pci_sysfs(root="/sys/bus/pci/devices"):
+    """[{bus, where, id, sub, class, driver}] from sysfs; None when there is no PCI bus to read"""
+    try:
+        names = sorted(os.listdir(root))
+    except OSError:
+        return None
+    out = []
+    for n in names:
+        d = os.path.join(root, n)
+        ven, dev = sys_read(os.path.join(d, "vendor"))[2:], sys_read(os.path.join(d, "device"))[2:]
+        if not ven or not dev:
+            continue
+        drv = os.path.join(d, "driver")
+        out.append({"bus": "pci", "where": n, "id": "%s:%s" % (ven, dev), "class": sys_read(os.path.join(d, "class"))[2:8],
+                    "sub": "%s:%s" % (sys_read(os.path.join(d, "subsystem_vendor"))[2:], sys_read(os.path.join(d, "subsystem_device"))[2:]),
+                    "driver": os.path.basename(os.path.realpath(drv)) if os.path.exists(drv) else "", "name": ""})
+    return out
+
+
+def hw_usb_sysfs(root="/sys/bus/usb/devices"):
+    """[{bus, where, id, class, bcd, name, ifaces: [(class, subclass, protocol, number, driver)]}]; None without USB"""
+    try:
+        names = sorted(os.listdir(root))
+    except OSError:
+        return None
+    out = []
+    for n in names:
+        d = os.path.join(root, n)
+        vid = sys_read(os.path.join(d, "idVendor"))
+        if ":" in n or not vid:
+            continue
+        ifaces = []
+        for f in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+            i = os.path.join(d, f)
+            if not f.startswith(n + ":") or not os.path.isdir(i):
+                continue
+            drv = os.path.join(i, "driver")
+            ifaces.append((sys_read(os.path.join(i, "bInterfaceClass")), sys_read(os.path.join(i, "bInterfaceSubClass")),
+                           sys_read(os.path.join(i, "bInterfaceProtocol")), sys_read(os.path.join(i, "bInterfaceNumber")),
+                           os.path.basename(os.path.realpath(drv)) if os.path.exists(drv) else ""))
+        out.append({"bus": "usb", "where": n, "id": "%s:%s" % (vid, sys_read(os.path.join(d, "idProduct"))),
+                    "class": sys_read(os.path.join(d, "bDeviceClass")) + sys_read(os.path.join(d, "bDeviceSubClass")) + sys_read(os.path.join(d, "bDeviceProtocol")),
+                    "bcd": sys_read(os.path.join(d, "bcdDevice")),
+                    "name": " ".join(x for x in (sys_read(os.path.join(d, "manufacturer")), sys_read(os.path.join(d, "product"))) if x),
+                    "ifaces": ifaces})
+    return out
+
+
+def hw_parse(text):
+    """the devices of a saved list: `lspci -nn` (also -nnk, -nnv, -n), `lsusb` (also -v), or the hardware IDs Windows
+    prints (PCI\\VEN_8086&DEV_A0F0&SUBSYS_00748086&REV_20, ...&CC_028000, USB\\VID_0C72&PID_000C). The same shape
+    as hw_pci_sysfs / hw_usb_sysfs; driver None = the list does not say (it is another system's anyway)"""
+    out, cur, win = [], None, {}
+    for l in text.replace("\r", "").replace("﻿", "").splitlines():
+        if l.startswith("#"):
+            continue
+        m = hw_rx("lspci").match(l)
+        n = hw_rx("lspci-n").match(l) if not m else None
+        if m or n:
+            slot, cls, ven, dev, rest = (m.group(1), m.group(3), m.group(5), m.group(6), m.group(7)) if m else n.groups()
+            pi = re.search(r"\(prog-if ([0-9a-f]{2})", rest)
+            cur = {"bus": "pci", "where": slot, "id": "%s:%s" % (ven, dev), "class": cls + (pi.group(1) if pi else "00"), "sub": "",
+                   "driver": None, "name": ("%s: %s" % (m.group(2), m.group(4))) if m else ""}
+            out.append(cur)
+            continue
+        m = hw_rx("lsusb").match(l)
+        if m:
+            cur = {"bus": "usb", "where": "%s-%s" % (m.group(1), m.group(2)), "id": "%s:%s" % (m.group(3), m.group(4)), "class": "",
+                   "bcd": "", "name": m.group(5).strip(), "ifaces": None, "_c": ["", "", ""]}
+            out.append(cur)
+            continue
+        s = l.strip()
+        if cur and cur["bus"] == "pci":
+            m = re.match(r"^Subsystem: .*\[([0-9a-f]{4}):([0-9a-f]{4})\]$", s)
+            if m and not cur["sub"] and l[:1] in ("\t", " "):
+                cur["sub"] = "%s:%s" % (m.group(1), m.group(2))
+        elif cur and cur["bus"] == "usb":
+            m = re.match(r"^(bDeviceClass|bDeviceSubClass|bDeviceProtocol|bInterfaceNumber|bInterfaceClass|bInterfaceSubClass|bInterfaceProtocol)\s+(\d+)", s)
+            if m:
+                k, v = m.group(1), "%02x" % int(m.group(2))
+                if k.startswith("bDevice"):
+                    cur["_c"][("bDeviceClass", "bDeviceSubClass", "bDeviceProtocol").index(k)] = v
+                    cur["class"] = "".join(cur["_c"]) if all(cur["_c"]) else ""
+                elif k == "bInterfaceNumber":
+                    cur["ifaces"] = (cur["ifaces"] or []) + [["", "", "", v, None]]
+                elif cur["ifaces"]:
+                    cur["ifaces"][-1][("bInterfaceClass", "bInterfaceSubClass", "bInterfaceProtocol").index(k)] = v
+            m = re.match(r"^bcdDevice\s+(\d+)\.(\d\d)", s)
+            if m:
+                cur["bcd"] = "%02x%s" % (int(m.group(1)), m.group(2))
+        for m in hw_rx("win-pci").finditer(l):
+            w = win.setdefault(("pci", m.group(1).lower(), m.group(2).lower()), {"sub": "", "class": ""})
+            sub = re.search(r"&SUBSYS_([0-9A-F]{4})([0-9A-F]{4})", m.group(3), re.I)
+            cc = re.search(r"&CC_([0-9A-F]{4,6})", m.group(3), re.I)
+            if sub:
+                w["sub"] = "%s:%s" % (sub.group(2).lower(), sub.group(1).lower())      # (SUBSYS_ is device then vendor)
+            if cc and len(cc.group(1)) > len(w["class"]):
+                w["class"] = cc.group(1).lower()
+        for m in hw_rx("win-usb").finditer(l):
+            win.setdefault(("usb", m.group(1).lower(), m.group(2).lower()), {})
+    for (bus, ven, dev), w in sorted(win.items()):
+        if bus == "pci":
+            out.append({"bus": "pci", "where": "", "id": "%s:%s" % (ven, dev), "class": w["class"], "sub": w["sub"], "driver": None, "name": ""})
+        else:
+            out.append({"bus": "usb", "where": "", "id": "%s:%s" % (ven, dev), "class": "", "bcd": "", "name": "", "ifaces": None})
+    for d in out:
+        d.pop("_c", None)
+        if d["bus"] == "usb" and d["ifaces"]:
+            d["ifaces"] = [tuple(i) for i in d["ifaces"]]
+    return out
+
+
+def hw_read_list(path):
+    """the text of a saved list; Windows PowerShell writes UTF-16 unless told otherwise"""
+    with open(path, "rb") as f:
+        b = f.read()
+    if b[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        return b.decode("utf-16", "replace")
+    return b.decode("utf-8", "replace")
+
+
+# ---- the judgement
+def hw_pci_key(d):
+    v, p = d["id"].upper().split(":")
+    sv, _, sd = d.get("sub", "").upper().partition(":")
+    c = d.get("class", "").upper()
+    return ("0000" + v, "0000" + p, ("0000" + sv) if sv else None, ("0000" + sd) if sd else None,
+            c[0:2] if len(c) >= 2 else None, c[2:4] if len(c) >= 4 else None, c[4:6] if len(c) >= 6 else None)
+
+
+def hw_usb_keys(d):
+    """one key per interface (a USB modalias is an interface's); without interfaces, the ID alone"""
+    v, p = d["id"].upper().split(":")
+    c = d.get("class", "").upper()
+    dc = (c[0:2], c[2:4], c[4:6]) if len(c) == 6 else (None, None, None)
+    bcd = d.get("bcd", "").upper() or None
+    if not d.get("ifaces"):
+        return [(v, p, bcd) + dc + (None, None, None, None)]
+    return [(v, p, bcd) + dc + tuple((x.upper() if x else None) for x in i[:4]) for i in d["ifaces"]]
+
+
+def hw_judge(devs, table, pkg, fams, known, local, kernel="", arch="", mine=None):
+    """a row for every device: {bus, id, class, name, state, driver, value, fix}. LOCAL: the devices are this
+    machine's (their bound driver is known); else they are a saved list and the answer is what EL's kernel claims.
+    states: ok (a driver is bound), driver (the kernel claims the ID), maybe (it claims the ID for some subsystem
+    IDs), unbound (claimed, not bound), partial (only the card's bus has a driver), none (no driver in this kernel),
+    program (no kernel driver needed: a program opens it), quiet (no driver; devices of this class often have none),
+    unknown (the list does not say enough)"""
+    rows = []
+    mine = mine or (("local", "builtin") if local else ("el", "builtin"))
+    # this kernel's own table was read: what EL's packages have beyond it is a package not installed (when this is
+    # the kernel the shipped table is of) or a newer kernel of the base
+    beyond = ("el",) if local and "local" in mine else ()
+    same = bool(table.kernel) and kernel.startswith(table.kernel)
+
+    def missing(r, mods):
+        p = pkg.get(mods[0], "modules")
+        r["state"], r["driver"] = "unbound", ", ".join(mods)
+        if same:
+            name = "kernel-modules" + ("-" + p if p in ("core", "extra") else "")
+            r["value"] = "its driver %s is in %s, which is not installed for this kernel" % (mods[0], name)
+            r["fix"] = ["sudo dnf -y install %s-%s" % (name, kernel)]
+        else:
+            r["value"] = "no driver in this kernel (%s); the base's kernel %s has %s for it" % (kernel or "?", table.kernel or "of EL 9.8", mods[0])
+            r["fix"] = ["silik update   # then restart"]
+
+    for d in devs:
+        bus = d["bus"]
+        fam = fams.get((bus, d["id"]))
+        r = {"bus": bus, "id": d["id"], "class": d.get("class", ""), "where": d.get("where", ""), "driver": "", "fix": [],
+             "name": d.get("name") or (fam["name"] if fam else "") or ""}
+        if bus == "pci":
+            cls = d.get("class", "")
+            if not d.get("name") and cls:           # (no name in the list: the class, and pci.tsv's name when it has one)
+                r["name"] = ("%s: %s" % (PCI_CLASSES.get(cls[:4], "class " + cls[:4]), r["name"])).rstrip(": ")
+            sure, maybe = table.claim("pci", hw_pci_key(d), mine)
+            other = table.claim("pci", hw_pci_key(d), beyond)[0] if beyond else []
+            up = table.claim("pci", hw_pci_key(d), ("up",))
+            bound = d.get("driver")
+            if bound:
+                r["state"], r["driver"], r["value"] = "ok", bound, "driver %s" % bound
+                if bound in HW_BUS_ONLY:
+                    r["state"], r["value"] = "partial", "%s drives the card's own bus; the part on it has no driver of its own bound" % bound
+                    r["fix"] = hw_todo(fam)
+            elif sure:
+                r["driver"] = ", ".join(sure)
+                if local and cls[:4] in HW_QUIET:
+                    # (an error-reporting or telemetry driver that did not take the bridge: nothing a person misses)
+                    r["state"], r["value"] = "quiet", "%s claims it and is not bound (a %s often has none bound)" % (r["driver"], PCI_CLASSES.get(cls[:4], "device of this class").lower())
+                elif local:
+                    r["state"], r["value"], r["fix"] = "unbound", "%s claims it and is not bound" % r["driver"], ["sudo modprobe " + sure[0], "sudo dmesg | grep -i %s   # why" % sure[0]]
+                elif set(sure) <= set(HW_BUS_ONLY):
+                    r["state"], r["value"] = "partial", "%s drives the card's own bus; EL 9's kernel has no driver for the part on it" % r["driver"]
+                    r["fix"] = hw_todo(fam)
+                else:
+                    where = sorted(set(pkg.get(m, "") for m in sure) - {"", "modules", "core"})
+                    r["state"], r["value"] = "driver", r["driver"] + (" (%s)" % ", ".join("built in" if w == "builtin" else "kernel-modules-" + w for w in where) if where else "")
+                    if d["id"].startswith("10de:") and cls.startswith("03"):
+                        r["value"] += ": the open driver; NVIDIA's own (CUDA): silik hw nvidia install"
+            elif other:
+                missing(r, other)
+            elif maybe and not local:
+                r["state"], r["driver"] = "maybe", ", ".join(maybe)
+                r["value"] = "%s claims this ID for some subsystem IDs or classes: `lspci -nnk` gives them" % r["driver"]
+            elif not cls and not local and not (up[0] or up[1]):
+                # (a Windows list without the class codes: storage, USB and graphics drivers bind by class)
+                r["state"], r["value"] = "unknown", "no driver names this ID; one may take it by its class, which this list does not give"
+            else:
+                hint = "; a newer kernel has %s for it" % ", ".join(up[0] or up[1]) if (up[0] or up[1]) else ""
+                if cls[:4] in HW_QUIET:
+                    r["state"], r["value"] = "quiet", "no driver claims it (a %s often has none)%s" % (PCI_CLASSES.get(cls[:4], "device of this class").lower(), hint)
+                else:
+                    r["state"], r["value"] = "none", "no driver in %s%s" % ("this kernel" if local else "EL 9's kernel", hint)
+                    r["fix"] = hw_todo(fam)
+        else:
+            vid, pid = d["id"].split(":")
+            ifaces = d.get("ifaces")
+            keys = hw_usb_keys(d)
+            sure, maybe, prog, up, other = [], [], [], [], []
+            for k in keys:
+                if beyond:
+                    o = table.claim("usb", k, beyond)
+                    other += [x for x in o[0] + o[1] if x not in other]
+                s, m = table.claim("usb", k, mine)
+                sure += [x for x in s if x not in sure]
+                maybe += [x for x in m if x not in maybe]
+                prog += [x for x in table.claim("usb", k, ("program",))[0] + table.claim("usb", k, ("program",))[1] if x not in prog]
+                u = table.claim("usb", k, ("up",))
+                up += [x for x in u[0] + u[1] if x not in up]
+            if ifaces is None:
+                # a list without interfaces: a pattern for this very product is taken as the product's driver
+                sure, maybe = sure + maybe, []
+            kn = hw_match(known, vid, pid, d.get("name", "")) if known else None
+            if kn and not r["name"]:
+                r["name"] = kn["name"]
+            bound = sorted(set(i[4] for i in ifaces or [] if i[4]))
+            classes = sorted(set([i[0] for i in ifaces or [] if i[0]] + ([d["class"][:2]] if d.get("class") and d["class"][:2] not in ("00", "ef") else [])))
+            what = ", ".join(USB_CLASSES.get(c, "class " + c) for c in classes)
+            if vid == "1d6b":
+                continue                                    # (the kernel's own root hubs)
+            if bound:
+                r["state"], r["driver"], r["value"] = "ok", ", ".join(bound), "driver %s" % ", ".join(bound)
+            elif sure:
+                r["driver"] = ", ".join(sure)
+                if local:
+                    r["state"], r["value"], r["fix"] = "unbound", "%s claims it and is not bound" % r["driver"], ["sudo modprobe " + sure[0]]
+                else:
+                    where = sorted(set(pkg.get(m, "") for m in sure) - {"", "modules", "core"})
+                    r["state"], r["value"] = "driver", r["driver"] + (" (%s)" % ", ".join("built in" if w == "builtin" else "kernel-modules-" + w for w in where) if where else "")
+            elif other:
+                missing(r, other)
+            elif kn and kn["kind"] in ("probe", "logic", "vm"):
+                r["state"], r["driver"] = "program", kn["driver"]
+                r["value"] = "no kernel driver needed: %s (silik doctor bench)" % kn["driver"]
+            elif kn and kn.get("el9") == "no":
+                r["state"], r["value"] = "none", "EL 9's kernel has no %s for this product (newer kernels: %s)" % (kn["driver"], kn["source"])
+                r["fix"] = ["another adapter, or Windows in the VM: silik win vm usb attach " + d["id"]]
+            elif prog:
+                drv = prog[0].split(":", 1)[1]
+                if drv == "-":
+                    r["state"], r["value"] = "none", "a fingerprint reader libfprint lists as not supported"
+                else:
+                    r["state"], r["driver"], r["value"] = "program", "libfprint", "fingerprint reader: libfprint's %s driver (fprintd; not a kernel driver)" % drv
+            elif maybe and not local:
+                r["state"], r["driver"] = "maybe", ", ".join(maybe)
+                r["value"] = "%s claims this ID for some of its interfaces: `lsusb -v` gives them" % r["driver"]
+            elif ifaces is None and not local:
+                r["state"], r["value"] = "unknown", "no driver names this ID; one may take it by its class, which this list does not give: `lsusb -v`"
+            else:
+                hint = "; a newer kernel has %s for it" % ", ".join(up) if up else ""
+                if any(c in USB_KEY for c in classes):
+                    r["state"], r["value"] = "none", "no driver in %s for it (%s)%s" % ("this kernel" if local else "EL 9's kernel", what, hint)
+                    r["fix"] = hw_todo(fam)
+                else:
+                    r["state"], r["value"] = "quiet", "no kernel driver (%s: a program may open it itself)%s" % (what or "no class told", hint)
+        rows.append(r)
+    return rows
+
+
+def hw_todo(fam):
+    """what a person can do, from pci.tsv's row: nothing to add when the row only says there is no driver"""
+    t = fam["todo"] if fam else ""
+    if t in ("", "-"):
+        return []
+    if t.startswith("no driver in EL 9's kernel"):
+        t = t.partition(": ")[2]
+    return [t] if t else []
+
+
+def hw_summary(rows):
+    c = {k: sum(1 for r in rows if r["state"] == k) for k in HW_STATES}
+    return {k: v for k, v in c.items() if v}
+
+
+def hw_local():
+    """this machine's devices and tables: (devs or None, table, pkg, kernel, arch, the alias file read, the sources
+    of the table that are this kernel's). Without /lib/modules/KERNEL/modules.alias (a container), EL 9.8's shipped
+    table stands in for it"""
+    kernel, arch = os.uname().release, host_arch()
+    alias = os.path.join("/lib/modules", kernel, "modules.alias")
+    here = os.path.isfile(alias)
+    table, pkg, shipped = hw_tables(arch, alias if here else "")
+    pci, usb = hw_pci_sysfs(), hw_usb_sysfs()
+    return ((None if pci is None and usb is None else (pci or []) + (usb or [])), table, pkg, kernel, arch, alias if here else shipped,
+            ("local", "builtin") if here else ("el", "builtin"))
+
+
+def hw_names(ctx, devs):
+    """the names lspci has for this machine's PCI devices (pciutils), when it is there"""
+    if not shutil.which("lspci") or not any(d["bus"] == "pci" for d in devs):
+        return
+    names = {}
+    for l in ctx.query(["lspci", "-D", "-nn"]).splitlines():
+        m = hw_rx("lspci").match(l)
+        if m:
+            names[m.group(1)] = "%s: %s" % (m.group(2), m.group(4))
+    for d in devs:
+        if d["bus"] == "pci" and d["where"] in names:
+            d["name"] = names[d["where"]]
+
+
+def hw_check(ctx, a):
+    fams, known = hw_families(), hw_known()
+    if a.from_file:
+        try:
+            text = hw_read_list(a.from_file)
+        except OSError as e:
+            die("%s: %s" % (a.from_file, e.strerror), 2)
+        devs = hw_parse(text)
+        if not devs:
+            die("%s: no device found in it. A list is the output of `lspci -nn` or `lsusb` (Linux), or of this in Windows "
+                "PowerShell: (Get-PnpDevice -PresentOnly).HardwareID" % a.from_file, 2)
+        arch = a.arch or "x86_64"
+        table, pkg, src = hw_tables(arch)
+        if not src:
+            die("the kernel's alias table (%s) is missing: sudo dnf -y reinstall silik-tools" % KERNEL_ALIASES, 2)
+        rows = hw_judge(devs, table, pkg, fams, known, False, arch=arch)
+        about = {"source": a.from_file, "kernel": "EL 9.8 (%s)" % os.path.basename(src), "arch": arch}
+    else:
+        devs, table, pkg, kernel, arch, src, mine = hw_local()
+        if a.arch and a.arch != arch:
+            die("--arch is for a saved list (--from FILE); this machine is %s" % arch, 2)
+        if devs is None:
+            die("no PCI or USB devices to read in /sys (a container?); a saved list: silik hw check --from FILE", 1)
+        hw_names(ctx, devs)
+        rows = hw_judge(devs, table, pkg, fams, known, True, kernel, arch, mine)
+        about = {"source": "this machine", "kernel": kernel, "arch": arch}
+    summ = hw_summary(rows)
+    rc = 1 if any(summ.get(k) for k in ("none", "unbound", "partial")) else 0
+    if a.json:
+        print(json.dumps(dict(about, devices=rows, summary=summ, note=HW_NOTE), indent=1))
+        return rc
+    # (a device that often has no driver is listed when a newer kernel does have one for it: an NPU, a memory controller)
+    show = rows if a.all else [r for r in rows if r["state"] != "quiet" or "newer kernel" in r["value"]]
+    for r in show:
+        print("%-3s %-9s %-8s %s" % (r["bus"], r["id"], r["state"], (r["name"] or "-")[:70]))
+        print("%-22s %s" % ("", r["value"]))
+        for f in r["fix"]:
+            print("%-22s do: %s" % ("", f))
+    n = lambda *ks: sum(summ.get(k, 0) for k in ks)
+    print("\n%d devices of %s, kernel %s %s: %d with a driver%s, %d without, %d not told by the list, %d that often have none%s"
+          % (len(rows), about["source"], about["kernel"], about["arch"], n("ok", "driver", "program"),
+             " (%d only for some variants)" % n("maybe") if n("maybe") else "", n("none", "unbound", "partial"), n("unknown") + n("maybe"),
+             n("quiet"), "" if a.all or not n("quiet") else " (--all lists them)"))
+    print(HW_NOTE)
+    return rc
+
+
+# `silik hw driver add NAME`: a driver the base's kernel lacks, as a kmod package of ELRepo (a module added beside
+# the base's kernel, which stays as it is; never ELRepo's kernel-ml, which would replace it). Only the gaps of
+# docs/DRIVERS.md for which ELRepo keeps an EL 9 package: its packaging repository was read on 2026-11-13.
+HW_KMODS = {
+    "wl": ("kmod-wl", "Broadcom BCM43xx Wi-Fi (BCM4360, BCM4352, BCM4331, BCM43142...): Broadcom's own driver, not open source; "
+                      "it switches off the kernel's Broadcom drivers (bcma, brcmfmac, brcmsmac, b43)"),
+    "r8127": ("kmod-r8127", "Realtek RTL8127 10G Ethernet: Realtek's driver"),
+    "rtw88_usb": ("kmod-rtw88_usb", "USB Wi-Fi adapters with Realtek 802.11ac chips: RTL8723DU, RTL8812AU, RTL8814AU, RTL8821AU, RTL8821CU, RTL8822CU"),
+    "rtw89_usb": ("kmod-rtw89_usb", "Realtek Wi-Fi 6 / 7 chips the base lacks: RTL8851BE, RTL8852BE-VT, RTL8922AE (PCIe); RTL8851BU, RTL8852BU (USB)"),
+}
+ELREPO_KEY = "/etc/pki/elrepo/SECURE-BOOT-KEY-elrepo.org.der"
+
+
+def hw_driver(ctx, a):
+    if a.action == "list" or not a.name:
+        for k, (p, what) in sorted(HW_KMODS.items()):
+            print("%-10s %-15s %s" % (k, p, what))
+        print("silik hw driver add NAME installs one: a package of ELRepo (elrepo.org), a third party, beside the base's kernel")
+        return 0
+    if a.name not in HW_KMODS:
+        die("silik hw driver add NAME: %s (silik hw driver list)" % " | ".join(sorted(HW_KMODS)), 2)
+    if not x86():
+        die("ELRepo builds these drivers for x86_64 only; this machine is %s" % host_arch(), 2)
+    p, what = HW_KMODS[a.name]
+    print("%s: %s" % (p, what))
+    print("It comes from ELRepo (elrepo.org): a third party, not the base system and not SilikVolt. The base's kernel is\n"
+          "not changed: the module is added beside it, and ELRepo rebuilds it when the base's kernel interface changes.")
+    # (elrepo-release is in AlmaLinux's own extras repository: ELRepo's repository file and its keys)
+    ctx.run(["sudo", "dnf", "-y", "install", "elrepo-release"])
+    ctx.run(["sudo", "dnf", "-y", "install", p])
+    print("Secure Boot: the kernel loads only modules signed by a key it trusts. ELRepo's is not one until it is enrolled:\n"
+          "  sudo mokutil --import %s   # asks for a password; confirmed on the blue screen at the next start\n"
+          "Then restart. To take it away: sudo dnf remove %s" % (ELREPO_KEY, p))
+    return 0
+
+
+def doc_probe_hardware():
+    devs, table, pkg, kernel, arch, src, mine = hw_local()
+    dep = read(os.path.join("/lib/modules", kernel, "modules.dep"), None)
+    return {"devs": devs, "table": table, "pkg": pkg, "kernel": kernel, "arch": arch, "alias": src, "mine": mine, "fams": hw_families(),
+            "known": hw_known(), "dep": dep, "container": sec_container()}
+
+
+def doc_check_hardware(st):
+    rows = []
+    if st["devs"] is None:
+        doc_row(rows, "hardware", "devices", "devices", "unknown", "no PCI or USB devices to read in /sys%s" % (" (inside a container)" if st["container"] else ""),
+                ["silik hw check --from FILE   # a list saved with lspci -nn / lsusb"])
+        return rows
+    judged = hw_judge(st["devs"], st["table"], st["pkg"], st["fams"], st["known"], True, st["kernel"], st["arch"], st.get("mine"))
+    for r in judged:
+        if r["state"] in ("none", "unbound", "partial"):
+            label = "%s [%s]" % (r["name"] or r["bus"], r["id"])
+            doc_row(rows, "hardware", "%s-%s" % (r["bus"], r["id"]), r["bus"] + " device", "warn", "%s: %s" % (label, r["value"]),
+                    r["fix"] or ["silik hw check   # every device and its driver"])
+    summ = hw_summary(judged)
+    with_drv = sum(summ.get(k, 0) for k in ("ok", "program"))
+    if with_drv or not rows:
+        doc_row(rows, "hardware", "drivers", "drivers", "ok" if with_drv else "unknown",
+                "%d devices with a driver bound%s (silik hw check lists them)" % (with_drv, ", %d that often have none" % summ["quiet"] if summ.get("quiet") else ""),
+                ["silik hw check --all"])
+    # vcan, slcan and ems_usb are in kernel-modules-extra, which the base's own package set does not install
+    if st["dep"] is None:
+        doc_row(rows, "hardware", "modules-extra", "extra modules", "unknown", "no /lib/modules/%s/modules.dep to read%s" % (st["kernel"], " (inside a container)" if st["container"] else ""),
+                ["rpm -q kernel-modules-extra"])
+    elif "/vcan.ko" not in st["dep"]:
+        doc_row(rows, "hardware", "modules-extra", "extra modules", "warn", "kernel-modules-extra is not installed for kernel %s: no vcan (the virtual CAN bus), slcan, ems_usb" % st["kernel"],
+                ["sudo dnf -y install kernel-modules-extra-" + st["kernel"]])
+    else:
+        doc_row(rows, "hardware", "modules-extra", "extra modules", "ok", "kernel-modules-extra is installed for this kernel (vcan, slcan, ems_usb)")
+    return rows
+
+
 DOCTOR = {"system": (doc_probe_system, doc_check_system), "security": (doc_probe_security, doc_check_security),
-          "graphics": (doc_probe_graphics, doc_check_graphics), "bench": (doc_probe_bench, doc_check_bench),
+          "graphics": (doc_probe_graphics, doc_check_graphics), "hardware": (doc_probe_hardware, doc_check_hardware),
+          "bench": (doc_probe_bench, doc_check_bench),
           "eda": (doc_probe_eda, doc_check_eda), "windows": (doc_probe_windows, doc_check_windows),
           "network": (doc_probe_network, doc_check_network)}
 DOCTOR["system"] = (doc_probe_rollback(doc_probe_system), doc_check_system)     # (the row "rollback": docs/ROLLBACK.md)
@@ -7422,7 +8023,7 @@ def parser(only=None):
     x.add_argument("--qt", action="store_true", help="Qt 5 programs take the accent in use (the shell runs it)")
     x.add_argument("--json", action="store_true"); x.set_defaults(fn=cmd_look)
     x = s.add_parser("doctor", help="is this workstation healthy, and what to do: ok / warn / bad / unknown and the command that fixes each")
-    x.add_argument("areas", nargs="*", metavar="AREA", help="system security graphics bench eda windows network (default: all)")
+    x.add_argument("areas", nargs="*", metavar="AREA", help="system security graphics hardware bench eda windows network (default: all)")
     x.add_argument("--json", action="store_true"); x.add_argument("--verbose", action="store_true", help="also the read-only commands it ran")
     x.set_defaults(fn=cmd_doctor)
     x = s.add_parser("session", help="this session: lock | logout | off (the last two ask first)")
@@ -7534,10 +8135,20 @@ def parser(only=None):
         x = bn.add_parser("compare", help="captures of `silik bench system --json` side by side")
         x.add_argument("files", nargs="+", metavar="FILE"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=bench_compare)
 
-    h = s.add_parser("hw", help="hardware: probe, NVIDIA driver").add_subparsers(dest="cmd")
+    h = s.add_parser("hw", help="hardware: probe, which devices have a driver, NVIDIA driver, a driver the base lacks").add_subparsers(dest="cmd")
     if only in (None, "hw"):
         x = h.add_parser("probe"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=hw_probe)
-        x = h.add_parser("nvidia"); x.add_argument("action", choices=["install", "status"]); x.set_defaults(fn=hw_nvidia)
+        x = h.add_parser("nvidia"); x.add_argument("action", choices=["install", "status"])
+        x.add_argument("--source", choices=["nvidia", "almalinux"], default="nvidia",
+                       help="nvidia: NVIDIA's repository, the module built on this machine (DKMS); almalinux: AlmaLinux's prebuilt, signed open modules")
+        x.set_defaults(fn=hw_nvidia)
+        x = h.add_parser("check", help="every PCI and USB device with its driver, or the driver that claims it, or none in this kernel and what to do")
+        x.add_argument("--from", dest="from_file", metavar="FILE", help="a list saved on another system: lspci -nn, lsusb, or Windows' hardware IDs")
+        x.add_argument("--arch", choices=["x86_64", "aarch64"], help="with --from: the machine's architecture (default x86_64)")
+        x.add_argument("--all", action="store_true", help="also the devices that often have no driver (bridges, memory)")
+        x.add_argument("--json", action="store_true"); x.set_defaults(fn=hw_check)
+        x = h.add_parser("driver", help="a driver the base's kernel lacks, as a kmod package of ELRepo (a third party): list | add NAME")
+        x.add_argument("action", nargs="?", choices=["list", "add"], default="list"); x.add_argument("name", nargs="?"); x.set_defaults(fn=hw_driver)
 
     vd = s.add_parser("vendor", help="vendors' tools (Vivado, MATLAB, Virtuoso...): is this system ready for one, and the command that prepares it").add_subparsers(dest="cmd")
     if only in (None, "vendor"):

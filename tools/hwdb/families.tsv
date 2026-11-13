@@ -1,0 +1,116 @@
+# SilikOS: the device families docs/DRIVERS.md and pci.tsv are about. Input of tools/gen_hwdb.py, written by hand.
+# kind: device = devices asked about by name: spec is BUS:VENDOR:DEVICE@CLASS,... (the PCI class a class-bound driver
+#   needs), or BUS:VENDOR~REGEX@CLASS = the devices of that vendor whose pci.ids name matches. The names shown are
+#   pci.ids's: a device with no name there is shown as such, not named from memory.
+#   driver = a family by its drivers: spec is BUS:MODULE,... (globs allowed): every ID those modules claim in the
+#   upstream kernel is looked for in EL 9's.
+# todo: what a person can do when EL 9 has no driver; kmod:NAME = `silik hw driver add NAME` (ELRepo's kmod-NAME);
+#   a leading ! = the alias match is not enough (a bus driver, or nouveau where NVIDIA's driver is wanted)
+# note: a remark for the table
+kind	area	family	spec	todo	note
+device	wifi	Intel Wi-Fi 6 AX200	pci:8086:2723@028000		
+device	wifi	Intel Wi-Fi 6 AX201 (CNVi)	pci:8086:a0f0@028000,8086:02f0@028000,8086:06f0@028000,8086:34f0@028000,8086:43f0@028000,8086:4df0@028000		
+device	wifi	Intel Wi-Fi 6E AX210	pci:8086:2725@028000		
+device	wifi	Intel Wi-Fi 6E AX211 (CNVi of Alder / Raptor / Meteor Lake)	pci:8086:51f0@028000,8086:51f1@028000,8086:54f0@028000,8086:7a70@028000,8086:7af0@028000,8086:7e40@028000,8086:7f70@028000		
+device	wifi	Intel Wi-Fi 7 BE200 / BE202	pci:8086:272b@028000		
+device	wifi	Intel Wi-Fi 7 BE201 (CNVi of Arrow / Lunar / Panther Lake)	pci:8086:7740@028000,8086:a840@028000,8086:e340@028000,8086:e440@028000,8086:d340@028000		
+device	wifi	Realtek RTL8852AE	pci:10ec:8852@028000,10ec:a85a@028000		
+device	wifi	Realtek RTL8852BE	pci:10ec:b852@028000,10ec:b85b@028000		
+device	wifi	Realtek RTL8852BE-VT	pci:10ec:b520@028000	kmod:rtw89_usb	
+device	wifi	Realtek RTL8852CE	pci:10ec:c852@028000		
+device	wifi	Realtek RTL8851BE	pci:10ec:b851@028000	kmod:rtw89_usb	
+device	wifi	Realtek RTL8922AE (Wi-Fi 7)	pci:10ec:8922@028000	kmod:rtw89_usb	
+device	wifi	Realtek RTL8821CE	pci:10ec:c821@028000,10ec:b821@028000		
+device	wifi	Realtek RTL8822CE	pci:10ec:c822@028000,10ec:c82f@028000		
+device	wifi	Realtek RTL8822BE / RTL8723DE	pci:10ec:b822@028000,10ec:d723@028000		
+device	wifi	MediaTek MT7921	pci:14c3:7961@028000,14c3:0608@028000		
+device	wifi	MediaTek MT7922	pci:14c3:7922@028000,14c3:0616@028000		
+device	wifi	MediaTek MT7925 (Wi-Fi 7)	pci:14c3:7925@028000,14c3:0717@028000		
+device	wifi	MediaTek MT7927 / MT7902	pci:14c3:7927@028000,14c3:7902@028000	no driver in EL 9's kernel: a cable, or a USB Wi-Fi adapter it drives	
+device	wifi	Qualcomm QCA6390	pci:17cb:1101@028000		
+device	wifi	Qualcomm WCN6855 (QCNFA765)	pci:17cb:1103@028000		
+device	wifi	Qualcomm WCN7850 (Wi-Fi 7)	pci:17cb:1107@028000		
+device	wifi	Qualcomm QCA6174 / QCA9377	pci:168c:003e@028000,168c:0042@028000		
+device	wifi	Broadcom BCM4360 / BCM4352 / BCM4331 / BCM43142 (bcma bus)	pci:14e4:43a0@028000,14e4:43b1@028000,14e4:4331@028000,14e4:4365@028000	!kmod:wl	bcma is the bus; EL 9.8 has no b43 for the radio on it
+device	wifi	Broadcom BCM4350 / BCM4356 / BCM43602 (FullMAC)	pci:14e4:43a3@028000,14e4:43ec@028000,14e4:43ba@028000		
+device	wifi	Broadcom BCM4364 / BCM4377 / BCM4378 / BCM4387 (Apple machines)	pci:14e4:4464@028000,14e4:4488@028000,14e4:4425@028000,14e4:4433@028000		
+driver	wifi	Intel Wi-Fi (iwlwifi)	pci:iwlwifi,iwl4965,iwl3945,ipw2200,ipw2100	no driver in EL 9's kernel: a cable, or a USB Wi-Fi adapter it drives	
+driver	wifi	Realtek 802.11ac (rtw88)	pci:rtw88_*	no driver in EL 9's kernel: a cable, or a USB Wi-Fi adapter it drives	
+driver	wifi	Realtek Wi-Fi 6 / 7 (rtw89)	pci:rtw89_*	kmod:rtw89_usb	
+driver	wifi	Realtek 802.11n / older ac (rtlwifi)	pci:rtl8821ae,rtl8723be,rtl8723ae,rtl8192ee,rtl8188ee,rtl8192ce,rtl8192se,rtl8192de,rtl818x_pci	no driver in EL 9's kernel: a cable, or a USB Wi-Fi adapter it drives	
+driver	wifi	MediaTek (mt76)	pci:mt7921e,mt7925e,mt76x2e,mt76x0e,mt7615e,mt7915e,mt7996e,mt7603e	no driver in EL 9's kernel: a cable, or a USB Wi-Fi adapter it drives	
+driver	wifi	Qualcomm Atheros (ath)	pci:ath12k,ath12k_wifi7,ath11k_pci,ath10k_pci,ath9k,ath5k,wil6210	no driver in EL 9's kernel: a cable, or a USB Wi-Fi adapter it drives	
+driver	wifi	Broadcom	pci:brcmfmac,bcma,b43,b43legacy,ssb,brcmsmac	kmod:wl	
+driver	wifi	USB Wi-Fi adapters	usb:rtw88_*,rtw89_*,rtl8xxxu,rtl8192cu,rtl8192du,rtl8187,mt7921u,mt7925u,mt76x2u,mt76x0u,mt7601u,mt7663u,ath9k_htc,ath10k_usb,carl9170,rt2800usb,rt73usb,rt2500usb,zd1211rw,ar5523,brcmfmac	kmod:rtw88_usb / rtw89_usb for the Realtek ones; else no driver in EL 9's kernel	
+driver	bluetooth	Bluetooth (btusb: by class, and these IDs by name)	usb:btusb,ath3k,bfusb,bpa10x		
+device	ethernet	Intel I219 (the PCH's Ethernet, Tiger Lake and newer)	pci:8086:15fb@020000,8086:15fc@020000,8086:1a1c@020000,8086:1a1d@020000,8086:1a1e@020000,8086:1a1f@020000,8086:0dc5@020000,8086:0dc6@020000,8086:550a@020000,8086:550e@020000,8086:5510@020000,8086:57a0@020000,8086:57b3@020000,8086:57b5@020000,8086:57b7@020000,8086:57b9@020000		
+device	ethernet	Intel I225	pci:8086:15f2@020000,8086:15f3@020000,8086:0d9f@020000		
+device	ethernet	Intel I226	pci:8086:125b@020000,8086:125c@020000,8086:125d@020000,8086:3102@020000		
+device	ethernet	Intel I210 / I211	pci:8086:1533@020000,8086:1539@020000		
+device	ethernet	Realtek RTL8111 / RTL8168	pci:10ec:8168@020000,10ec:8161@020000		
+device	ethernet	Realtek RTL8125 (2.5G)	pci:10ec:8125@020000		
+device	ethernet	Realtek RTL8126 (5G)	pci:10ec:8126@020000		
+device	ethernet	Realtek RTL8127 (10G)	pci:10ec:8127@020000	kmod:r8127	
+device	ethernet	Marvell (Aquantia) AQC107	pci:1d6a:07b1@020000,1d6a:d107@020000,1d6a:0001@020000		
+device	ethernet	Marvell (Aquantia) AQC113	pci:1d6a:04c0@020000,1d6a:14c0@020000,1d6a:94c0@020000		
+device	ethernet	Intel X550 / X540 (10G)	pci:8086:1563@020000,8086:15d1@020000,8086:1528@020000		
+device	ethernet	Intel X710 / XXV710 (10 / 25G)	pci:8086:1572@020000,8086:15ff@020000,8086:158b@020000		
+device	ethernet	Intel E810 (25 / 100G)	pci:8086:1593@020000,8086:159b@020000,8086:1592@020000		
+device	ethernet	NVIDIA (Mellanox) ConnectX-4 Lx / 5 / 6 Dx / 7	pci:15b3:1015@020000,15b3:1017@020000,15b3:101d@020000,15b3:1021@020000		
+device	ethernet	Broadcom NetXtreme-E BCM57414 / BCM57416 / BCM57508	pci:14e4:16d7@020000,14e4:16d8@020000,14e4:1750@020000		
+device	ethernet	Broadcom NetXtreme BCM5720 (1G)	pci:14e4:165f@020000		
+driver	ethernet	Intel 1G / 2.5G	pci:e1000e,igc,igb,e1000	a USB Ethernet adapter the base drives (r8152, ax88179_178a)	
+driver	ethernet	Intel 10 / 25 / 40 / 100G	pci:ixgbe,i40e,ice,iavf,idpf,fm10k,ixgbevf,igbvf		
+driver	ethernet	Realtek	pci:r8169,8139too,8139cp	kmod:r8127	
+driver	ethernet	Marvell Aquantia (atlantic)	pci:atlantic		
+driver	ethernet	Broadcom	pci:tg3,bnxt_en,bnx2,bnx2x,b44		
+driver	ethernet	NVIDIA Mellanox	pci:mlx5_core,mlx4_core,mlxsw_pci		
+driver	ethernet	Other server cards (Chelsio, Marvell / QLogic, Solarflare, Pensando, Netronome, Emulex, Cisco, Huawei, Amazon, Microsoft, Google)	pci:cxgb4,cxgb4vf,qede,qed,sfc,sfc_siena,ionic,nfp,be2net,enic,hinic,hinic3,ena,mana,gve,sky2,skge,alx,atl1c,atl1e,jme,forcedeth,tulip,e100,3c59x,ngbe,txgbe		
+driver	ethernet	USB Ethernet adapters and docks	usb:r8152,ax88179_178a,asix,cdc_ether,cdc_ncm,aqc111,lan78xx,smsc95xx,smsc75xx,r8153_ecm,cdc_mbim,qmi_wwan,rndis_host		
+device	gpu	AMD Ryzen 4000 / 5000 (Renoir, Lucienne, Cezanne, Barcelo)	pci:1002:1636@030000,1002:164c@030000,1002:1638@030000,1002:15e7@030000		
+device	gpu	AMD Ryzen 6000 / 7035 (Rembrandt)	pci:1002:1681@030000		
+device	gpu	AMD Ryzen 7020 (Mendocino), Ryzen 7000 / 9000 desktop (Raphael, Granite Ridge)	pci:1002:1506@030000,1002:164e@030000,1002:13c0@030000		
+device	gpu	AMD Ryzen 7040 / 8040 (Phoenix, Hawk Point)	pci:1002:15bf@030000,1002:15c8@030000,1002:1900@030000,1002:1901@030000		
+device	gpu	AMD Ryzen AI 300 (Strix, Krackan, Strix Halo)	pci:1002:150e@030000,1002:1114@030000,1002:1902@030000,1002:1586@030000		
+device	gpu	AMD Radeon RX 6000 (Navi 21-24)	pci:1002:73bf@030000,1002:73df@030000,1002:73ff@030000,1002:743f@030000		
+device	gpu	AMD Radeon RX 7000 (Navi 31-33)	pci:1002:744c@030000,1002:747e@030000,1002:7480@030000		
+device	gpu	AMD Radeon RX 9000 (Navi 44, 48)	pci:1002~Navi 4[48] \[Radeon RX 90@030000		
+device	gpu	NVIDIA GeForce GTX 900 / 1000 (Maxwell, Pascal)	pci:10de:13c2@030000,10de:1c03@030000,10de:1b06@030000	!silik hw nvidia install	nouveau claims it; NVIDIA's 580 legacy driver is the one with CUDA
+device	gpu	NVIDIA GeForce RTX 2000 / GTX 1600 (Turing)	pci:10de~^TU1(06|17) \[GeForce (RTX 2060|GTX 1650)\]$@030000	!silik hw nvidia install	nouveau claims it
+device	gpu	NVIDIA GeForce RTX 3000 (Ampere)	pci:10de~^GA10[4-7]M? \[GeForce RTX 30[56]0( Mobile / Max-Q)?\]$@030000	!silik hw nvidia install	nouveau claims it
+device	gpu	NVIDIA GeForce RTX 4000 (Ada)	pci:10de~^AD10[4-7]M? \[GeForce RTX 40[67]0\]$@030000	!silik hw nvidia install	nouveau claims it
+device	gpu	NVIDIA GeForce RTX 5000 (Blackwell)	pci:10de~^GB20[2-7]M? \[GeForce RTX 50[679]0\]$@030000	!silik hw nvidia install	nouveau claims it
+driver	gpu	Intel (i915, xe)	pci:i915,xe,gma500_gfx		
+driver	gpu	AMD (amdgpu, radeon)	pci:amdgpu,radeon		
+driver	gpu	NVIDIA (nouveau)	pci:nouveau		
+driver	gpu	Server and virtual (ast, mgag200, virtio, vmware, qxl, bochs, hyperv)	pci:ast,mgag200,virtio_gpu,vmwgfx,qxl,bochs,hyperv_drm,cirrus,vboxvideo		
+device	storage	NVMe SSD (any, by class)	pci:144d:a80a@010802		
+device	storage	SATA AHCI (any, by class)	pci:8086:a0d3@010601		
+device	storage	Intel VMD (RST)	pci:8086:9a0b@010400,8086:467f@010400,8086:a77f@010400,8086:7d0b@010400,8086:ad0b@010400		
+device	storage	Realtek PCIe card readers	pci:10ec:5227@ff0000,10ec:522a@ff0000,10ec:5249@ff0000,10ec:525a@ff0000,10ec:5260@ff0000,10ec:5261@ff0000,10ec:5264@ff0000,10ec:5228@ff0000		
+device	storage	Genesys Logic GL975x SD host	pci:17a0:9750@080501,17a0:9755@080501,17a0:9767@080501		
+device	storage	O2 Micro / BayHub SD host	pci:1217:8621@080501,1217:8620@080501		
+device	platform	Thunderbolt 4 / USB4: Intel (Tiger, Alder, Raptor, Meteor, Lunar Lake; Maple / Barlow Ridge)	pci:8086:9a1b@0c0340,8086:463e@0c0340,8086:a73e@0c0340,8086:7ec2@0c0340,8086:a833@0c0340,8086:e333@0c0340,8086:1134@0c0340,8086:5781@0c0340		
+device	platform	USB4: AMD (Rembrandt, Phoenix, Strix, Krackan)	pci:1022:162e@0c0340,1022:1668@0c0340,1022:151c@0c0340,1022:1120@0c0340		
+driver	storage	NVMe, AHCI, VMD	pci:nvme,ahci,vmd		
+driver	storage	RAID and SAS controllers	pci:megaraid_sas,mpt3sas,mpi3mr,smartpqi,hpsa,aacraid,mptsas,mptspi,3w_9xxx,3w_sas,arcmsr,isci,mvsas,pm80xx,qla2xxx,lpfc		
+driver	storage	Card readers and SD hosts	pci:rtsx_pci,sdhci_pci,cb710,jmb38x_ms,via_sdmmc,alcor_pci,toshsd,tifm_7xx1		
+driver	platform	Thunderbolt / USB4	pci:thunderbolt		
+device	audio	Intel audio: Tiger / Alder / Raptor Lake	pci:8086:a0c8@040100,8086:51c8@040100,8086:51ca@040100,8086:54c8@040100,8086:7ad0@040300		
+device	audio	Intel audio: Meteor / Arrow / Lunar / Panther Lake	pci:8086:7e28@040100,8086:7728@040100,8086:a828@040100,8086:e428@040100,8086:e328@040100		
+device	audio	AMD audio coprocessor (ACP), every generation shares this ID	pci:1022:15e2@048000		the generation is told by the revision, inside the driver
+device	camera	Intel IPU6 (MIPI camera of Tiger / Alder / Raptor / Meteor Lake laptops)	pci:8086:9a19@048000,8086:465d@048000,8086:a75d@048000,8086:7d19@048000	no driver in EL 9's kernel: a USB webcam (uvcvideo)	
+device	camera	Intel IPU7 (Lunar / Panther Lake)	pci:8086:645d@048000,8086:b05d@048000	no driver in EL 9's kernel: a USB webcam (uvcvideo)	
+device	platform	Intel Serial IO I2C (touchpad, touchscreen): Tiger / Alder / Raptor / Meteor / Arrow / Lunar / Panther Lake	pci:8086:a0e8@0c8000,8086:51e8@0c8000,8086:7a4c@0c8000,8086:7e78@0c8000,8086:7778@0c8000,8086:a878@0c8000,8086:e478@0c8000,8086:e378@0c8000		
+device	platform	Intel SMBus: the same platforms	pci:8086:a0a3@0c0500,8086:51a3@0c0500,8086:7e22@0c0500,8086:7722@0c0500,8086:e422@0c0500		
+device	platform	Intel Integrated Sensor Hub	pci:8086:a0fc@070000,8086:51fc@070000,8086:7e45@070000,8086:a845@070000,8086:e445@070000		
+device	platform	Intel NPU (Meteor / Arrow / Lunar / Panther Lake), AMD NPU (Ryzen AI)	pci:8086:7d1d@120000,8086:ad1d@120000,8086:643e@120000,8086:b03e@120000,1022:1502@118000,1022:17f0@118000		
+driver	audio	Intel audio (HDA, SOF, AVS)	pci:snd_hda_intel,snd_sof_pci_intel_*,snd_soc_avs,snd_soc_skl,snd_intel_sst_pci		
+driver	audio	AMD audio coprocessor	pci:snd_pci_acp*,snd_pci_ps,snd_sof_amd_*,snd_acp_pci,snd_rn_pci_acp3x,snd_rpl_pci_acp6x,snd_acp_legacy_mach		
+driver	camera	Intel IPU (MIPI cameras)	pci:intel_ipu6,intel_ipu7,ipu3_cio2,ipu3_imgu	no driver in EL 9's kernel: a USB webcam (uvcvideo)	
+driver	platform	Intel platform devices (LPSS, SMBus, MEI, sensor hub, SPI, thermal, NPU)	pci:intel_lpss_pci,i2c_i801,mei_me,intel_ish_ipc,spi_intel_pci,processor_thermal_device_pci,intel_vpu,intel_vsec,intel_pmc_core,dw_dmac_pci,intel_th_pci,idma64,mei_gsc,mei_txe		
+driver	platform	AMD platform devices (PSP, SMBus, sensor hub, NPU)	pci:ccp,i2c_piix4,amd_sfh,amdxdna,k10temp,sp5100_tco,amd_xgbe,pinctrl_amd		
+driver	bench	CAN: USB adapters	usb:gs_usb,peak_usb,kvaser_usb,ems_usb,usb_8dev,esd_usb,etas_es58x,ucan,mcba_usb,f81604,nct6694_canfd	no driver in EL 9's kernel: another adapter (gs_usb / candleLight, PEAK, Kvaser), or Windows in the VM: silik win vm usb attach VID:PID	
+driver	bench	CAN: PCI / PCIe cards	pci:peak_pciefd,peak_pci,kvaser_pciefd,kvaser_pci,ems_pci,plx_pci,m_can_pci,c_can_pci,ctucanfd_pci,esd_402_pci,f81601,softing	no driver in EL 9's kernel: a USB adapter it drives	
+driver	bench	USB serial adapters	usb:ftdi_sio,cp210x,ch341,pl2303,cdc_acm,xr_serial,mos7840,mos7720,ti_usb_3410_5052,io_ti,io_edgeport,keyspan,f81232,f81534,mxuport,ch348,usb_serial_simple,option,qcserial,ark3116,belkin_sa,cypress_m8,digi_acceleport,ir_usb,iuu_phoenix,mct_u232,opticon,oti6858,quatech2,spcp8x5,ssu100,upd78f0730,whiteheat,cp210x		
+driver	bench	USB test equipment and bridges (USBTMC, GPIB, I2C / SPI bridges)	usb:usbtmc,ni_usb_gpib,agilent_82357a,i2c_tiny_usb,i2c_diolan_u2c,i2c_cp2615,spi_ch341,ch341_buses,dln2,viperboard,i2c_robotfuzz_osif,usbio		
