@@ -371,6 +371,15 @@ say audit.boot info "lockdown: $(cat /sys/kernel/security/lockdown 2>&1); secure
 say audit.modules info "module signatures enforced: $(cat /sys/module/module/parameters/sig_enforce 2>&1); $(lsmod | wc -l) modules loaded; tainted: $(cat /proc/sys/kernel/tainted)"
 say audit.unconfined-services info "$(ps -eo label,comm --no-headers 2> /dev/null | awk '$1 ~ /:(unconfined_service_t|initrc_t|init_t):/ { print $2 }' | sort -u | tr '\n' ' ')"
 say audit.units info "$(for u in silikos-update.service silikos-security-update.service silikos-power-auto.service silikos-power-charge.service silikos-themes.service silikos-rollback-finish.service; do systemctl cat $u > /dev/null 2>&1 && printf '%s %s; ' "${u%.service}" "$(systemd-analyze security --no-pager $u 2> /dev/null | tail -1 | sed 's/.*: //' | awk '{print $1, $2}')"; done)"
+# the confined units do their work here, under SELinux (the rig that tried them has none): the themes made again by
+# the unit, the power profile set by it (and put back: the measured starts that follow are in the base's profile)
+t=/usr/share/themes/SilikOS/gtk-3.0/gtk.css; before=$(sha256sum $t 2>&1 | cut -c1-64); rm -f $t
+systemctl start silikos-themes.service; rc=$?
+is audit.unit-themes "exit $rc, $(systemctl show silikos-themes.service -p Result --value), $([ "$(sha256sum $t 2>&1 | cut -c1-64)" = "$before" ] && echo the stylesheet is back as it was || echo the stylesheet is not as it was)" "exit 0, success, the stylesheet is back as it was"
+systemctl start silikos-power-auto.service; rc=$?; sleep 3
+is audit.unit-power "exit $rc, $(systemctl show silikos-power-auto.service -p Result --value), tuned $(cat /etc/tuned/active_profile 2>&1)" "exit 0, success, tuned throughput-performance"
+systemctl stop silikos-power-auto.service; silik -q power balanced > /dev/null 2>&1; sleep 2
+say audit.unit-power-back info "tuned $(cat /etc/tuned/active_profile 2>&1); $(ausearch -m avc -ts recent 2> /dev/null | grep -cE 'silik|tuned|themes') AVC denials naming silik, tuned or themes in the last ten minutes"
 say audit.accounts info "root: $(passwd -S root 2>&1 | awk '{print $2}'); users with a shell: $(awk -F: '$7 !~ /(nologin|false|sync|shutdown|halt)$/ { print $1 }' /etc/passwd | tr '\n' ' '); empty passwords: $(awk -F: '$2 == "" { print $1 }' /etc/shadow | tr '\n' ' '); wheel: $(getent group wheel | cut -d: -f4)"
 say audit.sudo info "$(sudo -l -U tester 2>&1 | tail -3 | tr -s ' ' | tr '\n' ';'); timestamp_timeout: $(grep -rhs timestamp_timeout /etc/sudoers /etc/sudoers.d | tr '\n' ' ')"
 say audit.mounts info "$(for m in / /boot /home /tmp /dev/shm /var/tmp; do o=$(findmnt -no OPTIONS $m 2> /dev/null); [ -n "$o" ] && printf '%s[%s] ' $m "$(echo $o | tr ',' '\n' | grep -E '^(nodev|nosuid|noexec|ro)$' | tr '\n' ',')"; done); encrypted: $(lsblk -no TYPE 2> /dev/null | grep -c crypt)"
