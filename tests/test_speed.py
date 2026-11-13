@@ -67,6 +67,9 @@ class Launcher(unittest.TestCase):
             lib = os.path.join(d, "python")
             os.makedirs(lib)
             shutil.copy(SILIK_SRC, os.path.join(lib, "silik_main.py"))
+            plugins = os.path.join(os.path.dirname(SILIK_SRC), "plugins")       # (installed beside it, as the package does)
+            if os.path.isdir(plugins):
+                shutil.copytree(plugins, os.path.join(lib, "plugins"))
             import py_compile
             pyc = py_compile.compile(os.path.join(lib, "silik_main.py"), doraise=True,
                                      invalidation_mode=py_compile.PycInvalidationMode.CHECKED_HASH)
