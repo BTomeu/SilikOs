@@ -3655,7 +3655,8 @@ def lvl_state():
     out["kernel_args"] = [w for w in st.get("kernel_args", []) if isinstance(w, str) and KERNEL_ARG.match(w)] if isinstance(st.get("kernel_args"), list) else []
     out["sysctl"] = {k: v for k, v in st.get("sysctl", {}).items() if isinstance(v, int)} if isinstance(st.get("sysctl"), dict) else {}
     out["files"] = [p for p in st.get("files", []) if isinstance(p, str)] if isinstance(st.get("files"), list) else []
-    out["authselect"], out["faillock"] = st.get("authselect") is True, st.get("faillock") is True
+    # (authselect: True, this command turned with-faillock on in the profile there was; "selected": it selected the profile too)
+    out["authselect"], out["faillock"] = (st.get("authselect") if st.get("authselect") in (True, "selected") else False), st.get("faillock") is True
     out["bolt"] = st.get("bolt") if st.get("bolt") in ("enabled", "disabled") else None
     return out, True
 
@@ -3720,7 +3721,9 @@ def lvl_probe():
         "audit": None if rules is None else [r for r in LVL_AUDIT_RULES if r in rules],
         "audit_src": all(os.path.isfile(os.path.join(LVL_ROOT + LVL_AUDIT_SRC, r)) for r in LVL_AUDIT_RULES),
         "auditd": sec_active("auditd.service"),
-        "authselect": raw.split() if rc == 0 and raw.split() else None,
+        # the profile and its features; []: no profile is selected (a system installed before the kickstart selected
+        # one: `authselect current` then ends with 2); None: authselect does not answer
+        "authselect": raw.split() if rc == 0 and raw.split() else [] if rc == 2 else None,
         "dconf": bool(shutil.which("dconf")), "gdm": os.path.isdir(LVL_ROOT + os.path.dirname(LVL_GDM)),
         "nm": os.path.isdir(LVL_ROOT + os.path.dirname(LVL_NM)), "nm_active": sec_active("NetworkManager.service"),
         "sshd": {"unit": sec_unit("sshd.service"), "active": sec_active("sshd.service")},
@@ -3784,12 +3787,12 @@ def lvl_rows(pr):
         elif kind == "pam":
             k = lvl_conf_keys(pr["files"][LVL_FAILLOCK])
             if pr["authselect"] is None:
-                r["state"], r["value"] = "n/a", "authselect manages no profile here: the PAM files are not changed"
+                r["state"], r["value"] = "n/a", "authselect is not on this system: the PAM files are not changed"
             elif "with-faillock" in pr["authselect"] and all(key in k for key, _ in LVL_FAILLOCK_SET):
                 r["state"], r["value"] = "on", "with-faillock; " + ", ".join("%s = %s" % (key, k[key]) for key, _ in LVL_FAILLOCK_SET)
             else:
                 r["state"], r["value"] = "off", ("with-faillock is on, %s has the base's values" % LVL_FAILLOCK if "with-faillock" in pr["authselect"] else
-                                                 "wrong passwords are not counted")
+                                                 "wrong passwords are not counted" + ("" if pr["authselect"] else " (no authselect profile is selected)"))
         elif kind == "bolt":
             tb = pr["thunderbolt"]
             if not tb:
@@ -3956,9 +3959,17 @@ def lvl_plan(pr, without=(), keep_ssh=False, dry=False):
 
     # ---- wrong passwords
     if "faillock" in ids and rows["faillock"]["state"] == "off":
-        if "with-faillock" not in pr["authselect"]:
+        if not pr["authselect"]:
+            # no profile is selected (seen on installed systems: `authselect current` says so and enable-feature then
+            # does nothing): the profile a new installation gets, with the feature; authselect itself keeps a copy of
+            # the files it replaces (--force). Run, authselect 1.2.6 in an EL 9 container
+            steps.append(("run", as_root(["authselect", "select", "sssd", "with-faillock", "--force"])))
+            state["authselect"] = state["authselect"] or "selected"
+            notes.append("faillock: no authselect profile was selected: the profile sssd is, as on a new installation; what the PAM files were is "
+                         "authselect's own backup (authselect backup-list)")
+        elif "with-faillock" not in pr["authselect"]:      # (the features that are on stay: only this one is added)
             steps.append(("run", as_root(["authselect", "enable-feature", "with-faillock"])))
-            state["authselect"] = True
+            state["authselect"] = state["authselect"] or True
         k = lvl_conf_keys(files[LVL_FAILLOCK])
         new = ["%s = %d" % (key, v) for key, v in LVL_FAILLOCK_SET if key not in k]
         for key, v in LVL_FAILLOCK_SET:
@@ -4067,8 +4078,11 @@ def lvl_unplan(pr):
         steps.append(("run", as_root(["boltctl", "config", "auth-mode", st["bolt"]])))
     if st["faillock"] or LVL_MARK[0] in (files[LVL_FAILLOCK] or ""):
         steps.append(("run", as_root(["sed", "-i", "/^# silikos-hardened: begin/,/^# silikos-hardened: end/d", LVL_FAILLOCK])))
-    if st["authselect"] and "with-faillock" in (pr["authselect"] or ()):
+    if st["authselect"] and "with-faillock" in (pr["authselect"] or ()):      # only the feature this command added
         steps.append(("run", as_root(["authselect", "disable-feature", "with-faillock"])))
+        if st["authselect"] == "selected":
+            notes.append("faillock: the profile sssd stays selected, as on a new installation (no profile was before): the PAM files as they "
+                         "were then are authselect's backup (sudo authselect backup-list, sudo authselect backup-restore NAME)")
     gone = [p for p in LVL_OWN if files[p] is not None or p in st["files"]]
     gone += [p for p in st["files"] if p not in gone and os.path.dirname(p) == LVL_AUDIT and os.path.basename(p) in LVL_AUDIT_RULES]
     if not pr["sshd_dir"] and LVL_SSHD not in gone and pr["sshd"]["unit"] != "not-found":

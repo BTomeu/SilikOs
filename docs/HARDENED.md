@@ -70,7 +70,11 @@ Checked, never set (the level says `except` when one does not hold):
   kernel setting that is already as strict is not written. `deny` or `unlock_time` already in `faillock.conf` stay.
   An audit rule file with the same name that is already there is the owner's and stays.
 - **kdump** (`kexec`). While `kdump.service` is on, `kexec` is left out.
-- **PAM** (`faillock`). Only through authselect; where authselect manages no profile, nothing of PAM is touched.
+- **PAM** (`faillock`). Only through authselect, and the features that are on stay: `with-faillock` is added to the
+  profile there is. Where no profile is selected (`authselect current` says "No existing configuration detected",
+  seen on installed systems; `enable-feature` then does nothing), the profile `sssd` is selected with the feature, as
+  a new installation has it, and authselect keeps a copy of the PAM files it replaces (`authselect backup-list`).
+  `level default` takes off the feature it added and nothing else: a profile it selected stays selected.
 - **ssh.** `sshd` is refused while sshd is on and the user has no key in `~/.ssh/authorized_keys`. In an ssh session
   `sshd` and `wifi-mac` are refused (a new hardware address at the next reconnection would end the session) unless
   `--keep-ssh`: then the files are written and neither sshd nor NetworkManager is asked to read them again. At the
@@ -87,7 +91,7 @@ Checked, never set (the level says `except` when one does not hold):
 | Kernel arguments | every boot entry, with `grubby --update-kernel=ALL --args=...` (EL 9's way, the one `silik manifest apply --kernel` uses) |
 | Kernel settings | `/etc/sysctl.d/61-silikos-hardened.conf` (read after the default level's `60-silikos-security.conf`) |
 | Desktop | `/etc/dconf/db/local.d/locks/60-silikos-hardened`, `/etc/dconf/db/local.d/60-silikos-hardened`, `/etc/dconf/db/gdm.d/60-silikos-hardened`, then `dconf update` |
-| Wrong passwords | the authselect feature; four marked lines at the end of `/etc/security/faillock.conf` |
+| Wrong passwords | the authselect feature (or, where none was selected, the profile `sssd` with it); four marked lines at the end of `/etc/security/faillock.conf` |
 | Network | `/etc/NetworkManager/conf.d/60-silikos-hardened.conf` |
 | Audit | `/etc/audit/rules.d/11-loginuid.rules`, `43-module-load.rules` (copies of `/usr/share/audit/sample-rules`) |
 | sshd | `/etc/ssh/sshd_config.d/00-silikos-hardened.conf`. The name matters: sshd keeps the first value it reads, and a drop-in named `40-...` after another file's `PermitRootLogin yes` set nothing (run) |

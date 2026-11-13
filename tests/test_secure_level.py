@@ -110,7 +110,11 @@ def do(pr, steps):
                 for w in argv[2:]:
                     pr["keys"][w.split("=")[0]] = int(w.split("=")[1])
             elif argv[:2] == ["authselect", "enable-feature"]:
+                assert pr["authselect"], "enable-feature does nothing where no profile is selected"
                 pr["authselect"].append(argv[2])
+            elif argv[:2] == ["authselect", "select"]:
+                assert argv[-1] == "--force" and not pr["authselect"], argv
+                pr["authselect"] = argv[2:-1]
             elif argv[:2] == ["authselect", "disable-feature"]:
                 pr["authselect"].remove(argv[2])
             elif argv[0] == "install" and argv[-1].startswith(silik.LVL_AUDIT + "/"):
@@ -431,12 +435,42 @@ class Refusals(unittest.TestCase):
         # sshd keeps the first value it reads: a name after another drop-in's `PermitRootLogin yes` would set nothing
         self.assertLess(os.path.basename(silik.LVL_SSHD), "01-")
 
-    def test_pam_that_authselect_does_not_manage_is_left(self):
+    def test_without_authselect_pam_is_left(self):
         pr = system(authselect=None)
         self.assertEqual(states(pr)["faillock"], "n/a")
         steps, notes, _ = silik.lvl_plan(pr)
         self.assertFalse(any("authselect" in x for x in runs(steps)))
         self.assertNotIn(silik.LVL_FAILLOCK, writes(steps))
+
+    def test_no_profile_selected_gets_the_profile_with_the_feature(self):
+        """an installed system on which `authselect current` says "No existing configuration detected" (seen in the
+        CI): enable-feature does nothing there, so the profile is selected with the feature"""
+        start = system(authselect=[], ssh_keys=True)
+        self.assertEqual(states(start)["faillock"], "off")
+        pr, steps, notes, refused = hardened(start)
+        self.assertEqual(refused, [])
+        self.assertIn("authselect select sssd with-faillock --force", runs(steps))
+        self.assertFalse(any("enable-feature" in x for x in runs(steps)))
+        self.assertTrue(any("authselect backup-list" in n for n in notes))
+        self.assertEqual(pr["state"]["authselect"], "selected")
+        self.assertEqual(states(pr)["faillock"], "on")
+        self.assertEqual(silik.lvl_plan(restart(pr))[0], [])
+        back, notes = silik.lvl_unplan(restart(pr))
+        self.assertIn("authselect disable-feature with-faillock", runs(back))          # only what it added
+        self.assertTrue(any("backup-restore" in n for n in notes))
+        after = do(restart(pr), back)
+        self.assertEqual(after["authselect"], ["sssd"])
+        self.assertEqual(after["files"][silik.LVL_FAILLOCK], FAILLOCK)
+
+    def test_the_features_that_were_on_stay(self):
+        start = system(authselect=["sssd", "without-nullok", "with-fingerprint"], ssh_keys=True)
+        pr, steps, _, _ = hardened(start)
+        self.assertIn("authselect enable-feature with-faillock", runs(steps))
+        self.assertFalse(any("authselect select" in x for x in runs(steps)))
+        self.assertEqual(pr["authselect"], ["sssd", "without-nullok", "with-fingerprint", "with-faillock"])
+        self.assertIs(pr["state"]["authselect"], True)
+        after = do(restart(pr), silik.lvl_unplan(restart(pr))[0])
+        self.assertEqual(after["authselect"], ["sssd", "without-nullok", "with-fingerprint"])
 
     def test_the_owner_s_faillock_values_are_kept(self):
         pr = system()
@@ -542,15 +576,17 @@ class StateFile(unittest.TestCase):
         self.assertEqual(silik.lvl_choice(), {"level": "default", "without": []})
 
     def test_what_was_written_is_read_back(self):
-        st = {"kernel_args": ["lockdown=integrity", "debugfs=off"], "sysctl": {"kernel.sysrq": 16}, "files": [silik.LVL_SYSCTL],
-              "authselect": True, "faillock": True, "bolt": "enabled", "applied": "2026-11-13T10:00:00"}
-        self.put(silik.LVL_STATE, json.dumps(st))
-        got, readable = silik.lvl_state()
-        self.assertTrue(readable)
-        self.assertEqual(got, {k: v for k, v in st.items() if k != "applied"})
+        for auth in (True, "selected"):
+            st = {"kernel_args": ["lockdown=integrity", "debugfs=off"], "sysctl": {"kernel.sysrq": 16}, "files": [silik.LVL_SYSCTL],
+                  "authselect": auth, "faillock": True, "bolt": "enabled", "applied": "2026-11-13T10:00:00"}
+            self.put(silik.LVL_STATE, json.dumps(st))
+            got, readable = silik.lvl_state()
+            self.assertTrue(readable)
+            self.assertEqual(got, {k: v for k, v in st.items() if k != "applied"})
 
     def test_a_damaged_note_never_reaches_a_command_line(self):
-        for body in ("{not json", "[1, 2]", json.dumps({"kernel_args": ["init=/bin/sh x", "a b", 7, "debugfs=off; reboot"], "sysctl": {"a": "1; id"}, "files": [3], "bolt": "x"})):
+        for body in ("{not json", "[1, 2]", json.dumps({"kernel_args": ["init=/bin/sh x", "a b", 7, "debugfs=off; reboot"], "sysctl": {"a": "1; id"}, "files": [3], "bolt": "x",
+                                                       "authselect": "sssd; id"})):
             self.put(silik.LVL_STATE, body)
             got, _ = silik.lvl_state()
             self.assertEqual(got, EMPTY, body)

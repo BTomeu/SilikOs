@@ -90,7 +90,7 @@ case $stage in
   is set-choice "$(cat /etc/silikos/secure-level 2>&1)" hardened
   say set-items info "$(level items)"
   has set-pending "$(level items)" "lockdown=pending"
-  has set-faillock "$(authselect current --raw 2>&1)" with-faillock
+  has set-faillock "$(authselect current --raw 2>&1)" with-faillock       # (also where no profile was selected before: said in set-before)
   has set-faillock-pam "$(grep -c pam_faillock /etc/pam.d/system-auth 2>&1) lines with pam_faillock" "3 lines"
   is set-faillock-values "$(grep -E '^(deny|unlock_time) ' /etc/security/faillock.conf | tr '\n' ';')" "deny = 10;unlock_time = 600;"
   is set-lock-refuses-a-write "$(asuser gsettings writable org.gnome.desktop.session idle-delay)" false
@@ -171,7 +171,9 @@ PY
   has back-removes-args "$o" "grubby --update-kernel=ALL '--remove-args=$ARGS'"
   is back-files "$(there)" ""
   is back-entries "$(grubby --info=ALL | grep '^args=' | grep -cE 'lockdown=|module.sig_enforce|init_on_alloc|page_alloc.shuffle|intel_iommu|iommu.strict|disable_early_pci_dma|debugfs=')" 0
-  is back-authselect "$(authselect current --raw 2>&1 | words)" "$(cat $S/authselect)"
+  # only the feature it added is taken off; where no profile was selected before, the profile it selected stays
+  case "$(cat $S/authselect)" in *"No existing configuration"*) want="sssd ";; *) want=$(cat $S/authselect);; esac
+  is back-authselect "$(authselect current --raw 2>&1 | words)" "$want"
   is back-faillock "$(sha256sum /etc/security/faillock.conf)" "$(cat $S/faillock)"
   is back-lock-is-the-user-s-again "$(asuser gsettings writable org.gnome.desktop.session idle-delay)" true
   o=$(silik secure level default 2>&1)
