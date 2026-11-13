@@ -1,11 +1,11 @@
 Name:           silikos-desktop
-Version:        0.16.0
+Version:        0.17.0
 Release:        1%{?dist}
 Summary:        The SilikOS desktop: the Silik layout and the Flow looks (bar, island), its accents, GTK and shell themes, Cascadia Mono
 License:        LicenseRef-SilikVolt AND OFL-1.1
 BuildArch:      noarch
 Requires:       silikos-branding >= 0.2.0
-Requires:       silik-command >= 0.5.0
+Requires:       silik-command >= 0.6.1
 # `silik look` sets the look and the accent the shell follows; Start's session keys run `silik session`
 Requires:       silik-tools >= 0.7.0
 Requires:       gnome-shell

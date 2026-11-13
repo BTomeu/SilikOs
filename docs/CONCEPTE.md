@@ -88,6 +88,9 @@ Els menús del sistema, el calendari, les notificacions, l'indicador de volum, e
 que és triat en vídeo invers (o amb l'accent). Són paper opac, no vidre. La barra de títol de l'aspecte Silik i les
 pantalles de bloqueig i d'entrada es queden fosques, amb les tecles i el camp de la contrasenya com a tot arreu.
 
+Quan el portàtil va en mode d'**estalvi** (`silik power saver`), el vidre descansa: les peces tornen a paper opac i
+recuperen el vidre en sortir-ne (`silik look --glass-saver off` ho desactiva).
+
 ### El COMMAND bar
 
 Amb **Super+Espai** s'obre una barra on s'escriu el que es vol: el nom d'una aplicació o una adreça com `eda/try`,

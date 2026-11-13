@@ -46,5 +46,10 @@
       <summary>Which glass, while the key glass is true</summary>
       <description>on: paper at 0.86 over the blurred wallpaper. clear: paper at 0.70 over the blurred wallpaper. crystal: paper at 0.72 over the blurred windows behind the pane and the wallpaper. crystal-thin: paper at 0.55, a stronger blur. Every text colour of a mode reads at 4.5:1 with black behind the paper (tools/gen_accents.py). The key glass stays the switch (a setting made before there were modes keeps its meaning): `silik look --glass off` sets it to false and leaves this key as it is.</description>
     </key>
+    <key name="glass-saver" type="b">
+      <default>true</default>
+      <summary>Solid paper while the power profile is saver</summary>
+      <description>true: while the power profile is saver (`silik power saver`, the system menu, tuned on a low battery) the panes are solid paper, whatever the keys glass and glass-mode say, and are glass again when the profile changes: drawing the glass is work for the graphics card each time something changes behind a pane. false: the glass stays in every profile. `silik look --glass-saver on|off` sets this key.</description>
+    </key>
   </schema>
 </schemalist>

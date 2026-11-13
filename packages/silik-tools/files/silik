@@ -24,6 +24,7 @@
 #   silik look  [silik | bar | island] [--json]     the desktop's look; no argument: which one is in use
 #   silik look  [LOOK] --accent NAME [--json]       its accent: one colour for what is selected, focused, on
 #   silik look  [LOOK] --glass off|on|clear|crystal|crystal-thin   the floating panes: solid paper, or which glass
+#   silik look  --glass-saver on|off              solid paper while the power profile is saver (on by default)
 #   silik session lock | logout | off             (the last two ask first)
 #   silik update
 #   silik secure status [--json] [--offline] | apply [--keep-ssh]
@@ -47,7 +48,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.7.1"
+VERSION = "0.7.2"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -3531,6 +3532,12 @@ def glass_now(ctx):
     return mode if mode in [k for k, _ in GLASS[1:]] else "on"
 
 
+def glass_saver_now(ctx):
+    """does the glass rest while the power profile is saver? True, False, or None when the key is not on this system
+    (a silikos-desktop from before it)"""
+    return {"true": True, "false": False}.get(ctx.query(["gsettings", "get", LOOK_SCHEMA, "glass-saver"]).strip())
+
+
 def look_now(ctx):
     """the look in use, or '' when the setting is not on this system (silikos-desktop older than 0.11, or no desktop)"""
     v = ctx.query(["gsettings", "get", LOOK_SCHEMA, "look"]).strip().strip("'")
@@ -3560,14 +3567,15 @@ def cmd_look(ctx, a):
         qt_accent(ctx, acc, accent_icons(ctx, acc))
         return 0
     now = look_now(ctx)
-    if a.which is None and a.accent is None and a.glass is None:
+    if a.which is None and a.accent is None and a.glass is None and a.glass_saver is None:
         acc = accent_now(ctx) if now else ""
         gl = glass_now(ctx) if now else ""
+        gs = glass_saver_now(ctx) if gl else None
         modes = GLASS if gl and glass_modes(ctx) else GLASS[:2]       # (a silikos-desktop from before the modes: off, on)
         if a.json:
             print(json.dumps({"look": now or None, "looks": [k for k, _ in LOOKS],
                               "accent": acc or None, "accents": [k for k, _ in ACCENTS],
-                              "glass": gl or None, "glass_modes": [k for k, _ in modes] if gl else []}))
+                              "glass": gl or None, "glass_modes": [k for k, _ in modes] if gl else [], "glass_saver": gs}))
             return 0 if now else 1
         for k, what in LOOKS:
             print("%s %-7s %s" % ("●" if k == now else " ", k, what))
@@ -3577,6 +3585,9 @@ def cmd_look(ctx, a):
         if gl:
             for k, what in modes:
                 print("%s %-12s glass: %s" % ("●" if k == gl else " ", k, what))
+            if gs is not None:
+                print("  %-12s %s" % ("glass-saver", "on: solid paper while the power profile is saver (silik power)" if gs
+                                      else "off: the glass stays in every power profile"))
         if not now:
             print("silik: no setting %s on this system: the looks come with silikos-desktop 0.11" % LOOK_SCHEMA, file=sys.stderr)
             return 1
@@ -3597,6 +3608,8 @@ def cmd_look(ctx, a):
             die("no glass on this system: this silikos-desktop has no key glass")
         if a.glass not in ("on", "off") and not glass_modes(ctx):
             die("no glass %s on this system: this silikos-desktop has the glass on and off, not its modes" % a.glass)
+    if a.glass_saver is not None and not ctx.dry and glass_saver_now(ctx) is None:
+        die("no key glass-saver on this system: it comes with silikos-desktop 0.17")
     if a.which is not None:
         ctx.run(["gsettings", "set", LOOK_SCHEMA, "look", a.which])
         if not ctx.dry and look_now(ctx) != a.which:
@@ -3624,6 +3637,12 @@ def cmd_look(ctx, a):
         ctx.run(["gsettings", "set", LOOK_SCHEMA, "glass", "false" if a.glass == "off" else "true"])
         if not ctx.dry and glass_now(ctx) != a.glass:
             die("the glass is still %s: run it as the user, in the desktop session (gsettings could not change the setting)" % (glass_now(ctx) or "unknown"))
+    if a.glass_saver is not None:
+        # the shell and the COMMAND bar follow the key at once: with it on, the panes are solid paper while the power
+        # profile is saver, and glass again when it is not
+        ctx.run(["gsettings", "set", LOOK_SCHEMA, "glass-saver", "true" if a.glass_saver == "on" else "false"])
+        if not ctx.dry and glass_saver_now(ctx) != (a.glass_saver == "on"):
+            die("glass-saver did not change: run it as the user, in the desktop session (gsettings could not change the setting)")
     return 0
 
 
@@ -8408,6 +8427,8 @@ def parser(only=None):
     x.add_argument("--accent", choices=[k for k, _ in ACCENTS], help="one colour for what is selected, focused, on or running (ink: none)")
     x.add_argument("--glass", choices=[k for k, _ in GLASS], help="the floating panes: off (solid paper), on (paper over the blurred wallpaper), clear (thinner paper), "
                         "crystal (the windows behind too), crystal-thin (thinner, blurred more)")
+    x.add_argument("--glass-saver", dest="glass_saver", choices=["on", "off"], help="on (the default): the panes are solid paper while the power profile is saver; "
+                        "off: the glass stays in every profile")
     x.add_argument("--qt", action="store_true", help="Qt 5 programs take the accent in use (the shell runs it)")
     x.add_argument("--json", action="store_true"); x.set_defaults(fn=cmd_look)
     x = s.add_parser("doctor", help="is this workstation healthy, and what to do: ok / warn / bad / unknown and the command that fixes each")

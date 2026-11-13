@@ -5,7 +5,8 @@ _silik() {
   if [ "$g" = look ] && [ "$COMP_CWORD" -ge 2 ]; then
     if [ "${COMP_WORDS[COMP_CWORD-1]}" = --accent ]; then COMPREPLY=($(compgen -W "ink steel steel-vivid cobalt cobalt-vivid silicon silicon-vivid volt volt-vivid spark" -- "$cur"))
     elif [ "${COMP_WORDS[COMP_CWORD-1]}" = --glass ]; then COMPREPLY=($(compgen -W "off on clear crystal crystal-thin" -- "$cur"))
-    else COMPREPLY=($(compgen -W "silik bar island --accent --glass --json" -- "$cur")); fi
+    elif [ "${COMP_WORDS[COMP_CWORD-1]}" = --glass-saver ]; then COMPREPLY=($(compgen -W "on off" -- "$cur"))
+    else COMPREPLY=($(compgen -W "silik bar island --accent --glass --glass-saver --json" -- "$cur")); fi
     return
   fi
   # speed apply / undo: the items of the profile, in any number; bench: its switches, then files

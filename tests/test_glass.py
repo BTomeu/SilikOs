@@ -370,6 +370,83 @@ class Entries(unittest.TestCase):
         self.assertIn('= --glass ]; then COMPREPLY=($(compgen -W "off on clear crystal crystal-thin" -- "$cur"))', comp)
 
 
+class Saver(unittest.TestCase):
+    """the glass rests while the power profile is saver (key glass-saver, on by default): `silik look --glass-saver`,
+    the COMMAND bar, the shell extension. Seen in the rig with tuned and tuned-ppd running: docs/STATUS.md"""
+
+    def test_the_key(self):
+        root = ET.parse(os.path.join(FILES, "com.silikvolt.silikos.shell.gschema.xml")).getroot()
+        key = [k for k in root.iter("key") if k.get("name") == "glass-saver"]
+        self.assertEqual(len(key), 1)
+        self.assertEqual((key[0].get("type"), key[0].find("default").text), ("b", "true"))
+
+    def test_silik_sets_and_says_it(self):
+        rc, o, _ = call("--dry-run", "look", "--glass-saver", "off")
+        self.assertEqual((rc, o.strip()), (0, SET + "glass-saver false"))
+        with gsettings(dict(HERE, **{"glass-saver": "true"})) as log:
+            self.assertIs(json.loads(call("look", "--json")[1])["glass_saver"], True)
+            self.assertIn("glass-saver  on: solid paper while the power profile is saver", call("look")[1])
+            self.assertEqual(call("look", "--glass-saver", "off")[0], 0)
+            self.assertIs(json.loads(call("look", "--json")[1])["glass_saver"], False)
+            self.assertIn("glass-saver  off: the glass stays", call("look")[1])
+            self.assertEqual(json.loads(call("look", "--json")[1])["glass"], "on")       # (the glass's own keys are not touched)
+            self.assertEqual([x for x in text(log).splitlines() if x.startswith("set ")], ["set com.silikvolt.silikos.shell glass-saver false"])
+
+    def test_a_desktop_from_before_the_key(self):
+        with gsettings(dict(HERE)):
+            self.assertIsNone(json.loads(call("look", "--json")[1])["glass_saver"])
+            self.assertNotIn("glass-saver", call("look")[1])
+            rc, _, e = call("look", "--glass-saver", "on")
+            self.assertNotEqual(rc, 0)
+            self.assertIn("silikos-desktop 0.17", e)
+
+    def test_a_set_that_does_not_take_is_an_error(self):
+        with gsettings(dict(HERE, **{"glass-saver": "true"}), sticky=True):
+            rc, _, e = call("look", "--glass-saver", "off")
+            self.assertNotEqual(rc, 0)
+            self.assertIn("did not change", e)
+
+    def test_the_bar_reads_the_profile_as_the_shell_does(self):
+        with tempfile.TemporaryDirectory() as d:
+            f, none = os.path.join(d, "active_profile"), os.path.join(d, "no-such-daemon")
+            self.assertFalse(bar.power_saver(f, none))                     # no tuned: not saver
+            for profile, saver in (("powersave\n", True), ("balanced\n", False), ("balanced-battery", False),
+                                   ("throughput-performance\n", False), ("", False)):
+                with open(f, "w") as h:
+                    h.write(profile)
+                self.assertIs(bar.power_saver(f, none), saver, profile)
+            with open(f, "w") as h:
+                h.write("powersave\n")
+            self.assertFalse(bar.power_saver(f, f))                        # power-profiles-daemon instead of tuned: not known
+        src = text(os.path.join(ROOT, "packages", "silik-command", "files", "silik-command"))
+        self.assertIn('if schema.has_key("glass-saver") and settings.get_boolean("glass-saver") and power_saver():\n            return None', src)
+        ext = text(os.path.join(EXT, "extension.js"))
+        self.assertIn("const TUNED_ACTIVE = '%s';" % bar.TUNED_ACTIVE, ext)
+        self.assertIn("const PPD_DAEMON = '%s';" % bar.PPD_DAEMON, ext)
+        self.assertIn("'powersave': 'saver'", ext)
+
+    def test_the_shell_follows_the_profile_in_every_look(self):
+        ext = text(os.path.join(EXT, "extension.js"))
+        mode = ext.split("    _glassMode() {")[1].split("\n    }")[0]
+        self.assertIn("if (this._saver && this._saverSig && this._settings.get_boolean('glass-saver')) return null;", mode)
+        enable = ext.split("    enable() {")[1].split("\n    }")[0]
+        self.assertLess(enable.index("this._watchSaver();"), enable.index("this._glass();"))       # (not inside a look's own set-up)
+        watch = ext.split("    _watchSaver() {")[1].split("\n    }\n")[0]
+        self.assertIn("monitor_directory", watch)
+        self.assertNotRegex(watch, r"spawn|Subprocess|command_line")                               # no command is run for it
+        disable = ext.split("    disable() {")[1].split("\n    }")[0]
+        self.assertIn("this._saverMon.cancel()", disable)
+        self.assertIn("this._settings.disconnect(this._saverSig)", disable)
+
+    def test_in_three_languages_and_completion(self):
+        for lang in ("en", "ca", "es"):
+            items = {i.address: i for i in bar.system_items(bar.TEXT[lang])}
+            self.assertEqual(items["look/glass-saver"].twin, "silik look --glass-saver on")
+            self.assertEqual(items["look/glass-saver-off"].twin, "silik look --glass-saver off")
+        for k in ("glass_saver_on", "glass_saver_off"):
+            self.assertEqual(len({bar.TEXT[l][k] for l in ("en", "ca", "es")}), 3, k)
+
+
 class Extension(unittest.TestCase):
     def setUp(self):
         self.ext = text(os.path.join(EXT, "extension.js"))

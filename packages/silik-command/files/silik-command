@@ -38,6 +38,8 @@ TEXT = {
            "glass_clear": "look: clear glass (thinner paper over the blurred wallpaper)",
            "glass_crystal": "look: crystal (the windows behind the panes show through, blurred)",
            "glass_crystal_thin": "look: thin crystal (thinner paper, the windows behind blurred more)",
+           "glass_saver_on": "look: solid paper while the power profile is saver (the glass rests on a low battery)",
+           "glass_saver_off": "look: the glass stays in every power profile",
            "accent_ink": "accent: none, one ink on paper (the original)",
            "accent_steel": "accent: steel (what is selected, focused, on)",
            "accent_steel_vivid": "accent: steel (what is selected, focused, on, with the title bars)",
@@ -72,6 +74,8 @@ TEXT = {
            "glass_clear": "aspecte: vidre clar (paper més fi sobre el fons de pantalla desenfocat)",
            "glass_crystal": "aspecte: cristall (les finestres del darrere es veuen a través de les peces, desenfocades)",
            "glass_crystal_thin": "aspecte: cristall fi (paper més fi, les finestres del darrere més desenfocades)",
+           "glass_saver_on": "aspecte: paper opac mentre el perfil d'energia és estalvi (el vidre descansa amb poca bateria)",
+           "glass_saver_off": "aspecte: el vidre es queda en tots els perfils d'energia",
            "accent_ink": "accent: cap, una tinta sobre paper (l'original)",
            "accent_steel": "accent: acer (el que és triat, enfocat, encès)",
            "accent_steel_vivid": "accent: acer (el que és triat, enfocat, encès, amb les barres de títol)",
@@ -106,6 +110,8 @@ TEXT = {
            "glass_clear": "aspecto: vidrio claro (papel más fino sobre el fondo de pantalla desenfocado)",
            "glass_crystal": "aspecto: cristal (las ventanas de detrás se ven a través de las piezas, desenfocadas)",
            "glass_crystal_thin": "aspecto: cristal fino (papel más fino, las ventanas de detrás más desenfocadas)",
+           "glass_saver_on": "aspecto: papel opaco mientras el perfil de energía es ahorro (el vidrio descansa con poca batería)",
+           "glass_saver_off": "aspecto: el vidrio se queda en todos los perfiles de energía",
            "accent_ink": "acento: ninguno, una tinta sobre papel (el original)",
            "accent_steel": "acento: acero (lo seleccionado, enfocado, encendido)",
            "accent_steel_vivid": "acento: acero (lo seleccionado, enfocado, encendido, con las barras de título)",
@@ -359,6 +365,8 @@ def system_items(t, boxes=(), prefixes=(), programs=(), vendors=()):
         Item("look/glass-clear", t["glass_clear"], [SILIK, "look", "--glass", "clear"]),
         Item("look/glass-crystal", t["glass_crystal"], [SILIK, "look", "--glass", "crystal"]),
         Item("look/glass-crystal-thin", t["glass_crystal_thin"], [SILIK, "look", "--glass", "crystal-thin"]),
+        Item("look/glass-saver", t["glass_saver_on"], [SILIK, "look", "--glass-saver", "on"]),
+        Item("look/glass-saver-off", t["glass_saver_off"], [SILIK, "look", "--glass-saver", "off"]),
         Item("look/ink", t["accent_ink"], [SILIK, "look", "--accent", "ink"]),
         Item("look/steel", t["accent_steel"], [SILIK, "look", "--accent", "steel"]),
         Item("look/steel-vivid", t["accent_steel_vivid"], [SILIK, "look", "--accent", "steel-vivid"]),
@@ -707,6 +715,21 @@ WIDTH = 820
 WIDE = 20
 
 
+TUNED_ACTIVE = "/etc/tuned/active_profile"      # the profile in use, as tuned writes it at each change
+PPD_DAEMON = "/usr/libexec/power-profiles-daemon"   # (that one instead of tuned: tuned's file would be stale)
+
+
+def power_saver(path=None, other=None):
+    """True while the power profile is saver (tuned's powersave), read as the shell extension reads it: no command"""
+    if os.path.exists(PPD_DAEMON if other is None else other):
+        return False
+    try:
+        with open(TUNED_ACTIVE if path is None else path, encoding="utf-8") as f:
+            return f.read().strip() == "powersave"
+    except (OSError, UnicodeDecodeError):
+        return False
+
+
 def glass_mode():
     """the glass in use: None (off, or no schema, no key, no settings service: solid paper) or a key of GLASS. The key
     "glass" is the switch, "glass-mode" which glass (a desktop from before the modes has only the switch: "on")"""
@@ -719,6 +742,8 @@ def glass_mode():
         settings = Gio.Settings.new("com.silikvolt.silikos.shell")
         if not settings.get_boolean("glass"):
             return None
+        if schema.has_key("glass-saver") and settings.get_boolean("glass-saver") and power_saver():
+            return None         # (the power profile saver: solid paper, as the shell's panes; extension.js _watchSaver)
         mode = settings.get_string("glass-mode") if schema.has_key("glass-mode") else "on"
         return mode if mode in GLASS else "on"
     except Exception:       # (no GLib bindings, no settings service: solid paper)

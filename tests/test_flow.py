@@ -34,7 +34,7 @@ class Schema(unittest.TestCase):
         self.assertEqual([s.get("id") for s in schemas], [SCHEMA])
         self.assertEqual(schemas[0].get("path"), "/com/silikvolt/silikos/shell/")
         keys = schemas[0].findall("key")
-        self.assertEqual([(k.get("name"), k.get("type")) for k in keys], [("look", "s"), ("accent", "s"), ("glass", "b"), ("glass-mode", "s")])
+        self.assertEqual([(k.get("name"), k.get("type")) for k in keys], [("look", "s"), ("accent", "s"), ("glass", "b"), ("glass-mode", "s"), ("glass-saver", "b")])
         self.assertEqual([c.get("value") for c in keys[0].find("choices")], LOOKS)
         accents = [c.get("value") for c in keys[1].find("choices")]
         self.assertEqual(accents[0], "ink")                                   # (the list itself: tests/test_accents.py)

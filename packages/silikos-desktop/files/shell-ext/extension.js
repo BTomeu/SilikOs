@@ -334,6 +334,7 @@ class SilikShell {
         this._accent();
         this._qt();
         this._up();
+        this._watchSaver();
         this._glass();
     }
 
@@ -347,9 +348,13 @@ class SilikShell {
             if (this._accentSig) this._settings.disconnect(this._accentSig);
             if (this._glassSig) this._settings.disconnect(this._glassSig);
             if (this._glassModeSig) this._settings.disconnect(this._glassModeSig);
-            this._accentSig = this._glassSig = this._glassModeSig = 0;
+            if (this._saverSig) this._settings.disconnect(this._saverSig);
+            this._accentSig = this._glassSig = this._glassModeSig = this._saverSig = 0;
             this._settings = null;
         }
+        if (this._saverMon) this._saverMon.cancel();
+        this._saverMon = null;
+        this._saver = false;
     }
 
     /* the accent (key "accent"; `silik look --accent`): the extension's rules that take it are accent-<id>.css
@@ -376,8 +381,35 @@ class SilikShell {
        Silik look's title bar, rail and status bar stay solid: they are the window's frame, not a pane on it. */
     _glassMode() {
         if (!this._glassSig || !this._settings.get_boolean('glass')) return null;
+        /* the power profile "saver": solid paper while it lasts (the key glass-saver; see _watchSaver) */
+        if (this._saver && this._saverSig && this._settings.get_boolean('glass-saver')) return null;
         const mode = this._glassModeSig ? this._settings.get_string('glass-mode') : 'on';
         return Flow.GLASS_MODES[mode] ? mode : 'on';
+    }
+
+    /* In the power profile "saver" (`silik power saver`, the system menu, tuned on a low battery) the panes are solid
+       paper, and come back as they were when the profile changes: at rest the glass costs nothing, but each time
+       something is drawn behind a pane it is work for the graphics card (docs/STATUS.md: the modes measured), and
+       saver is the profile that asks for the least. The key glass-saver (true by default; `silik look --glass-saver
+       off`) turns this off. The profile is tuned's, read from the file tuned writes at each change, in every look;
+       no command is run for it. (With power-profiles-daemon instead of tuned the profile is not known: the glass
+       stays.) */
+    _watchSaver() {
+        this._saver = false;
+        if (!this._settings || !this._settings.settings_schema.has_key('glass-saver')) return;
+        this._saverSig = this._settings.connect('changed::glass-saver', () => this._glass());
+        const sync = () => {
+            const p = GLib.file_test(PPD_DAEMON, GLib.FileTest.EXISTS) ? '' : readText(TUNED_ACTIVE);
+            const saver = POWER_WORD[p] === 'saver';
+            if (saver === this._saver) return;
+            this._saver = saver;
+            this._glass();
+        };
+        try {
+            this._saverMon = Gio.File.new_for_path(GLib.path_get_dirname(TUNED_ACTIVE)).monitor_directory(Gio.FileMonitorFlags.NONE, null);
+            this._saverMon.connect('changed', sync);
+        } catch (e) { /* no tuned folder: the profile read now stands */ }
+        sync();
     }
 
     _glass(off) {
