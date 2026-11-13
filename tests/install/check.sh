@@ -104,7 +104,8 @@ if insession xwininfo -root > /dev/null 2>&1; then
   barmap() { insession xwininfo -name 'SilikOS COMMAND' 2> /dev/null | sed -n 's/^ *Map State: //p' | head -1; }
   st=""; for i in $(seq 1 20); do sleep 1; st=$(barmap); [ "$st" = IsViewable ] && break; done
   sock=$(stat -c '%a %U' /run/user/$uid/silik-command*.sock 2>&1 | head -1)       # (one socket per display)
-  t0=$(date +%s%N); insession silik-command --query sys/doctor > /dev/null 2>&1; rc=$?; ms=$(( ($(date +%s%N) - t0) / 1000000 ))
+  # (timeout: a call the bar that stays does not take opens a window of its own, which would never end here)
+  t0=$(date +%s%N); insession timeout 20 silik-command --query sys/doctor > /dev/null 2>&1; rc=$?; ms=$(( ($(date +%s%N) - t0) / 1000000 ))
   sleep 1
   n=$(pgrep -u tester -f 'bin/silik-comman[d]' | wc -l)
   if [ "$st" = IsViewable ] && [ "$sock" = "600 tester" ] && [ $rc = 0 ] && [ "$n" = 1 ] && [ "$(barmap)" = IsViewable ]; then

@@ -212,6 +212,11 @@ màquina virtual compartida: una primera mesura, no una mitjana.
 - Segona execució (run 43436222754, commit 4c4163f, el mateix dia; 120 comprovacions bé, cap de fallada, 15G de disc):
   amb el perfil 9,3 i 9,3 s, escriptori a 8,8 s, 986 i 981 MB; sense, 9,7 i 9,9 s, escriptori a 9,1 i 9,3 s, 1607 i
   1350 MB. Coincideix amb la primera.
+- Tercera execució completa (run 43464588417, commit f14e5cd, el mateix dia; 121 comprovacions bé, cap de fallada,
+  15G): amb el perfil 12,0 i 11,3 s, escriptori a 11,3 i 10,6 s, 990 i 978 MB; sense, 12,1 i 11,8 s, 1586 i 1340 MB.
+  La memòria coincideix amb les altres dues; l'arrencada és 2 a 3 s més lenta que a les altres (9,3 s): és un altre
+  runner (l'initrd hi triga 2,5 a 3,2 s en lloc de 2,1). El temps d'arrencada només es pot comparar dins d'una
+  mateixa execució.
 - En maquinari real: encara no.
 
 ### Al costat de l'AlmaLinux Workstation de sèrie

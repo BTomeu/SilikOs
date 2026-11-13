@@ -343,6 +343,14 @@ class Width(unittest.TestCase):
         self.assertGreater(longest, 60)         # (the titles that widened it are still there: the case is real)
 
 
+class Check(unittest.TestCase):
+    def test_the_installed_systems_check_cannot_hang(self):
+        """bar.stays: a second call that is not taken would open its own window and wait for a key nobody presses"""
+        check = read(os.path.join(ROOT, "tests/install/check.sh"))
+        self.assertIn("insession timeout 20 silik-command --query sys/doctor", check)
+        self.assertIn("pkill -u tester -f 'bin/silik-comman[d]'", check)        # and the bar is gone before the looks
+
+
 class Package(unittest.TestCase):
     def test_the_launcher_and_the_module(self):
         spec = read(SPEC)

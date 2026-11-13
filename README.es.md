@@ -69,9 +69,10 @@ de firma la tiene que hacer el propietario, así que un sistema instalado todav�
 
 Probado instalándolo: el workflow CI construye la ISO, la instala sola en una máquina virtual, arranca el sistema
 instalado y deja que se revise a sí mismo; el informe y las imágenes están en la rama
-[`ci-results`](../../tree/ci-results). La última ejecución completa cuando se escribió esto es la 43436222754 del
-13/11/2026 (commit 4c4163f): 120 comprobaciones correctas, ninguna fallida, 15 GB de disco; el sistema instalado
-arrancó en 9,3 s con unos 985 MB en uso (una máquina virtual: `docs/NUMEROS.md`) y volvió atrás de una actualización
+[`ci-results`](../../tree/ci-results). La última ejecución completa cuando se escribió esto es la 43464588417 del
+13/11/2026 (commit f14e5cd): 121 comprobaciones correctas, ninguna fallida, 15 GB de disco; el sistema instalado
+arrancó en 11,3 a 12,0 s (9,3 s en la ejecución anterior: depende del runner) con unos 985 MB en uso (una máquina
+virtual: `docs/NUMEROS.md`) y volvió atrás de una actualización
 en un disco LVM real (`docs/ROLLBACK.md`). Al lado del AlmaLinux 9 Workstation de serie en una misma máquina virtual
 (workflow Compare, ejecución 43446488850) usó de 151 a 166 MB menos de memoria y llegó al escritorio de 0,65 a 0,85 s
 más tarde: su sesión es X11, por las herramientas EDA, y la de la base es Wayland. No arranca más rápido que su base.

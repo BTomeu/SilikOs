@@ -70,9 +70,10 @@ signatura l'ha de fer el propietari, de manera que un sistema instal·lat encara
 
 Provat instal·lant-lo: el workflow CI construeix la ISO, la instal·la sola en una màquina virtual, arrenca el sistema
 instal·lat i deixa que es revisi ell mateix; l'informe i les imatges són a la branca
-[`ci-results`](../../tree/ci-results). L'última execució completa quan es va escriure això és la 43436222754 del
-13/11/2026 (commit 4c4163f): 120 comprovacions correctes, cap de fallada, 15 GB de disc; el sistema instal·lat hi va
-arrencar en 9,3 s amb uns 985 MB en ús (una màquina virtual: `docs/NUMEROS.md`) i va tornar enrere d'una actualització
+[`ci-results`](../../tree/ci-results). L'última execució completa quan es va escriure això és la 43464588417 del
+13/11/2026 (commit f14e5cd): 121 comprovacions correctes, cap de fallada, 15 GB de disc; el sistema instal·lat hi va
+arrencar en 11,3 a 12,0 s (9,3 s a l'execució anterior: depèn del runner) amb uns 985 MB en ús (una màquina virtual:
+`docs/NUMEROS.md`) i va tornar enrere d'una actualització
 en un disc LVM real (`docs/ROLLBACK.md`). Al costat de l'AlmaLinux 9 Workstation de sèrie en una mateixa màquina virtual (workflow
 Compare, execució 43446488850) va fer servir de 151 a 166 MB menys de memòria i va arribar a l'escriptori de 0,65 a
 0,85 s més tard: la seva sessió és X11, per les eines EDA, i la de la base és Wayland. No arrenca més ràpid que la

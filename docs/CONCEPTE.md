@@ -163,7 +163,7 @@ Tot està en un repositori de GitHub. Hi ha tres maneres de comprovar que funcio
 2. **El banc de proves**: un escriptori GNOME de veritat dins d'un contenidor, on s'instal·len els paquets i es fan
    fotos de pantalla. Totes les imatges dels colors, les icones, SavvyCAN o PulseView surten d'aquí.
 3. **La instal·lació real**: GitHub construeix la **ISO** (el disc d'instal·lació), la instal·la sola en una màquina
-   virtual, engega el sistema instal·lat, el revisa (120 comprovacions la darrera vegada) i desa fotos de pantalla.
+   virtual, engega el sistema instal·lat, el revisa (121 comprovacions la darrera vegada) i desa fotos de pantalla.
    És la prova que compta.
 
 Cada eina que compilem nosaltres passa per una **prova de veritat** en un sistema net: el simulador ha de simular, el
@@ -175,7 +175,7 @@ sense haver-ho executat de veritat. Les suposicions es marquen amb [A].
 ## 7. En quin punt som (13/11/2026)
 
 **Fet i provat en una instal·lació de veritat (màquina virtual, a GitHub):**
-- Instal·lació desatesa completa: la darrera, 120 comprovacions bé i cap de fallada (run 43436222754).
+- Instal·lació desatesa completa: la darrera, 121 comprovacions bé i cap de fallada (run 43464588417).
 - Eines d'EDA, microcontroladors i Wine dins de la ISO; els tres aspectes de l'escriptori, els accents, el vidre.
 - Tornar enrere d'una actualització (`silik rollback`) en un disc LVM de veritat.
 - Els paquets i les eines també es construeixen i es proven en màquines ARM de GitHub.
@@ -188,7 +188,8 @@ sense haver-ho executat de veritat. Les suposicions es marquen amb [A].
 **Fet i provat al banc, encara no en una instal·lació real:**
 - Les eines CAN i el banc (SavvyCAN, cantools, PulseView…) amb maquinari de veritat: no hi ha hagut cap adaptador.
 - SDCC i el firmware fx2lafw (sense cap analitzador real connectat).
-- L'Inici que s'obre més ràpid (de 64–76 ms a 15–17 ms amb 152 aplicacions) i el COMMAND bar que es queda carregat.
+- L'Inici que s'obre més ràpid (de 64–76 ms a 15–17 ms amb 152 aplicacions). El COMMAND bar que es queda carregat
+  sí que s'ha vist al sistema instal·lat (dues crides, un sol procés), però el temps mesurat és el del banc.
 
 **Només ho pot fer el propietari:**
 - **Activar GitHub Pages** (Settings → Pages → Source: GitHub Actions): és on es publicarà el repositori de paquets.

@@ -65,9 +65,10 @@ and not verified, with how each row was run.
 
 Tested by installing it: the workflow CI builds the ISO, installs it unattended in a virtual machine, boots the
 installed system and lets it check itself; the report and the pictures are on the branch
-[`ci-results`](../../tree/ci-results). The last complete run when this was written is run 43436222754 of
-13/11/2026 (commit 4c4163f): 120 checks ok, none failed, 15 GB on disk; in it the installed system started in 9.3 s
-with about 985 MB in use (a virtual machine: `docs/NUMEROS.md`), and went back from an update on a real LVM disk
+[`ci-results`](../../tree/ci-results). The last complete run when this was written is run 43464588417 of
+13/11/2026 (commit f14e5cd): 121 checks ok, none failed, 15 GB on disk; in it the installed system started in 11.3
+to 12.0 s (9.3 s in the run before: it depends on the runner) with about 985 MB in use (a virtual machine:
+`docs/NUMEROS.md`), and went back from an update on a real LVM disk
 (`docs/ROLLBACK.md`). Beside the stock AlmaLinux 9 Workstation in one virtual machine (workflow Compare, run
 43446488850) it used 151 to 166 MB less memory and reached the desktop 0.65 to 0.85 s later: its session is X11, for
 the EDA tools, the base's is Wayland. It is not faster to start than its base. The badge above is the CI's state.
