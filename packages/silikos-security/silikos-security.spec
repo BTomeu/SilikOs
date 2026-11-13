@@ -1,5 +1,5 @@
 Name:           silikos-security
-Version:        0.3.0
+Version:        0.4.0
 Release:        1%{?dist}
 Summary:        SilikOS security defaults: firewall zone, kernel settings, automatic security updates, screen lock
 License:        LicenseRef-SilikVolt
@@ -47,6 +47,9 @@ SELinux stays as the base has it (enforcing). Disk encryption and Secure Boot ar
 %install
 install -Dm0644 %{_sourcedir}/silikos.xml %{buildroot}%{_prefix}/lib/firewalld/zones/silikos.xml
 install -Dm0644 %{_sourcedir}/60-silikos-security.conf %{buildroot}%{_prefix}/lib/sysctl.d/60-silikos-security.conf
+# (read at the next start, or by `silik secure apply`: nothing here changes a running kernel or a live connection)
+install -Dm0644 %{_sourcedir}/60-silikos-rare.conf %{buildroot}%{_prefix}/lib/modprobe.d/60-silikos-rare.conf
+install -Dm0644 %{_sourcedir}/30-silikos-privacy.conf %{buildroot}%{_prefix}/lib/NetworkManager/conf.d/30-silikos-privacy.conf
 install -Dm0644 %{_sourcedir}/silikos-security-update.service %{buildroot}%{_prefix}/lib/systemd/system/silikos-security-update.service
 install -Dm0644 %{_sourcedir}/silikos-security-update.timer %{buildroot}%{_prefix}/lib/systemd/system/silikos-security-update.timer
 install -Dm0644 %{_sourcedir}/security-update.conf %{buildroot}%{_sysconfdir}/silikos/security-update.conf
@@ -97,6 +100,8 @@ systemctl daemon-reload >/dev/null 2>&1 || :
 %files
 %{_prefix}/lib/firewalld/zones/silikos.xml
 %{_prefix}/lib/sysctl.d/60-silikos-security.conf
+%{_prefix}/lib/modprobe.d/60-silikos-rare.conf
+%{_prefix}/lib/NetworkManager/conf.d/30-silikos-privacy.conf
 %{_prefix}/lib/systemd/system/silikos-security-update.service
 %{_prefix}/lib/systemd/system/silikos-security-update.timer
 %{_prefix}/lib/systemd/system/silikos-update.service

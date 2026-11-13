@@ -310,7 +310,7 @@ class Judge(unittest.TestCase):
         st = good()
         r = row(st, "vsyscall")
         self.assertEqual(r["state"], "ok")
-        self.assertIn("trade-off", r["value"])
+        self.assertIn("this kernel's own default", r["value"])      # (EL 9.8's kernel is built with it: nothing SilikOS weakens)
         self.assertIn("EL6", r["value"])
         for v, want in (("none", "ok"), ("emulate", "warn"), ("", "unknown")):
             st["vsyscall"] = v
@@ -601,7 +601,13 @@ class Package(unittest.TestCase):
         lines = [l.strip() for l in text("packages/silikos-security/files/60-silikos-security.conf").splitlines()]
         got = [tuple(x.strip() for x in l.split("=", 1)) for l in lines if l and not l.startswith("#")]
         want = [(k, str(v)) for k, v, how, by in silik.SEC_SYSCTL if by == "silikos"]
-        self.assertEqual(sorted(got), sorted(want))
+        # (the file writes three keys twice: as a pattern, which the kernel takes, and under the literal `all`, which
+        # is what a baseline's scanner reads; silik judges the pattern)
+        twins = [g for g in got if ".all." in g[0] and (g[0].replace(".all.", ".*."), g[1]) in want]
+        self.assertEqual(len(twins), 3)
+        self.assertEqual(sorted(g for g in got if g not in twins), sorted(want))
+        for k in ("fs.protected_fifos", "fs.protected_regular", "fs.suid_dumpable", "dev.tty.ldisc_autoload", "net.ipv4.conf.all.secure_redirects"):
+            self.assertIn(k, [g[0] for g in got])                       # the audit of 13/11/2026
         keys = " ".join(k for k, v in got)
         for k in ("max_user_namespaces", "mmap_min_addr", "kexec", "ip_forward", "unprivileged_userns"):   # podman, bwrap, Wine, kdump, VMs
             self.assertNotIn(k, keys)

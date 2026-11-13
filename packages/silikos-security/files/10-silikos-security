@@ -10,6 +10,11 @@ idle-delay=uint32 300
 lock-enabled=true
 lock-delay=uint32 0
 
+# What a notification says is not shown on the locked screen (GNOME's default shows it: a message, a calendar entry
+# or a build's result is read by whoever passes by). That something arrived is still shown.
+[org/gnome/desktop/notifications]
+show-in-lock-screen=false
+
 # A USB stick or a disc that is plugged in never starts a program by itself (GNOME's default asks; this never does).
 [org/gnome/desktop/media-handling]
 autorun-never=true

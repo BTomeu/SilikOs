@@ -129,5 +129,38 @@ class Log(unittest.TestCase):
             self.assertIn("$ silik status", text)
 
 
+class Defaults(unittest.TestCase):
+    """the hardening that every installation gets after the audit: what the base already ships, set; each key was
+    read on EL 9.8's kernel and packages by the audit (docs/SECURITY.md), none seen to break a tool [A]"""
+
+    def read(self, rel):
+        with open(os.path.join(ROOT, rel), encoding="utf-8") as f:
+            return f.read()
+
+    def test_rare_protocols_are_not_loaded_on_demand(self):
+        lines = [l for l in self.read("packages/silikos-security/files/60-silikos-rare.conf").splitlines() if l and not l.startswith("#")]
+        self.assertEqual(lines, ["install tipc /bin/false", "install ieee802154_socket /bin/false", "install mpls_router /bin/false"])
+        for kept in ("can", "bluetooth", "usb", "ppp", "vsock", "squashfs", "udf"):         # a bench and a laptop use them
+            self.assertFalse([l for l in lines if l.split()[1].startswith(kept)], kept)
+
+    def test_network_privacy_and_the_locked_screen(self):
+        nm = [l for l in self.read("packages/silikos-security/files/30-silikos-privacy.conf").splitlines() if l and not l.startswith("#")]
+        self.assertEqual(nm, ["[connection]", "ipv6.ip6-privacy=2"])                           # nothing about the hardware address: licences
+        dconf = self.read("packages/silikos-security/files/10-silikos-security")
+        self.assertIn("[org/gnome/desktop/notifications]\nshow-in-lock-screen=false", dconf)
+
+    def test_the_package_ships_them_and_scripts_touch_nothing_running(self):
+        spec = self.read("packages/silikos-security/silikos-security.spec")
+        for f in ("%{_prefix}/lib/modprobe.d/60-silikos-rare.conf", "%{_prefix}/lib/NetworkManager/conf.d/30-silikos-privacy.conf"):
+            self.assertEqual(spec.count(f), 2, f)                                              # installed and listed
+        scripts = spec.split("%post")[1] if "%post" in spec else ""
+        for cmd in ("sysctl -", "sysctl --system", "modprobe", "nmcli", "systemctl restart NetworkManager", "firewall-cmd"):
+            self.assertNotIn(cmd, scripts, cmd)
+
+    def test_no_login_without_a_password(self):
+        ks = self.read("kickstart/silikos.ks")
+        self.assertIn("\nauthselect enable-feature without-nullok || :\n", ks)
+
+
 if __name__ == "__main__":
     unittest.main()

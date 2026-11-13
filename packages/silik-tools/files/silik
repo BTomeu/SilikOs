@@ -2247,6 +2247,16 @@ SEC_SYSCTL = [
     ("net.ipv6.conf.*.accept_redirects", 0, "max", "silikos"),
     ("net.ipv4.conf.default.send_redirects", 0, "max", "silikos"),
     ("net.ipv4.conf.*.send_redirects", 0, "max", "silikos"),
+    # (the audit of 13/11/2026. The file also has the three redirect keys above once more under their literal
+    # `all` names, for what reads a baseline: the patterns here already cover them)
+    ("net.ipv4.conf.all.secure_redirects", 0, "max", "silikos"),
+    ("net.ipv4.conf.default.secure_redirects", 0, "max", "silikos"),
+    ("net.ipv4.conf.all.accept_source_route", 0, "max", "silikos"),
+    ("net.ipv4.conf.default.accept_source_route", 0, "max", "silikos"),
+    ("fs.protected_fifos", 2, "min", "silikos"),
+    ("fs.protected_regular", 2, "min", "silikos"),
+    ("fs.suid_dumpable", 0, "max", "silikos"),
+    ("dev.tty.ldisc_autoload", 0, "max", "silikos"),
     ("kernel.kptr_restrict", 1, "min", "base"),
     ("kernel.randomize_va_space", 2, "min", "base"),
     ("fs.protected_hardlinks", 1, "min", "base"),
@@ -2766,7 +2776,7 @@ def sec_checks(st):
     elif vs == "none":
         row("vsyscall", "vsyscall page", "ok", "none (an EL6 box does not run on this kernel: silik eda kernel-arg)")
     elif vs == "xonly":   # a trade-off, said as one: the page stays for glibc 2.12, at a fixed address, execute-only
-        row("vsyscall", "vsyscall page", "ok", "xonly: a trade-off. The page stays, execute-only, for EL6 boxes; `none` is stricter and stops them")
+        row("vsyscall", "vsyscall page", "ok", "xonly: this kernel's own default (the page stays, execute-only, for EL6 boxes); `none` is stricter and stops them")
     elif vs == "emulate":
         row("vsyscall", "vsyscall page", "warn", "emulate: the page is readable at a fixed address (wanted only by a program that reads it)",
             ["sudo grubby --update-kernel=ALL --args=vsyscall=xonly && sudo reboot"])

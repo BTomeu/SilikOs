@@ -67,6 +67,9 @@ else
   echo 'GRUB_DISTRIBUTOR="SilikOS"' >> /etc/default/grub
 fi
 dconf update || :
+# an account with no password does not log in (the audit of 13/11/2026: the base's login profile accepts one, its
+# `nullok`; the base's own switch for it, where the profile has it)
+authselect enable-feature without-nullok || :
 # the firewall's default zone is the SilikOS one (package silikos-security): incoming dropped, outgoing free.
 # The offline command also leaves a copy of the zone in /etc, which would hide the package's file on updates.
 firewall-offline-cmd --set-default-zone=silikos && rm -f /etc/firewalld/zones/silikos.xml || :
