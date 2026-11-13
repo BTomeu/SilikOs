@@ -18,7 +18,7 @@ for spec in "$root"/packages/*/*.spec; do
   files=$name-$ver-files
   rm -f "$top/SOURCES/$files.tar.gz" "$srpms/$name-$ver"-*.src.rpm
   if [ -d "$dir/files" ]; then
-    tar -C "$dir/files" --dereference --sort=name --owner=0 --group=0 --numeric-owner --mtime=@0 -czf "$top/SOURCES/$files.tar.gz" .
+    tar -C "$dir/files" --exclude=__pycache__ --dereference --sort=name --owner=0 --group=0 --numeric-owner --mtime=@0 -czf "$top/SOURCES/$files.tar.gz" .
   else
     tar --owner=0 --group=0 --numeric-owner --mtime=@0 -czf "$top/SOURCES/$files.tar.gz" -T /dev/null
   fi

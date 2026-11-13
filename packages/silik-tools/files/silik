@@ -8375,7 +8375,7 @@ def parser(only=None):
             continue
         g = s.add_parser(name, help=text)
         if only == name:
-            load_plugin(name).register(g, sys.modules[__name__])
+            load_plugin(name).register(g, sys.modules.get(__name__) or sys.modules["__main__"])   # (this module, however it was loaded)
     return p
 
 

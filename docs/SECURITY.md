@@ -171,6 +171,8 @@ for example `/etc/sysctl.d/90-local.conf` with `kernel.yama.ptrace_scope = 0`.
 
 No antivirus, no USBGuard, no audit rules, no FIPS mode or CIS / STIG profile, no kernel lockdown beyond the base's,
 no TPM unlock of the disk, no confinement of the vendor tools. `silik secure` reads and sets what is listed above.
+`silik audit` evaluates the system against a CIS, ANSSI or STIG profile of the base's own content and changes nothing;
+`silik cve` lists the advisories that wait with their CVEs (`docs/COMPLIANCE.md`).
 
 ## Not verified
 

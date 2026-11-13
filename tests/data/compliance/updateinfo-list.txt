@@ -1,0 +1,12 @@
+RHSA-2026:92907 Moderate/Sec. curl-minimal-7.76.1-40.el9_8.9.x86_64
+CVE-2026-8932   Moderate/Sec. curl-minimal-7.76.1-40.el9_8.9.x86_64
+ALSA-2026:92907 Moderate/Sec. curl-minimal-7.76.1-40.el9_8.9.x86_64
+RHSA-2026:95618 Moderate/Sec. glibc-2.34-284.el9_8.4.x86_64
+CVE-2026-8674   Moderate/Sec. glibc-2.34-284.el9_8.4.x86_64
+CVE-2026-86805  Moderate/Sec. glibc-2.34-284.el9_8.4.x86_64
+CVE-2026-89092  Moderate/Sec. glibc-2.34-284.el9_8.4.x86_64
+CVE-2026-95818  Moderate/Sec. glibc-2.34-284.el9_8.4.x86_64
+ALSA-2026:95618 Moderate/Sec. glibc-2.34-284.el9_8.4.x86_64
+RHSA-2026:92907 Moderate/Sec. libcurl-minimal-7.76.1-40.el9_8.9.x86_64
+CVE-2026-8932   Moderate/Sec. libcurl-minimal-7.76.1-40.el9_8.9.x86_64
+ALSA-2026:92907 Moderate/Sec. libcurl-minimal-7.76.1-40.el9_8.9.x86_64

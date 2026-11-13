@@ -1,0 +1,23 @@
+[
+ {
+  "address": "audit/run",
+  "argv": [
+   "audit"
+  ],
+  "en": "OpenSCAP evaluation against CIS Workstation Level 1 (read-only, writes the reports)",
+  "ca": "Avaluació OpenSCAP contra CIS Workstation Level 1 (només lectura, escriu els informes)",
+  "es": "Evaluación OpenSCAP contra CIS Workstation Level 1 (solo lectura, escribe los informes)",
+  "terminal": true
+ },
+ {
+  "address": "audit/profiles",
+  "argv": [
+   "audit",
+   "profiles"
+  ],
+  "en": "The audit profiles of the base's content (CIS, ANSSI, STIG...)",
+  "ca": "Els perfils d'auditoria del contingut de la base (CIS, ANSSI, STIG...)",
+  "es": "Los perfiles de auditoría del contenido de la base (CIS, ANSSI, STIG...)",
+  "terminal": true
+ }
+]

@@ -1,0 +1,30 @@
+[
+ {
+  "address": "sbom/export",
+  "argv": [
+   "sbom",
+   "export",
+   "-o",
+   "sbom.spdx.json"
+  ],
+  "en": "Software bill of materials of this system (SPDX 2.3) to sbom.spdx.json",
+  "ca": "Llista de materials de programari d'aquest sistema (SPDX 2.3) a sbom.spdx.json",
+  "es": "Lista de materiales de software de este sistema (SPDX 2.3) en sbom.spdx.json",
+  "terminal": true
+ },
+ {
+  "address": "sbom/export-cyclonedx",
+  "argv": [
+   "sbom",
+   "export",
+   "--format",
+   "cyclonedx",
+   "-o",
+   "sbom.cdx.json"
+  ],
+  "en": "Software bill of materials of this system (CycloneDX 1.6) to sbom.cdx.json",
+  "ca": "Llista de materials de programari d'aquest sistema (CycloneDX 1.6) a sbom.cdx.json",
+  "es": "Lista de materiales de software de este sistema (CycloneDX 1.6) en sbom.cdx.json",
+  "terminal": true
+ }
+]

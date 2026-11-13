@@ -17,6 +17,11 @@ Recommends:     snapm
 Recommends:     boom-boot
 # /etc/dconf/profile/user (user-db:user, system-db:local) and /etc/dconf/db/local.d are the dconf package's on EL9
 Requires:       dconf
+# `silik audit` and the audit part of `silik evidence`: the base's scanner and the base's own SCAP content (AppStream).
+# Weak: 3.8 MB to download, 114 MB installed with what they pull in a minimal system (dnf, EL 9.8, 13/11/2026); without
+# them those commands say what to install and the rest of `silik evidence` is written
+Recommends:     openscap-scanner
+Recommends:     scap-security-guide
 Requires(post): dconf
 Requires(post): systemd
 Requires(preun): systemd

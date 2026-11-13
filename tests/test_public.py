@@ -207,7 +207,9 @@ class Tree(unittest.TestCase):
         # test: a new one is looked at before it is published)
         known = {"noreply@anthropic.com", "aaron@sajatypeworks.com", "lumin@debian.org", "gurkan@phys.ethz.ch",
                  "julliard@winehq.org", "silik-shell@silikvolt.com", "user-theme@gnome-shell-extensions.gcampax.github.com",
-                 "secret@proxy.example.org", "pw@private.example.org"}
+                 "secret@proxy.example.org", "pw@private.example.org",
+                 # the name on the base's package signing key (tests/data/compliance); an example in CycloneDX's schema
+                 "packager@almalinux.org", "firstname.lastname@example.com"}
         mail = re.compile(r"(?<![$A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.(?:com|org|net|edu|es|cat|eu|ch|de|uk|io)\b")
         for f in tree_files():
             if f == os.path.abspath(__file__):
