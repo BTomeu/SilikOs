@@ -48,6 +48,9 @@ class Names(unittest.TestCase):
         self.assertEqual(silik.nevra_parse("gcc-c++-0:11.5.0-14.el9.alma.1.x86_64"), ("gcc-c++", "x86_64", "0:11.5.0-14.el9.alma.1"))
         self.assertEqual(silik.nevra_parse("compat-openssl11-1:1.1.1k-5.el9_8.6.x86_64"), ("compat-openssl11", "x86_64", "1:1.1.1k-5.el9_8.6"))
         self.assertIsNone(silik.nevra_parse("not a package"))
+        # what is handed to dnf is a package's name and nothing else: never something dnf would read as a switch
+        for bad in ("--installroot=/x-0:1-1.x86_64", "-y-0:1-1.x86_64", "a b-0:1-1.x86_64", "a-0:1;x-1.x86_64", "a-0:1-1.x86 64", "a-x:1-1.noarch"):
+            self.assertIsNone(silik.nevra_parse(bad), bad)
 
     def test_evr(self):
         self.assertEqual(silik.evr_cmp("0:2.34-284.el9_8.4", "0:2.34-283.el9_8"), 1)
@@ -144,10 +147,23 @@ class Plan(unittest.TestCase):
     def test_kernel_arguments(self):
         have, want = man(), man()
         want["kernel"]["args"] = ["quiet", "rhgb", "vsyscall=emulate"]
-        steps = silik.manifest_plan(have, want)
+        steps = silik.manifest_plan(have, want, prune=True)        # an argument can turn a protection off: --kernel only
+        self.assertEqual(runs(steps), [])
+        self.assertIn("left alone (--kernel sets the manifest's)", says(steps))
+        steps = silik.manifest_plan(have, want, kernel=True)
         self.assertEqual(runs(steps), ["sudo grubby --update-kernel=ALL --args=vsyscall=emulate"])
         self.assertIn("kept (--prune removes them): vsyscall=xonly", says(steps))
-        self.assertIn("sudo grubby --update-kernel=ALL --remove-args=vsyscall=xonly", runs(silik.manifest_plan(have, want, prune=True)))
+        self.assertIn("sudo grubby --update-kernel=ALL --remove-args=vsyscall=xonly", runs(silik.manifest_plan(have, want, prune=True, kernel=True)))
+
+    def test_a_manifest_from_someone_else_cannot_slip_a_switch_in(self):
+        want = man(["--setopt=x-0:1-1.x86_64", KSH], boxes=[{"name": "b", "image": "--privileged", "el": "7"}])
+        want["kernel"]["args"] = ["quiet", "rhgb", "vsyscall=xonly", "a b", "x=$(id)", "init=/bin/sh"]
+        self.assertEqual(runs(silik.manifest_plan(man(), want)), ["sudo dnf -y install ksh-3:1.0.6-7.el9.x86_64"])
+        steps = silik.manifest_plan(man(), want, kernel=True)
+        self.assertEqual(runs(steps), ["sudo dnf -y install ksh-3:1.0.6-7.el9.x86_64", "sudo grubby --update-kernel=ALL --args=init=/bin/sh"])
+        self.assertEqual([w for k, w in steps if k == "silik"], [])
+        self.assertIn("not plain words (not set): 'a b' 'x=$(id)'", says(steps))
+        self.assertIn("not an image's name", says(steps))
 
     def test_settings_go_through_silik(self):
         want = man()

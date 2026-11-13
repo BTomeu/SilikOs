@@ -5265,7 +5265,7 @@ def vendor_lib(ctx, a):
         so = os.path.basename(so)
         if not re.match(r"^[A-Za-z0-9][A-Za-z0-9+._-]*$", so):
             die("not a library's name: %r" % so, 2)
-        pkg = libs.get(so)
+        pkg = table = libs.get(so)
         if pkg is None:
             want = "%s()(64bit)" % so if host_arch() in ("x86_64", "aarch64") else so
             code, out = ctx.run(["dnf", "-q", "repoquery", "--whatprovides", want, "--qf", "%{name}"], check=False, capture=True)
@@ -5276,8 +5276,12 @@ def vendor_lib(ctx, a):
         if pkg is None:
             print("%-28s dnf did not answer" % so)
             rc = 1
-        elif pkg == "-":
+        elif pkg == "-" and table:      # asked of EL 9.8 + CRB + EPEL 9 when the table was written
             print("%-28s no package of EL 9, CRB or EPEL 9 has it: the program is for an older system (a box: silik eda create NAME --el 7)" % so)
+            rc = 1
+        elif pkg == "-":
+            print("%-28s no package of the enabled repositories has it: a library of the tool itself (its installation's folder, "
+                  "LD_LIBRARY_PATH), or of an older system (a box: silik eda create NAME --el 7)" % so)
             rc = 1
         else:
             print("%-28s %-24s sudo dnf -y install %s" % (so, pkg, pkg))
@@ -5301,10 +5305,11 @@ def vendor_names(ctx, a):
 # installed package (name, epoch, version, release, architecture, and the repository it came from), the enabled
 # repositories, the settings `silik` owns, the boxes, the tools' versions, the kernel's command line. Sorted, so two
 # exports of one machine are the same bytes; no secret, and no host name, address or user name unless --with-host.
-# The kernel's own packages are a section apart: `apply` leaves them alone unless --kernel, and never removes a
-# package unless --prune. MANIFEST_SECTIONS is where a new section goes: (name, export, diff, plan).
+# The kernel's own packages and arguments are a section apart: `apply` leaves them alone unless --kernel, and never
+# removes a package unless --prune. MANIFEST_SECTIONS is where a new section goes: (name, export, diff, plan).
 MANIFEST = 1
 KERNEL_ARGS_OF_THE_DISK = ("BOOT_IMAGE", "root", "rootflags", "ro", "rw", "resume", "rd.lvm.lv", "rd.luks.uuid", "rd.md.uuid", "initrd")
+KERNEL_ARG = re.compile(r"^[A-Za-z0-9_.-]+(=[A-Za-z0-9_.,:/@+%-]*)?$")
 KERNEL_SOURCE = re.compile(r"^kernel(-rt)?-\d")     # the source package of the kernel and of what is built with it (perf, bpftool...)
 INSTALLED_QF = "%{name}\t%{epoch}\t%{version}\t%{release}\t%{arch}\t%{from_repo}\t%{sourcerpm}"
 
@@ -5315,7 +5320,9 @@ def nevra(name, epoch, version, release, arch):
 
 def nevra_parse(s):
     """(name, arch, 'epoch:version-release') of "name-epoch:version-release.arch"; None when it is not one"""
-    m = re.match(r"^(.+)-(\d+):([^-]+)-([^-]+)\.([A-Za-z0-9_]+)$", s)
+    # (strict: these words go to dnf's command line from a file someone else may have written; a name never starts
+    # with a dash, so none can be read as a switch)
+    m = re.match(r"^([A-Za-z0-9][A-Za-z0-9+._-]*)-(\d+):([A-Za-z0-9+._~^]+)-([A-Za-z0-9+._~^]+)\.([A-Za-z0-9_]+)$", s)
     return (m.group(1), m.group(5), "%s:%s-%s" % (m.group(2), m.group(3), m.group(4))) if m else None
 
 
@@ -5511,7 +5518,7 @@ def manifest_diff(have, want):
 def manifest_plan(have, want, prune=False, kernel=False):
     """the steps that bring this machine (HAVE) to the manifest WANT, in order: ("run", argv) a command; ("silik",
     args) a silik command; ("say", text) what is not done and why. Packages are never removed without PRUNE; the
-    kernel's packages are left alone without KERNEL; a box and a running kernel are never removed"""
+    kernel's packages and arguments are left alone without KERNEL; a box and a kernel are never removed"""
     steps = []
     hb, wb = have.get("base") or {}, want.get("base") or {}
     if hb.get("arch") != wb.get("arch"):
@@ -5552,15 +5559,22 @@ def manifest_plan(have, want, prune=False, kernel=False):
             steps.append(("say", "%d kernel packages are here and not in the manifest: never removed by this command" % len(kd["remove"])))
     add = sorted(set(wk.get("args") or []) - set(hk.get("args") or []))
     rem = sorted(set(hk.get("args") or []) - set(wk.get("args") or []))
-    if add:
-        steps.append(("run", ["sudo", "grubby", "--update-kernel=ALL", "--args=" + " ".join(add)]))
-    if rem:
-        if prune:
+    odd = [w for w in add if not isinstance(w, str) or not KERNEL_ARG.match(w)]
+    if odd:         # (a word with a space or a quote in it would be more than one argument)
+        steps.append(("say", "kernel arguments of the manifest that are not plain words (not set): " + " ".join(repr(w) for w in odd)))
+        add = [w for w in add if w not in odd]
+    if (add or rem) and not kernel:     # (an argument can turn a protection off: the kernel's switch covers them too)
+        steps.append(("say", "the kernel's arguments differ (the manifest has %s; here %s): left alone (--kernel sets the manifest's)" % (
+            " ".join(add) or "none more", " ".join(rem) or "none more")))
+    elif add or rem:
+        if add:
+            steps.append(("run", ["sudo", "grubby", "--update-kernel=ALL", "--args=" + " ".join(add)]))
+        if rem and prune:
             steps.append(("run", ["sudo", "grubby", "--update-kernel=ALL", "--remove-args=" + " ".join(rem)]))
-        else:
+        elif rem:
             steps.append(("say", "kernel arguments here and not in the manifest: kept (--prune removes them): " + " ".join(rem)))
-    if add or (rem and prune):
-        steps.append(("say", "the kernel's arguments apply at the next start"))
+        if add or prune:
+            steps.append(("say", "the kernel's arguments apply at the next start"))
     hs, ws = have.get("settings") or {}, want.get("settings") or {}
     look = []
     if ws.get("look") and ws.get("look") != hs.get("look") and ws["look"] in [k for k, _ in LOOKS]:
@@ -5590,6 +5604,9 @@ def manifest_plan(have, want, prune=False, kernel=False):
             steps.append(("say", "the box %s (%s) is not one `silik eda create` makes: not made" % (n, b.get("image"))))
             continue
         img = b.get("image")
+        if img and img != EL[el]["image"] and not re.match(r"^[A-Za-z0-9][A-Za-z0-9._/:@-]*$", str(img)):
+            steps.append(("say", "the box %s names an image that is not an image's name: not made" % n))
+            continue
         steps.append(("silik", ["eda", "create", n, "--el", el] + (["--image", img] if img and img != EL[el]["image"] else [])))
         made = True
     if made:
@@ -5814,7 +5831,7 @@ def parser(only=None):
         x.add_argument("file"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=manifest_diff_cmd)
         x = mf.add_parser("apply", help="the dnf transaction and the silik commands that bring this machine to FILE, each printed")
         x.add_argument("file"); x.add_argument("--prune", action="store_true", help="also remove the packages (and kernel arguments) that are here and not in FILE")
-        x.add_argument("--kernel", action="store_true", help="also install the kernel packages of FILE (otherwise the kernel is left alone)")
+        x.add_argument("--kernel", action="store_true", help="also install the kernel packages of FILE and set its kernel arguments (otherwise the kernel is left alone)")
         x.set_defaults(fn=manifest_apply)
 
     c = s.add_parser("secure", help="security: an audit of this system, and the SilikOS defaults").add_subparsers(dest="cmd")

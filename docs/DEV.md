@@ -153,4 +153,15 @@ licence is the user's act). [A] the file names the command recognises, the folde
 installation made here. The libraries each release asks for are in the vendors' Linux notes; if one is missing on
 EL 9 the installer or the IDE says so, and that is the next thing to fix.
 
+**Before a vendor's installer is run**, `silik vendor check stm32cubeide` (or `jlink`, `ccs`, `mcuxpresso`, `zephyr`,
+`esp-idf`, `yocto`, `peak`, `kvaser`, `visa-open`...) says what the vendor's page names for that tool and what this
+system lacks of it, with the command for each; `silik vendor prepare TOOL` runs those (`docs/INDUSTRIA.md`: what was
+read, how, and that none was tried with the installer). `silik vendor lib libtinfo.so.5` names the EL 9 package of a
+library an installer or a tool says it cannot load.
+
+**Instruments.** USB instruments that speak USBTMC (oscilloscopes, multimeters, supplies) belong to the person at
+the screen (`70-silikos-usbtmc.rules`: the kernel's `/dev/usbtmcN` and the USB device itself, which PyVISA's
+pyvisa-py and the vendors' VISA libraries open). PyVISA is not in EL 9 or EPEL 9: `python3 -m pip install --user
+pyvisa pyvisa-py` (`silik vendor check visa-open`). Not tried with an instrument.
+
 KiCad is with the EDA tools (`docs/EDA.md`).

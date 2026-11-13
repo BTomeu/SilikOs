@@ -470,6 +470,10 @@ class Command(unittest.TestCase):
         with tools({"dnf": 'echo other-pkg'}):
             rc, out, err = call("-q", "vendor", "lib", "libfoo.so.3")
         self.assertIn("sudo dnf -y install other-pkg", out)
+        with tools({"dnf": "exit 0"}):          # the repositories have none
+            rc, out, err = call("-q", "vendor", "lib", "libfoo.so.3")
+        self.assertEqual(rc, 1)
+        self.assertIn("a library of the tool itself", out)
         self.assertEqual(call("vendor", "lib", "a;b")[0], 2)
 
 
