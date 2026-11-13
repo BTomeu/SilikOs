@@ -128,7 +128,7 @@ El mateix a mà en qualsevol ARM amb docker: `bash tools/arm_candidate.sh klayou
 
 Ordenat de més segur a menys, segons el que publica cada fabricant. Res d'això s'ha executat.
 
-| On | Què en sabem | Seguretat |
+| On | Què en sabem | Certesa |
 |---|---|---|
 | Núvol: AWS Graviton, Azure (i Oracle) | AlmaLinux publica imatges oficials d'AlmaLinux 9 `arm64` (AWS Marketplace; Azure `almalinux:almalinux-arm:9-arm-gen2`) i una imatge genèrica `AlmaLinux-9-GenericCloud-latest.aarch64.qcow2` [S9][S10][S11]; Oracle Cloud, x86_64 i aarch64 des de la 9.0 † [S30] | alta: la mateixa base, imatge del fabricant; a sobre, `tools/install_on_alma.sh`. Sense pantalla: `silik`, l'encastat i l'EDA oberta per línia d'ordres |
 | Servidors Ampere Altra (i Hetzner CAX, que en fa servir) | el catàleg de Red Hat té els processadors Ampere Altra Max per a RHEL 9.0-9.x aarch64 i un sistema certificat (GIGABYTE MP72-HB0) † [S12]; Hetzner diu que les seves imatges suporten Arm † [S13] (AlmaLinux 9 a CAX: no confirmat [A]) | alta en servidor; com a estació de treball depèn de la gràfica (`docs/DRIVERS.md`) |

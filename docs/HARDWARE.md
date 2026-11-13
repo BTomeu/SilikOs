@@ -19,8 +19,8 @@ selects or erases a disk.
   laptops; they boot with device trees that mainline Linux gained only recently, per model [A: state of mainline as
   known on 09/11/2026; check the model].
 - **As a virtual machine it can work:** AlmaLinux 9 for aarch64 as a Hyper-V guest under Windows 11 on ARM, then
-  SilikOS on top (`tools/install_on_alma.sh`, or the aarch64 ISO below). That gives the desktop, `silik`, the
-  COMMAND bar and the embedded stack (next section) [A: Hyper-V's ARM guest with the EL9 kernel not tried here;
+  SilikOS on top (`tools/install_on_alma.sh`, or the aarch64 ISO: `docs/ARM.md`). That gives the desktop, `silik`, the
+  COMMAND bar and the embedded stack (`docs/ARM.md`) [A: Hyper-V's ARM guest with the EL9 kernel not tried here;
   `hyperv-daemons` is in AlmaLinux 9's aarch64 AppStream].
 - **Not the tools:** Virtuoso, Sentaurus and Altium are x86_64 programs [A]; under emulation they would be slow and
   nobody supports that. Windows programs already run on that laptop's own Windows; no Windows VM inside the Linux VM
