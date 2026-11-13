@@ -9,7 +9,9 @@ repo --name=AppStream --baseurl=https://repo.almalinux.org/almalinux/9/AppStream
 repo --name=CRB --baseurl=https://repo.almalinux.org/almalinux/9/CRB/x86_64/os/
 repo --name=extras --baseurl=https://repo.almalinux.org/almalinux/9/extras/x86_64/os/
 repo --name=epel --baseurl=https://dl.fedoraproject.org/pub/epel/9/Everything/x86_64/
-# the SilikOS packages, on the installation medium (tools/build_iso.sh puts build/repo there)
+# the SilikOS packages, on the installation medium (tools/build_iso.sh puts build/repo there). For the installer
+# only (no --install): the installed system does not keep a repository that left with the medium. Its updates come
+# from SilikOS's own repository (package silikos-repos, turned on at the end of this file when it can be)
 repo --name=silikos --baseurl=file:///run/install/repo/silikos
 
 # a wired connection (cable, or a phone's USB tether) is brought up by itself so that the package sources answer;
@@ -45,6 +47,7 @@ silik-dev
 silik-win
 silikos-security
 silikos-power
+silikos-repos
 %end
 
 %post --log=/root/silikos-post.log
@@ -60,4 +63,11 @@ dconf update || :
 # the firewall's default zone is the SilikOS one (package silikos-security): incoming dropped, outgoing free.
 # The offline command also leaves a copy of the zone in /etc, which would hide the package's file on updates.
 firewall-offline-cmd --set-default-zone=silikos && rm -f /etc/firewalld/zones/silikos.xml || :
+# SilikOS's own packages are updated from the stable channel of their repository, when this system has the key they
+# are signed with (the package silikos-repos carries it once the owner has made it: docs/REPO.md). Without the key
+# both channels stay off: nothing unsigned is trusted. On a running system: silik update channel stable | next | off
+if grep -qs '^-----BEGIN PGP PUBLIC KEY BLOCK-----' /etc/pki/rpm-gpg/RPM-GPG-KEY-SilikOS; then
+  rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-SilikOS || :
+  dnf config-manager --save --setopt=silikos.enabled=1 || :
+fi
 %end

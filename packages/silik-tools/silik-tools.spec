@@ -17,7 +17,8 @@ on this desktop), `silik win ...` (Windows programs: a double-click runs them wi
 virtual machine for the rest), `silik dev ...` (embedded development), `silik power ...` (the power profile:
 performance, balanced, saver, auto), `silik hw ...`, `silik look` (the desktop's
 look: silik, bar, island), `silik session`,
-`silik update`, `silik doctor` (is this workstation healthy, and what to do).
+`silik update` (and `silik update channel`: the repository SilikOS's own packages are updated from),
+`silik doctor` (is this workstation healthy, and what to do).
 Every action prints the commands it runs; --dry-run runs nothing.
 
 %install

@@ -11,6 +11,7 @@ an EL9 system. It is a try: `docs/STATUS.md` says what has been run and what has
 | Desktop | GNOME Shell on X11 in three looks of the same shell (`silik look`): **island** (the default: one floating piece at the bottom), **bar** (one bar at the bottom) and **silik** (command line, text rail, status bar); one ink on paper, or an accent, alone or with coloured title bars (`silik look --accent`); the **COMMAND** bar on Super+Space | `packages/silikos-desktop`, `packages/silik-command` |
 | Tested by installing it | every change is built into an ISO, installed unattended in a virtual machine, booted and checked; the last report and pictures of the installed system are on the branch [`ci-results`](../../tree/ci-results). The last such run is of commit fa6c6e8 (11/11/2026): the workflows have not run since, and what changed after it was run in containers only (`docs/STATUS.md`) | `.github/workflows/ci.yml`, `tests/install/` |
 | Security | SELinux enforcing (the base's), a firewall zone that drops incoming connections, sshd off, every update installed daily by itself (`silik update --auto`, the desktop says when to restart), screen lock; `silik secure status` audits, `silik secure apply` sets; `docs/SECURITY.md` | `packages/silikos-security` |
+| Updates of its own packages | a package repository of SilikOS's own with two channels (stable: what a release published; next: every build that passed the tests), every package and the metadata signed; `silik update channel stable` turns one on, only on a system that has the key. Built and tried with throw-away keys; not published: the signing key is the owner's to make (`docs/REPO.md`) | `packages/silikos-repos`, `tools/build_pkgrepo.sh`, `.github/workflows/repo.yml` |
 | SilikStudio | the SilikVolt suite as a native application: a window of its own, the first key of the rail, its programs in the PATH. Its package is built from SilikStudio's repository on EL 9 and put in `build/extra/` for the ISO | `tools/build_iso.sh`, `docs/img/silikstudio.png` |
 | `silik` | one command behind every action; prints what it runs; `--dry-run` | `packages/silik-tools` |
 | Power | `silik power`: performance, balanced, saver, or auto (performance on mains power, balanced on battery: the default of a new installation), through the base's tuned and tuned-ppd, so the system menu shows the same; zram swap offered, SSD trim weekly; `silik dev ccache` for firmware rebuilds (measured: a rebuild a third of the time) | `packages/silikos-power`, `docs/POWER.md` |
@@ -61,8 +62,9 @@ Read `docs/PLAN.md` (decisions and phases), `docs/STATUS.md` (verified / not ver
 
 A prototype verified in virtual machines and containers, not a product. Not run, among others: any real hardware
 (graphics drivers, Wi-Fi, suspend, CAN adapters, flashing a board), any vendor tool (Cadence, Synopsys, Altium,
-STM32CubeIDE), the Windows virtual machine, ARM other than emulated. There is no signed package repository yet, so an
-installed system does not receive new versions of SilikOS's own packages. `docs/STATUS.md` has both tables, verified
+STM32CubeIDE), the Windows virtual machine, ARM other than emulated. The repository an installed system would update
+SilikOS's own packages from is built but not published (`docs/REPO.md`): its signing key is the owner's to make, so
+an installed system does not receive new versions of them yet. `docs/STATUS.md` has both tables, verified
 and not verified, with how each row was run.
 
 ## Licence, brand, security

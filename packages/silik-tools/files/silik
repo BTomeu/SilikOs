@@ -2,6 +2,7 @@
 # SilikOS — `silik`: the one command behind every action of the desktop (the COMMAND bar echoes these lines).
 #   silik status
 #   silik update [--auto [all | security | off]]          update now; the automatic updates (daily: all by default)
+#   silik update channel [stable | next | off]           SilikOS's own packages: the repository they are updated from
 #   silik eda   list | create NAME --el 6|7|8 | setup NAME | enter NAME | run NAME -- CMD... | import-vm DISK --name NAME
 #               | rm NAME | check | kernel-arg
 #   silik win   open [--prefix P --no-net --no-sandbox] FILE [ARGS] | apps | sync | stop [PREFIX]
@@ -1961,7 +1962,95 @@ def update_auto_now(ctx):
     return "all" if st[SEC_FULL_TIMER] == "enabled" else "security" if st[SEC_TIMER] == "enabled" else "off"
 
 
+# SilikOS's own packages (silik, the desktop, Wine, the open EDA and embedded tools) come from a repository of their
+# own, the file REPO_FILE of the package silikos-repos: two channels, both off until one is chosen here. A channel is
+# turned on only when this system has the key its packages and metadata are signed with (REPO_KEY, in the same
+# package once the owner has made the key): nothing unsigned is ever trusted. The base's repository files and
+# /etc/dnf/dnf.conf are not touched.
+REPO_FILE = "/etc/yum.repos.d/silikos.repo"
+REPO_KEY = "/etc/pki/rpm-gpg/RPM-GPG-KEY-SilikOS"
+CHANNELS = (("stable", "silikos", "what a release of SilikOS published"),
+            ("next", "silikos-next", "every build of main that passed the tests"),
+            ("off", "", "none: SilikOS's own packages stay at the version they were installed with"))
+REPO_CHECKS = ("gpgcheck", "repo_gpgcheck")       # the package's signature, the metadata's
+
+
+def channel_read():
+    """the SilikOS repository as this system has it: {"file": is there a repository file, "key": ok | missing |
+    placeholder (a file that is not a key), "on": [the channels that are on], "unchecked": [those of them with a
+    signature check off], "new": a newer file of the package waits (.rpmnew)}"""
+    text = read(REPO_FILE, None)
+    key = read(REPO_KEY, None)
+    st = {"file": text is not None, "key": "missing" if key is None else "ok" if "-----BEGIN PGP PUBLIC KEY BLOCK-----" in key else "placeholder",
+          "on": [], "unchecked": [], "new": os.path.exists(REPO_FILE + ".rpmnew")}
+    sect, opts = "", {}
+    for l in (text or "").splitlines():
+        l = l.strip()
+        if l.startswith("[") and l.endswith("]"):
+            sect = l[1:-1].strip()
+            opts[sect] = {}
+        elif sect and "=" in l and not l.startswith(("#", ";")):
+            k, _, v = l.partition("=")
+            opts[sect][k.strip()] = v.strip()
+    yes = ("1", "true", "yes", "on")
+    for name, rid, _ in CHANNELS:
+        o = opts.get(rid)
+        if not rid or o is None or o.get("enabled", "1").lower() not in yes:
+            continue
+        st["on"].append(name)
+        if any(o.get(k, "0").lower() not in yes for k in REPO_CHECKS):
+            st["unchecked"].append(name)
+    return st
+
+
+def channel_key_words(st):
+    return {"ok": "installed", "missing": "not on this system: the repository is not published signed yet, the channels stay off",
+            "placeholder": "that file is not a key: the channels stay off"}[st["key"]]
+
+
+def update_channel(ctx, want):
+    st = channel_read()
+    if want is None:
+        for name, rid, what in CHANNELS:
+            on = name in st["on"] if rid else not st["on"]
+            print("%s %-8s %s" % ("●" if on else " ", name, what))
+        print("  %-8s %s: %s" % ("key", REPO_KEY, channel_key_words(st)))
+        if not st["file"]:
+            print("silik: no %s: the package silikos-repos is not installed" % REPO_FILE)
+        for name in st["unchecked"]:
+            print("silik: the channel %s is on with a signature check off: silik update channel %s turns both on again" % (name, name))
+        return 0
+    if not st["file"]:
+        die("no %s: sudo dnf install silikos-repos" % REPO_FILE)
+    ids = dict((name, rid) for name, rid, _ in CHANNELS)
+    if want == "off":
+        ctx.run(["sudo", "dnf", "config-manager", "--save"] + ["--setopt=%s.enabled=0" % ids[n] for n in ("stable", "next")])
+        return 0
+    if st["key"] != "ok":
+        die("%s: %s. Nothing unsigned is trusted: the key comes with the package silikos-repos once SilikOS's repository is signed"
+            % (REPO_KEY, channel_key_words(st)))
+    other = "next" if want == "stable" else "stable"
+    if st["new"]:
+        # (the package's newer file, kept aside because this one was changed by choosing a channel)
+        ctx.run(["sudo", "mv", "-f", REPO_FILE + ".rpmnew", REPO_FILE])
+    ctx.run(["sudo", "dnf", "config-manager", "--save", "--setopt=%s.enabled=1" % ids[want], "--setopt=%s.enabled=0" % ids[other]]
+            + ["--setopt=%s.%s=1" % (ids[want], k) for k in REPO_CHECKS])
+    # the key, for the packages (rpm's keyring) and for the metadata (dnf's, asked once here): the automatic
+    # updates then never wait for an answer
+    ctx.run(["sudo", "rpm", "--import", REPO_KEY])
+    # (asked alone and not skipped when it fails, so that a repository that does not answer, or whose signature is
+    # not this key's, is said here; in the updates dnf leaves such a repository out and goes on with the base's)
+    rc, _ = ctx.run(["sudo", "dnf", "-y", "--disablerepo=*", "--enablerepo=" + ids[want], "--setopt=%s.skip_if_unavailable=0" % ids[want],
+                     "makecache"], check=False)
+    if rc != 0:
+        print("silik: the channel %s is on, but its repository did not answer or did not verify (above): the updates leave it out until it does" % want)
+        return 1
+    return 0
+
+
 def cmd_update(ctx, a):
+    if a.what == "channel":
+        return update_channel(ctx, a.channel)
     if a.auto == "":
         now = update_auto_now(ctx)
         for k, what in UPDATE_AUTO:
@@ -1985,6 +2074,8 @@ def cmd_update(ctx, a):
             print("silik: restart the computer to run what was updated (the kernel or a core library)")
         if os.path.isfile("/usr/libexec/silikos/restart-needed"):
             ctx.run(["sudo", "/usr/libexec/silikos/restart-needed"], check=False)     # (the status bar's note)
+    if not channel_read()["on"]:
+        print("silik: SilikOS's own packages were not updated: no repository enabled (silik update channel)")
     return 0
 
 
@@ -3673,7 +3764,7 @@ DOCTOR_ALIASES = {"sys": "system", "secure": "security", "gpu": "graphics", "dev
                   "win": "windows", "net": "network"}
 # the SilikOS packages the kickstart installs
 SILIKOS_PKGS = ("silikos-branding", "silikos-desktop", "silikos-security", "silik-tools", "silik-command",
-                "silik-eda-compat", "silik-eda-open", "silik-dev", "silik-win", "silikos-power")
+                "silik-eda-compat", "silik-eda-open", "silik-dev", "silik-win", "silikos-power", "silikos-repos")
 DOC_RESTART = "/run/silikos/restart"          # written by silikos-security's restart-needed after an update
 DOC_UPDATE_UNITS = {"all": (SEC_FULL_TIMER, "silikos-update.service"), "security": (SEC_TIMER, "silikos-security-update.service")}
 DOC_SHOW = "Id,LoadState,UnitFileState,ActiveState,Result,ExecMainStatus,ExecMainExitTimestamp,LastTriggerUSec"
@@ -3750,7 +3841,7 @@ def doc_probe_system():
     return {"os": os_release(), "silikos": os.path.exists("/etc/silikos-release"), "base": read("/etc/redhat-release").strip(),
             "kernel": os.uname().release, "rpm": rpm, "show": show, "journal": journal, "failed": failed, "ufailed": ufailed,
             "restart": read(DOC_RESTART, None), "disks": disks, "meminfo": read("/proc/meminfo"), "now": time.time(),
-            "container": sec_container()}
+            "container": sec_container(), "channel": channel_read()}
 
 
 def systemd_show(text):
@@ -3831,6 +3922,29 @@ def doc_updates(st, rows):
         doc_row(rows, "system", "updates", "automatic updates", "unknown", "%s; it has not run yet" % what, ["systemctl list-timers " + timer])
 
 
+def doc_channel(st, rows):
+    """where SilikOS's own packages are updated from (silik update channel)"""
+    ch = st["channel"]
+    name, none = "SilikOS repository", "SilikOS's own packages are not updated: no repository enabled"
+    if not ch["file"]:
+        doc_row(rows, "system", "channel", name, "warn", none + " (the package silikos-repos is not installed)", ["sudo dnf -y install silikos-repos"])
+    elif ch["unchecked"]:
+        doc_row(rows, "system", "channel", name, "bad", "channel %s is on with a signature check off (gpgcheck, repo_gpgcheck)" % " and ".join(ch["unchecked"]),
+                ["silik update channel " + ch["unchecked"][0]])
+    elif ch["on"] and ch["key"] != "ok":
+        doc_row(rows, "system", "channel", name, "bad", "channel %s is on and this system has no SilikOS signing key (%s): dnf refuses its packages" % (" and ".join(ch["on"]), REPO_KEY),
+                ["silik update channel off"])
+    elif ch["on"]:
+        new = "; a newer %s of the package waits" % os.path.basename(REPO_FILE) if ch["new"] else ""
+        doc_row(rows, "system", "channel", name, "warn" if new else "ok", "channel %s; packages and metadata are signature-checked%s" % (" and ".join(ch["on"]), new),
+                ["silik update channel " + ch["on"][0]])
+    elif ch["key"] == "ok":
+        doc_row(rows, "system", "channel", name, "warn", none, ["silik update channel stable"])
+    else:
+        doc_row(rows, "system", "channel", name, "warn", none + " (this system has no SilikOS signing key: the repository is not published signed yet)",
+                ["silik update channel   # says when the key is there"])
+
+
 def doc_check_system(st):
     rows, osr, here = [], st["os"], " (inside a container)" if st["container"] else ""
     shown = osr.get("PRETTY_NAME") if st["silikos"] else ""
@@ -3875,6 +3989,8 @@ def doc_check_system(st):
         doc_row(rows, "system", "restart", "restart", "unknown", "no restart note; the installed kernels are not known (no kernel-core package)" + here)
 
     doc_updates(st, rows)
+    if st.get("channel"):
+        doc_channel(st, rows)
 
     seen = {}
     for mp in ("/", "/home", "/var"):
@@ -4539,6 +4655,8 @@ def parser(only=None):
     x = s.add_parser("status", help="what this system is: base, kernel, SilikOS packages, the desktop"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=cmd_status)
     x = s.add_parser("update", help="update every package (the base's and SilikOS's), then say whether to restart; --auto: the automatic updates")
     x.add_argument("--auto", nargs="?", const="", choices=["", "all", "security", "off"], help="all | security | off (no value: which is on)")
+    x.add_argument("what", nargs="?", choices=["channel"], help="channel: the repository SilikOS's own packages are updated from")
+    x.add_argument("channel", nargs="?", choices=[k for k, _, _ in CHANNELS], help="stable | next | off (no value: which is on)")
     x.set_defaults(fn=cmd_update)
     x = s.add_parser("identity", help="the names the system shows: silikos | base | show")
     x.add_argument("which", nargs="?", default="show", choices=["show", "silikos", "base"]); x.set_defaults(fn=cmd_identity)

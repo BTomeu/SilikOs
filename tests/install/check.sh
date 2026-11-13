@@ -22,7 +22,7 @@ has name.pretty "$PRETTY_NAME" "SilikOS"
 is name.id "$ID" almalinux
 has name.redhat-release "$(cat /etc/redhat-release)" "AlmaLinux"
 has name.boot-entries "$(grep -h '^title' /boot/loader/entries/*.conf | head -3)" "SilikOS"
-for p in silik-tools silik-command silikos-branding silikos-desktop silikos-security silikos-power silik-eda-compat silik-eda-open silik-dev silik-win; do
+for p in silik-tools silik-command silikos-branding silikos-desktop silikos-security silikos-power silikos-repos silik-eda-compat silik-eda-open silik-dev silik-win; do
   if v=$(rpm -q $p 2>&1); then say package.$p ok "$v"; else say package.$p FAIL "$v"; fi
 done
 is security.selinux "$(getenforce 2>&1)" Enforcing
@@ -31,6 +31,11 @@ is security.zone "$(firewall-cmd --get-default-zone 2>&1)" silikos
 case "$(systemctl is-enabled sshd 2>&1)" in enabled) say security.sshd FAIL "sshd is enabled";; *) say security.sshd ok "not enabled";; esac
 is security.update-timer "$(systemctl is-active silikos-update.timer 2>&1) $(systemctl is-enabled silikos-security-update.timer 2>&1)" "active disabled"   # every update, daily (the security-only timer is the other choice)
 is update.auto "$(asuser silik update --auto | grep "^●" | awk "{print \$2}")" all
+# SilikOS's own repository (package silikos-repos): the installer's repository of the medium is not kept on the
+# installed system; the channel that is on is the one the key allows (stable with the key, none without it)
+if grep -rqs "file:///run/install" /etc/yum.repos.d; then say update.repo-medium FAIL "$(grep -rls "file:///run/install" /etc/yum.repos.d)"; else say update.repo-medium ok "no repository of the installation medium is kept"; fi
+if grep -qs "BEGIN PGP PUBLIC KEY BLOCK" /etc/pki/rpm-gpg/RPM-GPG-KEY-SilikOS; then want=stable; else want=off; fi
+is update.channel "$(asuser silik update channel | grep "^●" | awk "{print \$2}")" $want
 # power: the automatic choice on, the SSD trimmed weekly; a virtual machine on mains power: performance
 is power.auto "$(systemctl is-enabled silikos-power-auto 2>&1) $(systemctl is-active silikos-power-auto 2>&1)" "enabled active"
 is power.trim "$(systemctl is-enabled fstrim.timer 2>&1)" enabled

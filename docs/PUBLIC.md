@@ -25,7 +25,8 @@ poden haver canviat una mica [A].
    caduquen al cap de 90 dies). **[mira-ho tu]** si un log diu res que no vulguis. Per esborrar-los tots:
    `gh run list --repo BTomeu/SilikOs --limit 200 --json databaseId -q '.[].databaseId' | xargs -n1 gh run delete --repo BTomeu/SilikOs`
 4. **[mira-ho tu]** Settings → Secrets and variables → Actions (hauria d'estar buit: els workflows només fan servir
-   el token del run), Environments, Deploy keys, Webhooks, Collaborators.
+   el token del run; l'única excepció, des del 13/11, és la clau de signatura dels paquets, que va com a secret de
+   l'environment `package-signing`: `docs/REPO.md`), Environments, Deploy keys, Webhooks, Collaborators.
 5. No hi ha `LICENSE`: el README diu que la llicència no està triada i que fins llavors tots els drets són reservats.
    Tria-la aviat (`docs/COMERCIAL.md`, pregunta 1): sense llicència ningú pot fer servir el codi.
 
@@ -60,6 +61,7 @@ Fer-lo públic no engega res; el primer push sí, segons els fitxers que toqui:
 | Dev tools | `dev/**`, `tools/build_dev.sh`, `tools/release_keep.sh`, `dev.yml`, `packages/silik-dev/**` | 8 eines x86_64 + 3 ARM; escriu `dev-tools`, `sources-archive` | 6 min (3 runs, quan eren 2 eines) |
 | Wine | `wine/**`, `tools/build_wine*.sh`, `tools/release_keep.sh`, `wine.yml` | Wine i els complements; escriu `wine-<versió>`, `sources-archive` | 2-5 min amb memòria cau; uns 30 min sense [A: ho diu el workflow] |
 | Bench | `tools/bench_ngspice_flags.sh`, `bench.yml` | mesura, no escriu res | 15-17 min |
+| Package repository | res directament: s'engega quan un CI de `main` o d'un tag `v*` acaba verd, o si el push toca `site/**` | signa els paquets i publica el repositori (`docs/REPO.md`); escriu les releases `repo-el9-next`, `repo-el9-stable` i el lloc de Pages | no executat encara |
 
 El merge d'aquesta ronda toca `eda.yml`, `tools/build_eda.sh` i `tools/build_dev.sh`: **s'engegaran CI, EDA tools i
 Dev tools alhora**, i les memòries cau d'EDA no serveixen (canvia l'script). Quan EDA tools, Dev tools o Wine acaben,

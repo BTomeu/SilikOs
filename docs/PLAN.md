@@ -46,7 +46,8 @@ be used.
    that means the kernel cannot be touched, it is not touched"). Speed and security come from settings on top of the
    base's kernel (sysctl files, boot arguments, service choices), each one measured before it is claimed. Secure Boot
    therefore stays the base's own chain.
-10. **Signing and hosting** (owner, 11/11/2026: "you choose"; chosen, not built). The package signing key is made by
+10. **Signing and hosting** (owner, 11/11/2026: "you choose"; built 13/11/2026 except the key, which only the owner
+   makes, and the host name: `docs/REPO.md`). The package signing key is made by
    the owner on their machine and kept there with an offline copy; nobody else holds it. Automatic signing uses it as
    a secret of a protected publishing environment that runs only with the owner's approval. The package repository
    is static files (metadata on GitHub Pages, packages on GitHub Releases) behind a host name of the owner's, so that
@@ -68,7 +69,7 @@ be used.
 | 0c | Installed on the Ryzen 7 5800HS + RTX 3050; NVIDIA driver | owner's machine |
 | 0d | An EL6 box with Sentaurus / Cadence (or the imported RHEL 6.6 machine); licence check | owner's installers and licences |
 | 0e | Altium: Wine try, then the Windows virtual machine | owner's licences |
-| 1 | Hosted package repository, updates, signed packages | after phase 0 |
+| 1 | Hosted package repository, updates, signed packages | built 13/11/2026 and tried with throw-away keys; not published: the key is the owner's to make, the workflow has not run (`docs/REPO.md`) |
 | 2 | Desktop: own shell pieces (panel, window rules, settings), first-run setup | the looks bar and island: done (`docs/STATUS.md`); the rest after phase 0 |
 | 3 | ARM image (as a virtual machine first) | started 12/11/2026: packages, `silik`, the aarch64 ISO script three embedded tools and ngspice tried on emulated aarch64 (`docs/HARDWARE.md`); not installed or booted on ARM hardware |
 

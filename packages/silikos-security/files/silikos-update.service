@@ -12,5 +12,11 @@ Nice=19
 IOSchedulingClass=2
 IOSchedulingPriority=7
 Environment="ABRT_IGNORE_PYTHON=1"
+# When a channel of SilikOS's own repository is on (silik update channel), its key file goes into rpm's keyring
+# again before each run. A change of key arrives as a new key file of the package silikos-repos, signed with the
+# key before it; the base's dnf-automatic does not import a key by itself, and one package signed with a key rpm
+# does not know stops the whole update, the base's included (seen on EL 9.8, 13/11/2026: docs/REPO.md). Nothing is
+# imported while both channels are off or the file is not a key.
+ExecStartPre=-/bin/sh -c 'grep -Eqs "^enabled *= *1" /etc/yum.repos.d/silikos.repo && grep -qs "^-----BEGIN PGP PUBLIC KEY BLOCK-----" /etc/pki/rpm-gpg/RPM-GPG-KEY-SilikOS && exec rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-SilikOS'
 ExecStart=/usr/bin/dnf-automatic /etc/silikos/update.conf --timer
 ExecStartPost=-/usr/libexec/silikos/restart-needed

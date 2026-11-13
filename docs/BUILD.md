@@ -8,6 +8,7 @@
 | Installer ISO | `bash tools/build_iso.sh [AlmaLinux-9-…-boot.iso]` (the base ISO is checked first: its sha256 against AlmaLinux's signed `CHECKSUM`) | `xorriso`, `mtools`, `cpio`, `curl`, `gpg`, `implantisomd5` (isomd5sum), repo.almalinux.org |
 | Installer ISO for ARM | `SILIK_ARCH=aarch64 bash tools/build_iso.sh` (AlmaLinux's aarch64 boot ISO: UEFI only) | the same |
 | The base's sources | `bash tools/fetch_base_sources.sh [--list] [--limit N]`: the source packages of the boot ISO's installer image, from vault.almalinux.org, each checked by AlmaLinux's signature | `xorriso`, `unsquashfs`, `rpm`, `gpg`; several GB |
+| The package repository (what an installed system updates from) | `bash tools/build_pkgrepo.sh --out DIR --in build/repo` (unsigned without a key; `docs/REPO.md`) | EL 9: `rpm`, `createrepo_c`, `gpg`, `rpm-sign`, `dnf-utils` |
 | Brand rasters (committed) | `bash tools/gen_brand.sh` | `rsvg-convert`, the Cascadia Mono font |
 
 The ISO is the base's boot image relabelled `SilikOS-9-x-x86_64` (`SilikOS-9-x-aarch64`: its kickstart copy takes the

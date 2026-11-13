@@ -27,6 +27,7 @@ files, design data (often under an NDA: PDKs, schematics, layouts), keys and pas
 | Untrusted networks (a cafe, a conference, a university network) | Firewall: incoming dropped; no listening service (sshd off); ICMP redirects ignored | What the owner sends over the network: use the tools' own encryption, a VPN |
 | An untrusted Windows `.exe` | A Windows virtual machine (`silik win vm`) is a real boundary: it sees the shared folder `~/Windows` and the clipboard, nothing else of the home folder; its RDP port listens on 127.0.0.1 only. Under Wine a program runs as the user: `kernel.yama.ptrace_scope = 1` stops it reading other programs' memory, the sandbox (bubblewrap, `silik win`) limits the files it sees | Wine itself is not a sandbox: outside the sandbox, a program under Wine can read and write everything the user can. **Under X11 (the desktop's session) the sandbox does not protect the files either**: X11 does not separate its clients, so a sandboxed program can send keys to another window (a terminal) or read what is typed, which is as much as `--no-sandbox` (audit 12/11/2026). For a program that is not trusted: the Windows VM |
 | Known flaws in the base's packages | Security advisories installed every day | A new kernel is used only after a restart |
+| A changed package or a false update server for SilikOS's own packages | Every package and the repository's metadata carry a signature of SilikOS's key, and `dnf` checks both (`gpgcheck=1`, `repo_gpgcheck=1`): one changed byte of either is refused (run, with a throw-away key). No key on the system, no channel | Whoever holds the key, or the GitHub account that signs with it; old, well signed metadata served again hide an update [A] |
 | A USB stick left to be plugged in | Nothing on it starts by itself | A device that pretends to be a keyboard (USBGuard is not set up) |
 | Vendor tools and their installers | Nothing: they run as the user (some installers as root), unconfined, as on RHEL | — |
 
@@ -40,10 +41,60 @@ forced), several people sharing the machine, a malicious administrator.
 | SELinux enforcing, targeted policy | the base's default; the kickstart states `selinux --enforcing` | Confines the system's services. Programs the user starts (EDA tools, Wine) run unconfined, so it does not get in their way [A: the targeted policy's design; not run here] |
 | Firewall on, zone `silikos` | `/usr/lib/firewalld/zones/silikos.xml`; kickstart `firewall --enabled --remove-service=ssh` and `--set-default-zone=silikos`; on a running system `silik secure apply` | See below |
 | sshd off | kickstart `services --disabled=sshd`; `silik secure apply` | A workstation needs no remote login. To have it: `sudo systemctl enable --now sshd`, then `silik secure apply --keep-ssh` |
-| Every update, every day (since silikos-security 0.2.0; owner, 12/11/2026: "the system updates itself") | `silikos-update.timer` runs the base's `dnf-automatic` with `/etc/silikos/update.conf` (`upgrade_type = default`, no restart); when a new kernel or core library waits, `/run/silikos/restart` makes the desktop say "restart" (a notification in every look, a status-bar field in the Silik look). `silik update --auto security` keeps the security advisories only (`silikos-security-update.timer`), `off` none | The base's `/etc/dnf/automatic.conf` is neither used nor changed; the machine is never restarted by itself; a system upgraded from silikos-security 0.1 keeps the security-only timer it had (`silik update --auto all` switches). **SilikOS's own packages (silik-wine, KiCad, ngspice, OpenOCD...) are not updated yet**: the installed system has no SilikOS repository until it is published and signed (PLAN phase 1); until then they stay at their installation version |
+| Every update, every day (since silikos-security 0.2.0; owner, 12/11/2026: "the system updates itself") | `silikos-update.timer` runs the base's `dnf-automatic` with `/etc/silikos/update.conf` (`upgrade_type = default`, no restart); when a new kernel or core library waits, `/run/silikos/restart` makes the desktop say "restart" (a notification in every look, a status-bar field in the Silik look). `silik update --auto security` keeps the security advisories only (`silikos-security-update.timer`), `off` none | The base's `/etc/dnf/automatic.conf` is neither used nor changed; the machine is never restarted by itself; a system upgraded from silikos-security 0.1 keeps the security-only timer it had (`silik update --auto all` switches). **SilikOS's own packages (silik-wine, KiCad, ngspice, OpenOCD...) are updated only from SilikOS's own repository, and only once a channel of it is on** (`silik update channel`, below). Today no system has one on: the repository's signing key does not exist yet (the owner makes it, `docs/REPO.md`), so they stay at their installation version and `silik doctor` says so |
 | Kernel settings | `/usr/lib/sysctl.d/60-silikos-security.conf` | See below; each line is justified in the file |
 | Screen lock: blank after 300 s, locked at once | `/etc/dconf/db/local.d/10-silikos-security` | GNOME's own defaults on EL 9.8, stated; a user may change them, `status` warns above 900 s [A: the figure of the CIS benchmark for RHEL 9, from memory] |
 | No autorun of plugged media | the same file | GNOME would ask; this never starts anything |
+
+### SilikOS's own repository
+
+Off by default, and it cannot be turned on without the key. The package `silikos-repos` ships one file,
+`/etc/yum.repos.d/silikos.repo`, with two channels (`stable`: what a release published; `next`: every build of main
+that passed the tests), both `enabled=0`, both with `gpgcheck=1` and `repo_gpgcheck=1`, and no script. It does not
+touch the base's repository files or `/etc/dnf/dnf.conf`. The key, `/etc/pki/rpm-gpg/RPM-GPG-KEY-SilikOS`, is in the
+package only once the owner has made it; until then the tree holds a text that says so, the package installs no key
+and the workflow publishes the repository unsigned and marked so (`docs/REPO.md`).
+
+```bash
+silik update channel                 # which channel is on, and whether this system has the key
+silik update channel stable          # turns it on (next: the other one; off: none); prints every command
+```
+
+`stable` or `next` is refused while the key file is missing or is not a key: nothing unsigned is ever trusted. With
+the key it runs `dnf config-manager` on SilikOS's own file (the channel on, the other off, both checks on), imports
+the key into rpm's keyring, and asks the repository once, alone, so that a repository that does not answer or does
+not verify is said there. A new installation that has the key gets `stable` from the kickstart; the installer's
+repository of the installation medium is not kept on the installed system.
+
+- **What is checked.** Each package's signature against rpm's keyring, and the signature of `repomd.xml` (which
+  holds the checksums of the lists, which hold the checksum of every package) against the key file. Run in an
+  AlmaLinux 9.8 container with throw-away keys: a byte changed in a package, in `repomd.xml`, metadata made again
+  for a changed package, metadata signed with another key, a package signed with another key, and an unsigned
+  repository were each refused by `dnf`, and nothing of them was installed.
+- **The metadata's signature is the one that ties the repository to SilikOS's key.** rpm's keyring is the whole
+  system's: a package signed with any key the system already trusts (the base's, EPEL's, a vendor's) passes
+  `gpgcheck` wherever it comes from (seen: the foreign-signed package above was installed when its key had been
+  imported for another reason). The metadata are checked against SilikOS's key file only, and they name every
+  package's checksum: `repo_gpgcheck` must stay on. `silik update channel` turns both checks on again each time, and
+  the doctor says bad when one is off.
+- **A repository that fails does not stop the base's updates** (`skip_if_unavailable=1`): `dnf` says "Ignoring
+  repositories: silikos" and goes on. That holds for one that does not answer and for one with a bad signature
+  (both run). The price: a failure is a line in the update's output, not an error; `silik update channel stable`
+  asks it again and exits 1 while it fails.
+- **The automatic update and a new key.** The base's `dnf-automatic` (EL 9.8) does not import a key, and one
+  package signed with a key rpm does not know stops its whole run, the base's updates included (seen). So
+  `silikos-update.service` puts SilikOS's key file into rpm's keyring again before each run, only while a channel is
+  on and the file is a key: a change of key arrives as a new key file in the package `silikos-repos`, itself signed
+  with the key before it (`docs/REPO.md`). With `silik update --auto security` SilikOS's own packages are not
+  updated by themselves: the repository carries no security advisories.
+- **Where the key is.** Its private half on the owner's computer and, for the workflow that signs, in the secrets of
+  a GitHub environment that only main may use; never in the repository (the tests refuse a private key in the
+  tree). The workflow's job that sees it holds no token that writes and is never started by a pull request. A key
+  that is not the committed public one signs nothing; a committed key without the private one publishes nothing.
+- **What this does not answer.** Whoever controls the GitHub account can sign. Metadata have no expiry: someone
+  between the machine and the server can serve old, well signed metadata and so hold an update back [A: dnf's
+  behaviour, not run]; they cannot make the system install something the key did not sign. GitHub is a single
+  point: without it SilikOS's own packages are not updated (the base's are).
 
 ### The firewall zone
 
@@ -140,3 +191,7 @@ Not run, and why:
   shows the clock and the system icons only. It had shown the name of the focused program in the top bar, a fault of
   the shell extension, fixed in `silikos-desktop` 0.10.1.
 - **The Wine sandbox** (bubblewrap): `status` only says whether bubblewrap is there.
+- **SilikOS's own repository on an installed system**: the channel turned on by the kickstart, the daily timer
+  taking SilikOS's packages from it, a real `sudo`. Run in a container: `silik update channel`, `silik update` and
+  the update service's command against a repository served there, with throw-away keys. The published repository
+  itself (GitHub Pages, the releases, the signing workflow) has not run, and the real key does not exist.
