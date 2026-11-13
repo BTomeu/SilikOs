@@ -1,0 +1,30 @@
+VERSION ""
+
+NS_ :
+
+BS_:
+
+BU_: ECU TESTER
+
+BO_ 257 ECU_Heartbeat: 8 ECU
+ SG_ State : 0|4@1+ (1,0) [0|3] "" TESTER
+ SG_ Fault : 8|8@1+ (1,0) [0|255] "" TESTER
+ SG_ Counter : 16|8@1+ (1,0) [0|255] "" TESTER
+
+BO_ 258 ECU_Status: 8 ECU
+ SG_ Enabled : 0|1@1+ (1,0) [0|1] "" TESTER
+ SG_ Output : 8|16@1+ (0.1,0) [0|100] "%" TESTER
+ SG_ Supply : 24|16@1+ (0.01,0) [0|60] "V" TESTER
+
+BO_ 513 ECU_Command: 8 TESTER
+ SG_ Enable : 0|1@1+ (1,0) [0|1] "" ECU
+ SG_ Setpoint : 8|16@1+ (0.1,0) [0|100] "%" ECU
+
+CM_ BO_ 257 "Sent by the ECU every 100 ms";
+CM_ BO_ 258 "The ECU's answer to each ECU_Command";
+CM_ BO_ 513 "Sent by the tester; an enabled ECU without one for 300 ms goes to Fault";
+BA_DEF_ BO_ "GenMsgCycleTime" INT 0 65535;
+BA_DEF_DEF_ "GenMsgCycleTime" 0;
+BA_ "GenMsgCycleTime" BO_ 257 100;
+VAL_ 257 State 0 "Init" 1 "Ready" 2 "Run" 3 "Fault" ;
+VAL_ 257 Fault 0 "None" 1 "CommandTimeout" ;

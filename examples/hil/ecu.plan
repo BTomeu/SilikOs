@@ -1,0 +1,134 @@
+# ecu.plan: the example ECU of `silik hil new`, simulated on python-can's virtual bus: no hardware.
+#   silik hil check ecu.plan                           is the plan right, what will it run
+#   silik hil run ecu.plan                             run it: a folder hil-results/ecu-DATE-TIME/
+#   silik hil run ecu.plan --set fault=no-timeout      a fault put into the simulated ECU: command-timeout fails
+# A comment is a line that starts with #. Durations carry their unit (us, ms, s, min).
+
+[plan]
+name = Example ECU: heartbeat, command, loss of the command
+dut = example-ecu (simulated)
+
+[vars]
+# what the simulated ECU does wrong: none, slow-heartbeat, no-answer, wrong-output, no-timeout
+fault = none
+setpoint = 25.0
+
+[bus can]
+# virtual: python-can's bus inside the runner (no kernel module: a container, CI). On a bench: interface = socketcan
+# and channel = can0, after `silik dev can up can0 500k`.
+interface = virtual
+channel = hil0
+dbc = ecu.dbc
+
+[sim ecu]
+# a Python file loaded into the runner, which plays the device on the bus. It is a program of whoever wrote the plan.
+script = ecu_sim.py
+bus = can
+args = --fault ${fault}
+
+[commands]
+# the only programs a plan may run are the ones listed here. This plan runs none.
+
+[step boot]
+do = can.expect
+req = SYS-001
+note = the ECU announces itself, ready, within 1 s
+message = ECU_Heartbeat
+where = State == Ready
+timeout = 1 s
+
+[step heartbeat-period]
+do = can.expect
+req = SYS-002
+note = the heartbeat comes every 100 ms and its counter moves
+message = ECU_Heartbeat
+period = 100 ms +- 20 ms
+count = 10
+always = Counter changes
+timeout = 2 s
+
+[step quiet-before-command]
+do = can.silence
+req = SYS-003
+note = no status before a command asks for it
+message = ECU_Status
+for = 300 ms
+
+[step enable]
+do = can.send
+req = SYS-010
+message = ECU_Command
+signals = Enable = 1, Setpoint = ${setpoint}
+every = 50 ms
+
+[step answer]
+do = can.expect
+req = SYS-010
+note = a command is answered with the output it set
+message = ECU_Status
+where = Enabled == 1, Output in 24.9..25.1
+timeout = 200 ms
+
+[step running]
+do = can.expect
+req = SYS-011
+message = ECU_Heartbeat
+where = State == Run
+timeout = 300 ms
+
+[step stop-enable]
+do = can.stop
+task = enable
+
+[step command-timeout]
+do = can.expect
+req = SYS-020
+note = the safe state: without commands the ECU is in Fault (CommandTimeout) within 500 ms
+message = ECU_Heartbeat
+where = State == Fault, Fault == CommandTimeout
+timeout = 500 ms
+
+[step clear]
+do = can.send
+req = SYS-021
+message = ECU_Command
+signals = Enable = 0
+
+[step ready-again]
+do = can.expect
+req = SYS-021
+note = a command with Enable = 0 clears the fault
+message = ECU_Heartbeat
+where = State == Ready, Fault == None
+timeout = 300 ms
+
+[repeat 3]
+[step on]
+do = can.send
+message = ECU_Command
+signals = Enable = 1, Setpoint = 10
+
+[step on-answer]
+do = can.expect
+req = SYS-012
+message = ECU_Status
+where = Enabled == 1, Output in 9.9..10.1
+timeout = 200 ms
+
+[step off]
+do = can.send
+message = ECU_Command
+signals = Enable = 0
+
+[step off-answer]
+do = can.expect
+req = SYS-012
+message = ECU_Status
+where = Enabled == 0, Output == 0
+timeout = 200 ms
+[end]
+
+[teardown disable]
+do = can.send
+message = ECU_Command
+signals = Enable = 0

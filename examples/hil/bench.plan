@@ -1,0 +1,76 @@
+# bench.plan: a start for a real board on the bench: a debug probe, a CAN adapter, a serial console.
+# SilikOS has not run this on hardware: every line is yours to adapt. `silik hil check bench.plan` says what is
+# missing; `silik --dry-run hil run bench.plan` shows each step and the exact commands, and runs nothing.
+# A plan from somebody else is a program: read its [commands] before you run it.
+
+[plan]
+name = ECU on the bench
+dut = my-ecu rev A
+firmware = build/ecu.elf
+on-fail = stop
+
+[vars]
+can = can0
+console = /dev/ttyACM0
+
+[bus can]
+# bring the interface up first: silik dev can up can0 500k
+interface = socketcan
+channel = ${can}
+dbc = ecu.dbc
+# an adapter whose driver stamps frames with its own clock (PCAN-USB, Kvaser...): timestamps = hardware
+
+[serial console]
+port = ${console}
+baud = 115200
+
+[commands]
+# ${file} is the step's file. One way to flash per line; the other usual ones:
+#   stm32flash -w ${file} -v -g 0x0 /dev/ttyUSB0             (the serial bootloader)
+#   dfu-util -a 0 -s 0x08000000:leave -D ${file}             (USB DFU; a .bin)
+flash = openocd -f interface/stlink.cfg -f target/stm32g4x.cfg -c "program {${file}} verify reset exit"
+reset = openocd -f interface/stlink.cfg -f target/stm32g4x.cfg -c "init; reset run; exit"
+
+[setup power-on]
+# other ways: command = NAME (a bench supply's SCPI client, a script), or a relay on a serial port:
+#   relay = NAME of a [serial ...] with  bytes = A0 01 01 A2   or   line = dtr
+do = power
+state = on
+ask = switch the bench supply on (12 V)
+settle = 500 ms
+
+[setup flash]
+do = flash
+req = SYS-000
+command = flash
+
+[setup banner]
+do = serial.expect
+port = console
+pattern = boot ok
+timeout = 3 s
+
+[step heartbeat-period]
+do = can.expect
+req = SYS-002
+message = ECU_Heartbeat
+period = 100 ms +- 10 ms
+count = 50
+timeout = 7 s
+
+[step version]
+do = serial.send
+port = console
+text = version\r\n
+
+[step version-answer]
+do = serial.expect
+req = SYS-004
+port = console
+pattern = fw [0-9]+\.[0-9]+\.[0-9]+
+timeout = 1 s
+
+[teardown power-off]
+do = power
+state = off
+ask = switch the bench supply off
