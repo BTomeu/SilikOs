@@ -50,8 +50,11 @@ pm_setup() {
 
 direct_dnf() {   # the repository files, from the list of mirrors to the main server (AlmaLinux, EPEL, Fedora)
   local f
-  for f in /etc/yum.repos.d/*.repo; do
+  # (Fedora 45 keeps its own under /usr/share/dnf5/repos.d)
+  for f in /etc/yum.repos.d/*.repo /usr/share/dnf5/repos.d/*.repo; do
+    [ -e "$f" ] || continue
     case "$f" in
+      *openh264*) sed -i 's|^enabled=1|enabled=0|' "$f" ;;      # (a repository on a server of its own)
       *almalinux*) sed -i -e 's|^mirrorlist=|#mirrorlist=|' -e 's|^# *baseurl=|baseurl=|' "$f" ;;
       *epel*) sed -i -e 's|^metalink=|#metalink=|' \
                 -e 's|^# *baseurl=https\?://download.example/pub/|baseurl=https://dl.fedoraproject.org/pub/|' "$f" ;;

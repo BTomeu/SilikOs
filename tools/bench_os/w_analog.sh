@@ -18,7 +18,8 @@ mkdir -p /work/spice && cd /work/spice || exit 1
 ver=$(ngspice --version 2>/dev/null | grep -o 'ngspice-[0-9][0-9.]*' | head -1); ver=${ver#ngspice-}
 export OMP_NUM_THREADS=1
 for c in ladder rings; do
-  # ("checksum N": the number of time points; a simulator that stopped early would not print it)
+  # (the simulator must get to the end and print the number of time points; that number is not compared between
+  # systems: the time step adapts, and two versions of ngspice do not take the same steps)
   timed "spice-$c" "$system" --tool ngspice --version "$ver" \
-    -- "ngspice -b /data/spice/$c.cir > $c.log 2>&1 && grep -q 'length(v(' $c.log && sed -n 's/^length(v([^)]*)) = \\([0-9.e+]*\\).*/checksum \\1/p' $c.log"
+    -- "ngspice -b /data/spice/$c.cir > $c.log 2>&1 && grep -q '^length(v(' $c.log"
 done
