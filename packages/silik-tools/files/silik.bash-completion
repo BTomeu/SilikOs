@@ -12,6 +12,23 @@ _silik() {
   if [ "$g" = doctor ] && [ "$COMP_CWORD" -ge 2 ]; then
     COMPREPLY=($(compgen -W "system security graphics bench eda windows network --json --verbose" -- "$cur")); return
   fi
+  # vendor check / prepare: the tools of the vendors' data, in any number; vendor lib: library names (none to offer)
+  if [ "$g" = vendor ] && [ "$COMP_CWORD" -ge 3 ]; then
+    case ${COMP_WORDS[2]} in
+      check|prepare) COMPREPLY=($(compgen -W "$(silik -q vendor list --json 2>/dev/null | sed -n 's/^  "tool": "\(.*\)",$/\1/p') --all --json" -- "$cur"));;
+      list) COMPREPLY=($(compgen -W "--json" -- "$cur"));;
+    esac
+    return
+  fi
+  # manifest: a file, and each command's switches
+  if [ "$g" = manifest ] && [ "$COMP_CWORD" -ge 3 ]; then
+    case ${COMP_WORDS[2]} in
+      export) COMPREPLY=($(compgen -W "--with-host" -- "$cur") $(compgen -f -- "$cur"));;
+      diff) COMPREPLY=($(compgen -W "--json" -- "$cur") $(compgen -f -- "$cur"));;
+      apply) COMPREPLY=($(compgen -W "--prune --kernel" -- "$cur") $(compgen -f -- "$cur"));;
+    esac
+    return
+  fi
   # the plugins (/usr/share/silikos/python/plugins/NAME.py): their groups, and each one's words from its head
   local pd=${SILIK_PLUGIN_DIR:-/usr/share/silikos/python/plugins} pl=
   [ -d "$pd" ] && pl=$(sed -n 's/^# silik-plugin: \([a-z][a-z0-9-]*\)$/\1/p' "$pd"/*.py 2>/dev/null | tr '\n' ' ')
@@ -19,7 +36,7 @@ _silik() {
     COMPREPLY=($(compgen -W "$(sed -n 's/^# words: //p' "$pd/$g.py" | head -1)" -- "$cur")); return
   fi
   case $COMP_CWORD in
-    1) COMPREPLY=($(compgen -W "status update identity look session eda dev win power hw secure doctor $pl --dry-run --version" -- "$cur"));;
+    1) COMPREPLY=($(compgen -W "status update identity look session eda dev win power hw secure doctor vendor manifest $pl --dry-run --version" -- "$cur"));;
     2) case $g in
          eda) COMPREPLY=($(compgen -W "list create setup enter run import-vm rm check kernel-arg tools try bench tune" -- "$cur"));;
          win) COMPREPLY=($(compgen -W "list open create run install stop rm sync apps vm" -- "$cur"));;
@@ -29,6 +46,8 @@ _silik() {
          identity) COMPREPLY=($(compgen -W "show silikos base" -- "$cur"));;
          session) COMPREPLY=($(compgen -W "lock logout off" -- "$cur"));;
          secure) COMPREPLY=($(compgen -W "status apply" -- "$cur"));;
+         vendor) COMPREPLY=($(compgen -W "list check prepare lib" -- "$cur"));;
+         manifest) COMPREPLY=($(compgen -W "export diff apply" -- "$cur"));;
        esac;;
     3) case "$g ${COMP_WORDS[2]}" in
          "eda setup"|"eda enter"|"eda run"|"eda rm") COMPREPLY=($(compgen -W "$(silik -q eda list 2>/dev/null | awk '$1 != "no" {print $1}')" -- "$cur"));;

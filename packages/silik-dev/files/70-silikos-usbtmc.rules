@@ -1,0 +1,12 @@
+# SilikOS (silik-dev): USB test and measurement instruments (oscilloscopes, multimeters, power supplies, generators
+# that speak USBTMC: USB class FE "application specific", subclass 03) belong to the person at the screen, as the
+# debug probes and the serial ports do. uaccess gives access to the user of the active local session only, and takes
+# it back when that session ends (systemd-logind; before 73-seat-late).
+# An instrument shows up twice, and a program may open either (pyvisa-py's installation notes: both need the
+# permission):
+#   /dev/usbtmcN          the kernel's usbtmc driver (drivers/usb/class/usbtmc.c: its device nodes are "usbtmc%d")
+#   /dev/bus/usb/BBB/DDD  the USB device itself, which libusb programs open (PyUSB under pyvisa-py; a vendor's VISA)
+# The second is matched by its interfaces: udev's usb_id (50-udev-default.rules) writes them on the device as
+# ID_USB_INTERFACES=":ccsspp:...", class, subclass and protocol in hexadecimal.
+KERNEL=="usbtmc[0-9]*", SUBSYSTEM=="usbmisc", TAG+="uaccess"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ENV{ID_USB_INTERFACES}=="*:fe03??:*", TAG+="uaccess"

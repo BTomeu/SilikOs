@@ -22,6 +22,11 @@
 #   silik secure status [--json] [--offline] | apply [--keep-ssh]
 #   silik doctor [--json] [--verbose] [AREA...]       is this workstation healthy, and what to do: system security
 #               graphics bench eda windows network (default: all); exit 0 all ok, 1 warn or unknown, 2 bad
+#   silik vendor list [--json] | check TOOL... | check --all [--json] | prepare TOOL... | lib LIBRARY...
+#               a vendor's tool (Vivado, MATLAB, Virtuoso, J-Link...): what its vendor says of EL 9, this system
+#               against its published requirements, and the commands that prepare it (no vendor software is run)
+#   silik manifest export [FILE] [--with-host] | diff FILE [--json] | apply FILE [--prune] [--kernel]
+#               packages, repositories, settings, boxes as one JSON file: two machines the same
 # Global: --dry-run prints the commands and runs nothing; -q hides the `$ ...` lines.
 # Python 3.9 (the base system's), standard library only. Every external command is printed as `$ ...` before it runs.
 # Installed as /usr/share/silikos/python/silik_main.py, which /usr/bin/silik (files/silik-launch) imports compiled.
@@ -4527,6 +4532,1164 @@ def cmd_doctor(ctx, a):
     return rc
 
 
+# ------------------------------------------------------------------ vendor
+# `silik vendor`: is this system ready for a vendor's tool, before its installer is run? The tools are data
+# (vendors.conf, package silik-tools: what a published page of the vendor says, how and when it was read); nothing
+# of that file is executed: its package names go to rpm and dnf, its check names choose among the fixed checks
+# below. As the doctor: vendor_probe() reads the system, vendor_rows() judges what was read and runs nothing (the
+# tests feed it made-up systems), and every row that is not ok carries the one command that fixes it:
+# `silik vendor prepare TOOL` runs those (each printed), and prints the ones left to the person (a network profile,
+# a kernel setting, the vendor's own device rules: never changed here). No vendor software is downloaded or run.
+VENDORS = "/usr/share/silikos/vendors.conf"
+VENDOR_EL9 = {"yes": "yes: AlmaLinux 9 is named", "rhel": "RHEL 9 only, AlmaLinux not named",
+              "unlisted": "EL 9 not named (other systems are)", "kernel": "in EL 9's kernel", "box": "no: use a box",
+              "windows": "no: Windows VM", "unknown": "not confirmed"}
+VENDOR_READ = {"page": "read on the vendor's page", "extract": "a search engine's extract of the vendor's page [A]",
+               "none": "not confirmed [A]"}
+VENDOR_CHECKS = ("base", "identity", "lsb", "hostid", "tmp", "locale", "x11", "selinux", "limits", "kernel", "serial",
+                 "kvm", "box", "usbtmc", "canmod")
+VENDOR_LISTS = ("minors", "more", "repos", "pkgs", "pkgs_a", "minver", "checks", "udev", "arch", "mods_kernel", "mods_vendor")
+VENDOR_TEXTS = ("name", "maker", "kind", "el9", "release", "says", "read", "date", "url", "udev_how", "own", "route",
+                "note", "disk_gb", "ram_gb")
+VENDOR_NEEDS = ("name", "el9", "read", "date", "url")
+VENDOR_MARK = dict(SEC_MARK, info="·")
+VENDOR_RULE_DIRS = ("/etc/udev/rules.d", "/run/udev/rules.d", "/usr/lib/udev/rules.d", "/lib/udev/rules.d")
+VENDOR_SYSCTL = ("fs.file-max", "fs.inotify.max_user_watches", "kernel.shmmax", "vm.max_map_count", "user.max_user_namespaces")
+LSB_LOADER = "/lib64/ld-lsb-x86-64.so.3"        # the name FlexNet daemons ask the loader by (EL 9 has no redhat-lsb)
+USBTMC_RULES = "70-silikos-usbtmc.rules"        # silik-dev
+SERIAL_RULES = "70-silikos-serial.rules"
+
+
+def vendor_parse(text):
+    """vendors.conf as ({tool: {key: value}}, {library: package or '-'}); a list key is a list of words. ValueError
+    names the line of what it does not understand: a key it does not know is never passed on"""
+    tools, libs, cur, last, where = {}, {}, None, None, 0
+    for where, line in enumerate(text.splitlines(), 1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if line[0] in " \t":                # a value continued
+            if cur is None or last is None:
+                raise ValueError("line %d: a continued value with nothing before it" % where)
+            cur[last] = (cur[last] + " " + line.strip()).strip()
+            continue
+        line = line.strip()
+        if line.startswith("[") and line.endswith("]"):
+            name, last = line[1:-1], None
+            if name == "=libraries":
+                cur = libs
+            elif not valid_name(name) or name in tools:
+                raise ValueError("line %d: [%s]: a tool's name is letters, digits, - _ . and is used once" % (where, name))
+            else:
+                cur = tools[name] = {}
+            continue
+        k, eq, v = line.partition("=")
+        k, v = k.strip(), v.strip()
+        if not eq or cur is None:
+            raise ValueError("line %d: expected `key = value` inside a [tool]" % where)
+        if cur is not libs and k not in VENDOR_LISTS + VENDOR_TEXTS:
+            raise ValueError("line %d: unknown key %r" % (where, k))
+        cur[k], last = v, k
+    for t, r in tools.items():
+        for k in VENDOR_NEEDS:
+            if not r.get(k):
+                raise ValueError("[%s]: no %s" % (t, k))
+        if r["el9"] not in VENDOR_EL9 or r["read"] not in VENDOR_READ:
+            raise ValueError("[%s]: el9 is one of %s and read one of %s" % (t, " ".join(VENDOR_EL9), " ".join(VENDOR_READ)))
+        for k in VENDOR_LISTS:
+            r[k] = r.get(k, "").split()
+        bad = [c for c in r["checks"] if c not in VENDOR_CHECKS]
+        if bad:
+            raise ValueError("[%s]: unknown check %s" % (t, " ".join(bad)))
+        # the words that reach a command line: package names (with an architecture or not), module names
+        for k in ("pkgs", "pkgs_a", "mods_kernel", "mods_vendor", "repos"):
+            for w in r[k]:
+                if not re.match(r"^[A-Za-z0-9][A-Za-z0-9+._-]*$", w):
+                    raise ValueError("[%s]: %s: %r is not a package or module name" % (t, k, w))
+        for w in r["minver"]:
+            if not re.match(r"^[A-Za-z0-9][A-Za-z0-9+._-]*:[0-9][0-9A-Za-z.]*$", w):
+                raise ValueError("[%s]: minver: %r is not PACKAGE:VERSION" % (t, w))
+        for k in ("disk_gb", "ram_gb"):
+            if r.get(k) and not r[k].isdigit():
+                raise ValueError("[%s]: %s is a whole number" % (t, k))
+    for so, pkg in libs.items():
+        if not re.match(r"^[A-Za-z0-9][A-Za-z0-9+._-]*$", so) or not re.match(r"^(-|[A-Za-z0-9][A-Za-z0-9+._-]*)$", pkg):
+            raise ValueError("[=libraries]: %s = %s" % (so, pkg))
+    return tools, libs
+
+
+def vendor_load(path=None):
+    """(tools, libraries) of vendors.conf: $SILIK_VENDORS, the installed file, or the one beside this script"""
+    here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vendors.conf")
+    for p in [path] if path else [os.environ.get("SILIK_VENDORS"), VENDORS, here]:
+        if p and os.path.isfile(p):
+            try:
+                with open(p, encoding="utf-8") as f:
+                    return vendor_parse(f.read())
+            except (OSError, ValueError) as e:
+                die("%s: %s" % (p, e))
+    die("the vendors' data (vendors.conf, package silik-tools) is not on this system")
+
+
+def rpm_vercmp(a, b):
+    """rpm's own comparison of two version (or release) strings: -1, 0, 1 (rpmvercmp: segments of digits or of
+    letters; a number is newer than letters; ~ sorts before everything, ^ after the version it follows)"""
+    a, b = a or "", b or ""
+    if a == b:
+        return 0
+    i = j = 0
+    while i < len(a) or j < len(b):
+        while i < len(a) and not (a[i].isalnum() or a[i] in "~^"):
+            i += 1
+        while j < len(b) and not (b[j].isalnum() or b[j] in "~^"):
+            j += 1
+        ta, tb = a[i:i + 1] == "~", b[j:j + 1] == "~"
+        if ta or tb:
+            if not ta:
+                return 1
+            if not tb:
+                return -1
+            i, j = i + 1, j + 1
+            continue
+        ca, cb = a[i:i + 1] == "^", b[j:j + 1] == "^"
+        if ca or cb:
+            if i >= len(a):
+                return -1
+            if j >= len(b):
+                return 1
+            if not ca:
+                return 1
+            if not cb:
+                return -1
+            i, j = i + 1, j + 1
+            continue
+        if i >= len(a) or j >= len(b):
+            break
+        si, sj = i, j
+        num = a[i].isdigit()
+        test = str.isdigit if num else str.isalpha
+        while i < len(a) and test(a[i]):
+            i += 1
+        while j < len(b) and test(b[j]):
+            j += 1
+        x, y = a[si:i], b[sj:j]
+        if not y:
+            return 1 if num else -1
+        if num:
+            x, y = x.lstrip("0"), y.lstrip("0")
+            if len(x) != len(y):
+                return 1 if len(x) > len(y) else -1
+        if x != y:
+            return 1 if x > y else -1
+    if i >= len(a) and j >= len(b):
+        return 0
+    return 1 if i < len(a) else -1
+
+
+def vendor_rpm(names):
+    """{NAME: version, NAME.ARCH: version} for those of NAMES that are installed, from one rpm call; None when the
+    system has no rpm (the answer is then unknown, never "missing")"""
+    names = sorted(set(names))
+    if not shutil.which("rpm"):
+        return None
+    if not names:
+        return {}
+    rc, out = sec_cmd(["rpm", "-q", "--qf", "%{NAME}\t%{ARCH}\t%{VERSION}\n"] + names, timeout=60)
+    if rc is None:
+        return None
+    have = {}
+    for l in out.splitlines():          # (a package that is not installed is a line "package X is not installed")
+        f = l.split("\t")
+        if len(f) == 3:
+            have[f[0]] = have[f[0] + "." + f[1]] = f[2]
+    return have
+
+
+def repos_enabled(d="/etc/yum.repos.d"):
+    """the ids of the enabled repositories, sorted, from the .repo files (dnf is not asked: it is a second each
+    time); None when the folder is not there"""
+    try:
+        files = sorted(f for f in os.listdir(d) if f.endswith(".repo"))
+    except OSError:
+        return None
+    on = set()
+    for fn in files:
+        sect, enabled = None, True
+        for l in read(os.path.join(d, fn)).splitlines() + ["[]"]:
+            l = l.strip()
+            if l.startswith("["):
+                if sect and enabled:
+                    on.add(sect)
+                sect, enabled = l.strip("[]"), True
+            elif sect and l.replace(" ", "").lower().startswith("enabled="):
+                enabled = l.split("=", 1)[1].strip().lower() in ("1", "true", "yes")
+    return sorted(on)
+
+
+def net_cards(root=None):
+    """the machine's own network interfaces (Ethernet-type, with a device behind them): [{name, mac, assign, wifi}];
+    assign: the kernel's addr_assign_type (0: the hardware's address; 1: random; 2: taken from another device;
+    3: set by a program, as NetworkManager's cloned address is)"""
+    top = os.path.join(root or SYSFS, "class", "net")
+    out = []
+    try:
+        names = sorted(os.listdir(top))
+    except OSError:
+        return out
+    for n in names:
+        d = os.path.join(top, n)
+        if read(os.path.join(d, "type")).strip() != "1" or not os.path.exists(os.path.join(d, "device")):
+            continue
+        a = read(os.path.join(d, "addr_assign_type")).strip()
+        out.append({"name": n, "mac": read(os.path.join(d, "address")).strip(), "assign": int(a) if a.isdigit() else None,
+                    "wifi": os.path.isdir(os.path.join(d, "wireless")) or os.path.isdir(os.path.join(d, "phy80211"))})
+    return out
+
+
+NM_CONF_DIRS = ("/usr/lib/NetworkManager/conf.d", "/run/NetworkManager/conf.d", "/etc/NetworkManager/conf.d")
+
+
+def nm_defaults(files=None):
+    """NetworkManager's default for a cloned address, where a file sets one: [(file, key, value)] for
+    ethernet.cloned-mac-address and wifi.cloned-mac-address"""
+    if files is None:
+        files = []
+        for d in NM_CONF_DIRS:
+            try:
+                files += [os.path.join(d, f) for f in sorted(os.listdir(d)) if f.endswith(".conf")]
+            except OSError:
+                pass
+        files.append("/etc/NetworkManager/NetworkManager.conf")
+    out = []
+    for p in files:
+        for l in read(p).splitlines():
+            k, eq, v = l.partition("=")
+            if eq and k.strip() in ("ethernet.cloned-mac-address", "wifi.cloned-mac-address"):
+                out.append((p, k.strip(), v.strip()))
+    return out
+
+
+def nm_profiles(run=None):
+    """the active wired and Wi-Fi connections and their cloned address: [{conn, device, wifi, cloned}] (cloned: ''
+    when the profile sets none); None when NetworkManager does not answer"""
+    run = run or sec_cmd
+    rc, out = run(["nmcli", "-t", "-f", "NAME,DEVICE,TYPE", "connection", "show", "--active"], timeout=5)
+    if rc != 0:
+        return None
+    res = []
+    for l in out.splitlines():
+        f = re.split(r"(?<!\\):", l)        # (-t writes a ':' of a name as '\:')
+        if len(f) != 3 or not ("ethernet" in f[2] or "wireless" in f[2]):
+            continue
+        name, wifi = f[0].replace("\\:", ":").replace("\\\\", "\\"), "wireless" in f[2]
+        rc2, v = run(["nmcli", "-g", ("802-11-wireless" if wifi else "802-3-ethernet") + ".cloned-mac-address", "connection", "show", name], timeout=5)
+        res.append({"conn": name, "device": f[1], "wifi": wifi, "cloned": v.strip() if rc2 == 0 else None})
+    return res
+
+
+def udev_rules(dirs=VENDOR_RULE_DIRS):
+    """the names of the device-rule files on the system"""
+    names = set()
+    for d in dirs:
+        try:
+            names.update(f for f in os.listdir(d) if f.endswith(".rules"))
+        except OSError:
+            pass
+    return names
+
+
+def modprobe_blacklist(d="/etc/modprobe.d"):
+    """{module: file} for the modules a file of /etc/modprobe.d blacklists"""
+    out = {}
+    try:
+        files = sorted(os.listdir(d))
+    except OSError:
+        return out
+    for fn in files:
+        for l in read(os.path.join(d, fn)).splitlines():
+            f = l.split("#", 1)[0].split()
+            if len(f) == 2 and f[0] == "blacklist":
+                out.setdefault(f[1].replace("-", "_"), os.path.join(d, fn))
+    return out
+
+
+def vendor_probe(recipes):
+    """what `silik vendor check` reads of this system for RECIPES ({tool: recipe}), once: nothing is changed. Only
+    what their checks ask is read (NetworkManager is asked for the licence host id alone)"""
+    import resource
+    want = set(c for r in recipes.values() for c in r["checks"])
+    names = set(n for r in recipes.values() for n in r["pkgs"] + r["pkgs_a"] + [m.split(":")[0] for m in r["minver"]])
+    uname = os.uname()
+    st = {"arch": host_arch(), "release": read("/etc/redhat-release").strip(), "osr": os_release(),
+          "osr_base": os.path.islink("/etc/os-release"), "kernel": uname.release,
+          "rpm": vendor_rpm(names), "repos": repos_enabled(), "udev": udev_rules(),
+          "session": os.environ.get("XDG_SESSION_TYPE", ""),
+          "mem_gb": None, "disk_gb": None}
+    m = re.search(r"^MemTotal:\s+(\d+) kB", read("/proc/meminfo"), re.M)
+    if m:
+        st["mem_gb"] = int(m.group(1)) / 1024.0 ** 2
+    try:
+        v = os.statvfs(os.path.expanduser("~"))
+        st["disk_gb"] = v.f_bavail * v.f_frsize / float(GB)
+    except OSError:
+        pass
+    if "lsb" in want:
+        st["lsb"], st["lsb_release"] = os.path.exists(LSB_LOADER), shutil.which("lsb_release") is not None
+    if "hostid" in want:
+        st["cards"], st["nm"], st["nm_conf"] = net_cards(), nm_profiles(), nm_defaults()
+        name = uname.nodename
+        rc, out = sec_cmd(["getent", "hosts", name], timeout=5)
+        st["host"] = {"name": name, "static": read("/etc/hostname").strip(), "resolves": None if rc is None else rc == 0}
+    if "tmp" in want:
+        st["usr_tmp"] = os.path.isdir("/usr/tmp")
+    if "locale" in want:
+        rc, out = sec_cmd(["locale", "-a"])
+        st["locales"] = None if rc is None else set(l.strip().lower().replace("-", "") for l in out.splitlines())
+    if "selinux" in want:
+        rc, out = sec_cmd(["getenforce"])
+        st["selinux"] = out if rc == 0 else ""
+    if "limits" in want:
+        lim = {}
+        for k, res in (("nofile", resource.RLIMIT_NOFILE), ("nproc", resource.RLIMIT_NPROC), ("stack", resource.RLIMIT_STACK)):
+            lim[k] = [None if x == resource.RLIM_INFINITY else x for x in resource.getrlimit(res)]
+        st["limits"] = lim
+        st["sysctl"] = {k: read("/proc/sys/" + k.replace(".", "/")).strip() for k in VENDOR_SYSCTL}
+        st["vsyscall"] = kernel_vsyscall() if x86() else "n/a"
+    if "kernel" in want:
+        st["kdevel"] = os.path.isdir("/usr/src/kernels/" + uname.release)
+    if "serial" in want:
+        import grp
+        try:
+            st["dialout"] = "dialout" in [grp.getgrgid(g).gr_name for g in os.getgroups()]
+        except (KeyError, OSError):
+            st["dialout"] = False
+    if "kvm" in want:
+        st["kvm"] = os.path.exists("/dev/kvm")
+    if "box" in want:
+        st["podman"] = shutil.which("podman") is not None
+    if "usbtmc" in want or "canmod" in want:
+        mods = read("/proc/modules")
+        st["modules"] = set(l.split()[0] for l in mods.splitlines() if l.split()) if mods else None
+        st["blacklist"] = modprobe_blacklist()
+    return st
+
+
+def el9_minor(release):
+    """'9.8' from the base's release file ("AlmaLinux release 9.8 (...)"); '' when this is not an EL 9 system"""
+    m = re.search(r"release (9)\.(\d+)", release or "")
+    return "%s.%s" % m.groups() if m else ""
+
+
+def vendor_rows(tool, r, st):
+    """the rows of `silik vendor check TOOL`, judged from the state ST (vendor_probe): [{tool, id, name, state, value,
+    run, hand}]. state: ok / warn (something to do) / bad (not on this machine) / unknown (cannot be seen: never ok)
+    / info (reported, not judged). run: the commands `silik vendor prepare` runs (argv lists); hand: what is left
+    to the person, as text. Nothing is run here"""
+    rows = []
+
+    def row(i, name, state, value, run=(), hand=()):
+        rows.append({"tool": tool, "id": i, "name": name, "state": state, "value": value,
+                     "run": [list(c) for c in run], "hand": list(hand)})
+
+    a_mark = "" if r["read"] == "page" else " [A]"
+    here = el9_minor(st.get("release"))
+    rel = (r.get("release") or "").strip()
+    said = "%s%s%s" % (VENDOR_EL9[r["el9"]], (" (%s)" % rel) if rel else "", a_mark)
+    # ---- what the vendor says of this system
+    if not here:
+        row("support", "vendor support", "unknown", "%s; this is not an EL 9 system (%s)" % (said, st.get("release") or "no /etc/redhat-release"))
+    elif r["el9"] == "unknown":
+        row("support", "vendor support", "unknown", "%s: %s" % (said, r.get("says") or "its requirements were not read"),
+            hand=["read the vendor's page for the release in use" + (": " + r["url"] if r["url"] != "-" else "")])
+    elif r["minors"] and here not in r["minors"]:
+        row("support", "vendor support", "warn", "%s; it names %s and this system is %s" % (said, " ".join(r["minors"]), here),
+            hand=["the vendor's list decides its support: nothing to change here (an installer that refuses the name: silik identity base)"])
+    elif r["el9"] in ("yes", "kernel"):
+        row("support", "vendor support", "ok", said + ((": this system is %s" % here) if r["minors"] else ""))
+    else:
+        row("support", "vendor support", "info", said)
+    if r["arch"]:
+        if st["arch"] not in r["arch"]:
+            row("arch", "architecture", "bad", "the vendor publishes it for %s; this machine is %s" % (" ".join(r["arch"]), st["arch"]))
+    elif st["arch"] != "x86_64" and r["el9"] != "kernel":
+        row("arch", "architecture", "unknown", "this machine is %s; whether the vendor publishes a build for it was not read" % st["arch"])
+    checks = r["checks"]
+    if "identity" in checks:
+        osr = st.get("osr") or {}
+        el = "rhel" in (osr.get("ID_LIKE", "") + " " + osr.get("ID", "")).split()
+        row("identity", "names read", "ok" if el else "unknown",
+            "ID=%s VERSION_ID=%s, release file \"%s\"%s" % (osr.get("ID", "?"), osr.get("VERSION_ID", "?"), st.get("release") or "-",
+                                                         "; os-release is the base's own" if st.get("osr_base") else
+                                                         "; the display name says SilikOS (an installer that compares it: silik identity base)"))
+    # ---- packages
+    pk, pka = r["pkgs"], [n for n in r["pkgs_a"] if n not in r["pkgs"]]
+    rpm = st.get("rpm")
+    missing = []
+    if pk or pka:
+        if rpm is None:
+            row("packages", "packages", "unknown", "rpm is not on this system: %d names not looked up" % len(pk + pka))
+        else:
+            missing = [n for n in pk + pka if n not in rpm]
+            if missing:
+                row("packages", "packages", "warn", "%d of %d installed; missing: %s" % (
+                    len(pk + pka) - len(missing), len(pk + pka), " ".join(n + ("[A]" if n in pka else "") for n in missing)),
+                    run=[["sudo", "dnf", "-y", "install"] + missing])
+            else:
+                row("packages", "packages", "ok", "all %d installed%s" % (len(pk + pka), (" (%d of them not from the vendor's list [A])" % len(pka)) if pka else ""))
+    if r["repos"]:
+        on = st.get("repos")
+        if on is None:
+            row("repos", "repositories", "unknown", "/etc/yum.repos.d is not readable: %s not looked up" % " ".join(r["repos"]))
+        else:
+            off = [x for x in r["repos"] if x not in on]
+            cmds = [["sudo", "dnf", "-y", "install", "epel-release"] if x == "epel" else ["sudo", "dnf", "config-manager", "--set-enabled", x] for x in off]
+            if off and missing:
+                rows.insert(len(rows) - 1, {"tool": tool, "id": "repos", "name": "repositories", "state": "warn",
+                                            "value": "not enabled: %s (the missing packages come from there)" % " ".join(off),
+                                            "run": cmds, "hand": []})
+            else:
+                row("repos", "repositories", "ok", "%s enabled" % " ".join(r["repos"]) if not off else
+                    "%s not enabled, and nothing is missing from there" % " ".join(off))
+    if r["minver"] and rpm is not None:
+        low, good = [], []
+        for w in r["minver"]:
+            n, _, v = w.partition(":")
+            if n in rpm:
+                (low if rpm_vercmp(rpm[n], v) < 0 else good).append("%s %s (asked: %s)" % (n, rpm[n], v))
+        if low:
+            row("minver", "minimum versions", "warn", "older than the source asks: " + ", ".join(low),
+                hand=["a newer one than EL 9's, the way the project's own instructions give" + (": " + r["url"] if r["url"] != "-" else "")])
+        elif good:
+            row("minver", "minimum versions", "ok", ", ".join(good))
+    for k, what, have, unit in (("disk_gb", "free disk (home)", st.get("disk_gb"), "GB"), ("ram_gb", "memory", st.get("mem_gb"), "GB")):
+        if r.get(k):
+            need = int(r[k])
+            if have is None:
+                row(k, what, "unknown", "the source's figure is %d %s; not readable here" % (need, unit))
+            else:
+                row(k, what, "ok" if have >= need else "warn", "%.0f %s; the source's figure is %d %s" % (have, unit, need, unit))
+    # ---- licence daemons
+    if "lsb" in checks:
+        tail = "; lsb_release: %s" % ("present" if st.get("lsb_release") else "absent (an installer that calls it: sudo dnf -y install lsb_release, EPEL 9)")
+        if st["arch"] != "x86_64":
+            row("lsb", "licence loader", "info", "the name %s is the x86_64 daemons'; this machine is %s" % (LSB_LOADER, st["arch"]))
+        elif st.get("lsb"):
+            row("lsb", "licence loader", "ok", "%s is there (FlexNet daemons ask the loader by that name; EL 9 has no redhat-lsb-core)%s" % (LSB_LOADER, tail))
+        else:
+            row("lsb", "licence loader", "warn", "%s is missing: lmgrd and the vendor daemons fail with \"No such file or directory\"%s" % (LSB_LOADER, tail),
+                run=[["sudo", "ln", "-s", "ld-linux-x86-64.so.2", "/usr/lib64/ld-lsb-x86-64.so.3"]])
+    if "hostid" in checks:
+        cards, nm, conf = st.get("cards") or [], st.get("nm"), st.get("nm_conf") or []
+        if not cards:
+            row("hostid", "licence host id", "unknown", "no network interface of the machine is visible here (a container?): a FlexNet host id is an interface's address")
+        else:
+            said_, hand, state = [], [], "ok"
+            dflt = {k.split(".")[0]: (v, p) for p, k, v in conf}
+            for c in cards:
+                prof = next((p for p in (nm or []) if p["device"] == c["name"]), None)
+                cloned = (prof or {}).get("cloned") or ""
+                kind = "wifi" if c["wifi"] else "ethernet"
+                rnd = cloned in ("random", "stable") or (not cloned and dflt.get(kind, ("", ""))[0] in ("random", "stable"))
+                if rnd:
+                    state = "warn"
+                    why = "profile \"%s\"" % prof["conn"] if cloned else "NetworkManager's default in %s" % dflt[kind][1]
+                    said_.append("%s %s: a %s address (%s): a licence locked to it stops working" % (c["name"], c["mac"], cloned or dflt[kind][0], why))
+                    hand.append("nmcli connection modify %s %s.cloned-mac-address permanent && nmcli connection up %s" % (
+                        shlex.quote(prof["conn"]) if prof else "PROFILE", "wifi" if c["wifi"] else "ethernet", shlex.quote(prof["conn"]) if prof else "PROFILE"))
+                elif c["assign"] in (1, 3) and not cloned:
+                    state = "warn" if state == "ok" else state
+                    said_.append("%s %s: not the hardware's address (%s)" % (c["name"], c["mac"], "random" if c["assign"] == 1 else "set by a program"))
+                    hand.append("find what sets the address of %s (ip -d link show %s); a licence wants the hardware's" % (c["name"], c["name"]))
+                else:
+                    said_.append("%s %s: %s" % (c["name"], c["mac"], "set in its profile (fixed)" if cloned and cloned not in ("permanent", "preserve") else "the hardware's"))
+            if nm is None and state == "ok":
+                said_.append("NetworkManager did not answer: its profiles were not read")
+                state = "unknown"
+            row("hostid", "licence host id", state, "; ".join(said_), hand=hand)
+        h = st.get("host") or {}
+        name = h.get("name") or ""
+        if not name or name.split(".")[0] in ("localhost", "localhost6") or not h.get("static"):
+            row("hostname", "host name", "warn", "\"%s\"%s: a licence file names the server's host, which must not change" % (
+                name or "?", "" if h.get("static") else " (no static name in /etc/hostname)"), hand=["sudo hostnamectl set-hostname NAME"])
+        elif h.get("resolves") is False:
+            row("hostname", "host name", "warn", "\"%s\" does not resolve to an address on this machine: lmgrd and the tools look it up" % name,
+                hand=["add it to /etc/hosts (or to the site's DNS): ADDRESS %s" % name])
+        else:
+            row("hostname", "host name", "ok" if h.get("resolves") else "unknown", "\"%s\"%s" % (name, ", resolves here" if h.get("resolves") else ": whether it resolves was not readable"))
+    if "tmp" in checks:
+        if st.get("usr_tmp"):
+            row("tmp", "/usr/tmp", "ok", "there (older installers and licence daemons write to it)")
+        else:
+            row("tmp", "/usr/tmp", "warn", "missing", run=[["sudo", "ln", "-s", "../var/tmp", "/usr/tmp"]])
+    if "locale" in checks:
+        loc = st.get("locales")
+        if loc is None:
+            row("locale", "locale", "unknown", "`locale -a` did not answer")
+        elif "en_us.utf8" in loc:
+            row("locale", "locale", "ok", "en_US.UTF-8 is available")
+        else:
+            row("locale", "locale", "warn", "en_US.UTF-8 is not available", run=[["sudo", "dnf", "-y", "install", "glibc-langpack-en"]])
+    if "x11" in checks:
+        s = st.get("session")
+        if s == "x11":
+            row("x11", "display", "ok", "an X11 session (SilikOS's own)")
+        elif s == "wayland":
+            row("x11", "display", "warn", "a Wayland session: these tools are X11 programs (through XWayland some misdraw or fail to place windows)",
+                hand=["log out and choose the SilikOS session at the login screen (it is X11)"])
+        else:
+            row("x11", "display", "unknown", "no desktop session here (SilikOS's is X11; over ssh: ssh -X)")
+    if "selinux" in checks:
+        s = st.get("selinux")
+        row("selinux", "SELinux", "info" if s else "unknown",
+            ("%s; nothing of SilikOS relabels a vendor's files. If a tool or daemon is denied: sudo ausearch -m avc -ts recent" % s) if s
+            else "getenforce did not answer")
+    if "limits" in checks:
+        lim = st.get("limits") or {}
+
+        def two(k, unit=1):
+            s, h = (lim.get(k) or [None, None])
+            return "%s / %s" % tuple("unlimited" if x is None else str(x // unit) for x in (s, h))
+        row("limits", "limits", "info", "open files %s, processes %s, stack %s MiB (soft / hard): reported; no figure was read from the vendor. "
+            "To raise one for a shell: ulimit -n N" % (two("nofile"), two("nproc"), two("stack", 1024 * 1024)))
+        row("sysctl", "kernel settings", "info", "%s; vsyscall %s: reported, never changed here. A vendor's figure: sudo sysctl -w NAME=VALUE "
+            "(to keep it: a file in /etc/sysctl.d)" % (", ".join("%s=%s" % (k, v or "?") for k, v in sorted((st.get("sysctl") or {}).items())), st.get("vsyscall") or "unknown"))
+    if "kernel" in checks:
+        k = st.get("kernel") or "?"
+        if st.get("kdevel"):
+            row("kernel", "kernel headers", "ok", "kernel-devel for the running kernel (%s) is installed: a vendor's kernel module can be built" % k)
+        else:
+            row("kernel", "kernel headers", "warn", "no kernel-devel for the running kernel (%s): a vendor's kernel module cannot be built" % k,
+                run=[["sudo", "dnf", "-y", "install", "kernel-devel-" + k]],
+                hand=["with Secure Boot on, a module built here must be signed with a key the machine trusts (mokutil --sb-state)"])
+    # ---- devices
+    if "serial" in checks:
+        if SERIAL_RULES in (st.get("udev") or ()):
+            row("serial", "serial ports", "ok", "they belong to the person at the screen (%s): no dialout group needed" % SERIAL_RULES)
+        elif st.get("dialout"):
+            row("serial", "serial ports", "ok", "this user is in the group dialout")
+        else:
+            row("serial", "serial ports", "warn", "root:dialout, and this user is not in that group",
+                hand=["sudo dnf -y install silik-dev   # its rule gives them to the person at the screen", "or: sudo usermod -aG dialout $USER   # then log in again"])
+    if r["udev"]:
+        import fnmatch
+        got = sorted(f for f in (st.get("udev") or ()) if any(fnmatch.fnmatchcase(f, g) for g in r["udev"]))
+        if got:
+            row("udev", "device rules", "ok", ", ".join(got))
+        else:
+            row("udev", "device rules", "warn", "none of the vendor's rule files (%s) is on the system: its probe or cable belongs to root" % " ".join(r["udev"]),
+                hand=[(r.get("udev_how") or "the vendor's installer brings them") + "   # SilikOS does not copy a vendor's files"])
+    if "usbtmc" in checks:
+        mods = st.get("modules")
+        tail = "" if mods is None else "; the kernel's usbtmc driver is %s" % ("loaded (/dev/usbtmcN; pyvisa-py takes the device from it)" if "usbtmc" in mods else "not loaded (it loads when an instrument is plugged in)")
+        if "usbtmc" in (st.get("blacklist") or {}):
+            tail += "; blacklisted in %s (a vendor's VISA does that)" % st["blacklist"]["usbtmc"]
+        if USBTMC_RULES in (st.get("udev") or ()):
+            row("usbtmc", "USB instruments", "ok", "USBTMC devices belong to the person at the screen (%s)%s" % (USBTMC_RULES, tail))
+        else:
+            row("usbtmc", "USB instruments", "warn", "no rule gives USBTMC devices to the user: they belong to root%s" % tail,
+                run=[["sudo", "dnf", "-y", "install", "silik-dev"]])
+    if "canmod" in checks:
+        mods, black = st.get("modules"), st.get("blacklist") or {}
+        if mods is None:
+            row("canmod", "CAN driver", "unknown", "/proc/modules is not readable")
+        else:
+            kern, vend = [m for m in r["mods_kernel"] if m in mods], [m for m in r["mods_vendor"] if m in mods]
+            blk = sorted(set(black[m] for m in r["mods_kernel"] if m in black))
+            if kern and vend:
+                row("canmod", "CAN driver", "bad", "the kernel's (%s) and the vendor's (%s) are both loaded: they exclude each other" % (" ".join(kern), " ".join(vend)),
+                    hand=["keep one: sudo modprobe -r %s   (SocketCAN stays), or the vendor's own uninstall" % " ".join(vend)])
+            elif vend:
+                row("canmod", "CAN driver", "info", "the vendor's driver is loaded (%s): its own API and devices. SocketCAN tools (candump, SavvyCAN, silik dev can) see no "
+                    "interface from it%s" % (" ".join(vend), ("; the kernel's is blacklisted in " + ", ".join(blk)) if blk else ""),
+                    hand=["back to SocketCAN: the vendor's own uninstall (it removes its blacklist file), then plug the adapter again"])
+            elif blk:
+                row("canmod", "CAN driver", "warn", "the kernel's driver is blacklisted in %s (a vendor's installer writes that) and the vendor's is not loaded: "
+                    "a plugged adapter gives no interface" % ", ".join(blk),
+                    hand=["sudo rm %s   # then plug the adapter again (or install the vendor's driver again)" % " ".join(blk)])
+            elif kern:
+                row("canmod", "CAN driver", "ok", "the kernel's %s is loaded: SocketCAN (silik dev can)" % " ".join(kern))
+            else:
+                row("canmod", "CAN driver", "ok", "none loaded (no adapter plugged in); the kernel's %s loads when one is: SocketCAN (silik dev can)" % r["mods_kernel"][0])
+    if "kvm" in checks:
+        if st.get("kvm"):
+            row("kvm", "virtual machine", "ok", "/dev/kvm is there: a Windows virtual machine can run here")
+        else:
+            row("kvm", "virtual machine", "warn", "no /dev/kvm: virtualisation is off in the firmware, or this is itself a virtual machine",
+                hand=["turn on VT-x / AMD-V in the firmware's settings"])
+    if "box" in checks:
+        row("box", "boxes", "ok" if st.get("podman") else "warn", "podman is installed" if st.get("podman") else "podman is missing",
+            run=[] if st.get("podman") else [["sudo", "dnf", "-y", "install", "silik-eda-compat"]])
+    if r.get("route"):
+        row("route", "on SilikOS", "info", r["route"])
+    if r.get("own"):
+        row("own", "vendor's check", "info", r["own"])
+    return rows
+
+
+def vendor_pick(tools, names, all_):
+    if all_ or not names:
+        if not all_:
+            die("silik vendor check TOOL... | --all; the tools: %s" % " ".join(sorted(tools)), 2)
+        return sorted(tools)
+    for n in names:
+        if n not in tools:
+            die("no tool %r in the vendors' data; the tools: %s" % (n, " ".join(sorted(tools))), 2)
+    return list(dict.fromkeys(names))
+
+
+def vendor_cmd(argv):
+    return " ".join(shlex.quote(a) for a in argv)
+
+
+def vendor_report(tools, picked, st):
+    """[{tool, name, ..., checks, prepare, by_hand, ready}] for the tools PICKED"""
+    out = []
+    for t in picked:
+        r = tools[t]
+        rows = vendor_rows(t, r, st)
+        run, hand = [], []
+        for x in rows:
+            for c in x["run"]:
+                if c not in run:
+                    run.append(c)
+            hand += [h for h in x["hand"] if h not in hand]
+        out.append({"tool": t, "name": r["name"], "maker": r.get("maker", ""), "el9": r["el9"], "release": r.get("release", ""),
+                    "says": r.get("says", ""), "read": r["read"], "date": r["date"], "url": r["url"], "more": r["more"],
+                    "note": r.get("note", ""), "checks": rows, "prepare": run, "by_hand": hand,
+                    "ready": all(x["state"] in ("ok", "info") for x in rows)})
+    return out
+
+
+def vendor_print(rep):
+    lines = []
+    for t in rep:
+        lines.append("%s%s  %s%s" % ("\n" if lines else "", t["tool"], t["name"], ("  " + t["release"]) if t["release"] else ""))
+        lines.append("  %s, %s%s" % (VENDOR_READ[t["read"]], t["date"], ("  " + t["url"]) if t["url"] != "-" else ""))
+        if t["says"]:
+            lines.append("  it says: " + t["says"])
+        for x in t["checks"]:
+            lines.append("%s %-8s %-17s %s" % (VENDOR_MARK[x["state"]], x["state"], x["name"], x["value"]))
+            lines += ["%-28s fix: %s" % ("", vendor_cmd(c)) for c in x["run"]]
+            lines += ["%-28s by hand: %s" % ("", h) for h in x["hand"]]
+        if t["note"]:
+            lines.append("  note: " + t["note"])
+        todo = sum(1 for x in t["checks"] if x["state"] not in ("ok", "info"))
+        lines.append("  %s" % ("ready: nothing to prepare (not tried with the vendor's installer)" if t["ready"] else
+                               "%d to look at%s%s" % (todo, ("; `silik vendor prepare %s` runs %d command%s" % (t["tool"], len(t["prepare"]), "" if len(t["prepare"]) == 1 else "s")) if t["prepare"] else "",
+                                                     ("; %d by hand" % len(t["by_hand"])) if t["by_hand"] else "")))
+    text = "\n".join(lines)
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        print(text.encode("ascii", "replace").decode("ascii"))
+
+
+def vendor_rc(rep):
+    states = [x["state"] for t in rep for x in t["checks"]]
+    return 2 if "bad" in states else 1 if "warn" in states or "unknown" in states else 0
+
+
+def vendor_list(ctx, a):
+    tools, _ = vendor_load()
+    rows = [{"tool": t, "name": r["name"], "maker": r.get("maker", ""), "kind": r.get("kind", ""), "el9": r["el9"],
+             "support": VENDOR_EL9[r["el9"]], "release": r.get("release", ""), "minors": r["minors"], "says": r.get("says", ""),
+             "read": r["read"], "date": r["date"], "url": r["url"]} for t, r in sorted(tools.items())]
+    if a.json:
+        print(json.dumps(rows, indent=1))
+        return 0
+    print("%-14s %-37s %-22s %-8s %-10s %s" % ("tool", "on EL 9, as the vendor says", "release", "read", "date", "source"))
+    for x in rows:
+        print("%-14s %-37s %-22s %-8s %-10s %s" % (x["tool"], x["support"] + ("" if x["read"] == "page" else " [A]"),
+                                                 (x["release"] or "-")[:22], x["read"], x["date"], x["url"]))
+    print("\nread: page = the vendor's own text was read; extract = a search engine's extract of its page [A]; none = not confirmed [A].\n"
+          "Nothing here was tried with a vendor's installer. `silik vendor check TOOL` checks this system against a tool.")
+    return 0
+
+
+def vendor_check(ctx, a):
+    tools, _ = vendor_load()
+    picked = vendor_pick(tools, a.tools, a.all)
+    rep = vendor_report(tools, picked, vendor_probe({t: tools[t] for t in picked}))
+    if a.json:
+        for t in rep:
+            t["prepare"] = [vendor_cmd(c) for c in t["prepare"]]
+            for x in t["checks"]:
+                x["fix"] = [vendor_cmd(c) for c in x.pop("run")]
+        count = {k: sum(1 for t in rep for x in t["checks"] if x["state"] == k) for k in ("ok", "info", "warn", "bad", "unknown")}
+        print(json.dumps({"tools": rep, "summary": count, "ready": [t["tool"] for t in rep if t["ready"]]}, indent=1))
+    else:
+        vendor_print(rep)
+    return vendor_rc(rep)
+
+
+def vendor_prepare(ctx, a):
+    """runs the commands the check's rows carry (each printed; --dry-run prints them and runs nothing), then says what
+    is left to the person. It never touches a network profile, a kernel setting or a vendor's file"""
+    tools, _ = vendor_load()
+    picked = vendor_pick(tools, a.tools, a.all)
+    recipes = {t: tools[t] for t in picked}
+    rep = vendor_report(tools, picked, vendor_probe(recipes))
+    run = []
+    for t in rep:
+        run += [c for c in t["prepare"] if c not in run]
+    # the repositories first, then one transaction for every package
+    pk = [n for c in run if c[:4] == ["sudo", "dnf", "-y", "install"] and c[4:] != ["epel-release"] for n in c[4:]]
+    first = [c for c in run if c[:4] != ["sudo", "dnf", "-y", "install"] or c[4:] == ["epel-release"]]
+    repo = [c for c in first if c[1] == "dnf"]
+    plan = repo + ([["sudo", "dnf", "-y", "install"] + list(dict.fromkeys(pk))] if pk else []) + [c for c in first if c[1] != "dnf"]
+    failed = 0
+    for c in plan:
+        rc, _ = ctx.run(as_root(c[1:]) if c[0] == "sudo" else c, check=False)
+        failed += 1 if rc else 0
+    if not plan:
+        print("nothing to run for %s" % " ".join(picked))
+    if not ctx.dry and plan:
+        rep = vendor_report(tools, picked, vendor_probe(recipes))
+    for t in rep:
+        left = [x for x in t["checks"] if x["state"] not in ("ok", "info") and (ctx.dry and not x["run"] or not ctx.dry)]
+        for x in left:
+            print("%s %-8s %-14s %-17s %s" % (VENDOR_MARK[x["state"]], x["state"], t["tool"], x["name"], x["value"]))
+            for h in x["hand"]:
+                print("%-28s by hand: %s" % ("", h))
+    if failed:
+        print("silik: %d command%s failed: the rows above say what is still missing" % (failed, "" if failed == 1 else "s"), file=sys.stderr)
+        return 1
+    return 0 if ctx.dry else vendor_rc(rep) and 1
+
+
+def vendor_lib(ctx, a):
+    """the EL 9 package that holds a library a program asks for ("error while loading shared libraries: NAME"): the
+    table of vendors.conf first, then the repositories (dnf repoquery --whatprovides, printed)"""
+    _, libs = vendor_load()
+    rc = 0
+    for so in a.names:
+        so = os.path.basename(so)
+        if not re.match(r"^[A-Za-z0-9][A-Za-z0-9+._-]*$", so):
+            die("not a library's name: %r" % so, 2)
+        pkg = table = libs.get(so)
+        if pkg is None:
+            want = "%s()(64bit)" % so if host_arch() in ("x86_64", "aarch64") else so
+            code, out = ctx.run(["dnf", "-q", "repoquery", "--whatprovides", want, "--qf", "%{name}"], check=False, capture=True)
+            if ctx.dry:
+                continue
+            found = sorted(set(out.split()))
+            pkg = found[0] if code == 0 and found else "-" if code == 0 else None
+        if pkg is None:
+            print("%-28s dnf did not answer" % so)
+            rc = 1
+        elif pkg == "-" and table:      # asked of EL 9.8 + CRB + EPEL 9 when the table was written
+            print("%-28s no package of EL 9, CRB or EPEL 9 has it: the program is for an older system (a box: silik eda create NAME --el 7)" % so)
+            rc = 1
+        elif pkg == "-":
+            print("%-28s no package of the enabled repositories has it: a library of the tool itself (its installation's folder, "
+                  "LD_LIBRARY_PATH), or of an older system (a box: silik eda create NAME --el 7)" % so)
+            rc = 1
+        else:
+            print("%-28s %-24s sudo dnf -y install %s" % (so, pkg, pkg))
+    return rc
+
+
+def vendor_names(ctx, a):
+    """every package name of vendors.conf, one per line with its tool (for tools/check_deps.sh)"""
+    tools, libs = vendor_load()
+    for t, r in sorted(tools.items()):
+        for n in r["pkgs"] + r["pkgs_a"]:
+            print("%s\t%s" % (n, t))
+    for so, pkg in sorted(libs.items()):
+        if pkg != "-":
+            print("%s\t%s" % (pkg, so))
+    return 0
+
+
+# ------------------------------------------------------------------ manifest
+# `silik manifest export | diff | apply`: what makes two machines the same for work, as one plain JSON file: every
+# installed package (name, epoch, version, release, architecture, and the repository it came from), the enabled
+# repositories, the settings `silik` owns, the boxes, the tools' versions, the kernel's command line. Sorted, so two
+# exports of one machine are the same bytes; no secret, and no host name, address or user name unless --with-host.
+# The kernel's own packages and arguments are a section apart: `apply` leaves them alone unless --kernel, and never
+# removes a package unless --prune. MANIFEST_SECTIONS is where a new section goes: (name, export, diff, plan).
+MANIFEST = 1
+KERNEL_ARGS_OF_THE_DISK = ("BOOT_IMAGE", "root", "rootflags", "ro", "rw", "resume", "rd.lvm.lv", "rd.luks.uuid", "rd.md.uuid", "initrd")
+KERNEL_ARG = re.compile(r"^[A-Za-z0-9_.-]+(=[A-Za-z0-9_.,:/@+%-]*)?$")
+KERNEL_SOURCE = re.compile(r"^kernel(-rt)?-\d")     # the source package of the kernel and of what is built with it (perf, bpftool...)
+INSTALLED_QF = "%{name}\t%{epoch}\t%{version}\t%{release}\t%{arch}\t%{from_repo}\t%{sourcerpm}"
+
+
+def nevra(name, epoch, version, release, arch):
+    return "%s-%s:%s-%s.%s" % (name, epoch or "0", version, release, arch)
+
+
+def nevra_parse(s):
+    """(name, arch, 'epoch:version-release') of "name-epoch:version-release.arch"; None when it is not one"""
+    # (strict: these words go to dnf's command line from a file someone else may have written; a name never starts
+    # with a dash, so none can be read as a switch)
+    m = re.match(r"^([A-Za-z0-9][A-Za-z0-9+._-]*)-(\d+):([A-Za-z0-9+._~^]+)-([A-Za-z0-9+._~^]+)\.([A-Za-z0-9_]+)$", s)
+    return (m.group(1), m.group(5), "%s:%s-%s" % (m.group(2), m.group(3), m.group(4))) if m else None
+
+
+def evr_cmp(a, b):
+    """two 'epoch:version-release' compared as rpm does"""
+    ea, _, ra = a.partition(":")
+    eb, _, rb = b.partition(":")
+    if int(ea or 0) != int(eb or 0):
+        return 1 if int(ea or 0) > int(eb or 0) else -1
+    va, _, la = ra.partition("-")
+    vb, _, lb = rb.partition("-")
+    return rpm_vercmp(va, vb) or rpm_vercmp(la, lb)
+
+
+def installed_packages():
+    """(packages, kernel packages) as sorted "NEVRA @repository" lines; dnf says the repository each came from, rpm
+    alone does not (then it is left empty). gpg-pubkey entries are not packages. None when neither answers"""
+    rc, out = sec_cmd(["dnf", "-q", "repoquery", "--installed", "--disablerepo=*", "--qf", INSTALLED_QF], timeout=300)
+    if rc != 0 or not out:
+        rc, out = sec_cmd(["rpm", "-qa", "--qf", "%{NAME}\t%{EPOCHNUM}\t%{VERSION}\t%{RELEASE}\t%{ARCH}\t\t%{SOURCERPM}\n"], timeout=300)
+        if rc != 0:
+            return None
+    pk, kern = set(), set()
+    for l in out.splitlines():
+        f = l.split("\t")
+        if len(f) != 7 or f[0] == "gpg-pubkey":
+            continue
+        line = nevra(*f[:5]) + (" @" + f[5].lstrip("@") if f[5] else "")
+        # (kmod-NAME is a driver built for one kernel; kmod-libs is of the tool kmod, an ordinary package)
+        (kern if KERNEL_SOURCE.match(f[6]) or (f[0].startswith("kmod-") and not re.match(r"^kmod-\d", f[6])) else pk).add(line)
+    return sorted(pk), sorted(kern)
+
+
+def kernel_args(cmdline=None):
+    """the kernel's command line without what names this machine's disks (root=, resume=, rd.lvm.lv=...), sorted"""
+    out = []
+    for w in (read("/proc/cmdline") if cmdline is None else cmdline).split():
+        if w.split("=", 1)[0] not in KERNEL_ARGS_OF_THE_DISK:
+            out.append(w)
+    return sorted(set(out))
+
+
+def manifest_now(ctx, with_host=False):
+    """this machine's manifest (read-only: nothing is echoed or changed)"""
+    pk = installed_packages()
+    if pk is None:
+        die("neither dnf nor rpm answered: this is not a system a manifest can be made of")
+    osr = os_release()
+    ps = power_state(ctx)
+    home = os.path.expanduser("~")
+    tools = rpm_versions([p for _, p, _ in DEV_TOOLS + OPEN_TOOLS])
+    bx = []
+    for b in boxes(ctx):
+        bx.append({"name": b["name"], "image": b["image"], "el": box_el(ctx, BOX_PREFIX + b["name"]) or None})
+    man = {
+        "manifest": MANIFEST,
+        "silik": VERSION,
+        "base": {"id": osr.get("ID") or None, "version": osr.get("VERSION_ID") or None, "arch": host_arch(),
+                 "release": read("/etc/redhat-release").strip() or None},
+        "repos": repos_enabled() or [],
+        "packages": pk[0],
+        "kernel": {"running": os.uname().release, "packages": pk[1], "args": kernel_args()},
+        "settings": {"look": look_now(ctx) or None, "accent": accent_now(ctx) or None, "glass": glass_now(ctx) or None,
+                     "power": {"auto": ps["auto"], "profile": None if ps["auto"] else ps["profile"],
+                               "ac": ps["auto_profiles"]["ac"], "battery": ps["auto_profiles"]["battery"]},
+                     "update_auto": update_auto_now(ctx) or None},
+        "boxes": sorted(bx, key=lambda b: b["name"]),
+        "tools": {"versions": {p: v for p, v in sorted(tools.items()) if v and " " not in v},
+                  "ides": {key: p.replace(home, "~", 1) if p.startswith(home) else p
+                           for key, p in sorted((k, dev_find_ide(exe, roots)) for k, _, exe, roots, _, _ in DEV_IDES) if p}},
+    }
+    for name, export, _, _ in MANIFEST_SECTIONS:
+        man[name] = export(ctx)
+    if with_host:
+        import getpass
+        man["host"] = {"name": os.uname().nodename, "user": getpass.getuser(),
+                       "cards": {c["name"]: c["mac"] for c in net_cards()}}
+    return man
+
+
+def manifest_dump(man):
+    return json.dumps(man, indent=1, sort_keys=True, ensure_ascii=False) + "\n"
+
+
+def manifest_read(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            man = json.load(f)
+    except (OSError, ValueError) as e:
+        die("%s: %s" % (path, e))
+    if not isinstance(man, dict) or man.get("manifest") != MANIFEST:
+        die("%s is not a manifest this silik reads (manifest %s; this one writes %d)" % (path, man.get("manifest") if isinstance(man, dict) else "?", MANIFEST))
+    return man
+
+
+def pkg_map(lines):
+    """{(name, arch): [epoch:version-release, ...]} of manifest package lines (what does not parse is left out)"""
+    out = {}
+    for l in lines or []:
+        p = nevra_parse(str(l).split(" @")[0])
+        if p:
+            out.setdefault((p[0], p[1]), []).append(p[2])
+    return out
+
+
+def pkg_diff(have, want, installonly=False):
+    """what the package lines WANT have and HAVE lack: {install: [NEVRA...] (missing or newer there), downgrade: [...],
+    remove: [name.arch...] (here only), changed: [(name.arch, here, there)]}. installonly (kernels: several versions
+    side by side): a version is missing or not, nothing is a downgrade"""
+    h, w = pkg_map(have), pkg_map(want)
+    d = {"install": [], "downgrade": [], "remove": [], "changed": []}
+    for (n, a), evrs in sorted(w.items()):
+        got = h.get((n, a))
+        for evr in evrs:
+            spec = "%s-%s.%s" % (n, evr, a)
+            if not got or installonly:
+                if evr not in (got or []):
+                    d["install"].append(spec)
+            elif evr not in got:
+                top = got[0]
+                for e in got[1:]:           # (the newest of several installed versions)
+                    top = e if evr_cmp(e, top) > 0 else top
+                d["changed"].append(("%s.%s" % (n, a), top, evr))
+                d["install" if evr_cmp(evr, top) > 0 else "downgrade"].append(spec)
+    for (n, a), evrs in sorted(h.items()):
+        if (n, a) not in w:
+            d["remove"].append("%s.%s" % (n, a))
+        elif installonly:
+            d["remove"] += ["%s-%s.%s" % (n, e, a) for e in evrs if e not in w[(n, a)]]
+    return d
+
+
+def manifest_diff(have, want):
+    """what differs between this machine (HAVE) and a manifest (WANT), section by section: {section: [lines]}; an
+    empty dict: the same. `+` is in the file and not here, `-` here and not in the file, `~` both, differently"""
+    out = {}
+
+    def add(sect, line):
+        out.setdefault(sect, []).append(line)
+    hb, wb = have.get("base") or {}, want.get("base") or {}
+    for k in ("id", "version", "arch"):
+        if hb.get(k) != wb.get(k):
+            add("base", "~ %s: %s here, %s in the file" % (k, hb.get(k), wb.get(k)))
+    for r in sorted(set(want.get("repos") or []) - set(have.get("repos") or [])):
+        add("repos", "+ " + r)
+    for r in sorted(set(have.get("repos") or []) - set(want.get("repos") or [])):
+        add("repos", "- " + r)
+    d = pkg_diff(have.get("packages"), want.get("packages"))
+    moved = dict((spec, (na, here)) for na, here, there in d["changed"] for spec in ["%s-%s.%s" % (na.rsplit(".", 1)[0], there, na.rsplit(".", 1)[1])])
+    for spec in d["install"] + d["downgrade"]:
+        add("packages", ("~ %s: %s here, %s in the file" % (moved[spec][0], moved[spec][1], nevra_parse(spec)[2])) if spec in moved else "+ " + spec)
+    for na in d["remove"]:
+        add("packages", "- " + na)
+    hk, wk = have.get("kernel") or {}, want.get("kernel") or {}
+    kd = pkg_diff(hk.get("packages"), wk.get("packages"), installonly=True)
+    for spec in kd["install"]:
+        add("kernel", "+ " + spec)
+    for spec in kd["remove"]:
+        add("kernel", "- " + spec)
+    for w in sorted(set(wk.get("args") or []) - set(hk.get("args") or [])):
+        add("kernel", "+ argument " + w)
+    for w in sorted(set(hk.get("args") or []) - set(wk.get("args") or [])):
+        add("kernel", "- argument " + w)
+
+    def flat(d, pre=""):
+        res = {}
+        for k, v in (d or {}).items():
+            if isinstance(v, dict):
+                res.update(flat(v, pre + k + "."))
+            else:
+                res[pre + k] = v
+        return res
+    for sect in ("settings", "tools"):
+        fh, fw = flat(have.get(sect)), flat(want.get(sect))
+        for k in sorted(set(fh) | set(fw)):
+            if fh.get(k) != fw.get(k):
+                add(sect, "~ %s: %s here, %s in the file" % (k, fh.get(k), fw.get(k)))
+    hx = {b["name"]: b for b in have.get("boxes") or []}
+    wx = {b["name"]: b for b in want.get("boxes") or []}
+    for n in sorted(set(hx) | set(wx)):
+        if n not in hx:
+            add("boxes", "+ %s (el %s, %s)" % (n, wx[n].get("el"), wx[n].get("image")))
+        elif n not in wx:
+            add("boxes", "- %s" % n)
+        elif (hx[n].get("el"), hx[n].get("image")) != (wx[n].get("el"), wx[n].get("image")):
+            add("boxes", "~ %s: %s here, %s in the file" % (n, hx[n].get("image"), wx[n].get("image")))
+    for name, _, diff, _ in MANIFEST_SECTIONS:
+        for line in diff(have.get(name), want.get(name)):
+            add(name, line)
+    return out
+
+
+def manifest_plan(have, want, prune=False, kernel=False):
+    """the steps that bring this machine (HAVE) to the manifest WANT, in order: ("run", argv) a command; ("silik",
+    args) a silik command; ("say", text) what is not done and why. Packages are never removed without PRUNE; the
+    kernel's packages and arguments are left alone without KERNEL; a box and a kernel are never removed"""
+    steps = []
+    hb, wb = have.get("base") or {}, want.get("base") or {}
+    if hb.get("arch") != wb.get("arch"):
+        return [("stop", "the manifest is of a %s machine and this one is %s: its packages are not this machine's" % (wb.get("arch"), hb.get("arch")))]
+    if hb.get("version") != wb.get("version") or hb.get("id") != wb.get("id"):
+        steps.append(("say", "the manifest is of %s %s and this system is %s %s: the exact versions may not be in this system's repositories" % (
+            wb.get("id"), wb.get("version"), hb.get("id"), hb.get("version"))))
+    here = set(have.get("repos") or [])
+    for r in want.get("repos") or []:
+        if r in here:
+            continue
+        if r == "epel":
+            steps.append(("run", ["sudo", "dnf", "-y", "install", "epel-release"]))
+        elif re.match(r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$", r):
+            steps.append(("run", ["sudo", "dnf", "config-manager", "--set-enabled", r]))
+    extra = sorted(here - set(want.get("repos") or []))
+    if extra:
+        steps.append(("say", "repositories enabled here and not in the manifest (left as they are): " + " ".join(extra)))
+    d = pkg_diff(have.get("packages"), want.get("packages"))
+    if d["install"]:
+        steps.append(("run", ["sudo", "dnf", "-y", "install"] + d["install"]))
+    if d["downgrade"]:
+        steps.append(("run", ["sudo", "dnf", "-y", "downgrade"] + d["downgrade"]))
+    if d["remove"]:
+        if prune:
+            steps.append(("run", ["sudo", "dnf", "-y", "remove"] + d["remove"]))
+        else:
+            steps.append(("say", "%d packages are here and not in the manifest: kept (--prune removes them)" % len(d["remove"])))
+    hk, wk = have.get("kernel") or {}, want.get("kernel") or {}
+    kd = pkg_diff(hk.get("packages"), wk.get("packages"), installonly=True)
+    if kd["install"] or kd["remove"]:
+        if kernel and kd["install"]:
+            steps.append(("run", ["sudo", "dnf", "-y", "install"] + kd["install"]))
+        elif kd["install"]:
+            steps.append(("say", "%d of the kernel's packages differ (the manifest's kernel: %s; running here: %s): left alone (--kernel installs the manifest's)" % (
+                len(kd["install"]), wk.get("running"), hk.get("running"))))
+        if kd["remove"]:
+            steps.append(("say", "%d kernel packages are here and not in the manifest: never removed by this command" % len(kd["remove"])))
+    add = sorted(set(wk.get("args") or []) - set(hk.get("args") or []))
+    rem = sorted(set(hk.get("args") or []) - set(wk.get("args") or []))
+    odd = [w for w in add if not isinstance(w, str) or not KERNEL_ARG.match(w)]
+    if odd:         # (a word with a space or a quote in it would be more than one argument)
+        steps.append(("say", "kernel arguments of the manifest that are not plain words (not set): " + " ".join(repr(w) for w in odd)))
+        add = [w for w in add if w not in odd]
+    if (add or rem) and not kernel:     # (an argument can turn a protection off: the kernel's switch covers them too)
+        steps.append(("say", "the kernel's arguments differ (the manifest has %s; here %s): left alone (--kernel sets the manifest's)" % (
+            " ".join(add) or "none more", " ".join(rem) or "none more")))
+    elif add or rem:
+        if add:
+            steps.append(("run", ["sudo", "grubby", "--update-kernel=ALL", "--args=" + " ".join(add)]))
+        if rem and prune:
+            steps.append(("run", ["sudo", "grubby", "--update-kernel=ALL", "--remove-args=" + " ".join(rem)]))
+        elif rem:
+            steps.append(("say", "kernel arguments here and not in the manifest: kept (--prune removes them): " + " ".join(rem)))
+        if add or prune:
+            steps.append(("say", "the kernel's arguments apply at the next start"))
+    hs, ws = have.get("settings") or {}, want.get("settings") or {}
+    look = []
+    if ws.get("look") and ws.get("look") != hs.get("look") and ws["look"] in [k for k, _ in LOOKS]:
+        look.append(ws["look"])
+    if ws.get("accent") and ws.get("accent") != hs.get("accent") and ws["accent"] in [k for k, _ in ACCENTS]:
+        look += ["--accent", ws["accent"]]
+    if ws.get("glass") and ws.get("glass") != hs.get("glass") and ws["glass"] in ("on", "off"):
+        look += ["--glass", ws["glass"]]
+    if look:
+        steps.append(("silik", ["look"] + look))
+    hp, wp = hs.get("power") or {}, ws.get("power") or {}
+    words = [k for k, _ in POWER]
+    if wp.get("auto") and (not hp.get("auto") or (hp.get("ac"), hp.get("battery")) != (wp.get("ac"), wp.get("battery"))) \
+            and wp.get("ac") in words and wp.get("battery") in words:
+        steps.append(("silik", ["power", "auto", "--ac", wp["ac"], "--battery", wp["battery"]]))
+    elif wp.get("auto") is False and wp.get("profile") in words and (hp.get("auto") or hp.get("profile") != wp["profile"]):
+        steps.append(("silik", ["power", wp["profile"]]))
+    if ws.get("update_auto") in [k for k, _ in UPDATE_AUTO] and ws["update_auto"] != hs.get("update_auto"):
+        steps.append(("silik", ["update", "--auto", ws["update_auto"]]))
+    hx = set(b["name"] for b in have.get("boxes") or [])
+    made = False
+    for b in want.get("boxes") or []:
+        n, el = str(b.get("name")), str(b.get("el") or "")
+        if n in hx or not valid_name(n):
+            continue
+        if el not in EL:
+            steps.append(("say", "the box %s (%s) is not one `silik eda create` makes: not made" % (n, b.get("image"))))
+            continue
+        img = b.get("image")
+        if img and img != EL[el]["image"] and not re.match(r"^[A-Za-z0-9][A-Za-z0-9._/:@-]*$", str(img)):
+            steps.append(("say", "the box %s names an image that is not an image's name: not made" % n))
+            continue
+        steps.append(("silik", ["eda", "create", n, "--el", el] + (["--image", img] if img and img != EL[el]["image"] else [])))
+        made = True
+    if made:
+        steps.append(("say", "what is installed inside a box is not in a manifest: `silik eda setup NAME`, then the vendor's own installer"))
+    gone = sorted(hx - set(str(b.get("name")) for b in want.get("boxes") or []))
+    if gone:
+        steps.append(("say", "boxes here and not in the manifest (never removed by this command): " + " ".join(gone)))
+    wi, hi = (want.get("tools") or {}).get("ides") or {}, (have.get("tools") or {}).get("ides") or {}
+    for k in sorted(set(wi) - set(hi)):
+        steps.append(("say", "%s is in the manifest (%s): a vendor's program, installed from the file you download (silik dev install FILE)" % (k, wi[k])))
+    for name, _, _, plan in MANIFEST_SECTIONS:
+        steps += plan(have.get(name), want.get(name), prune)
+    return steps
+
+
+MANIFEST_SECTIONS = []      # (name, export(ctx) -> value, diff(have, want) -> [lines], plan(have, want, prune) -> [steps])
+
+
+def manifest_export(ctx, a):
+    text = manifest_dump(manifest_now(ctx, a.with_host))
+    if not a.file or a.file == "-":
+        sys.stdout.write(text)
+        return 0
+    if ctx.dry:
+        print("would write %s (%d bytes)" % (a.file, len(text.encode("utf-8"))))
+        return 0
+    with open(a.file, "w", encoding="utf-8") as f:
+        f.write(text)
+    man = json.loads(text)
+    print("%s: %d packages, %d of the kernel, %d repositories, %d boxes%s" % (
+        a.file, len(man["packages"]), len(man["kernel"]["packages"]), len(man["repos"]), len(man["boxes"]),
+        "; with this machine's name, user and addresses" if a.with_host else "; no host name, user or address in it"))
+    return 0
+
+
+def manifest_diff_cmd(ctx, a):
+    want = manifest_read(a.file)
+    d = manifest_diff(manifest_now(ctx), want)
+    if a.json:
+        print(json.dumps({"same": not d, "differs": d}, indent=1, sort_keys=True))
+        return 1 if d else 0
+    if not d:
+        print("the same as %s" % a.file)
+        return 0
+    for sect in sorted(d):
+        print("%s (%d)" % (sect, len(d[sect])))
+        for line in d[sect]:
+            print("  " + line)
+    print("\n+ in the file, not here; - here, not in the file; ~ both, differently. `silik manifest apply %s --dry-run` shows what it would run" % shlex.quote(a.file))
+    return 1
+
+
+def manifest_apply(ctx, a):
+    want = manifest_read(a.file)
+    steps = manifest_plan(manifest_now(ctx), want, prune=a.prune, kernel=a.kernel)
+    if steps and steps[0][0] == "stop":
+        die(steps[0][1])
+    if not [s for s in steps if s[0] != "say"]:
+        for kind, what in steps:
+            print("silik: " + what)
+        print("nothing to change: this machine has what %s lists" % a.file)
+        return 0
+    failed = 0
+    for kind, what in steps:
+        if kind == "say":
+            print("silik: " + what)
+        elif kind == "run":
+            rc, _ = ctx.run(as_root(what[1:]) if what[0] == "sudo" else what, check=False)
+            failed += 1 if rc else 0
+        else:
+            ctx.echo(["silik"] + what)
+            if not ctx.dry:
+                try:
+                    rc = main((["-q"] if ctx.quiet else []) + what)
+                except SystemExit as e:
+                    rc = e.code if isinstance(e.code, int) else 1
+                failed += 1 if rc else 0
+    if failed:
+        print("silik: %d step%s failed; `silik manifest diff %s` says what still differs" % (failed, "" if failed == 1 else "s", shlex.quote(a.file)), file=sys.stderr)
+        return 1
+    return 0
+
+
 # ------------------------------------------------------------------ command line
 # ---------------------------------------------------------------- plugins
 # A group of commands in a file of its own: plugins/NAME.py beside this program (/usr/share/silikos/python/plugins),
@@ -4700,6 +5863,31 @@ def parser(only=None):
         x = h.add_parser("probe"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=hw_probe)
         x = h.add_parser("nvidia"); x.add_argument("action", choices=["install", "status"]); x.set_defaults(fn=hw_nvidia)
 
+    vd = s.add_parser("vendor", help="vendors' tools (Vivado, MATLAB, Virtuoso...): is this system ready for one, and the command that prepares it").add_subparsers(dest="cmd")
+    if only in (None, "vendor"):
+        x = vd.add_parser("list", help="the tools known: what each vendor says of EL 9, for which release, read how, when and where")
+        x.add_argument("--json", action="store_true"); x.set_defaults(fn=vendor_list)
+        x = vd.add_parser("check", help="this system against a tool's published requirements: ok / warn / bad / unknown / info, and the command that fixes each")
+        x.add_argument("tools", nargs="*", metavar="TOOL"); x.add_argument("--all", action="store_true"); x.add_argument("--json", action="store_true")
+        x.set_defaults(fn=vendor_check)
+        x = vd.add_parser("prepare", help="runs the commands `check` gives (each printed; --dry-run runs nothing); what is left to the person is said")
+        x.add_argument("tools", nargs="*", metavar="TOOL"); x.add_argument("--all", action="store_true"); x.set_defaults(fn=vendor_prepare)
+        x = vd.add_parser("lib", help="the EL 9 package that holds a library a program asks for (libtinfo.so.5 ...)")
+        x.add_argument("names", nargs="+", metavar="LIBRARY"); x.set_defaults(fn=vendor_lib)
+        x = vd.add_parser("names"); x.set_defaults(fn=vendor_names)      # (for tools/check_deps.sh)
+
+    mf = s.add_parser("manifest", help="this machine's packages, repositories, settings and boxes as one file; what differs from one; bring this machine to it").add_subparsers(dest="cmd")
+    if only in (None, "manifest"):
+        x = mf.add_parser("export", help="write the manifest (to FILE, or to the terminal)")
+        x.add_argument("file", nargs="?"); x.add_argument("--with-host", action="store_true", help="also this machine's name, user and network addresses")
+        x.set_defaults(fn=manifest_export)
+        x = mf.add_parser("diff", help="what differs between this machine and FILE (exit 0: the same)")
+        x.add_argument("file"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=manifest_diff_cmd)
+        x = mf.add_parser("apply", help="the dnf transaction and the silik commands that bring this machine to FILE, each printed")
+        x.add_argument("file"); x.add_argument("--prune", action="store_true", help="also remove the packages (and kernel arguments) that are here and not in FILE")
+        x.add_argument("--kernel", action="store_true", help="also install the kernel packages of FILE and set its kernel arguments (otherwise the kernel is left alone)")
+        x.set_defaults(fn=manifest_apply)
+
     c = s.add_parser("secure", help="security: an audit of this system, and the SilikOS defaults").add_subparsers(dest="cmd")
     if only in (None, "secure"):
         x = c.add_parser("status", help="read-only audit: ok / warn / bad / unknown, and the command that fixes each")
@@ -4721,7 +5909,7 @@ def parser(only=None):
 WIN_SWITCHES = ("--prefix", "--no-net", "--no-sandbox")
 
 
-GROUPS = ("eda", "dev", "win", "power", "hw", "secure")   # the groups with commands of their own (parser(only=...))
+GROUPS = ("eda", "dev", "win", "power", "hw", "secure", "vendor", "manifest")   # the groups with commands of their own (parser(only=...))
 
 
 def main(argv=None):

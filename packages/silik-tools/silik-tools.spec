@@ -17,7 +17,10 @@ on this desktop), `silik win ...` (Windows programs: a double-click runs them wi
 virtual machine for the rest), `silik dev ...` (embedded development), `silik power ...` (the power profile:
 performance, balanced, saver, auto), `silik hw ...`, `silik look` (the desktop's
 look: silik, bar, island), `silik session`,
-`silik update`, `silik doctor` (is this workstation healthy, and what to do).
+`silik update`, `silik doctor` (is this workstation healthy, and what to do), `silik vendor` (is this system ready
+for a vendor's tool: what the vendor says of EL 9, the packages and settings its requirements name, the command that
+prepares them; no vendor software is included or run), `silik manifest` (packages, repositories, settings and boxes
+as one file: export, diff, apply).
 Every action prints the commands it runs; --dry-run runs nothing.
 
 %install
@@ -47,10 +50,13 @@ fi
 install -Dm0644 %{_sourcedir}/silik.bash-completion %{buildroot}%{_datadir}/bash-completion/completions/silik
 # the USB devices SilikOS knows (silik doctor bench, silik dev can): IDs read from the drivers' tables and upstream rules
 install -Dm0644 %{_sourcedir}/hardware.tsv %{buildroot}%{_datadir}/silikos/hardware.tsv
+# what the vendors' tools ask of the system (silik vendor): data, read by silik; nothing in it is executed
+install -Dm0644 %{_sourcedir}/vendors.conf %{buildroot}%{_datadir}/silikos/vendors.conf
 
 %files
 %{_bindir}/silik
 %dir %{_datadir}/silikos
 %{_datadir}/silikos/python
 %{_datadir}/silikos/hardware.tsv
+%{_datadir}/silikos/vendors.conf
 %{_datadir}/bash-completion/completions/silik
