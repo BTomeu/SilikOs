@@ -4528,6 +4528,60 @@ def cmd_doctor(ctx, a):
 
 
 # ------------------------------------------------------------------ command line
+# ---------------------------------------------------------------- plugins
+# A group of commands in a file of its own: plugins/NAME.py beside this program (/usr/share/silikos/python/plugins),
+# whose first lines say
+#     # silik-plugin: NAME
+#     # help: one line for `silik --help`
+#     # words: the group's commands, for the shell's completion
+# and which has `register(group, silik)`: GROUP is the group's parser (it adds its commands with
+# group.add_subparsers(dest="cmd"), each with set_defaults(fn=...), fn(ctx, a) as every command here), SILIK this
+# module (Ctx, die, the helpers). The head is read as text and the file is imported only when its group is typed:
+# a plugin costs the others nothing. A plugin never replaces a command of silik's own. Only files that root or the
+# owner of this program owns and that are not writable by everybody are taken. docs/PLUGINS.md
+PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "plugins")
+PLUGIN_NAME = re.compile(r"^# silik-plugin: ([a-z][a-z0-9-]*)$", re.M)
+_plugins = None
+
+
+def plugins():
+    """{group: (path, help)} of the plugins beside this program"""
+    global _plugins
+    if _plugins is not None:
+        return _plugins
+    _plugins = {}
+    try:
+        names, mine = sorted(os.listdir(PLUGIN_DIR)), os.stat(__file__).st_uid
+    except OSError:
+        return _plugins
+    for f in names:
+        path = os.path.join(PLUGIN_DIR, f)
+        if not f.endswith(".py"):
+            continue
+        try:
+            st = os.stat(path)
+            if st.st_uid not in (0, mine) or st.st_mode & 0o002:
+                continue
+            with open(path, encoding="utf-8") as fh:
+                head = fh.read(800)
+        except (OSError, UnicodeDecodeError):
+            continue
+        m = PLUGIN_NAME.search(head)
+        if not m or m.group(1) != f[:-3]:
+            continue
+        h = re.search(r"^# help: (.+)$", head, re.M)
+        _plugins[m.group(1)] = (path, h.group(1).strip() if h else "")
+    return _plugins
+
+
+def load_plugin(name):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("silik_plugin_" + name.replace("-", "_"), plugins()[name][0])
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def parser(only=None):
     """the command line. ONLY: the group typed (main reads it): the other groups get their name and help, which
     `silik --help` shows, but not their commands (building every command was 4-5 ms of each start: docs/STATUS.md)"""
@@ -4655,6 +4709,12 @@ def parser(only=None):
         x = c.add_parser("apply", help="set the SilikOS defaults; never loosens what is stricter, never touches a disk")
         x.add_argument("--keep-ssh", action="store_true", help="leave sshd as it is and keep its port open in the firewall zone")
         x.set_defaults(fn=secure_apply)
+    for name, (_, text) in plugins().items():
+        if name in s.choices:        # (a plugin never replaces a command of silik's own)
+            continue
+        g = s.add_parser(name, help=text)
+        if only == name:
+            load_plugin(name).register(g, sys.modules[__name__])
     return p
 
 
@@ -4668,7 +4728,7 @@ def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     # the global switches take no value, so the first word that is not a switch is the group
     first = next((x for x in argv if not x.startswith("-")), None)
-    p = parser(first if first in GROUPS else None)
+    p = parser(first if first in GROUPS or first in plugins() else None)
     # the global switches are taken anywhere before a "--" (`silik secure apply --dry-run` as `silik --dry-run ...`)
     cut = argv.index("--") if "--" in argv else len(argv)
     # (after `win open FILE` / `win run PREFIX` / `win install PREFIX SETUP` the words are the Windows program's own:

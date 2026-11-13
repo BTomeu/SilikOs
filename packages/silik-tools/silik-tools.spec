@@ -31,6 +31,19 @@ if /usr/bin/python3 -c 'import sys; sys.exit(sys.version_info[:2] != (3, 9))' 2>
   /usr/bin/python3 -c 'import py_compile as c, sys; c.compile(sys.argv[1], dfile=sys.argv[2], doraise=True, invalidation_mode=c.PycInvalidationMode.CHECKED_HASH)' \
     %{buildroot}%{_datadir}/silikos/python/silik_main.py %{_datadir}/silikos/python/silik_main.py
 fi
+# the plugins: groups of commands in files of their own (docs/PLUGINS.md), and their COMMAND bar addresses
+install -d %{buildroot}%{_datadir}/silikos/python/plugins
+for f in %{_sourcedir}/plugins/*.py %{_sourcedir}/plugins/*.cmd.json; do
+  [ -f "$f" ] || continue
+  install -m0644 "$f" %{buildroot}%{_datadir}/silikos/python/plugins/
+done
+if /usr/bin/python3 -c 'import sys; sys.exit(sys.version_info[:2] != (3, 9))' 2>/dev/null; then
+  for f in %{buildroot}%{_datadir}/silikos/python/plugins/*.py; do
+    [ -f "$f" ] || continue
+    /usr/bin/python3 -c 'import py_compile as c, sys; c.compile(sys.argv[1], dfile=sys.argv[2], doraise=True, invalidation_mode=c.PycInvalidationMode.CHECKED_HASH)' \
+      "$f" %{_datadir}/silikos/python/plugins/$(basename "$f")
+  done
+fi
 install -Dm0644 %{_sourcedir}/silik.bash-completion %{buildroot}%{_datadir}/bash-completion/completions/silik
 # the USB devices SilikOS knows (silik doctor bench, silik dev can): IDs read from the drivers' tables and upstream rules
 install -Dm0644 %{_sourcedir}/hardware.tsv %{buildroot}%{_datadir}/silikos/hardware.tsv

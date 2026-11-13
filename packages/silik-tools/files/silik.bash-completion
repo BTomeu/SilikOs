@@ -12,8 +12,14 @@ _silik() {
   if [ "$g" = doctor ] && [ "$COMP_CWORD" -ge 2 ]; then
     COMPREPLY=($(compgen -W "system security graphics bench eda windows network --json --verbose" -- "$cur")); return
   fi
+  # the plugins (/usr/share/silikos/python/plugins/NAME.py): their groups, and each one's words from its head
+  local pd=${SILIK_PLUGIN_DIR:-/usr/share/silikos/python/plugins} pl=
+  [ -d "$pd" ] && pl=$(sed -n 's/^# silik-plugin: \([a-z][a-z0-9-]*\)$/\1/p' "$pd"/*.py 2>/dev/null | tr '\n' ' ')
+  if [ "$COMP_CWORD" -eq 2 ] && [ -n "$g" ] && [ -f "$pd/$g.py" ] && [[ " $pl " == *" $g "* ]]; then
+    COMPREPLY=($(compgen -W "$(sed -n 's/^# words: //p' "$pd/$g.py" | head -1)" -- "$cur")); return
+  fi
   case $COMP_CWORD in
-    1) COMPREPLY=($(compgen -W "status update identity look session eda dev win power hw secure doctor --dry-run --version" -- "$cur"));;
+    1) COMPREPLY=($(compgen -W "status update identity look session eda dev win power hw secure doctor $pl --dry-run --version" -- "$cur"));;
     2) case $g in
          eda) COMPREPLY=($(compgen -W "list create setup enter run import-vm rm check kernel-arg tools try bench tune" -- "$cur"));;
          win) COMPREPLY=($(compgen -W "list open create run install stop rm sync apps vm" -- "$cur"));;

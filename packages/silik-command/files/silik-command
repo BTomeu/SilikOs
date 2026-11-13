@@ -355,12 +355,43 @@ def launch(item, t=None):
         return False
 
 
+PLUGIN_DIR = os.environ.get("SILIK_PLUGIN_DIR") or "/usr/share/silikos/python/plugins"
+ADDRESS = re.compile(r"^[a-z][a-z0-9-]*/[a-z0-9][a-z0-9./-]*$")
+
+
+def plugin_items(lang, d=None):
+    """the addresses of silik's plugins: plugins/NAME.cmd.json, a list of {"address": "group/word", "argv": [...],
+    "en": ..., "ca": ..., "es": ..., "terminal": true}. ARGV is what follows `silik`: an entry runs silik, nothing
+    else. A file that does not read, or an entry that is not of that shape, is left out"""
+    out, d = [], d or PLUGIN_DIR
+    try:
+        names = sorted(f for f in os.listdir(d) if f.endswith(".cmd.json"))
+    except OSError:
+        return out
+    for f in names:
+        try:
+            with open(os.path.join(d, f), encoding="utf-8") as fh:
+                rows = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        for r in rows if isinstance(rows, list) else []:
+            try:
+                a, argv, title = r["address"], r["argv"], r.get(lang) or r["en"]
+                if not (ADDRESS.match(a) and isinstance(argv, list) and argv and all(isinstance(x, str) for x in argv)
+                        and isinstance(title, str) and not argv[0].startswith("-")):
+                    continue
+                out.append(Item(a, title, [SILIK] + argv, bool(r.get("terminal", True))))
+            except (KeyError, TypeError, AttributeError):
+                continue
+    return out
+
+
 def all_items(lang, started=None):
     """every entry; STARTED: the SILIK_LISTS calls already started (silik_json_start), else they start here"""
     started = [silik_json_start(a) for a in SILIK_LISTS] if started is None else started
     apps = app_items(desktop_dirs(), lang)       # read while silik answers
     boxes, prefixes, programs = (silik_json_read(p) for p in started)
-    return system_items(TEXT[lang], boxes, prefixes, programs) + apps
+    return system_items(TEXT[lang], boxes, prefixes, programs) + plugin_items(lang) + apps
 
 
 # ------------------------------------------------------------------ window
