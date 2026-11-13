@@ -160,9 +160,11 @@ BINFMT_HOW = "EL 9 does not ship qemu-user-static: an x86_64 emulator has to be 
 # what does not exist on ARM (aarch64), said instead of failing further on
 ARM_EDA = ("the vendors' EDA tools (Virtuoso, Sentaurus...) and the EL6 / EL7 userlands of the boxes are x86_64 programs, "
            "and this machine is %s")
-ARM_WINE = ("Wine is not available for %s in SilikOS: silik-wine is built for x86_64 only (Windows programs for x86). "
-            "On a Windows on ARM computer run the program in Windows itself; on a machine with KVM, in a Windows virtual "
-            "machine (`silik win vm create`)")
+ARM_WINE = ("Wine is not available for %s in SilikOS: silik-wine is built for x86_64 only, and EL 9 and EPEL 9 have no "
+            "Wine and no x86 emulator (FEX-Emu, box64) for ARM. What runs a Windows program for x86 here: %s. "
+            "`silik win routes` shows every route")
+KVM_DEV = "/dev/kvm"
+HYPERV_BUS = "/sys/bus/vmbus"
 
 
 def kernel_vsyscall():
@@ -1207,7 +1209,7 @@ def win_prepare(ctx, name, a=None, create=False, arch="win64"):
     new = not os.path.isdir(d)
     if not ctx.dry and not shutil.which("wine"):
         if not x86():
-            win_die(ctx, ARM_WINE % host_arch(), 127)
+            win_die(ctx, ARM_WINE % (host_arch(), win_route_here()), 127)
         win_die(ctx, "Wine is not installed (the package silik-wine: `sudo dnf install silik-wine`): Windows programs cannot run here yet", 127)
     if new and not create:
         if ctx.dry:
@@ -1768,6 +1770,94 @@ def win_apps(ctx, a):
             print("%-28s %-12s %s" % (p["address"], p["prefix"], p["name"]))
         if not ps:
             print("no installed Windows programs; an installer opened with `silik win open SETUP.exe` adds its own")
+    return 0
+
+
+# ------------------------------------------------------------------ win routes
+# How a Windows program built for x86 can run on this machine, by what is seen here (nothing is run or changed).
+# On ARM (docs/ARM.md): Windows 11 for ARM in a virtual machine runs x86 and x64 programs through Windows' own
+# emulation (user programs; a kernel driver must be an ARM64 one); a Wine for ARM with an x86 emulator (FEX-Emu,
+# box64: Hangover) is in neither EL 9 nor EPEL 9, and Wine's ARM64 support needs 4K pages (Wine 10.0's release
+# notes): EL 9's default aarch64 kernel has them, kernel-64k does not.
+def page_size():
+    try:
+        return os.sysconf("SC_PAGE_SIZE")
+    except (ValueError, OSError):
+        return 0
+
+
+def win_routes_list():
+    """[{id, state: ready | missing | no | unknown, name, detail, how}], the most useful first"""
+    arch, kvm, virt = host_arch(), os.path.exists(KVM_DEV), shutil.which("virt-install") is not None
+    wine = shutil.which("wine") is not None
+    out = []
+
+    def route(i, state, name, detail, how=""):
+        out.append({"id": i, "state": state, "name": name, "detail": detail, "how": how})
+
+    def vm(name, note):
+        if not kvm:
+            route("vm", "no", name, "no KVM here (%s is missing): virtualisation is off in the firmware's setup, or this system is "
+                  "itself a virtual machine without nested virtualisation; %s" % (KVM_DEV, note))
+        elif not virt:
+            route("vm", "missing", name, "KVM is here; virt-install is not installed; " + note, "sudo dnf install silik-win virt-install")
+        else:
+            route("vm", "ready", name, "KVM and virt-install are here; " + note, "silik win vm create --iso ISO")
+
+    if arch == "x86_64":
+        if wine:
+            route("wine", "ready", "Wine, in the sandbox", "the program runs directly on this processor", "silik win open FILE.exe")
+        else:
+            route("wine", "missing", "Wine, in the sandbox", "the package silik-wine is not installed", "sudo dnf install silik-wine")
+        vm("a Windows virtual machine", "for the programs Wine does not run")
+        return out
+    vm("a Windows 11 for ARM virtual machine",
+       "Windows runs x86 and x64 programs through its own emulation (a kernel driver must be an ARM64 one)")
+    page = page_size()
+    pages = ("this kernel's pages are %d bytes, the size Wine on ARM needs" % page if page == 4096 else
+             "Wine on ARM needs 4K pages and this kernel's are %d bytes (EL 9's default kernel has 4K pages; kernel-64k does not)" % page)
+    if wine:
+        route("wine", "ready" if page == 4096 else "no", "Wine for ARM with an x86 emulator",
+              "a `wine` is on this system (not SilikOS's: silik-wine is x86_64 only); %s" % pages, "silik win open FILE.exe")
+    else:
+        route("wine", "no", "Wine for ARM with an x86 emulator (FEX-Emu, box64: Hangover)",
+              "not packaged: EL 9 and EPEL 9 have no Wine, FEX-Emu, box64 or Hangover for %s, and silik-wine is x86_64 only; %s" % (arch, pages))
+    emu = os.path.exists(BINFMT_X86)
+    route("emulator", "ready" if emu else "missing", "x86_64 Linux programs under emulation (binfmt_misc)",
+          ("registered (%s)" % BINFMT_X86 if emu else "no x86_64 emulator is registered: " + BINFMT_HOW) +
+          "; for the x86_64 boxes of the EDA tools, slow; not a way to run Windows programs", "silik eda create NAME --arch amd64")
+    # (Hyper-V's guests have its VMBus: /sys/bus/vmbus [A: not seen on an ARM guest here])
+    hv = os.path.isdir(HYPERV_BUS)
+    route("windows", "ready" if hv else "unknown", "Windows itself, on a Windows on ARM computer",
+          "this system is a guest of Hyper-V (%s): the Windows that hosts it runs the program, through its own emulation" % HYPERV_BUS if hv else
+          "where SilikOS is a virtual machine of a Windows on ARM computer, that Windows runs the program; nothing here says "
+          "this is one (no %s)" % HYPERV_BUS)
+    return out
+
+
+def win_route_here():
+    """the one route for a Windows program on this ARM machine, in words (`silik win open` without a Wine)"""
+    r = dict((x["id"], x) for x in win_routes_list())
+    if r.get("wine", {}).get("state") == "ready":
+        return "the `wine` of this system"
+    vm = r["vm"]
+    if vm["state"] == "ready":
+        return ("a Windows 11 for ARM virtual machine (`silik win vm create --iso ISO`), where Windows runs x86 programs "
+                "through its own emulation")
+    if vm["state"] == "missing":
+        return "a Windows 11 for ARM virtual machine, once virt-install is installed (`%s`)" % vm["how"]
+    return ("nothing on this machine: it has no KVM (%s), so no Windows virtual machine either. On a Windows on ARM computer "
+            "run the program in Windows itself" % KVM_DEV)
+
+
+def win_routes(ctx, a):
+    rs = win_routes_list()
+    if a.json:
+        print(json.dumps({"arch": host_arch(), "page_size": page_size(), "routes": rs}, indent=1))
+        return 0
+    print("arch %s, pages of %d bytes" % (host_arch(), page_size()))
+    for r in rs:
+        print("%-9s %-8s %s: %s%s" % (r["id"], r["state"], r["name"], r["detail"], "  <- " + r["how"] if r["how"] else ""))
     return 0
 
 
@@ -4610,6 +4700,8 @@ def parser(only=None):
         x = w.add_parser("rm"); x.add_argument("prefix"); x.add_argument("--yes", action="store_true"); x.set_defaults(fn=win_rm)
         x = w.add_parser("sync", help="installed Windows programs become applications of the desktop"); x.set_defaults(fn=win_sync)
         x = w.add_parser("apps", help="the installed Windows programs"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=win_apps)
+        x = w.add_parser("routes", help="how a Windows program can run on this machine (Wine, a Windows VM; on ARM: which of them exists)")
+        x.add_argument("--json", action="store_true"); x.set_defaults(fn=win_routes)
         v = w.add_parser("vm").add_subparsers(dest="vmcmd")
         x = v.add_parser("create"); x.add_argument("--iso", required=True); x.add_argument("--name", default="windows")
         x.add_argument("--ram", type=int, default=8); x.add_argument("--disk", type=int, default=80); x.add_argument("--cpus", type=int, default=4)

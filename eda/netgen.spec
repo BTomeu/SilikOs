@@ -8,7 +8,7 @@ Summary:        Netgen, layout against schematic (LVS) (upstream's source built 
 License:        GPL-1.0-or-later
 URL:            http://opencircuitdesign.com/netgen/
 Source0:        netgen-%{version}.tar.gz
-ExclusiveArch:  x86_64
+ExclusiveArch:  x86_64 aarch64
 BuildRequires:  gcc make m4 python3 tcsh tcl-devel tk-devel libX11-devel
 Requires:       tcl tk
 

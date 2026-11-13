@@ -12,7 +12,7 @@ URL:            https://github.com/BTomeu/SilikOs
 Source0:        pylab-requirements.txt
 Source1:        pylab-build-requirements.txt
 Source2:        silik-pylab-sources-%{version}.tar
-ExclusiveArch:  x86_64
+ExclusiveArch:  x86_64 aarch64
 BuildRequires:  python3.12-devel python3.12-pip python3.12-setuptools python3.12-wheel gcc
 Requires:       python3.12 python3.12-cryptography python3.12-pyyaml python3.12-packaging
 

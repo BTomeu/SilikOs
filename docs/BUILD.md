@@ -7,6 +7,7 @@
 | Dependency names | `bash tools/check_deps.sh` | an EL9 system with its repositories and EPEL |
 | Installer ISO | `bash tools/build_iso.sh [AlmaLinux-9-…-boot.iso]` (the base ISO is checked first: its sha256 against AlmaLinux's signed `CHECKSUM`) | `xorriso`, `mtools`, `cpio`, `curl`, `gpg`, `implantisomd5` (isomd5sum), repo.almalinux.org |
 | Installer ISO for ARM | `SILIK_ARCH=aarch64 bash tools/build_iso.sh` (AlmaLinux's aarch64 boot ISO: UEFI only) | the same |
+| A recipe not yet for ARM, tried on ARM | `bash tools/arm_candidate.sh NAME` (`--list`: which; builds it in an `almalinux:9` container with `SILIK_TRY_ARCH=1`, then its trial in a clean one; publishes nothing: `docs/ARM.md`) | an aarch64 machine with docker (the workflow ARM candidates runs it on GitHub's ARM runners) |
 | The base's sources | `bash tools/fetch_base_sources.sh [--list] [--limit N]`: the source packages of the boot ISO's installer image, from vault.almalinux.org, each checked by AlmaLinux's signature | `xorriso`, `unsquashfs`, `rpm`, `gpg`; several GB |
 | Brand rasters (committed) | `bash tools/gen_brand.sh` | `rsvg-convert`, the Cascadia Mono font |
 

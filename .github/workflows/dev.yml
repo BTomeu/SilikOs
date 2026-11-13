@@ -161,7 +161,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        tool: [openocd, dfu-util, stm32flash]
+        tool: [openocd, dfu-util, stm32flash, silik-pylab]
     runs-on: ubuntu-24.04-arm
     container: almalinux:9
     timeout-minutes: 60
@@ -218,7 +218,7 @@ jobs:
       - name: Try each tool, then the stack (EPEL's ARM compiler, newlib, stlink; the base's gdb), in a clean EL 9 aarch64
         run: |
           rc=0
-          for t in openocd dfu-util stm32flash stack; do
+          for t in openocd dfu-util stm32flash silik-pylab stack; do
             case $t in stack) pk='/dist/*.rpm' ;; *) pk="/dist/$t-[0-9]*.rpm" ;; esac
             if out=$(docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD/dev:/dev-recipes:ro" almalinux:9 bash -c "uname -m; bash /dev-recipes/trial.sh $t $pk" 2>&1); then
               echo "$out" | tail -12

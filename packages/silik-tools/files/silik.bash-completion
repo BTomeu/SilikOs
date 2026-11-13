@@ -16,7 +16,7 @@ _silik() {
     1) COMPREPLY=($(compgen -W "status update identity look session eda dev win power hw secure doctor --dry-run --version" -- "$cur"));;
     2) case $g in
          eda) COMPREPLY=($(compgen -W "list create setup enter run import-vm rm check kernel-arg tools try bench tune" -- "$cur"));;
-         win) COMPREPLY=($(compgen -W "list open create run install stop rm sync apps vm" -- "$cur"));;
+         win) COMPREPLY=($(compgen -W "list open create run install stop rm sync apps routes vm" -- "$cur"));;
          hw)  COMPREPLY=($(compgen -W "probe nvidia" -- "$cur"));;
          dev) COMPREPLY=($(compgen -W "tools try install can serial ccache" -- "$cur"));;
          power) COMPREPLY=($(compgen -W "show performance balanced saver auto apply zram trim --json" -- "$cur"));;
