@@ -331,7 +331,7 @@ def collect(ctx, silik, a):
     say("silik cve --json%s" % (" --offline" if a.offline else ""))
     rep = cv.report(cv.probe(ctx, silik, offline=a.offline))
     files["cve.json"] = scrub(json.dumps(rep, indent=1) + "\n").encode()
-    files["cve.txt"] = scrub(cv.text(rep, {"ok": "ok", "warn": "warn", "bad": "bad", "unknown": "?"}) + "\n").encode()
+    files["cve.txt"] = scrub(cv.text(rep, silik.SEC_MARK) + "\n").encode()
     results["cve"] = rep["summary"]
 
     say("silik audit --profile %s" % a.profile)
