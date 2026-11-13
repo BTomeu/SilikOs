@@ -986,13 +986,16 @@ def wine_opt():
     return "/".join(wine.split("/")[:3]) if wine.startswith("/opt/") and wine.count("/") > 2 else None
 
 
-def win_show(f, d):
+def win_show(f, d, iso=False):
     """what the sandbox must show, read-only, for file f to open: nothing when it is seen already (the prefix, the
     shared folder, the system, Wine's own folder, a folder always shown), else its folder, or f alone when the
-    folder is too much"""
-    if any(_under(f, t) for t in [win_shared(), d, "/usr", "/etc"] + [p for p in [wine_opt()] if p] + win_always()):
+    folder is too much. An isolated sandbox (`iso`) is not shown the Downloads folder: a file that lies directly
+    in it is shown alone, so that a program nobody trusts yet cannot read, and send away, the other downloads"""
+    always = [] if iso else win_always()
+    if any(_under(f, t) for t in [win_shared(), d, "/usr", "/etc"] + [p for p in [wine_opt()] if p] + always):
         return []
-    return [os.path.dirname(f)] if win_narrow(os.path.dirname(f)) else [f]
+    folder = os.path.dirname(f)
+    return [folder] if win_narrow(folder) and not (iso and folder in win_always()) else [f]
 
 
 def win_env(d, display=True, iso=None):
@@ -1037,6 +1040,8 @@ def win_sandbox(name, d, show=(), net=True, info_fd=None, iso=None):
     # env -i: the first process of the sandbox is bwrap itself, and it must not carry this command's environment
     a = ["env", "-i", bwrap_bin() or "bwrap", "--unshare-user", "--unshare-pid", "--unshare-ipc", "--unshare-uts", "--unshare-cgroup-try"]
     a += ([] if net and not iso else ["--unshare-net"]) + ["--new-session", "--cap-drop", "ALL"]
+    if iso:
+        a += ["--die-with-parent"]      # (its parent is the process that also holds its display: win_isolated_start)
     if info_fd is not None:
         a += ["--info-fd", str(info_fd)]
 
@@ -1121,16 +1126,24 @@ def win_xauth_entry(cookie):
 
 
 def win_xkb(text):
-    """the keyboard switches of the nested server from `setxkbmap -query` of the session (rules, model, layout,
-    variant, options): without them a nested server has the US layout whatever the session has (seen with Xephyr
-    1.20.11 in a session set to es/cat)"""
+    """the session's keyboard layout, read from its `setxkbmap -query` (rules, model, layout, variant, options), as
+    the switches that give it to another server with setxkbmap. A nested server starts with the US layout whatever
+    the session has, and Xephyr 1.20.11's own -xkb-layout and -keybd switches only change the layout's NAME (seen
+    in a session set to es/cat: the key right of L stayed a semicolon); setxkbmap from outside changes the keys."""
     out = []
     for l in text.splitlines():
         k, _, v = l.partition(":")
         k, v = k.strip(), v.strip()
         if k in ("rules", "model", "layout", "variant", "options") and v and all(c.isalnum() or c in "-_:,+()." for c in v):
-            out += ["-xkb-" + k, v]
+            out += ["-" + k.replace("options", "option"), v]
     return out
+
+
+def win_xkb_set(ctx, iso):
+    """gives the sandbox's own server the session's keyboard layout (a client from outside, with the server's key)"""
+    xkb = win_xkb(ctx.query(["setxkbmap", "-query"]))
+    if xkb:
+        ctx.run(["env", "XAUTHORITY=" + iso["xauth"], "setxkbmap", "-display", ":%s" % iso["display"]] + xkb, check=False)
 
 
 def win_screen():
@@ -1140,17 +1153,17 @@ def win_screen():
     return v if w.isdigit() and h.isdigit() and 320 <= int(w) <= 16384 and 200 <= int(h) <= 16384 else WIN_SCREEN
 
 
-def win_xephyr(name, rt, displayfd, xkb=()):
+def win_xephyr(name, rt, displayfd):
     """the nested X server of an isolated sandbox: a window of this session, titled with the prefix's name, that is
     the whole screen of the prefix's programs.
     -displayfd: the server takes a free display number and writes it when it is ready; -auth: its own key, so that
     nothing else of this user connects by chance; no TCP and no abstract socket (-nolisten local: the socket's file
     is then the only way in, and only this sandbox is given it); -noreset: it stays between two programs;
     -no-host-grab: it never takes the session's keyboard or pointer for itself (Xephyr's Ctrl+Shift grab is off).
-    setpriv --pdeathsig: it is started as a child of the sandbox's bwrap and ends with it."""
+    setpriv --pdeathsig: it ends with the process that started it (win_isolated_start), as the sandbox does."""
     return ["setpriv", "--pdeathsig", "TERM", xephyr_bin() or "Xephyr", "-displayfd", str(displayfd), "-auth", os.path.join(rt, "Xauthority"),
             "-nolisten", "tcp", "-nolisten", "local", "-noreset", "-no-host-grab", "-screen", win_screen(),
-            "-title", WIN_TITLE[win_lang()] % name, "-name", "silik-win-isolated"] + list(xkb)
+            "-title", WIN_TITLE[win_lang()] % name, "-name", "silik-win-isolated"]
 
 
 def win_pasta(pid):
@@ -1177,9 +1190,12 @@ def win_display_alive(n):
 
 
 def win_isolated_start(ctx, name, d, rt, show, net, fd, iso, tail, logf):
-    """starts an isolated sandbox: its X server, then bwrap, as ONE process tree. A child of this command starts the
-    server, waits for its display number, and becomes bwrap (exec): the server is then bwrap's child and ends with
-    it (setpriv --pdeathsig), whatever ends the sandbox. Returns (the process id of bwrap, the display number)."""
+    """starts an isolated sandbox: its X server, then bwrap, both children of ONE small process that stays (a
+    child of this command, named silik-win-box) and does nothing but wait for the first of the two to end, and then
+    end the other: the window closed by the owner ends every program of the box at once, with or without a window
+    of its own (one without would otherwise run on, unseen, with the network), and the end of the sandbox takes
+    its window away. Both die with that process too (setpriv --pdeathsig, bwrap --die-with-parent).
+    Returns (that process's id, the display number)."""
     import secrets
     disp = os.path.join(rt, "display")
     for f in (disp, iso["xauth"]):
@@ -1190,20 +1206,28 @@ def win_isolated_start(ctx, name, d, rt, show, net, fd, iso, tail, logf):
     xfd = os.open(iso["xauth"], os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     os.write(xfd, win_xauth_entry(secrets.token_bytes(16)))
     os.close(xfd)
-    xkb = win_xkb(ctx.query(["setxkbmap", "-query"]))
-    win_echo(ctx, win_xephyr(name, rt, 3, xkb), "3>%s &" % shlex.quote(disp))
+    win_echo(ctx, win_xephyr(name, rt, 3), "3>%s &" % shlex.quote(disp))
     sys.stdout.flush()
     sys.stderr.flush()
     pid = os.fork()
-    if pid == 0:                                    # the child: the X server, then bwrap in this same process
+    if pid == 0:                                    # the child: it starts the two, waits, and ends what is left
+        rc = 127
         try:
             os.setsid()
+            # nothing of this command stays open in it (the prefix's lock above all: it would be held for ever)
+            os.closerange(3, fd)
+            os.closerange(fd + 1, 4096)
             log = os.open(logf, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             os.dup2(os.open(os.devnull, os.O_RDONLY), 0)
             os.dup2(log, 1)
             os.dup2(log, 2)
+            try:
+                import ctypes
+                ctypes.CDLL(None).prctl(15, b"silik-win-box", 0, 0, 0)      # PR_SET_NAME: what `ps` and `top` call it
+            except (OSError, AttributeError):
+                pass
             dfd = os.open(disp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            x = subprocess.Popen(win_xephyr(name, rt, dfd, xkb), pass_fds=(dfd,))
+            x = subprocess.Popen(win_xephyr(name, rt, dfd), pass_fds=(dfd,))
             os.close(dfd)
             t0, n = time.time(), ""
             while not n.endswith("\n"):
@@ -1211,15 +1235,22 @@ def win_isolated_start(ctx, name, d, rt, show, net, fd, iso, tail, logf):
                     raise OSError("the X server (Xephyr) did not start")
                 time.sleep(0.02)
                 n = read(disp)
-            argv = win_sandbox(name, d, show, net, info_fd=fd, iso=dict(iso, display=n.strip())) + tail(n.strip())
-            os.set_inheritable(fd, True)
-            os.execvp(argv[0], argv)
+            b = subprocess.Popen(win_sandbox(name, d, show, net, info_fd=fd, iso=dict(iso, display=n.strip())) + tail(n.strip()), pass_fds=(fd,))
+            os.close(fd)
+            gone = 0
+            while gone not in (x.pid, b.pid):
+                gone = os.wait()[0]
+            for other in (x, b):
+                if other.pid != gone:
+                    other.terminate()           # (bwrap: its sandbox dies with it; Xephyr: it closes its window)
+                    os.waitpid(other.pid, 0)
+            rc = 0
         except BaseException as e:      # (nothing of this command's own exit path may run in the child)
             try:
                 os.write(2, ("silik: %s\n" % e).encode())
             except OSError:
                 pass
-        os._exit(127)
+        os._exit(rc)
     t0, n = time.time(), ""
     while not n.endswith("\n"):
         if os.waitpid(pid, os.WNOHANG)[0] or time.time() - t0 > 25:
@@ -1320,7 +1351,7 @@ def win_session(ctx, name, d, show=(), net=True, iso=False, sound=False):
         return s
     win_reap(ctx, name)                 # (what an earlier sandbox of this prefix may have left)
     rt = win_runtime(name)
-    show = sorted(set(win_always()) | set(show))
+    show = sorted((set() if iso else set(win_always())) | set(show))
     show = [p for p in show if not any(p != q and _under(p, q) for q in show)]
     iso = {"display": "N", "xauth": os.path.join(rt, "Xauthority"), "sound": bool(sound)} if iso else None
 
@@ -1330,7 +1361,8 @@ def win_session(ctx, name, d, show=(), net=True, iso=False, sound=False):
     info = os.path.join(rt, "session.json")
     if ctx.dry:
         if iso:
-            win_echo(ctx, win_xephyr(name, rt, 3, win_xkb(ctx.query(["setxkbmap", "-query"]))), "3>%s &" % shlex.quote(os.path.join(rt, "display")))
+            win_echo(ctx, win_xephyr(name, rt, 3), "3>%s &" % shlex.quote(os.path.join(rt, "display")))
+            win_xkb_set(ctx, iso)
         win_echo(ctx, win_sandbox(name, d, show, net, info_fd=3, iso=iso) + tail(), "3>%s &" % shlex.quote(info))
         if iso and net:
             ctx.echo(win_pasta("PID"))
@@ -1349,6 +1381,7 @@ def win_session(ctx, name, d, show=(), net=True, iso=False, sound=False):
         if iso:
             box, n = win_isolated_start(ctx, name, d, rt, show, net, fd, iso, tail, logf)
             iso = dict(iso, display=n)
+            win_xkb_set(ctx, iso)
             argv = win_sandbox(name, d, show, net, info_fd=fd, iso=iso) + tail(n)
 
             def ended():
@@ -1498,12 +1531,15 @@ def win_exec(ctx, name, d, cmd, a=None, show=(), cwd=None, arch=None, window=Tru
                         "(or `silik win stop %s`) and run this again, or put the file in %s" % (name, what, name, win_shared()), 75)
         if not s and not ctx.dry and win_outside(d):
             win_die(ctx, "prefix %s is in use by a Wine started outside the sandbox: close its programs (`silik win stop %s`) first" % (name, name))
+        fresh = not s
         s = s or win_session(ctx, name, d, show, net, iso, sound)
         t0 = time.time()
         rc = win_enter(ctx, d, s, tail, cwd)
         # the sandbox can end while this program was entering it (the same 3 s): the program then failed or was
-        # killed at once, and is started again in a new one
-        if ctx.dry or again or rc not in (1, 126, 137) or time.time() - t0 > 5:
+        # killed at once, and is started again in a new one. (An isolated sandbox also ends when its window is
+        # closed, and a closed window is not opened again: not one this command started itself, and one that was
+        # running only within 2 s)
+        if ctx.dry or again or rc not in (1, 126, 137) or time.time() - t0 > (2 if s.get("iso") else 5) or (fresh and s.get("iso")):
             break
         while win_session_info(name) and time.time() - t0 < 1.5:
             time.sleep(0.1)
@@ -1642,7 +1678,7 @@ def win_run(ctx, a):
         cmd[0] = os.path.realpath(cmd[0])
         if not _under(cmd[0], "/usr"):                          # (the system's own programs are not asked about)
             win_gate(ctx, a, cmd[0], a.prefix)
-        show = win_show(cmd[0], d)
+        show = win_show(cmd[0], d, win_iso(a, a.prefix))
     # a console program typed in a terminal keeps the terminal (its output, its exit code)
     prog = cmd[0] if os.path.isabs(cmd[0]) else win_unix(d, cmd[0])
     console = win_tty() and (cmd[0].lower() in WIN_CONSOLE or bool(prog and win_cui(prog)))
@@ -1908,7 +1944,7 @@ def win_open(ctx, a):
     if getattr(a, "isolated", False) and win_boxed(a) and (name == WIN_ISOLATED or not os.path.isdir(prefix_dir(name))):
         win_mark(ctx, name)                 # a prefix made isolated stays so (the prefix "isolated" always is)
     d, shared = win_prepare(ctx, name, a, create=True), win_shared()
-    show = win_show(f, d) if win_boxed(a) else []
+    show = win_show(f, d, win_iso(a, name)) if win_boxed(a) else []
     if show:
         print("silik: %s is shown to the program, read-only (the file is outside %s)" % (show[0], shared), file=sys.stderr)
     if ext == ".exe":

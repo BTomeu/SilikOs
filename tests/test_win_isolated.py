@@ -75,7 +75,7 @@ class Isolated(Case):
     def plan(self, *argv):
         rc, o, e = self.run_(*argv)
         l = self.lines(o)
-        return rc, l, e, [x for x in l if "Xephyr" in x], [x for x in l if " /usr/bin/bwrap " in x], [x for x in l if x.startswith("$ env -i nsenter")]
+        return rc, l, e, [x for x in l if " /usr/bin/Xephyr " in x], [x for x in l if " /usr/bin/bwrap " in x], [x for x in l if x.startswith("$ env -i nsenter")]
 
     # -- the plan
     def test_an_isolated_program_gets_a_server_of_its_own(self):
@@ -123,6 +123,25 @@ class Isolated(Case):
         self.assertNotIn("--unshare-net", box[-1])
         self.assertIn(" DISPLAY=:7 ", enter[-1])
 
+    def test_an_isolated_box_is_not_shown_the_other_downloads(self):
+        exe = self.file("Downloads/setup.exe")
+        self.file("Downloads/bank-statement.pdf", "x")
+        rc, l, e, x, box, enter = self.plan("win", "open", "--isolated", exe)
+        self.assertIn("--ro-bind %s %s" % (exe, exe), box[-1])                       # the file alone
+        self.assertNotIn("--ro-bind %s/Downloads %s/Downloads " % (self.home, self.home), box[-1])
+        self.assertIn("%s is shown to the program, read-only" % exe, e)
+        self.assertTrue(enter[-1].endswith(" wine explorer /desktop=silik,1280x800 " + exe))
+        # an installer with its files beside it, unpacked in a folder of its own: that folder
+        sub = self.file("Downloads/tool-1.2/setup.exe")
+        rc, l, e, x, box, enter = self.plan("win", "open", "--isolated", sub)
+        self.assertIn("--ro-bind %s/Downloads/tool-1.2 %s/Downloads/tool-1.2" % (self.home, self.home), box[-1])
+        self.assertNotIn("--ro-bind %s/Downloads %s/Downloads " % (self.home, self.home), box[-1])
+        # the shared folder is shared: what is put in ~/Windows is for every prefix
+        self.assertIn("--bind %s %s" % (self.shared, self.shared), box[-1])
+        # the normal box still shows Downloads
+        rc, l, e, x, box, enter = self.plan("win", "open", "--yes", exe)
+        self.assertIn("--ro-bind %s/Downloads %s/Downloads " % (self.home, self.home), box[-1])
+
     def test_sound_only_when_asked(self):
         exe = self.file("Downloads/setup.exe")
         os.makedirs(os.path.join(self.rt, "pulse"))
@@ -140,8 +159,9 @@ class Isolated(Case):
         p = [i for i in l if i.startswith("$ /usr/bin/pasta ")]
         self.assertEqual(p[-1], "$ /usr/bin/pasta --quiet --config-net -t none -u none -T none -U none --no-map-gw "
                                 "--userns /proc/PID/ns/user --netns /proc/PID/ns/net")
-        self.assertLess(l.index(box[-1]), l.index(p[-1]))
-        self.assertLess(l.index(p[-1]), l.index(enter[-1]))
+        last = lambda x: len(l) - 1 - l[::-1].index(x)      # (the plan has the prefix's set-up first: the same lines)
+        self.assertLess(last(box[-1]), last(p[-1]))
+        self.assertLess(last(p[-1]), last(enter[-1]))
         # --no-net: no pasta; without pasta on the system: no network, and it is said
         rc, l, e, x, box, enter = self.plan("win", "open", "--isolated", "--no-net", exe)
         self.assertFalse([i for i in l if "pasta" in i])
@@ -159,9 +179,14 @@ class Isolated(Case):
     def test_the_keyboard_layout_of_the_session_goes_to_the_server(self):
         exe = self.file("Downloads/setup.exe")
         rc, l, e, x, box, enter = self.plan("win", "open", "--isolated", exe)
-        self.assertIn(" -xkb-rules evdev -xkb-model pc105 -xkb-layout es -xkb-variant cat 3>", x[-1])
+        # Xephyr's own switches change the layout's name only (seen): the layout is set from outside, with its key
+        self.assertNotIn("-xkb-", x[-1])
+        k = [i for i in l if " setxkbmap " in i]
+        self.assertEqual(k[-1], "$ env XAUTHORITY=%s/silik-win/isolated/Xauthority setxkbmap -display :N -rules evdev -model pc105 -layout es -variant cat" % self.rt)
+        self.assertLess(l.index(x[0]), l.index(k[0]))
+        self.assertLess(l.index(k[0]), l.index(box[0]))
         self.assertEqual(silik.win_xkb("layout:     us,es\noptions:    grp:alt_shift_toggle,caps:escape\n"),
-                         ["-xkb-layout", "us,es", "-xkb-options", "grp:alt_shift_toggle,caps:escape"])
+                         ["-layout", "us,es", "-option", "grp:alt_shift_toggle,caps:escape"])
         self.assertEqual(silik.win_xkb("layout: es; rm -rf /\nvariant: $(id)\nnonsense\n"), [])
         self.assertEqual(silik.win_xkb(""), [])
 
@@ -310,8 +335,24 @@ class Isolated(Case):
         would give the programs a way to the system's files through /proc/PID/root"""
         src = text("packages/silik-tools/files/silik")
         body = src[src.index("def win_isolated_start"):src.index("def win_runtime_make")]
-        self.assertLess(body.index("subprocess.Popen(win_xephyr("), body.index("os.execvp(argv[0], argv)"))
+        self.assertLess(body.index("subprocess.Popen(win_xephyr("), body.index("subprocess.Popen(win_sandbox("))
         self.assertNotIn("nsenter", body)
+
+    def test_the_box_and_its_window_end_together(self):
+        """closing the window ends every program of the box, the end of the box closes the window, and both end
+        with the process that holds them"""
+        exe = self.file("Downloads/setup.exe")
+        rc, l, e, x, box, enter = self.plan("win", "open", "--isolated", exe)
+        self.assertIn(" --die-with-parent ", box[-1])
+        self.assertTrue(x[-1].startswith("$ setpriv --pdeathsig TERM "))
+        src = text("packages/silik-tools/files/silik")
+        body = src[src.index("def win_isolated_start"):src.index("def win_runtime_make")]
+        self.assertIn("gone = os.wait()[0]", body)
+        self.assertIn("other.terminate()", body)
+        self.assertIn("os.closerange(3, fd)", body)             # the prefix's lock is not held by the box
+        # the normal box lives on after the command that started it: it must not die with it
+        rc, l, e, x, box, enter = self.plan("win", "open", "--yes", exe)
+        self.assertNotIn("--die-with-parent", box[-1])
 
 
 class Question(Case):
