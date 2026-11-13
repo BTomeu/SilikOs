@@ -21,6 +21,7 @@ def load(name, path):
 
 
 gen = load("gen_marks", os.path.join(ROOT, "tools", "gen_marks.py"))
+walls = load("gen_wallpaper", os.path.join(ROOT, "tools", "gen_wallpaper.py"))
 CUTS = {"LOGO": gen.LOGO, "SMALL": gen.SMALL, "TILE": gen.TILE}
 
 # an upper half circle drawn left to right, as the mark's arc is: M x y A r r 0 0 1 x2 y
@@ -49,6 +50,13 @@ def marks(text):
         on = [d for d in dots if abs(math.hypot(d[0] - cx, d[1] - cy) - rx) < 0.08 * rx]
         found.append((rx, float(sw.group(1)), on, cx, cy, "round" in m.group(7)))
     return found
+
+
+def arc_distance(x, y, cx, cy, r):
+    """how far (x, y) is from the mark's line: the upper half of the circle of radius r about (cx, cy)"""
+    if y <= cy:
+        return abs(math.hypot(x - cx, y - cy) - r)
+    return min(math.hypot(x - (cx - r), y - cy), math.hypot(x - (cx + r), y - cy))
 
 
 def png_size(path):
@@ -82,7 +90,7 @@ class Brand(unittest.TestCase):
                 self.assertTrue(ok, "%s: a mark of radius %s, stroke %s, dot %s at (%.2f, %.2f) is none of the brand's cuts"
                                 % (rel, r, sw, dr, dx, dy))
                 seen += 1
-        self.assertGreaterEqual(seen, 8)             # the marks, the icon tiles, the installer and boot files, the two backgrounds
+        self.assertGreaterEqual(seen, 10)            # the marks, the icon tiles, the installer and boot files, the backgrounds that carry it
 
     def test_no_svg_can_be_stretched(self):
         for path in svgs():
@@ -113,6 +121,75 @@ class Brand(unittest.TestCase):
             with open(os.path.join(ROOT, rel)) as f:
                 text = f.read()
             self.assertIn(gen.mark(cut, gen.INK if rel.endswith("mark.svg") else gen.PAPER), text, rel)
+
+    def test_a_background_carries_the_mark_as_itself_or_not_at_all(self):
+        """the set of backgrounds (tools/gen_wallpaper.py): on the sheets that carry the mark it is the generator's
+        LOGO cut at one scale factor, once, whole and inside the frame; on the others there is no mark and nothing
+        that could pass for one (no half circle with a dot on it)"""
+        w, h, mx, my, mr, sw, px, py, pr = gen.LOGO
+        where = {"wafer": (walls.K, walls.MARK_DX, walls.MARK_DY), "grid": (walls.GRID_K, walls.GRID_DX, walls.GRID_DY)}
+        self.assertEqual(sorted(walls.WITH_MARK), sorted(where))
+        for name, _ in walls.SHEETS:
+            for dark, c in ((False, walls.LIGHT), (True, walls.DARK)):
+                rel = "packages/silikos-branding/files/" + walls.filename(name, dark)
+                with open(os.path.join(ROOT, rel)) as f:
+                    text = f.read()
+                found = marks(text)
+                if name not in where:
+                    self.assertEqual(found, [], rel)
+                    self.assertNotIn('stroke-linecap="round"/>\n  <circle', text, rel)      # (how gen_marks writes one)
+                    continue
+                k, dx, dy = where[name]
+                self.assertEqual(walls.WITH_MARK[name], k)
+                self.assertEqual(len(found), 1, rel)
+                self.assertEqual(text.count(gen.mark(gen.LOGO, c["ink"], k, dx, dy)), 1, rel)      # the generator's own, in the sheet's ink
+                r, stroke, dots, cx, cy, round_cap = found[0]
+                self.assertAlmostEqual(r, mr * k)
+                self.assertAlmostEqual(stroke, sw * k)                    # (one factor: the line is as heavy as the cut's)
+                self.assertGreaterEqual(k, 30 / 80.0)                     # the LOGO cut is for 30 px and more
+                # whole, and inside the frame with space to it
+                self.assertGreater(cx - r - stroke, walls.INNER + 60, rel)
+                self.assertLess(cx + r + stroke, walls.W - walls.INNER - 60, rel)
+                self.assertGreater(cy - r - stroke, walls.INNER + 60, rel)
+                self.assertLess(cy + stroke, walls.H - walls.INNER - 60, rel)
+
+    def test_the_mark_on_a_background_has_clear_space(self):
+        """nothing of the pattern comes near the mark's line or its dot: the dies of the wafer and the points of the
+        grid that would are left out (measured here from the pattern's ink to the mark's ink)"""
+        w, h, mx, my, mr, sw, px, py, pr = gen.LOGO
+        half = walls.DIE / 2.0
+        k = walls.K
+        acx, acy, dcx, dcy = walls.MARK_DX + mx * k, walls.MARK_DY + my * k, walls.MARK_DX + px * k, walls.MARK_DY + py * k
+        dies = walls.dies()
+        self.assertGreater(len(dies), 800)
+        for x, y in dies:
+            reach = half * math.sqrt(2)                                   # a die's corner from its centre
+            self.assertGreaterEqual(arc_distance(x + half, y + half, acx, acy, mr * k) - sw * k / 2.0 - reach, walls.CLEAR - 1e-6)
+            self.assertGreaterEqual(math.hypot(x + half - dcx, y + half - dcy) - pr * k - reach, walls.CLEAR - 1e-6)
+        k = walls.GRID_K
+        acx, acy, dcx, dcy = walls.GRID_DX + mx * k, walls.GRID_DY + my * k, walls.GRID_DX + px * k, walls.GRID_DY + py * k
+        self.assertEqual((acx, acy - (62 - 37.5) * k), (walls.W / 2.0, walls.H / 2.0))      # its ink centred on the sheet
+        points = walls.grid_points()
+        self.assertGreater(len(points), 2000)
+        self.assertGreaterEqual(walls.GRID_CLEAR, walls.GRID)             # at least a whole pitch of paper around it
+        for x, y, major in points:
+            reach = 12 if major else 2.5                                  # a cross's arm, a dot's radius
+            self.assertGreaterEqual(arc_distance(x, y, acx, acy, mr * k) - sw * k / 2.0 - reach, walls.GRID_CLEAR - 12 - 1e-6)
+            self.assertGreaterEqual(math.hypot(x - dcx, y - dcy) - pr * k - reach, walls.GRID_CLEAR - 12 - 1e-6)
+            self.assertFalse(y <= acy and math.hypot(x - acx, y - acy) < mr * k)     # and none under the arc
+
+    def test_a_winding_is_not_a_mark(self):
+        """the schematic's inductors are the symbol's half circles, four in a row, and no junction dot lies on one"""
+        with open(os.path.join(ROOT, "packages/silikos-branding/files/silikos-schematic-light.svg")) as f:
+            text = f.read()
+        coils = re.findall(r"M([\d.]+) ([\d.]+)((?:a40 40 0 0 1 80 0)+)", text)
+        self.assertEqual([len(c[2]) // len("a40 40 0 0 1 80 0") for c in coils], [4, 4, 4])
+        dots = [(float(x), float(y)) for x, y in re.findall(r"M([\d.]+) ([\d.]+)h0", text)]
+        self.assertGreater(len(dots), 20)
+        for x0, y0, humps in coils:
+            for i in range(4):
+                for x, y in dots:
+                    self.assertGreater(math.hypot(x - (float(x0) + 40 + 80 * i), y - float(y0)), 40 + 14 + 20)
 
     def test_the_shell_draws_the_mark_itself(self):
         with open(os.path.join(ROOT, "packages/silikos-desktop/files/shell-ext/extension.js")) as f:

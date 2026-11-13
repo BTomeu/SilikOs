@@ -1,5 +1,5 @@
 Name:           silikos-branding
-Version:        0.4.0
+Version:        0.5.0
 Release:        1%{?dist}
 Summary:        SilikOS name, marks, backgrounds, boot splash and login logo
 License:        LicenseRef-SilikVolt
@@ -13,15 +13,23 @@ Recommends:     plymouth-theme-spinner
 # the About logo. What programs read stays the base's: ID, ID_LIKE, VERSION_ID, /etc/redhat-release.
 
 %description
-The SilikVolt mark, the SilikOS backgrounds and boot splash, the login screen logo, and the system's display name:
+The SilikVolt mark, the SilikOS backgrounds (a set of drawing sheets, each a light sheet and its dark twin: wafer,
+plain, grid, scope, pcb, mesh, schematic, cells; `silik look --wallpaper NAME` and GNOME Settings choose among them),
+the boot splash, the login screen logo, and the system's display name:
 /etc/os-release becomes the base's file with NAME, VERSION, PRETTY_NAME, LOGO and the URLs changed, while ID, ID_LIKE,
 VERSION_ID, PLATFORM_ID, CPE_NAME, /etc/redhat-release and /etc/system-release stay the base's (package tools and
 vendor installers read them). `/usr/libexec/silikos/identity base` (or `silik identity base`) puts the base's own
 os-release back.
 
 %install
-install -Dm0644 %{_sourcedir}/silikos-light.svg %{buildroot}%{_datadir}/backgrounds/silikos/silikos-light.svg
-install -Dm0644 %{_sourcedir}/silikos-dark.svg %{buildroot}%{_datadir}/backgrounds/silikos/silikos-dark.svg
+# the backgrounds (tools/gen_wallpaper.py): the wafer keeps the first names, the others are silikos-NAME-light / -dark;
+# and the list GNOME Settings shows them from
+for sheet in "" plain- grid- scope- pcb- mesh- schematic- cells-; do
+  for twin in light dark; do
+    install -Dm0644 %{_sourcedir}/silikos-$sheet$twin.svg %{buildroot}%{_datadir}/backgrounds/silikos/silikos-$sheet$twin.svg
+  done
+done
+install -Dm0644 %{_sourcedir}/silikos-backgrounds.xml %{buildroot}%{_datadir}/gnome-background-properties/silikos-backgrounds.xml
 install -Dm0644 %{_sourcedir}/silikos-mark.svg %{buildroot}%{_datadir}/pixmaps/silikos-mark.svg
 install -Dm0644 %{_sourcedir}/silikos-mark-light.svg %{buildroot}%{_datadir}/pixmaps/silikos-mark-light.svg
 install -Dm0644 %{_sourcedir}/silikos-logo-icon.svg %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/silikos-logo-icon.svg
@@ -75,6 +83,9 @@ dconf update >/dev/null 2>&1 || :
 
 %files
 %{_datadir}/backgrounds/silikos/
+# (no package of the base's desktop owns this folder unless gnome-backgrounds is installed)
+%dir %{_datadir}/gnome-background-properties
+%{_datadir}/gnome-background-properties/silikos-backgrounds.xml
 %{_datadir}/pixmaps/silikos-mark.svg
 %{_datadir}/pixmaps/silikos-mark-light.svg
 %{_datadir}/icons/hicolor/scalable/apps/silikos-logo-icon.svg

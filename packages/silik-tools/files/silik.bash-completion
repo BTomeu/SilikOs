@@ -1,12 +1,13 @@
 # bash completion for silik
 _silik() {
   local cur=${COMP_WORDS[COMP_CWORD]} g=${COMP_WORDS[1]}
-  # look: a look, --accent and its accents, --glass and its modes, at any place after the word look
+  # look: a look, --accent and its accents, --glass and its modes, --wallpaper and its sheets, at any place after the word look
   if [ "$g" = look ] && [ "$COMP_CWORD" -ge 2 ]; then
     if [ "${COMP_WORDS[COMP_CWORD-1]}" = --accent ]; then COMPREPLY=($(compgen -W "ink steel steel-vivid cobalt cobalt-vivid silicon silicon-vivid volt volt-vivid spark" -- "$cur"))
     elif [ "${COMP_WORDS[COMP_CWORD-1]}" = --glass ]; then COMPREPLY=($(compgen -W "off on clear crystal crystal-thin" -- "$cur"))
     elif [ "${COMP_WORDS[COMP_CWORD-1]}" = --glass-saver ]; then COMPREPLY=($(compgen -W "on off" -- "$cur"))
-    else COMPREPLY=($(compgen -W "silik bar island --accent --glass --glass-saver --json" -- "$cur")); fi
+    elif [ "${COMP_WORDS[COMP_CWORD-1]}" = --wallpaper ]; then COMPREPLY=($(compgen -W "wafer wafer-dark plain plain-dark grid grid-dark scope scope-dark pcb pcb-dark mesh mesh-dark schematic schematic-dark cells cells-dark" -- "$cur"))
+    else COMPREPLY=($(compgen -W "silik bar island --accent --glass --glass-saver --wallpaper --json" -- "$cur")); fi
     return
   fi
   # speed apply / undo: the items of the profile, in any number; bench: its switches, then files

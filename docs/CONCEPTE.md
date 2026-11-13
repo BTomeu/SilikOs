@@ -83,6 +83,13 @@ oberta. L'illa i la barra, que sempre hi són, només mostren les finestres que 
 text es llegeix (4,5:1 com a mínim) fins i tot amb negre al darrere: com més fi és el paper, més fosc es fa el text
 gris, i al més fi és tinta. Les mesures de cada mode són a `docs/STATUS.md`.
 
+El **fons de pantalla** és un full de dibuix d'enginyeria, i n'hi ha un joc de vuit, cadascun amb el seu bessó fosc:
+`silik look --wallpaper wafer | plain | grid | scope | pcb | mesh | schematic | cells` (el mapa d'oblia d'ara, un full
+en blanc, una quadrícula de punts, un oscil·loscopi, un circuit imprès, una malla d'elements finits, un esquema, files
+de cel·les estàndard), i `NOM-dark` posa el bessó fosc a l'escriptori; al COMMAND bar, `look/wallpaper-…`. Van del més
+tranquil (`plain`) al més dens (`cells`), per poder jutjar el vidre sobre fons diferents. La marca hi és, tal com és,
+a `wafer` i a `grid`; als altres no hi és. Una imatge pròpia triada a la Configuració no es toca si no es demana.
+
 Els menús del sistema, el calendari, les notificacions, l'indicador de volum, els diàlegs i el canvi de finestra
 (Alt+Tab) són del mateix **paper i tinta**: marc fi de tinta, cantonades de 6 px (4 a les tecles), Cascadia Mono, el
 que és triat en vídeo invers (o amb l'accent). Són paper opac, no vidre. La barra de títol de l'aspecte Silik i les
