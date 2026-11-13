@@ -9946,7 +9946,7 @@ def parser(only=None):
     if only in (None, "win"):
         def box(x):   # the sandbox switches, before the positional arguments
             x.add_argument("--no-net", action="store_true", help="the program has no network (it still shares this session's screen and keyboard: "
-                           "not a way to run a program you do not trust; that is `silik win vm`)")
+                           "not a way to run a program you do not trust; that is --isolated, or `silik win vm`)")
             x.add_argument("--no-sandbox", action="store_true", help="run without the sandbox: the program sees the whole home folder")
             x.add_argument("--isolated", action="store_true", help="for a program you do not trust with this session: a display of its own (a window "
                            "that is its whole screen), so it cannot read this session's keyboard, screen or clipboard; its own network "
