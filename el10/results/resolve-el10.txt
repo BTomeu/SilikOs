@@ -16,3 +16,10 @@ qucs-s                     resolves (13 names)
 xschem                     resolves (13 names)
 yosys                      DOES NOT RESOLVE: missing gcc-toolset-14-gcc gcc-toolset-14-gcc-c++
 dfu-util                   resolves (3 names)
+openocd                    DOES NOT RESOLVE: missing jimtcl-devel
+savvycan                   resolves (8 names)
+sdcc                       resolves (11 names)
+sigrok-firmware-fx2lafw    resolves (4 names); built first, ours: sdcc 
+sigrok                     DOES NOT RESOLVE: missing libserialport-devel
+silik-pylab                resolves (5 names)
+stm32flash                 resolves (2 names)

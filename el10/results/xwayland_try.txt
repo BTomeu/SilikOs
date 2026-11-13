@@ -1,0 +1,15 @@
+## mutter's log about X11:
+## sockets: X0 X1 
+## Xwayland processes before an X11 client connects: 1
+## the X server an X11 program finds (xdpyinfo on :0):
+   version number:    11.0
+   vendor string:    The X.Org Foundation
+   vendor release number:    12401009
+## Xwayland processes after: 1; its command line: /usr/bin/Xwayland :0 -rootless -noreset -accessx -core -auth /tmp/run-tester/.mutter-Xwaylandauth.YYGLY3 -listenfd 4 -listenfd 5 -displayfd 6 -initfd 7 -byteswappedclients -enable-ei-portal 
+## extensions that inject or record input: RECORD XInputExtension XTEST 
+## the same question without the key, before any xhost: Authorization required, but no authorization protocol specified
+## the access list, then what `silik eda` asks for (xhost +si:localuser:tester):
+   access control enabled, only authorized clients can connect
+   localuser:tester being added to access control list
+## mutter's key file for its X server (XAUTHORITY): /tmp/run-tester/.mutter-Xwaylandauth.YYGLY3
+## an X11 client's window, as mutter has it: (true, '"class=XTerm client=x11 decorated=true"')

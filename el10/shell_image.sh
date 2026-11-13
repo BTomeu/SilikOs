@@ -17,7 +17,7 @@ fi
 docker run "${opts[@]}" almalinux:10 bash -c "$pre"' && bash /src/el10/repos.sh &&
   dnf -y install gnome-shell gjs mutter gnome-session dbus-daemon mesa-dri-drivers xorg-x11-server-Xwayland \
       glib2-devel gsettings-desktop-schemas gnome-shell-extension-user-theme gnome-extensions-app \
-      dejavu-sans-fonts procps-ng findutils diffutils unzip which python3-gobject gtk3 gtk4 xprop xdpyinfo &&
+      dejavu-sans-fonts procps-ng findutils diffutils unzip which python3-gobject gtk3 gtk4 xprop xdpyinfo xhost xterm &&
   (dnf -y install mutter-devkit || echo "note: no mutter-devkit package") && dnf clean all'
 docker commit "$name-build" "$name" >/dev/null
 docker rm "$name-build" >/dev/null

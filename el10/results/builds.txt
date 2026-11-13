@@ -1,0 +1,21 @@
+# el10/build_tools.sh build stm32flash dfu-util netgen ngspice, AlmaLinux 10.2 x86_64 container, 2026-11-13
+# (the product's tools/build_dev.sh / tools/build_eda.sh, as copies with the EL 9 guard and dist tag saying el10: 2 lines
+# changed in each; then dev/trial.sh / eda/trial.sh, unchanged, in a second clean container)
+== stm32flash (dev)
+   built: stm32flash-0.7-1.silik.el10.x86_64.rpm
+   TRIAL-OK stm32flash 0.7 : starts and names its options
+== dfu-util (dev)
+   built: dfu-util-0.11-1.silik.el10.x86_64.rpm
+   TRIAL-OK dfu-util 0.11 : starts, and lists no device where there is none
+== netgen (eda)
+   built: netgen-1.5.328-1.silik.el10.x86_64.rpm 
+   TRIAL-OK Netgen 1.5.328 : two netlists of an inverter match; one with a wrong gate does not
+== ngspice (eda), the recipe as it is
+   BUILD FAILED at configure ("cannot run C compiled programs"). config.log:
+   /usr/bin/ld: conftest.o: relocation R_X86_64_32 against `.rodata.str1.1' can not be used when making a PIE object; recompile with -fPIE
+   (the recipe gives configure CFLAGS="-O2" in place of the distribution's flags; EL 10's link flags make a PIE)
+== ngspice (eda), a copy of the recipe with CFLAGS="-O2 -fPIE" CXXFLAGS="-O2 -fPIE" (one line changed, by hand, in the container)
+   built: ngspice-47-2.silik.el10.x86_64.rpm
+   TRIAL-OK ** ngspice-47 : Circuit level simulation program : v(out) = 0.5 V, the XSPICE gain block gives 1 V; the shared library gives the same 0.5 V
+# every binary built there says what it needs (readelf -n of a program built under rpmbuild on EL 10.2):
+#   Properties: x86 ISA needed: x86-64-baseline, x86-64-v2, x86-64-v3     (rpm's flags: -march=x86-64-v3)

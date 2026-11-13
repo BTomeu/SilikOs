@@ -1,2 +1,141 @@
 # AlmaLinux release 9.8 (Olive Jaguar), x86_64, 2026-11-13; sources: appstream baseos crb epel extras 
 ## 1. names our packages ask for
+MISSING       Recommends devsim                             silik-eda-open         
+MISSING       Recommends dfu-util                           silik-dev              
+MISSING       Recommends kicad                              silik-eda-open         
+MISSING       Recommends kicad-footprints                   silik-eda-open         
+MISSING       Recommends kicad-symbols                      silik-eda-open         
+MISSING       Recommends kicad-templates                    silik-eda-open         
+MISSING       Recommends klayout                            silik-eda-open         
+MISSING       Recommends magic                              silik-eda-open         
+MISSING       Recommends netgen                             silik-eda-open         
+MISSING       Recommends ngspice                            silik-eda-open         
+MISSING       Recommends nvc                                silik-eda-open         
+MISSING       Recommends openocd                            silik-dev              
+MISSING       Recommends qucs-s                             silik-eda-open         
+MISSING       Recommends savvycan                           silik-dev              
+MISSING       Recommends sdcc                               silik-dev              
+MISSING       Recommends sigrok                             silik-dev              
+MISSING       Recommends sigrok-firmware-fx2lafw            silik-dev              
+MISSING       Recommends stm32flash                         silik-dev              
+MISSING       Recommends xschem                             silik-eda-open         
+MISSING       Recommends yosys                              silik-eda-open         
+ok            Recommends apr                                silik-eda-compat       appstream apr-1.7.0
+ok            Recommends apr-util                           silik-eda-compat       appstream apr-util-1.6.1
+ok            Recommends arm-none-eabi-binutils-cs          silik-dev              epel arm-none-eabi-binutils-cs-2.43
+ok            Recommends arm-none-eabi-gcc-cs               silik-dev              epel arm-none-eabi-gcc-cs-12.4.0
+ok            Recommends arm-none-eabi-gcc-cs-c++           silik-dev              epel arm-none-eabi-gcc-cs-c++-12.4.0
+ok            Recommends arm-none-eabi-newlib               silik-dev              epel arm-none-eabi-newlib-4.4.0.20231231
+ok            Recommends autofs                             silik-eda-compat       baseos autofs-5.1.7
+ok            Recommends avrdude                            silik-dev              epel avrdude-7.3
+ok            Recommends bubblewrap                         silik-tools            baseos bubblewrap-0.6.3
+ok            Recommends can-utils                          silik-dev              epel can-utils-2023.03
+ok            Recommends cmake                              silik-dev              appstream cmake-3.31.8
+ok            Recommends compat-openssl11                   silik-eda-compat       appstream compat-openssl11-1.1.1k
+ok            Recommends edk2-aarch64                       silik-win              crb edk2-aarch64-20241117
+ok            Recommends edk2-ovmf                          silik-win              appstream edk2-ovmf-20241117
+ok            Recommends elfutils-libelf                    silik-eda-compat       baseos elfutils-libelf-0.194
+ok            Recommends environment-modules                silik-eda-compat       baseos environment-modules-5.3.0
+ok            Recommends freerdp                            silik-win              appstream freerdp-2.11.7
+ok            Recommends gcc-c++                            silik-eda-open         appstream gcc-c++-11.5.0
+ok            Recommends gdb                                silik-dev              appstream gdb-16.3
+ok            Recommends glibc(x86-32)                      silik-eda-compat       baseos glibc-2.34
+ok            Recommends gnome-terminal                     silik-command          appstream gnome-terminal-3.40.3
+ok            Recommends gnuplot                            silik-eda-open         epel gnuplot-5.4.3
+ok            Recommends gtkwave                            silik-eda-open         epel gtkwave-3.3.118
+ok            Recommends i2c-tools                          silik-dev              appstream i2c-tools-4.3
+ok            Recommends iverilog                           silik-eda-open         epel iverilog-12.0
+ok            Recommends libXScrnSaver                      silik-eda-compat       appstream libXScrnSaver-1.2.3
+ok            Recommends libXft                             silik-eda-compat       appstream libXft-2.3.3
+ok            Recommends libXp                              silik-eda-compat       appstream libXp-1.0.3
+ok            Recommends libXtst                            silik-eda-compat       appstream libXtst-1.2.3
+ok            Recommends libgcc(x86-32)                     silik-eda-compat       baseos libgcc-11.5.0
+ok            Recommends libguestfs-tools-c                 silik-eda-compat       appstream guestfs-tools-1.52.2
+ok            Recommends libmodbus                          silik-dev              epel libmodbus-3.1.12
+ok            Recommends libnotify                          silik-win              appstream libnotify-0.7.9
+ok            Recommends libnsl                             silik-eda-compat       baseos libnsl-2.34
+ok            Recommends libpng12                           silik-eda-compat       epel libpng12-1.2.57
+ok            Recommends libstdc++(x86-32)                  silik-eda-compat       baseos libstdc++-11.5.0
+ok            Recommends libvirt-client                     silik-win              appstream libvirt-client-11.10.0
+ok            Recommends libvirt-daemon-kvm                 silik-win              appstream libvirt-daemon-kvm-11.10.0
+ok            Recommends libxcrypt-compat                   silik-eda-compat       appstream libxcrypt-compat-4.4.18
+ok            Recommends lrzsz                              silik-dev              baseos lrzsz-0.12.20
+ok            Recommends make                               silik-dev              baseos make-4.3
+ok            Recommends make                               silik-eda-open         baseos make-4.3
+ok            Recommends mesa-libGLU                        silik-eda-compat       appstream mesa-libGLU-9.0.1
+ok            Recommends minicom                            silik-dev              baseos minicom-2.7.1
+ok            Recommends motif                              silik-eda-compat       appstream motif-2.3.4
+ok            Recommends ncurses-compat-libs                silik-eda-compat       epel ncurses-compat-libs-6.2
+ok            Recommends nfs-utils                          silik-eda-compat       baseos nfs-utils-2.5.4
+ok            Recommends passt                              silik-win              appstream passt-0^20251210.gd04c480
+ok            Recommends pciutils                           silik-tools            appstream pciutils-3.7.0
+ok            Recommends picocom                            silik-dev              epel picocom-3.1
+ok            Recommends plymouth-scripts                   silikos-branding       appstream plymouth-scripts-0.9.5
+ok            Recommends plymouth-theme-spinner             silikos-branding       appstream plymouth-theme-spinner-0.9.5
+ok            Recommends podman                             silik-tools            appstream podman-5.8.2
+ok            Recommends python3-matplotlib                 silik-eda-open         epel python3-matplotlib-3.4.3
+ok            Recommends python3-numpy                      silik-eda-open         appstream python3-numpy-1.23.5
+ok            Recommends python3-pyserial                   silik-dev              appstream python3-pyserial-3.4
+ok            Recommends python3-scipy                      silik-eda-open         appstream python3-scipy-1.9.3
+ok            Recommends qemu-kvm                           silik-win              appstream qemu-kvm-10.1.0
+ok            Recommends qt5ct                              silikos-desktop        epel qt5ct-1.1
+ok            Recommends screen                             silik-dev              epel screen-4.8.0
+ok            Recommends ser2net                            silik-dev              epel ser2net-4.6.5
+ok            Recommends setserial                          silik-dev              baseos setserial-2.17
+ok            Recommends socat                              silik-dev              appstream socat-1.7.4.1
+ok            Recommends stlink                             silik-dev              epel stlink-1.7.0
+ok            Recommends swtpm                              silik-win              appstream swtpm-0.8.0
+ok            Recommends tio                                silik-dev              epel tio-3.9
+ok            Recommends tuned-ppd                          silikos-power          appstream tuned-ppd-2.27.0
+ok            Recommends unzip                              silik-dev              baseos unzip-6.0
+ok            Recommends usbutils                           silik-dev              baseos usbutils-017
+ok            Recommends verilator                          silik-eda-open         epel verilator-5.022
+ok            Recommends verilator-devel                    silik-eda-open         epel verilator-devel-5.022
+ok            Recommends virt-install                       silik-win              appstream virt-install-5.1.0
+ok            Recommends virt-manager                       silik-win              appstream virt-manager-5.1.0
+ok            Recommends virt-viewer                        silik-win              appstream virt-viewer-11.0
+ok            Recommends wireshark                          silik-dev              appstream wireshark-3.4.10
+ok            Recommends wireshark-cli                      silik-dev              appstream wireshark-cli-3.4.10
+ok            Recommends xdg-utils                          silik-command          appstream xdg-utils-1.1.3
+ok            Recommends xorg-x11-fonts-100dpi              silik-eda-compat       appstream xorg-x11-fonts-100dpi-7.5
+ok            Recommends xorg-x11-fonts-75dpi               silik-eda-compat       appstream xorg-x11-fonts-75dpi-7.5
+ok            Recommends xorg-x11-fonts-Type1               silik-eda-compat       appstream xorg-x11-fonts-Type1-7.5
+ok            Recommends xorg-x11-fonts-misc                silik-eda-compat       appstream xorg-x11-fonts-misc-7.5
+ok            Recommends xorg-x11-server-utils              silik-eda-compat       appstream xorg-x11-server-utils-7.7
+ok            Recommends xorg-x11-server-utils              silik-tools            appstream xorg-x11-server-utils-7.7
+ok            Recommends xorg-x11-xauth                     silik-eda-compat       appstream xorg-x11-xauth-1.1
+ok            Requires   bubblewrap                         silik-win              baseos bubblewrap-0.6.3
+ok            Requires   coreutils                          silik-win              baseos coreutils-8.32
+ok            Requires   dconf                              silikos-desktop        appstream dconf-0.40.0
+ok            Requires   dconf                              silikos-security       appstream dconf-0.40.0
+ok            Requires   dejavu-sans-fonts                  silikos-desktop        baseos dejavu-sans-fonts-2.37
+ok            Requires   dnf-automatic                      silikos-security       baseos dnf-automatic-4.14.0
+ok            Requires   dnf-utils                          silikos-security       baseos yum-utils-4.3.0
+ok            Requires   firewalld                          silikos-security       baseos firewalld-1.3.4
+ok            Requires   gdm                                silikos-desktop        appstream gdm-40.1
+ok            Requires   glib2                              silikos-desktop        baseos glib2-2.68.4
+ok            Requires   gnome-shell                        silikos-desktop        appstream gnome-shell-40.10
+ok            Requires   gnome-shell-extension-user-theme   silikos-desktop        appstream gnome-shell-extension-user-theme-40.7
+ok            Requires   gtk3                               silik-command          appstream gtk3-3.24.31
+ok            Requires   gtk3                               silikos-desktop        appstream gtk3-3.24.31
+ok            Requires   ksh                                silik-eda-compat       appstream ksh-1.0.6
+ok            Requires   podman                             silik-eda-compat       appstream podman-5.8.2
+ok            Requires   python3                            silik-command          baseos python3-3.9.25
+ok            Requires   python3                            silik-tools            baseos python3-3.9.25
+ok            Requires   python3-gobject                    silik-command          appstream python3-gobject-3.40.1
+ok            Requires   python3-gobject                    silikos-desktop        appstream python3-gobject-3.40.1
+ok            Requires   shared-mime-info                   silik-win              baseos shared-mime-info-2.1
+ok            Requires   shared-mime-info                   silikos-desktop        baseos shared-mime-info-2.1
+ok            Requires   systemd                            silikos-power          baseos systemd-252
+ok            Requires   systemd                            silikos-security       baseos systemd-252
+ok            Requires   tcsh                               silik-eda-compat       appstream tcsh-6.22.03
+ok            Requires   tuned                              silikos-power          baseos tuned-2.27.0
+ok            Requires   util-linux                         silik-win              baseos util-linux-2.37.4
+ok            Requires   xterm                              silik-eda-compat       appstream xterm-366
+## 2. the kickstart's %packages
+ok            environment workstation-product-environment
+(sources)     epel-release: the EPEL source is set by el10/repos.sh here
+## 3. the whole set
+weak_deps=True: 918 packages, 1.6 G to download, 4.7 G installed
+weak_deps=False: 358 packages, 235 M to download, 910 M installed
+## 3b. i686 packages in the set: 4

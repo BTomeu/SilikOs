@@ -1,0 +1,100 @@
+ptyxis                             appstream ptyxis-47.13
+gnome-terminal                     -
+gnome-console                      -
+xhost                              appstream xhost-1.0.9
+xrandr                             -
+xset                               -
+xdpyinfo                           epel xdpyinfo-1.3.4
+xmodmap                            epel xmodmap-1.0.11
+xrdb                               appstream xrdb-1.2.2
+xauth                              appstream xorg-x11-xauth-1.1.2
+xorg-x11-xauth                     appstream xorg-x11-xauth-1.1.2
+xdotool                            -
+wmctrl                             epel wmctrl-1.07
+ydotool                            -
+wtype                              -
+wine                               -
+winetricks                         -
+kicad                              -
+ngspice                            -
+iverilog                           epel iverilog-13.0
+verilator                          epel verilator-5.030
+gtkwave                            epel gtkwave-3.3.121
+yosys                              -
+klayout                            -
+magic                              -
+netgen                             -
+xschem                             -
+openocd                            -
+dfu-util                           -
+stm32flash                         -
+stlink                             -
+avrdude                            -
+sdcc                               -
+ser2net                            -
+sigrok-cli                         -
+pulseview                          -
+libsigrok                          -
+arm-none-eabi-gcc-cs               epel arm-none-eabi-gcc-cs-14.1.0
+arm-none-eabi-newlib               epel arm-none-eabi-newlib-4.5.0.20241231
+can-utils                          epel can-utils-2025.01
+openssl-compat                     -
+compat-openssl11                   -
+libpng12                           -
+libpng15                           -
+libnsl                             baseos libnsl-2.39
+libnsl2                            epel libnsl2-2.0.1
+ncurses-compat-libs                epel ncurses-compat-libs-6.4
+libxcrypt-compat                   appstream libxcrypt-compat-4.4.36
+motif                              epel motif-2.3.8
+libXp                              epel libXp-1.0.4
+ksh                                appstream ksh-1.0.10
+tcsh                               appstream tcsh-6.24.10
+glibc(x86-32)                      -
+glibc.i686                         -
+freerdp                            appstream freerdp-3.32.2
+qemu-kvm                           appstream qemu-kvm-10.1.0
+libvirt-daemon-kvm                 appstream libvirt-daemon-kvm-11.10.0
+virt-manager                       crb virt-manager-5.1.0
+virt-viewer                        appstream virt-viewer-11.0
+swtpm                              appstream swtpm-0.9.0
+edk2-ovmf                          appstream edk2-ovmf-20251114
+passt                              appstream passt-0^20251210.gd04c480
+bubblewrap                         baseos bubblewrap-0.10.0
+podman                             appstream podman-5.8.2
+tuned-ppd                          appstream tuned-ppd-2.27.0
+power-profiles-daemon              -
+gnome-shell-extension-user-theme   appstream gnome-shell-extension-user-theme-49.0
+qt5ct                              epel qt5ct-1.1
+qt6ct                              epel qt6ct-0.11
+xterm                              appstream xterm-389
+xorg-x11-fonts-misc                appstream xorg-x11-fonts-misc-7.5
+xorg-x11-fonts-100dpi              appstream xorg-x11-fonts-100dpi-7.5
+gnome-tweaks                       epel gnome-tweaks-46.1
+snapm                              appstream snapm-0.7.0
+boom-boot                          appstream boom-boot-1.6.8
+nvidia-open-kmod                   -
+gcc-gnat                           -
+gcc-toolset-15                     appstream gcc-toolset-15-15.0
+libei                              appstream libei-1.5.0
+xwayland-run                       appstream xwayland-run-0.0.4
+xdg-desktop-portal-gnome           appstream xdg-desktop-portal-gnome-47.3
+gnome-remote-desktop               appstream gnome-remote-desktop-49.3
+wlr-randr                          -
+mutter-devkit                      -
+mutter-devel                       crb mutter-devel-49.4
+python3-matplotlib                 epel python3-matplotlib-3.9.1
+python3-scipy                      appstream python3-scipy-1.11.3
+python3-pyserial                   appstream python3-pyserial-3.5
+wireshark                          appstream wireshark-4.4.2
+minicom                            baseos minicom-2.9
+picocom                            epel picocom-2024.07
+tio                                epel tio-3.9
+i2c-tools                          appstream i2c-tools-4.3
+libmodbus                          epel libmodbus-3.1.12
+qt6-qtbase-devel                   appstream qt6-qtbase-devel-6.10.1
+qt5-qtbase-devel                   epel qt5-qtbase-devel-5.15.18
+wxGTK-devel                        epel wxGTK-devel-3.2.6
+opencascade-devel                  -
+tk-devel                           appstream tk-devel-8.6.13
+tcl-devel                          appstream tcl-devel-8.6.13
