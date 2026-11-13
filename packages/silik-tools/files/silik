@@ -2693,7 +2693,9 @@ def sec_listen():
             if socks is None:
                 rc2, o2 = sec_cmd(["systemctl", "list-sockets", "--no-legend", "--no-pager"])
                 socks = sec_sockets_parse(o2) if rc2 == 0 else {}
-            r["unit"] = socks.get("%s:%s" % (r["addr"], r["port"]), "") or (socks.get("*:" + r["port"], "") if r["addr"] in ("*", "[::]", "0.0.0.0") else "")
+            r["unit"] = socks.get("%s:%s" % (r["addr"], r["port"]), "")
+            if not r["unit"] and r["addr"] in ("*", "[::]", "0.0.0.0"):       # (a socket for every address is named in more than one way)
+                r["unit"] = next((u for k, u in sorted(socks.items()) if k.rpartition(":")[2] == r["port"] and k.rpartition(":")[0] in ("*", "[::]", "0.0.0.0")), "")
     return rows
 
 
@@ -3165,7 +3167,7 @@ def sec_checks_more(st, m, row, hard=False):
         if out:
             fwl = st["firewall"]
             row("listening", "listening", "warn", "%d beyond this machine: %s%s%s" % (
-                len(said), ", ".join(said[:10]), "; whose the others are is root's to see" if blind and st["uid"] else "",
+                len(said), ", ".join(said[:10]), "; whose a socket without a name here is, root sees" if blind and st["uid"] else "",
                 "; the firewall zone drops what comes for them" if fwl["active"] and fwl["target"] not in (None, "ACCEPT") else ""),
                 ["sudo systemctl disable --now UNIT   # the unit named; rpcbind.socket: NFSv3 only, avahi-daemon.service avahi-daemon.socket: finding printers"] + sudo)
         else:
@@ -3538,10 +3540,12 @@ LVL_ITEMS = (
     {"id": "memory", "row": "H2", "kind": "karg", "args": ("init_on_alloc=1", "page_alloc.shuffle=1"),
      "sets": "memory is zeroed when it is handed out and free pages are shuffled (init_on_alloc=1 page_alloc.shuffle=1)",
      "cost": "some speed of programs that allocate much (simulators): not measured"},
-    {"id": "iommu", "row": "H2", "kind": "karg", "args": ("intel_iommu=on", "iommu.strict=1", "efi=disable_early_pci_dma"), "x86": ("intel_iommu=on", "efi=disable_early_pci_dma"),
-     "sets": "a device reaches only the memory it was given, from the first moment of the start (intel_iommu=on iommu.strict=1 efi=disable_early_pci_dma)",
-     "cost": "some speed of disks and network cards: not measured; [A] a firmware that leaves a device writing memory at the start may not start: "
-             "take efi=disable_early_pci_dma off in the boot menu (e)"},
+    {"id": "iommu", "row": "H2", "kind": "karg", "args": ("intel_iommu=on", "iommu.strict=1"), "x86": ("intel_iommu=on",),
+     "sets": "a device reaches only the memory it was given, and loses it at once when it is taken back (intel_iommu=on iommu.strict=1)",
+     "cost": "some speed of disks and network cards: not measured"},
+    {"id": "early-dma", "row": "H2", "kind": "karg", "args": ("efi=disable_early_pci_dma",), "x86": ("efi=disable_early_pci_dma",),
+     "sets": "no device writes memory between the firmware and the kernel's own IOMMU set-up (efi=disable_early_pci_dma)",
+     "cost": "[A] a firmware that leaves a device writing memory at the start may not start: press e in the boot menu and take the word off the line"},
     {"id": "debugfs", "row": "H2", "kind": "karg", "args": ("debugfs=off",),
      "sets": "the kernel's debugging file system is not there (debugfs=off)",
      "cost": "blktrace, powertop and drivers' debug files (/sys/kernel/debug); tracing through /sys/kernel/tracing stays"},
@@ -3724,6 +3728,10 @@ def lvl_rows(pr):
         kind = it["kind"]
         if kind == "karg":
             args = lvl_args(it, pr["arch"])
+            if not args:
+                r["state"], r["value"] = "n/a", "an argument of x86 machines: nothing to set on %s" % pr["arch"]
+                rows.append(r)
+                continue
             run = all(lvl_arg_in(pr["cmdline"], a) for a in args)
             nxt = all(all(lvl_arg_in(e, a) for a in args) for e in pr["entries"]) if pr["entries"] else None
             other = [w for w in (lvl_arg_other(pr["cmdline"], a) for a in args) if w]

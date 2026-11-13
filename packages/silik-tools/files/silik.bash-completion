@@ -29,7 +29,7 @@ _silik() {
   # secure level hardened: its switches, and after --without the items of the level (silik secure level --list)
   if [ "$g" = secure ] && [ "${COMP_WORDS[2]}" = level ] && [ "$COMP_CWORD" -ge 4 ]; then
     if [ "${COMP_WORDS[COMP_CWORD-1]}" = --without ]; then
-      COMPREPLY=($(compgen -W "lockdown memory iommu debugfs kptr bpf-jit kexec tiocsti sysrq locks faillock userlist automount wifi-mac dhcp-name thunderbolt audit sshd" -- "$cur"))
+      COMPREPLY=($(compgen -W "lockdown memory iommu early-dma debugfs kptr bpf-jit kexec tiocsti sysrq locks faillock userlist automount wifi-mac dhcp-name thunderbolt audit sshd" -- "$cur"))
     elif [ "${COMP_WORDS[3]}" = hardened ]; then COMPREPLY=($(compgen -W "--without --keep-ssh --list" -- "$cur")); fi
     return
   fi

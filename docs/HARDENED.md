@@ -31,7 +31,8 @@ Rows H1..H11 are the posture study's of 13/11/2026. `[A]`: assumed, not run or n
 |---|---|---|---|---|
 | `lockdown` | H2 | Kernel arguments `lockdown=integrity module.sig_enforce=1`: the running kernel cannot be changed, not even by root, and loads only modules with a signature it trusts | Kernel modules without such a signature: the NVIDIA driver built on the machine (DKMS) before its MOK step, VirtualBox, a vendor's dongle or debug-probe driver. No hibernation. No `/dev/mem` tools (`flashrom`, user-space PCI drivers). No MSR writes. `kexec` only of a signed kernel | `--without lockdown` |
 | `memory` | H2 | `init_on_alloc=1 page_alloc.shuffle=1`: memory is zeroed when it is handed out; free pages are shuffled | Some speed of programs that allocate much (simulators): not measured | `--without memory` |
-| `iommu` | H2 | `intel_iommu=on iommu.strict=1 efi=disable_early_pci_dma` (on ARM: `iommu.strict=1`): a device reaches only the memory it was given, from the first moment of the start. On an AMD machine `intel_iommu=on` does nothing and AMD's IOMMU is on when the firmware has it on [A] | Some speed of disks and network cards: not measured. [A] A firmware that leaves a device writing memory at the start may not start with `efi=disable_early_pci_dma`: press `e` in the boot menu and take the word off the line | `--without iommu` |
+| `iommu` | H2 | `intel_iommu=on iommu.strict=1` (on ARM: `iommu.strict=1`): a device reaches only the memory it was given, and loses it at once when it is taken back. On an AMD machine `intel_iommu=on` does nothing and AMD's IOMMU is on when the firmware has it on [A] | Some speed of disks and network cards: not measured | `--without iommu` |
+| `early-dma` | H2 | `efi=disable_early_pci_dma` (x86 machines): no device writes memory between the firmware and the kernel's own IOMMU set-up | [A] A firmware that leaves a device writing memory at the start may not start: press `e` in the boot menu and take the word off the line, then `silik secure level default` or `--without early-dma` | `--without early-dma` |
 | `debugfs` | H2 | `debugfs=off`: the kernel's debugging file system does not exist | `blktrace`, `powertop`, drivers' debug files under `/sys/kernel/debug`. Tracing through `/sys/kernel/tracing` stays | `--without debugfs` |
 | `kptr` | H3 | `kernel.kptr_restrict = 2`: kernel addresses are hidden from root too | `perf` and crash tools show no kernel symbols, even as root | `--without kptr` |
 | `bpf-jit` | H3 | `net.core.bpf_jit_harden = 2`: BPF programs compiled into the kernel are hardened, root's too | `bpftrace` and bcc tools as root: slower, no JIT addresses | `--without bpf-jit` |
@@ -186,6 +187,7 @@ Not run anywhere yet, and what will run it:
 - **Thunderbolt** (`thunderbolt`): no such hardware here or in the CI. The item is [A] as a whole: bolt 0.9.10 has no
   switch for "never enrol by itself" (its default policy is read-only; GNOME Shell enrols a new device while the
   session is unlocked), so the level turns bolt's authorisation off, which is the switch Settings calls Direct Access.
-- **IOMMU strictness on real hardware, `efi=disable_early_pci_dma` on real firmware**, and what `init_on_alloc`
-  costs a simulation: not measured.
+- **IOMMU strictness on real hardware, `efi=disable_early_pci_dma` on real firmware** (the CI's machine starts
+  without UEFI and has no IOMMU: both arguments are taken and do nothing there), and what `init_on_alloc` costs a
+  simulation: not measured.
 - **The TPM row**: the shape of systemd's token in the LUKS header is written from its documentation [A].

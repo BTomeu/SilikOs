@@ -48,6 +48,7 @@ def run(*argv):
 BASE_ARGS = "root=/dev/mapper/almalinux-root ro vsyscall=xonly rhgb quiet"
 ALL_ARGS = "lockdown=integrity module.sig_enforce=1 init_on_alloc=1 page_alloc.shuffle=1 intel_iommu=on iommu.strict=1 efi=disable_early_pci_dma debugfs=off"
 FAILLOCK = "# Configuration for locking the user after multiple failed\n# deny = 3\n# unlock_time = 600\n"
+KARGS = ("lockdown", "memory", "iommu", "early-dma", "debugfs")
 EMPTY = {"kernel_args": [], "sysctl": {}, "files": [], "authselect": False, "faillock": False, "bolt": None}
 
 
@@ -200,8 +201,7 @@ class Level(unittest.TestCase):
         self.assertEqual(silik.lvl_conf_keys(w[silik.LVL_SYSCTL]), {"kernel.kptr_restrict": "2", "net.core.bpf_jit_harden": "2",
                                                                     "kernel.kexec_load_disabled": "1", "dev.tty.legacy_tiocsti": "0", "kernel.sysrq": "0"})
         self.assertEqual({k: v for k, v in states(pr).items() if k != "thunderbolt"},
-                         dict({i: "on" for i in silik.LVL_IDS if i != "thunderbolt"},
-                              lockdown="pending", memory="pending", iommu="pending", debugfs="pending"))
+                         dict({i: "on" for i in silik.LVL_IDS if i != "thunderbolt"}, **{i: "pending" for i in KARGS}))
         self.assertEqual(pr["marks"], sorted([silik.LVL_CHOICE, silik.LVL_STATE]))
         self.assertTrue(any("after a restart" in n for n in notes))
         self.assertEqual(states(restart(pr))["lockdown"], "on")
@@ -282,7 +282,8 @@ class Level(unittest.TestCase):
 
     def test_without_leaves_items_out(self):
         pr, steps, _, _ = hardened(system(ssh_keys=True), without=("iommu", "wifi-mac", "sysrq", "audit"))
-        self.assertEqual(runs(steps)[0], "grubby --update-kernel=ALL --args=lockdown=integrity module.sig_enforce=1 init_on_alloc=1 page_alloc.shuffle=1 debugfs=off")
+        self.assertEqual(runs(steps)[0], "grubby --update-kernel=ALL --args=lockdown=integrity module.sig_enforce=1 init_on_alloc=1 page_alloc.shuffle=1 "
+                                         "efi=disable_early_pci_dma debugfs=off")
         w = writes(steps)
         self.assertNotIn("kernel.sysrq", w[silik.LVL_SYSCTL])
         self.assertNotIn("cloned-mac", w[silik.LVL_NM])
@@ -306,8 +307,10 @@ class Level(unittest.TestCase):
         self.assertEqual(pr2["state"]["sysctl"]["kernel.kptr_restrict"], 1)
 
     def test_arm_has_no_intel_or_efi_argument(self):
-        steps, _, _ = silik.lvl_plan(system(arch="aarch64"))
+        steps, notes, _ = silik.lvl_plan(system(arch="aarch64"))
         self.assertEqual(runs(steps)[0], "grubby --update-kernel=ALL --args=lockdown=integrity module.sig_enforce=1 init_on_alloc=1 page_alloc.shuffle=1 iommu.strict=1 debugfs=off")
+        self.assertEqual(states(system(arch="aarch64"))["early-dma"], "n/a")
+        self.assertTrue(any(n.startswith("early-dma: an argument of x86 machines") for n in notes))
 
     def test_some_of_it_set_by_hand_is_mixed(self):
         pr = system()
@@ -326,7 +329,7 @@ class Refusals(unittest.TestCase):
             self.assertEqual(runs(steps)[0], "grubby --update-kernel=ALL --args=init_on_alloc=1 page_alloc.shuffle=1 intel_iommu=on iommu.strict=1 efi=disable_early_pci_dma debugfs=off")
             self.assertNotIn("lockdown=integrity", pr["state"]["kernel_args"])
             self.assertEqual(states(pr)["lockdown"], "off")
-            self.assertEqual(states(pr)["memory"], "pending")                # the rest is done
+            self.assertEqual({states(pr)[i] for i in KARGS if i != "lockdown"}, {"pending"})      # the rest is done
             level, summary = at(restart(pr))
             self.assertEqual(level, "hardened")
             self.assertIn("except: lockdown is off", summary)                # and it does not pretend
@@ -623,7 +626,7 @@ class Values(unittest.TestCase):
             self.assertTrue(it["sets"] and it["cost"] and it["row"].startswith("H"), it["id"])
         byid = {it["id"]: it for it in silik.LVL_ITEMS}
         self.assertIn("[PROPOSAL values]", byid["faillock"]["sets"])
-        for i in ("tiocsti", "thunderbolt", "audit", "iommu"):
+        for i in ("tiocsti", "thunderbolt", "audit", "early-dma"):
             self.assertIn("[A]", byid[i]["sets"] + byid[i]["cost"], i)
         self.assertIn("not measured", byid["memory"]["cost"])            # no number is made up
         self.assertIn("FlexLM", byid["wifi-mac"]["cost"])
@@ -693,7 +696,8 @@ class Cli(unittest.TestCase):
             printed = [l[2:].replace("sudo ", "") for l in o.splitlines() if l.startswith("$ ")]
             steps, _, _ = silik.lvl_plan(system(ssh_keys=True, secureboot="disabled"), ("iommu",))
             self.assertEqual(len(printed), len(steps))
-            self.assertIn("grubby --update-kernel=ALL '--args=lockdown=integrity module.sig_enforce=1 init_on_alloc=1 page_alloc.shuffle=1 debugfs=off'", printed)
+            self.assertIn("grubby --update-kernel=ALL '--args=lockdown=integrity module.sig_enforce=1 init_on_alloc=1 page_alloc.shuffle=1 "
+                          "efi=disable_early_pci_dma debugfs=off'", printed)
             self.assertIn("    | kernel.kptr_restrict = 2", o)                               # what goes into each file is shown
             self.assertIn("level: hardened, except: Secure Boot is off; left out by choice: iommu (after this dry run's commands)", o)
         finally:
@@ -925,14 +929,26 @@ class Parsers(unittest.TestCase):
                                         "*:9090 cockpit.socket cockpit.service\n")
         self.assertEqual(socks["0.0.0.0:111"], "rpcbind.socket")
         self.assertEqual(socks["*:9090"], "cockpit.socket")
-        old = silik.sec_cmd
+        old, oldp = silik.sec_cmd, silik.SEC_PROC
         silik.sec_cmd = lambda argv, timeout=20: (0, self.SS) if argv[0] == "ss" else (0, "0.0.0.0:22 sshd.socket sshd.service\n*:9090 cockpit.socket cockpit.service\n")
-        try:
-            rows = {(r["addr"], r["port"]): r["unit"] for r in silik.sec_listen()}
-        finally:
-            silik.sec_cmd = old
+        with tempfile.TemporaryDirectory() as d:        # (the processes ss names are a made-up machine's, not this one's)
+            os.makedirs(os.path.join(d, "870"))
+            with open(os.path.join(d, "870", "cgroup"), "w") as f:
+                f.write("0::/system.slice/avahi-daemon.service\n")
+            silik.SEC_PROC = d
+            try:
+                rows = {(r["addr"], r["port"]): r["unit"] for r in silik.sec_listen()}
+            finally:
+                silik.sec_cmd, silik.SEC_PROC = old, oldp
+        self.assertEqual(rows[("0.0.0.0", "5353")], "avahi-daemon.service")      # the unit of the process that holds it
         self.assertEqual(rows[("0.0.0.0", "22")], "sshd.socket")
         self.assertEqual(rows[("*", "9090")], "cockpit.socket")
+        self.assertEqual(rows[("0.0.0.0", "111")], "")                           # (no socket unit has it: not guessed)
+        silik.sec_cmd = lambda argv, timeout=20: (0, "tcp LISTEN 0 128 *:22 *:*\n") if argv[0] == "ss" else (0, "[::]:22 sshd.socket sshd.service\n")
+        try:
+            self.assertEqual(silik.sec_listen()[0]["unit"], "sshd.socket")           # one socket for every address, named two ways
+        finally:
+            silik.sec_cmd = old
         silik.sec_cmd = lambda argv, timeout=20: (None, "")
         try:
             self.assertIsNone(silik.sec_listen())
