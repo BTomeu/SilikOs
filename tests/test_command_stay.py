@@ -105,10 +105,26 @@ class Path(unittest.TestCase):
     def test_in_the_runtime_folder(self):
         with tempfile.TemporaryDirectory() as d:
             self.assertEqual(bar.socket_path({"XDG_RUNTIME_DIR": d}), os.path.join(d, "silik-command.sock"))
+            self.assertEqual(bar.socket_path({"XDG_RUNTIME_DIR": d, "DISPLAY": ":0"}), os.path.join(d, "silik-command-_0.sock"))
             self.assertIsNone(bar.socket_path({"XDG_RUNTIME_DIR": d, "SILIK_COMMAND_ONCE": "1"}))
             self.assertIsNone(bar.socket_path({"XDG_RUNTIME_DIR": os.path.join(d, "none")}))
         self.assertIsNone(bar.socket_path({}))
         self.assertIsNone(bar.socket_path({"XDG_RUNTIME_DIR": ""}))
+
+
+class Display(unittest.TestCase):
+    """one socket per display: the same user's second session (ssh -X, VNC) is not answered by the first's bar"""
+
+    def test_names(self):
+        for env, name in (({}, "silik-command.sock"), ({"DISPLAY": ":0"}, "silik-command-_0.sock"),
+                          ({"DISPLAY": "localhost:10.0"}, "silik-command-localhost_10.0.sock"),
+                          ({"WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0"}, "silik-command-wayland_0_0.sock"),
+                          ({"DISPLAY": "../../etc/x"}, "silik-command-.._.._etc_x.sock")):
+            self.assertEqual(bar.socket_name(env), name)
+            self.assertNotIn("/", bar.socket_name(env))
+
+    def test_two_displays_two_sockets(self):
+        self.assertNotEqual(bar.socket_name({"DISPLAY": ":0"}), bar.socket_name({"DISPLAY": "localhost:10.0"}))
 
 
 class Listen(unittest.TestCase):
@@ -151,7 +167,11 @@ class HandOver(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.dir.cleanup)
-        self.path = os.path.join(self.dir.name, bar.SOCKET)
+        self.path = os.path.join(self.dir.name, bar.socket_name({"DISPLAY": ":7"}))
+        patch = mock.patch.dict(os.environ, {"DISPLAY": ":7"})
+        patch.start()
+        self.addCleanup(patch.stop)
+        os.environ.pop("WAYLAND_DISPLAY", None)
 
     def test_asks_and_is_told_ok(self):
         s = Server(self.path)
@@ -210,11 +230,12 @@ class Launcher(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.dir.cleanup)
-        self.path = os.path.join(self.dir.name, bar.SOCKET)
+        self.path = os.path.join(self.dir.name, bar.socket_name({"DISPLAY": "localhost:11.0"}))
 
     def launch(self, *argv, **env):
-        e = {k: v for k, v in os.environ.items() if k not in ("SILIK_COMMAND_ONCE", "DESKTOP_STARTUP_ID")}
-        e.update(XDG_RUNTIME_DIR=self.dir.name, **env)
+        e = {k: v for k, v in os.environ.items() if k not in ("SILIK_COMMAND_ONCE", "DESKTOP_STARTUP_ID", "WAYLAND_DISPLAY")}
+        e.update(XDG_RUNTIME_DIR=self.dir.name, DISPLAY="localhost:11.0")
+        e.update(env)
         return subprocess.run([sys.executable, "-IS", LAUNCH] + list(argv), env=e, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                               universal_newlines=True, timeout=30)
 
@@ -222,6 +243,9 @@ class Launcher(unittest.TestCase):
         text = read(LAUNCH)
         self.assertTrue(text.startswith("#!/usr/bin/python3 -IS\n"))
         self.assertIn('"%s"' % bar.SOCKET, text)
+        key = [l.strip() for l in read(os.path.join(ROOT, "packages/silik-command/files/silik-command")).splitlines() if l.strip().startswith('key = "".join(')]
+        self.assertEqual(len(key), 1)
+        self.assertIn(key[0].replace("env.get(", "os.environ.get("), text)       # the same key for the display
         self.assertIn('"%s"' % bar.HELLO, text)
         self.assertIn("import silik_command", text)
         self.assertLess(text.index("if hand_over(sys.argv[1:]):"), text.index("import site"))
@@ -239,8 +263,8 @@ class Launcher(unittest.TestCase):
     def test_it_loads_nothing_of_the_bar_for_a_hand_over(self):
         s = Server(self.path)
         self.addCleanup(s.close)
-        e = {k: v for k, v in os.environ.items() if k not in ("SILIK_COMMAND_ONCE",)}
-        e.update(XDG_RUNTIME_DIR=self.dir.name)
+        e = {k: v for k, v in os.environ.items() if k not in ("SILIK_COMMAND_ONCE", "WAYLAND_DISPLAY")}
+        e.update(XDG_RUNTIME_DIR=self.dir.name, DISPLAY="localhost:11.0")
         p = subprocess.run([sys.executable, "-IS", "-X", "importtime", LAUNCH], env=e, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                            universal_newlines=True, timeout=30)
         self.assertEqual(p.returncode, 0)
@@ -259,6 +283,10 @@ class Launcher(unittest.TestCase):
         if not os.path.exists("/usr/share/silikos/python/silik_command.py"):
             self.assertNotEqual(p.returncode, 0)
             self.assertIn("silik_command", p.stderr)
+
+    def test_another_display_is_not_this_bars(self):
+        """the bar of localhost:11.0 is not asked by a call on :0"""
+        self.other_cases([], {"DISPLAY": ":0"})
 
     def test_a_list_is_not_handed_over(self):
         self.other_cases(["--list", "sys/"], {})

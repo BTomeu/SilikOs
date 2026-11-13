@@ -103,7 +103,7 @@ if insession xwininfo -root > /dev/null 2>&1; then
   asuser systemd-run --quiet --user --collect -p WorkingDirectory=/home/tester -E DISPLAY=:0 -E SILIK_COMMAND_STAY=1 silik-command > /dev/null 2>&1
   barmap() { insession xwininfo -name 'SilikOS COMMAND' 2> /dev/null | sed -n 's/^ *Map State: //p' | head -1; }
   st=""; for i in $(seq 1 20); do sleep 1; st=$(barmap); [ "$st" = IsViewable ] && break; done
-  sock=$(stat -c '%a %U' /run/user/$uid/silik-command.sock 2>&1)
+  sock=$(stat -c '%a %U' /run/user/$uid/silik-command*.sock 2>&1 | head -1)       # (one socket per display)
   t0=$(date +%s%N); insession silik-command --query sys/doctor > /dev/null 2>&1; rc=$?; ms=$(( ($(date +%s%N) - t0) / 1000000 ))
   sleep 1
   n=$(pgrep -u tester -f 'bin/silik-comman[d]' | wc -l)

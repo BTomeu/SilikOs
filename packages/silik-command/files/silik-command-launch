@@ -16,7 +16,9 @@ def hand_over(argv):
     d = os.environ.get("XDG_RUNTIME_DIR")
     if not d or os.environ.get("SILIK_COMMAND_ONCE") or "--list" in argv or "-h" in argv or "--help" in argv:
         return False
-    path = os.path.join(d, "silik-command.sock")
+    # (one socket per display: silik_command.socket_name())
+    key = "".join(c if c.isalnum() or c == "." else "_" for c in (os.environ.get("WAYLAND_DISPLAY") or "") + (os.environ.get("DISPLAY") or ""))
+    path = os.path.join(d, "silik-command%s.sock" % ("-" + key if key else ""))
     if not os.path.exists(path):
         return False
     import socket

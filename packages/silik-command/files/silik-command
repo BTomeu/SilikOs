@@ -557,20 +557,29 @@ def all_items(lang, started=None):
 
 
 # ------------------------------------------------------------------ the bar that stays
-# One line over a socket in the user's runtime folder (theirs alone, mode 0700; the socket 0600): HELLO, the
+# One line over a socket in the user's runtime folder (theirs alone, mode 0700; the socket 0600, one per display): HELLO, the
 # desktop's startup id, then the words of the command line, NUL between them. The answer is "ok" (the window is being
 # shown) or anything else (this bar cannot serve it: the caller opens its own). A request shows the bar with a query
 # in it and nothing else: nothing typed into the socket is ever run. /usr/bin/silik-command (silik-command-launch)
 # speaks the same line without loading this file; the tests hold the two equal.
-SOCKET = "silik-command.sock"
+SOCKET = "silik-command%s.sock"
 HELLO = "silik-command 1"
+
+
+def socket_name(env=None):
+    """the socket's name: one per display. The runtime folder is the user's, not the display's: a second session of
+    the same user (ssh -X, VNC, a remote desktop: common where the EDA tools run) must not be answered by the bar
+    of the first, which would show itself on the other screen"""
+    env = os.environ if env is None else env
+    key = "".join(c if c.isalnum() or c == "." else "_" for c in (env.get("WAYLAND_DISPLAY") or "") + (env.get("DISPLAY") or ""))
+    return SOCKET % ("-" + key if key else "")
 
 
 def socket_path(env=None):
     """where a bar that stays listens, or None: no runtime folder (a bare X session, a test), or SILIK_COMMAND_ONCE"""
     env = os.environ if env is None else env
     d = env.get("XDG_RUNTIME_DIR")
-    return os.path.join(d, SOCKET) if d and os.path.isdir(d) and not env.get("SILIK_COMMAND_ONCE") else None
+    return os.path.join(d, socket_name(env)) if d and os.path.isdir(d) and not env.get("SILIK_COMMAND_ONCE") else None
 
 
 def request_line(argv, startup_id=""):
