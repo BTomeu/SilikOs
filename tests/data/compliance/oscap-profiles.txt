@@ -1,0 +1,20 @@
+xccdf_org.ssgproject.content_profile_anssi_bp28_enhanced:ANSSI-BP-028 (enhanced)
+xccdf_org.ssgproject.content_profile_anssi_bp28_high:ANSSI-BP-028 (high)
+xccdf_org.ssgproject.content_profile_anssi_bp28_intermediary:ANSSI-BP-028 (intermediary)
+xccdf_org.ssgproject.content_profile_anssi_bp28_minimal:ANSSI-BP-028 (minimal)
+xccdf_org.ssgproject.content_profile_bsi:BSI SYS.1.1 and SYS.1.3
+xccdf_org.ssgproject.content_profile_ccn_advanced:Centro Criptológico Nacional (CCN) - STIC for AlmaLinux OS 9 - Advanced
+xccdf_org.ssgproject.content_profile_ccn_basic:Centro Criptológico Nacional (CCN) - STIC for AlmaLinux OS 9 - Basic
+xccdf_org.ssgproject.content_profile_ccn_intermediate:Centro Criptológico Nacional (CCN) - STIC for AlmaLinux OS 9 - Intermediate
+xccdf_org.ssgproject.content_profile_cis:CIS AlmaLinux OS 9 Benchmark for Level 2 - Server
+xccdf_org.ssgproject.content_profile_cis_server_l1:CIS AlmaLinux OS 9 Benchmark for Level 1 - Server
+xccdf_org.ssgproject.content_profile_cis_workstation_l1:CIS AlmaLinux OS 9 Benchmark for Level 1 - Workstation
+xccdf_org.ssgproject.content_profile_cis_workstation_l2:CIS AlmaLinux OS 9 Benchmark for Level 2 - Workstation
+xccdf_org.ssgproject.content_profile_cui:DRAFT - Unclassified Information in Non-federal Information Systems and Organizations (NIST 800-171)
+xccdf_org.ssgproject.content_profile_e8:Australian Cyber Security Centre (ACSC) Essential Eight
+xccdf_org.ssgproject.content_profile_hipaa:Health Insurance Portability and Accountability Act (HIPAA)
+xccdf_org.ssgproject.content_profile_ism_o:Australian Cyber Security Centre (ACSC) ISM Official
+xccdf_org.ssgproject.content_profile_ospp:Protection Profile for General Purpose Operating Systems
+xccdf_org.ssgproject.content_profile_pci-dss:PCI-DSS v4.0.1 Control Baseline for AlmaLinux OS 9
+xccdf_org.ssgproject.content_profile_stig:DISA STIG for AlmaLinux OS 9
+xccdf_org.ssgproject.content_profile_stig_gui:DISA STIG with GUI for AlmaLinux OS 9

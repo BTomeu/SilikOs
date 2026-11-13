@@ -1,0 +1,44 @@
+===============================================================================
+  Moderate: curl security update
+===============================================================================
+  Update ID: ALSA-2026:92907
+       Type: security
+    Updated: 2026-10-30 13:07:28
+       Bugs: 2496759 - 
+       CVEs: CVE-2026-8932
+Description: The curl packages provide the libcurl library and the curl utility for downloading files from servers using various protocols, including HTTP, FTP, and LDAP.  
+           : 
+           : Security Fix(es):  
+           : 
+           :   * libcurl: libcurl: Security feature bypass due to improper mTLS connection reuse (CVE-2026-8932)
+           : 
+           : 
+           : For more details about the security issue(s), including the impact, a CVSS score, acknowledgments, and other related information, refer to the CVE page(s) listed in the References section.
+   Severity: Moderate
+
+===============================================================================
+  Moderate: glibc security update
+===============================================================================
+  Update ID: ALSA-2026:95618
+       Type: security
+    Updated: 2026-11-06 09:40:00
+       Bugs: 2531725 - 
+           : 2536382 - 
+           : 2538209 - 
+           : 2538306 - 
+       CVEs: CVE-2026-8674
+           : CVE-2026-86805
+           : CVE-2026-89092
+           : CVE-2026-95818
+Description: The glibc packages provide the standard C libraries (libc), POSIX thread libraries (libpthread), standard math libraries (libm), and the name service cache daemon (nscd) used by multiple programs on the system. Without these libraries, the Linux system cannot function correctly.  
+           : 
+           : Security Fix(es):  
+           : 
+           :   * glibc: nscd stack overflow leads to degraded DNS resolution (CVE-2026-89092)
+           :   * glibc: glibc DNS stub resolver: Denial of Service via long search domain in configuration (CVE-2026-8674)
+           :   * glibc: glibc: Privilege escalation and arbitrary code execution via TOCTOU race condition in dynamic loader (CVE-2026-86805)
+           :   * glibc: glibc: Local attacker can cause denial of service and information disclosure via stack-based buffer overflow. (CVE-2026-95818)
+           : 
+           : 
+           : For more details about the security issue(s), including the impact, a CVSS score, acknowledgments, and other related information, refer to the CVE page(s) listed in the References section.
+   Severity: Moderate

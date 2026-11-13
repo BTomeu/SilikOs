@@ -1,0 +1,12 @@
+[
+ {
+  "address": "evidence/make",
+  "argv": [
+   "evidence"
+  ],
+  "en": "Evidence folder of this system: SBOM, CVE report, audit, status, MANIFEST (and its tar.gz)",
+  "ca": "Carpeta d'evidències d'aquest sistema: SBOM, informe de CVE, auditoria, estat, MANIFEST (i el seu tar.gz)",
+  "es": "Carpeta de evidencias de este sistema: SBOM, informe de CVE, auditoría, estado, MANIFEST (y su tar.gz)",
+  "terminal": true
+ }
+]

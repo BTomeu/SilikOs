@@ -1,0 +1,12 @@
+[
+ {
+  "address": "cve/show",
+  "argv": [
+   "cve"
+  ],
+  "en": "Known security advisories and CVEs that wait on this system",
+  "ca": "Avisos de seguretat i CVE coneguts que esperen en aquest sistema",
+  "es": "Avisos de seguridad y CVE conocidos que esperan en este sistema",
+  "terminal": true
+ }
+]

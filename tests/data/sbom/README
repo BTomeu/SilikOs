@@ -1,0 +1,11 @@
+The official JSON schemas `silik sbom`'s bills are held to (tests/test_sbom.py, tests/schema_min.py). For the tests
+only: nothing here is installed. Downloaded 13/11/2026, unchanged (the tests check their sha256):
+
+spdx-2.3.schema.json   https://raw.githubusercontent.com/spdx/spdx-spec/v2.3/schemas/spdx-schema.json
+                       SPDX specification 2.3, (c) The Linux Foundation and its contributors, Creative Commons
+                       Attribution 3.0 Unported (LICENSE.spdx-spec)
+bom-1.6.schema.json    https://raw.githubusercontent.com/CycloneDX/specification/1.6/schema/bom-1.6.schema.json
+spdx.schema.json       https://raw.githubusercontent.com/CycloneDX/specification/1.6/schema/spdx.schema.json
+                       CycloneDX specification 1.6, (c) OWASP Foundation, Apache License 2.0 (LICENSE.cyclonedx)
+                       (its third file, jsf-0.82.schema.json, describes the "signature" property, which silik's bills
+                       do not have: it is not kept here, and a bill that had one would stop the validator)

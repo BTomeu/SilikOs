@@ -1,0 +1,1998 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Benchmark xmlns="http://checklists.nist.gov/xccdf/1.2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="xccdf_org.ssgproject.content_benchmark_ALMALINUX-9" resolved="1" xml:lang="en-US" style="SCAP_1.2">
+  <Profile id="xccdf_org.ssgproject.content_profile_cis_workstation_l1">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US" override="true">CIS AlmaLinux OS 9 Benchmark for Level 1 - Workstation</title>
+  </Profile>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_aide_installed" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Install AIDE</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_aide_build_database" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Build and Test AIDE Database</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_aide_check_audit_tools" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Configure AIDE to Verify the Audit Tools</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_aide_periodic_cron_checking" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Configure Periodic Execution of AIDE</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_configure_custom_crypto_policy_cis" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Implement Custom Crypto Policy Modules for CIS Benchmark</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_partition_for_dev_shm" selected="false" severity="low">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure /dev/shm is configured</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_partition_for_tmp" selected="false" severity="low">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure /tmp Located On Separate Partition</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_dconf_db_up_to_date" selected="false" severity="high">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Make sure that the dconf databases are up-to-date with regards to respective keyfiles</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_dconf_gnome_disable_user_list" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable the GNOME3 Login User List</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_gnome_gdm_disable_xdmcp" selected="false" severity="high">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable XDMCP in GDM</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_dconf_gnome_disable_autorun" selected="false" severity="low">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable GNOME3 Automount running</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_dconf_gnome_screensaver_idle_delay" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Set GNOME3 Screensaver Inactivity Timeout</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_dconf_gnome_screensaver_lock_delay" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Set GNOME3 Screensaver Lock Delay After Activation Period</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_dconf_gnome_screensaver_user_locks" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure Users Cannot Change GNOME3 Screensaver Settings</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_dconf_gnome_session_idle_user_locks" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure Users Cannot Change GNOME3 Session Idle Settings</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_sudo_installed" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Install sudo Package</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sudo_add_use_pty" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure Only Users Logged In To Real tty Can Execute Sudo - sudo use_pty</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sudo_custom_logfile" selected="false" severity="low">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure Sudo Logfile Exists - sudo logfile</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sudo_remove_no_authenticate" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure Users Re-Authenticate for Privilege Escalation - sudo !authenticate</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sudo_require_reauthentication" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Require Re-Authentication When Using the sudo Command</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_ensure_almalinux_gpgkey_installed" selected="false" severity="high">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure AlmaLinux GPG Key Installed</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_ensure_gpgcheck_globally_activated" selected="false" severity="high">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure gpgcheck Enabled In Main dnf Configuration</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_ensure_gpgcheck_never_disabled" selected="false" severity="high">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure gpgcheck Enabled for All dnf Package Repositories</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_enable_authselect" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Enable authselect</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_banner_etc_issue_cis" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure Local Login Warning Banner Is Configured Properly</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_banner_etc_issue_net_cis" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure Remote Login Warning Banner Is Configured Properly</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_banner_etc_motd_cis" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure Message Of The Day Is Configured Properly</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupowner_etc_issue" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Group Ownership of System Login Banner</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupowner_etc_issue_net" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Group Ownership of System Login Banner for Remote Connections</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupowner_etc_motd" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Group Ownership of Message of the Day Banner</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_owner_etc_issue" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify ownership of System Login Banner</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_owner_etc_issue_net" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify ownership of System Login Banner for Remote Connections</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_owner_etc_motd" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify ownership of Message of the Day Banner</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_etc_issue" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify permissions on System Login Banner</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_etc_issue_net" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify permissions on System Login Banner for Remote Connections</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_etc_motd" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify permissions on Message of the Day Banner</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_dconf_gnome_banner_enabled" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Enable GNOME3 Login Warning Banner</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_dconf_gnome_login_banner_text" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Set the GNOME3 Login Warning Banner Text</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_pam_pwquality_installed" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Install pam_pwquality Package</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_password_pam_modules_in_authselect_profile" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure Active Authselect Profile Includes PAM Modules</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_account_password_pam_faillock_password_auth" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Configure the Use of the pam_faillock.so Module in the /etc/pam.d/password-auth File.</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_account_password_pam_faillock_system_auth" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Configure the Use of the pam_faillock.so Module in the /etc/pam.d/system-auth File.</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_password_pam_pwhistory_enforce_for_root" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure Password History Is Enforced for the Root User</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_password_pam_pwhistory_remember_password_auth" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Limit Password Reuse: password-auth</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_password_pam_pwhistory_remember_system_auth" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Limit Password Reuse: system-auth</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_deny" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Lock Accounts After Failed Password Attempts</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_unlock_time" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Set Lockout Time for Failed Password Attempts</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_password_pam_dictcheck" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure PAM Enforces Password Requirements - Prevent the Use of Dictionary Words</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_password_pam_difok" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure PAM Enforces Password Requirements - Minimum Different Characters</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_password_pam_enforce_root" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure PAM Enforces Password Requirements - Enforce for root User</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_password_pam_maxrepeat" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Set Password Maximum Consecutive Repeating Characters</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_password_pam_maxsequence" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Limit the maximum number of sequential characters in passwords</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_password_pam_minclass" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure PAM Enforces Password Requirements - Minimum Different Categories</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_password_pam_minlen" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure PAM Enforces Password Requirements - Minimum Length</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_set_password_hashing_algorithm_libuserconf" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Set Password Hashing Algorithm in /etc/libuser.conf</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_set_password_hashing_algorithm_logindefs" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Set Password Hashing Algorithm in /etc/login.defs</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_set_password_hashing_algorithm_passwordauth" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Set PAM Password Hashing Algorithm - password-auth</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_set_password_hashing_algorithm_systemauth" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Set PAM Password Hashing Algorithm - system-auth</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_account_unique_id" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure All Accounts on the System Have Unique User IDs</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_group_unique_id" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure All Groups on the System Have Unique Group ID</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_account_disable_post_pw_expiration" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Set Account Expiration Following Inactivity</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_account_unique_name" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure All Accounts on the System Have Unique Names</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_maximum_age_login_defs" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Set Password Maximum Age</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_password_set_max_life_existing" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Set Existing Passwords Maximum Age</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_password_set_warn_age_existing" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Set Existing Passwords Warning Age</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_password_warn_age_login_defs" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Set Password Warning Age</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_set_post_pw_existing" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Set existing passwords a period of inactivity before they been locked</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_password_all_shadowed" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify All Account Password Hashes are Shadowed</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_password_last_change_is_in_past" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure all users last password change date is in the past</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_password_pam_unix_no_remember" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Avoid using remember in pam_unix module</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_gid_passwd_group_same" selected="false" severity="low">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">All GIDs referenced in /etc/passwd must be defined in /etc/group</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_no_empty_passwords" selected="false" severity="high">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Prevent Login to Accounts With Empty Password</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_no_empty_passwords_etc_shadow" selected="false" severity="high">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure There Are No Accounts With Blank or Null Passwords</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_no_forward_files" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify No .forward Files Exist</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_no_netrc_files" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify No netrc Files Exist</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_no_uid_except_zero" selected="false" severity="high">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Only Root Has UID 0</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_root_gid_zero" selected="false" severity="high">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Root Has A Primary GID 0</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_ensure_pam_wheel_group_empty" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure the Group Used by pam_wheel.so Module Exists on System and is Empty</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_ensure_root_password_configured" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure Authentication Required for Single User Mode</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_groups_no_zero_gid_except_root" selected="false" severity="high">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Only Group Root Has GID 0</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_no_invalid_shell_accounts_unlocked" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Non-Interactive Accounts Are Locked</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_no_password_auth_for_systemaccounts" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure that System Accounts Are Locked</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_no_shelllogin_for_systemaccounts" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure that System Accounts Do Not Run a Shell Upon Login</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_use_pam_wheel_group_for_su" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Enforce Usage of pam_wheel with Group Parameter for su Authentication</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_tmout" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Set Interactive Session Timeout</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_user_dot_group_ownership" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">User Initialization Files Must Be Group-Owned By The Primary Group</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_user_dot_user_ownership" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">User Initialization Files Must Be Owned By the Primary User</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_user_interactive_home_directory_exists" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">All Interactive Users Home Directories Must Exist</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permission_user_init_files" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure All User Initialization Files Have Mode 0740 Or Less Permissive</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_home_directories" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">All Interactive User Home Directories Must Have mode 0750 Or Less Permissive</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_root_path_dirs_no_write" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure that Root's Path Does Not Include World or Group-Writable Directories</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_no_dirs_unowned_by_root" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure that All Root's Path Directories Are Owned by Root</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_root_path_all_dirs" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure that All Entries in The Path of Root Are Directories</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_root_path_no_dot" selected="false" severity="unknown">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure that Root's Path Does Not Include Relative Paths or Null Directories</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_umask_etc_bashrc" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure the Default Bash Umask is Set Correctly</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_umask_etc_login_defs" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure the Default Umask is Set Correctly in login.defs</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_accounts_umask_etc_profile" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure the Default Umask is Set Correctly in /etc/profile</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupowner_grub2_cfg" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify /boot/grub2/grub.cfg Group Ownership</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupowner_user_cfg" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify /boot/grub2/user.cfg Group Ownership</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_owner_grub2_cfg" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify /boot/grub2/grub.cfg User Ownership</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_owner_user_cfg" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify /boot/grub2/user.cfg User Ownership</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_grub2_cfg" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify /boot/grub2/grub.cfg Permissions</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_user_cfg" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify /boot/grub2/user.cfg Permissions</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_grub2_password" selected="false" severity="high">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Set Boot Loader Password in grub2</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_ensure_journald_and_rsyslog_not_active_together" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure journald and rsyslog Are Not Active Together</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_rsyslog_filecreatemode" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure rsyslog Default File Permissions Configured</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_rsyslog_files_groupownership" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure Log Files Are Owned By Appropriate Group</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_rsyslog_files_ownership" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure Log Files Are Owned By Appropriate User</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_rsyslog_files_permissions" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure System Log Files Have Correct Permissions</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_systemd-journal-remote_installed" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Install systemd-journal-remote Package</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_service_systemd-journald_enabled" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Enable systemd-journald Service</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_journald_compress" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure journald is configured to compress large log files</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_journald_storage" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure journald is configured to write log files to persistent disk</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_socket_systemd-journal-remote_disabled" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable systemd-journal-remote Socket</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_firewalld_installed" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Install firewalld Package</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_service_firewalld_enabled" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify firewalld Enabled</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_firewalld_loopback_traffic_restricted" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Configure Firewalld to Restrict Loopback Traffic</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_firewalld_loopback_traffic_trusted" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Configure Firewalld to Trust Loopback Traffic</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_accept_ra" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Configure Accepting Router Advertisements on All IPv6 Interfaces</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_accept_redirects" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable Accepting ICMP Redirects for All IPv6 Interfaces</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_accept_source_route" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable Kernel Parameter for Accepting Source-Routed Packets on all IPv6 Interfaces</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_forwarding" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable Kernel Parameter for IPv6 Forwarding</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_accept_ra" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable Accepting Router Advertisements on all IPv6 Interfaces by Default</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_accept_redirects" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable Kernel Parameter for Accepting ICMP Redirects by Default on IPv6 Interfaces</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_accept_source_route" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable Kernel Parameter for Accepting Source-Routed Packets on IPv6 Interfaces by Default</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_accept_redirects" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable Accepting ICMP Redirects for All IPv4 Interfaces</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_accept_source_route" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable Kernel Parameter for Accepting Source-Routed Packets on all IPv4 Interfaces</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_log_martians" selected="false" severity="unknown">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Enable Kernel Parameter to Log Martian Packets on all IPv4 Interfaces</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_rp_filter" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Enable Kernel Parameter to Use Reverse Path Filtering on all IPv4 Interfaces</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_secure_redirects" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable Kernel Parameter for Accepting Secure ICMP Redirects on all IPv4 Interfaces</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_accept_redirects" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable Kernel Parameter for Accepting ICMP Redirects by Default on IPv4 Interfaces</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_accept_source_route" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable Kernel Parameter for Accepting Source-Routed Packets on IPv4 Interfaces by Default</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_log_martians" selected="false" severity="unknown">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Enable Kernel Parameter to Log Martian Packets on all IPv4 Interfaces by Default</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_rp_filter" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Enable Kernel Parameter to Use Reverse Path Filtering on all IPv4 Interfaces by Default</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_secure_redirects" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Configure Kernel Parameter for Accepting Secure Redirects By Default</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_icmp_echo_ignore_broadcasts" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Enable Kernel Parameter to Ignore ICMP Broadcast Echo Requests on IPv4 Interfaces</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_icmp_ignore_bogus_error_responses" selected="false" severity="unknown">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Enable Kernel Parameter to Ignore Bogus ICMP Error Responses on IPv4 Interfaces</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_tcp_syncookies" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Enable Kernel Parameter to Use TCP Syncookies on Network Interfaces</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_send_redirects" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable Kernel Parameter for Sending ICMP Redirects on all IPv4 Interfaces</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_send_redirects" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable Kernel Parameter for Sending ICMP Redirects on all IPv4 Interfaces by Default</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_ip_forward" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable Kernel Parameter for IP Forwarding on IPv4 Interfaces</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_nftables_installed" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Install nftables Package</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_service_nftables_disabled" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify nftables Service is Disabled</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_dir_perms_world_writable_sticky_bits" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify that All World-Writable Directories Have Sticky Bits Set</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_unauthorized_world_writable" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure No World-Writable Files Exist</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_ungroupowned" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure All Files Are Owned by a Group</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_no_files_unowned_by_user" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure All Files Are Owned by a User</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_etc_security_opasswd" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Permissions and Ownership of Old Passwords File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupowner_backup_etc_group" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Group Who Owns Backup group File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupowner_backup_etc_gshadow" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Group Who Owns Backup gshadow File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupowner_backup_etc_passwd" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Group Who Owns Backup passwd File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupowner_backup_etc_shadow" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify User Who Owns Backup shadow File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupowner_etc_group" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Group Who Owns group File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupowner_etc_gshadow" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Group Who Owns gshadow File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupowner_etc_passwd" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Group Who Owns passwd File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupowner_etc_shadow" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Group Who Owns shadow File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupowner_etc_shells" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Group Who Owns /etc/shells File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_owner_backup_etc_group" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify User Who Owns Backup group File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_owner_backup_etc_gshadow" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify User Who Owns Backup gshadow File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_owner_backup_etc_passwd" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify User Who Owns Backup passwd File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_owner_backup_etc_shadow" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Group Who Owns Backup shadow File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_owner_etc_group" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify User Who Owns group File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_owner_etc_gshadow" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify User Who Owns gshadow File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_owner_etc_passwd" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify User Who Owns passwd File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_owner_etc_shadow" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify User Who Owns shadow File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_owner_etc_shells" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Who Owns /etc/shells File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_backup_etc_group" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Permissions on Backup group File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_backup_etc_gshadow" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Permissions on Backup gshadow File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_backup_etc_passwd" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Permissions on Backup passwd File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_backup_etc_shadow" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Permissions on Backup shadow File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_etc_group" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Permissions on group File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_etc_gshadow" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Permissions on gshadow File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_etc_passwd" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Permissions on passwd File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_etc_shadow" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Permissions on shadow File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_etc_shells" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Permissions on /etc/shells File</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_kernel_module_cramfs_disabled" selected="false" severity="low">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable Mounting of cramfs</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_kernel_module_freevxfs_disabled" selected="false" severity="low">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable Mounting of freevxfs</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_kernel_module_hfs_disabled" selected="false" severity="low">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable Mounting of hfs</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_kernel_module_hfsplus_disabled" selected="false" severity="low">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable Mounting of hfsplus</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_kernel_module_jffs2_disabled" selected="false" severity="low">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable Mounting of jffs2</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_mount_option_dev_shm_nodev" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Add nodev Option to /dev/shm</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_mount_option_dev_shm_noexec" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Add noexec Option to /dev/shm</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_mount_option_dev_shm_nosuid" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Add nosuid Option to /dev/shm</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_mount_option_home_nodev" selected="false" severity="unknown">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Add nodev Option to /home</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_mount_option_home_nosuid" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Add nosuid Option to /home</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_mount_option_tmp_nodev" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Add nodev Option to /tmp</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_mount_option_tmp_noexec" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Add noexec Option to /tmp</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_mount_option_tmp_nosuid" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Add nosuid Option to /tmp</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_mount_option_var_log_audit_nodev" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Add nodev Option to /var/log/audit</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_mount_option_var_log_audit_noexec" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Add noexec Option to /var/log/audit</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_mount_option_var_log_audit_nosuid" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Add nosuid Option to /var/log/audit</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_mount_option_var_log_nodev" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Add nodev Option to /var/log</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_mount_option_var_log_noexec" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Add noexec Option to /var/log</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_mount_option_var_log_nosuid" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Add nosuid Option to /var/log</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_mount_option_var_nodev" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Add nodev Option to /var</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_mount_option_var_nosuid" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Add nosuid Option to /var</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_mount_option_var_tmp_nodev" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Add nodev Option to /var/tmp</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_mount_option_var_tmp_noexec" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Add noexec Option to /var/tmp</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_mount_option_var_tmp_nosuid" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Add nosuid Option to /var/tmp</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_kernel_yama_ptrace_scope" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Restrict usage of ptrace to descendant processes</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_coredump_disable_backtraces" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable core dump backtraces</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_coredump_disable_storage" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable storing core dump</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sysctl_kernel_randomize_va_space" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Enable Randomized Layout of Virtual Address Space</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_libselinux_installed" selected="false" severity="high">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Install libselinux Package</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_mcstrans_removed" selected="false" severity="low">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Uninstall mcstrans Package</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_grub2_enable_selinux" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure SELinux Not Disabled in /etc/default/grub</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_selinux_not_disabled" selected="false" severity="high">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure SELinux is Not Disabled</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_selinux_policytype" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Configure SELinux Policy</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_cron_installed" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Install the cron service</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_service_crond_enabled" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Enable cron Service</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupowner_cron_d" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Group Who Owns cron.d</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupowner_cron_daily" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Group Who Owns cron.daily</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupowner_cron_hourly" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Group Who Owns cron.hourly</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupowner_cron_monthly" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Group Who Owns cron.monthly</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupowner_cron_weekly" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Group Who Owns cron.weekly</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupowner_crontab" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Group Who Owns Crontab</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_owner_cron_d" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Owner on cron.d</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_owner_cron_daily" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Owner on cron.daily</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_owner_cron_hourly" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Owner on cron.hourly</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_owner_cron_monthly" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Owner on cron.monthly</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_owner_cron_weekly" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Owner on cron.weekly</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_owner_crontab" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Owner on crontab</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_cron_d" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Permissions on cron.d</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_cron_daily" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Permissions on cron.daily</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_cron_hourly" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Permissions on cron.hourly</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_cron_monthly" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Permissions on cron.monthly</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_cron_weekly" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Permissions on cron.weekly</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_crontab" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Permissions on crontab</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_at_allow_exists" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure that /etc/at.allow exists</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_at_deny_not_exist" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure that /etc/at.deny does not exist</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_cron_allow_exists" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure that /etc/cron.allow exists</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_cron_deny_not_exist" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure that /etc/cron.deny does not exist</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupowner_at_allow" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Group Who Owns /etc/at.allow file</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupowner_cron_allow" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Group Who Owns /etc/cron.allow file</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_owner_cron_allow" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify User Who Owns /etc/cron.allow file</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_at_allow" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Permissions on /etc/at.allow file</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_cron_allow" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Permissions on /etc/cron.allow file</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_dhcp_removed" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Uninstall DHCP Server Package</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_service_dnsmasq_disabled" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable dnsmasq Service</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_bind_removed" selected="false" severity="low">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Uninstall bind Package</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_ftp_removed" selected="false" severity="low">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Remove ftp Package</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_vsftpd_removed" selected="false" severity="high">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Uninstall vsftpd Package</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_httpd_removed" selected="false" severity="unknown">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Uninstall httpd Package</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_nginx_removed" selected="false" severity="unknown">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Uninstall nginx Package</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_cyrus-imapd_removed" selected="false" severity="unknown">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Uninstall cyrus-imapd Package</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_dovecot_removed" selected="false" severity="unknown">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Uninstall dovecot Package</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_has_nonlocal_mta" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure Mail Transfer Agent is not Listening on any non-loopback Address</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_postfix_network_listening_disabled" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable Postfix Network Listening</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_service_rpcbind_disabled" selected="false" severity="low">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable rpcbind Service</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_service_nfs_disabled" selected="false" severity="unknown">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable Network File System (nfs)</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_chrony_installed" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">The Chrony package is installed</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_chronyd_specify_remote_server" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">A remote time server for Chrony is configured</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_chronyd_run_as_chrony_user" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure that chronyd is running under chrony user account</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_rsync_removed" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Uninstall rsync Package</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_no_rsh_trust_files" selected="false" severity="high">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Remove Rsh Trust Files</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_telnet-server_removed" selected="false" severity="high">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Uninstall telnet-server Package</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_telnet_removed" selected="false" severity="low">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Remove telnet Clients</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_tftp-server_removed" selected="false" severity="high">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Uninstall tftp-server Package</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_tftp_removed" selected="false" severity="low">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Remove tftp Daemon</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_squid_removed" selected="false" severity="unknown">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Uninstall squid Package</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_samba_removed" selected="false" severity="unknown">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Uninstall Samba Package</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_package_net-snmp_removed" selected="false" severity="unknown">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Uninstall net-snmp Package</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupowner_sshd_config" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Group Who Owns SSH Server config file</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupownership_sshd_private_key" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Group Ownership on SSH Server Private *_key Key Files</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_groupownership_sshd_pub_key" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Group Ownership on SSH Server Public *.pub Key Files</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_owner_sshd_config" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Owner on SSH Server config file</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_ownership_sshd_private_key" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Ownership on SSH Server Private *_key Key Files</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_ownership_sshd_pub_key" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Ownership on SSH Server Public *.pub Key Files</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_sshd_config" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Permissions on SSH Server config file</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_sshd_private_key" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Permissions on SSH Server Private *_key Key Files</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_file_permissions_sshd_pub_key" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Verify Permissions on SSH Server Public *.pub Key Files</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sshd_set_keepalive" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Set SSH Client Alive Count Max</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sshd_set_idle_timeout" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Set SSH Client Alive Interval</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_disable_host_auth" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable Host-Based Authentication</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sshd_disable_empty_passwords" selected="false" severity="high">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable SSH Access via Empty Passwords</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sshd_disable_forwarding" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable SSH Forwarding</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sshd_disable_gssapi_auth" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable GSSAPI Authentication</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sshd_disable_rhosts" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable SSH Support for .rhosts Files</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sshd_disable_root_login" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Disable SSH Root Login</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sshd_do_not_permit_user_env" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Do Not Allow SSH Environment Options</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sshd_enable_pam" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Enable PAM</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sshd_enable_warning_banner_net" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Enable SSH Warning Banner</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sshd_limit_user_access" selected="false" severity="unknown">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Limit Users' SSH Access</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sshd_set_login_grace_time" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure SSH LoginGraceTime is configured</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sshd_set_loglevel_verbose" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Set SSH Daemon LogLevel to VERBOSE</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sshd_set_max_auth_tries" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Set SSH authentication attempt limit</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sshd_set_max_sessions" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Set SSH MaxSessions limit</title>
+  </Rule>
+  <Rule id="xccdf_org.ssgproject.content_rule_sshd_set_maxstartups" selected="false" severity="medium">
+    <title xmlns:xhtml="http://www.w3.org/1999/xhtml" xml:lang="en-US">Ensure SSH MaxStartups is configured</title>
+  </Rule>
+  <TestResult id="xccdf_org.open-scap_testresult_xccdf_org.ssgproject.content_profile_cis_workstation_l1" start-time="2026-11-13T08:06:49+00:00" end-time="2026-11-13T08:06:50+00:00" version="0.1.82" test-system="cpe:/a:redhat:openscap:1.3.14">
+    <benchmark href="/usr/share/xml/scap/ssg/content/ssg-almalinux9-ds.xml" id="xccdf_org.ssgproject.content_benchmark_ALMALINUX-9"/>
+    <title>OSCAP Scan Result</title>
+    <identity authenticated="false" privileged="false">ada</identity>
+    <profile idref="xccdf_org.ssgproject.content_profile_cis_workstation_l1"/>
+    <target>bench-7</target>
+    <target-address>127.0.0.1</target-address>
+    <target-address>192.0.2.7</target-address>
+    <target-address>198.51.100.7</target-address>
+    <target-facts>
+      <fact name="urn:xccdf:fact:scanner:name" type="string">OpenSCAP</fact>
+      <fact name="urn:xccdf:fact:scanner:version" type="string">1.3.14</fact>
+      <fact name="urn:xccdf:fact:asset:identifier:fqdn" type="string">bench-7</fact>
+      <fact name="urn:xccdf:fact:asset:identifier:host_name" type="string">bench-7</fact>
+      <fact name="urn:xccdf:fact:ethernet:MAC" type="string">02:00:00:AA:BB:01</fact>
+      <fact name="urn:xccdf:fact:asset:identifier:mac" type="string">02:00:00:AA:BB:01</fact>
+      <fact name="urn:xccdf:fact:ethernet:MAC" type="string">02:00:00:AA:BB:02</fact>
+      <fact name="urn:xccdf:fact:asset:identifier:mac" type="string">02:00:00:AA:BB:02</fact>
+      <fact name="urn:xccdf:fact:ethernet:MAC" type="string">02:00:00:AA:BB:03</fact>
+      <fact name="urn:xccdf:fact:asset:identifier:mac" type="string">02:00:00:AA:BB:03</fact>
+      <fact name="urn:xccdf:fact:ethernet:MAC" type="string">02:00:00:AA:BB:04</fact>
+      <fact name="urn:xccdf:fact:asset:identifier:mac" type="string">02:00:00:AA:BB:04</fact>
+      <fact name="urn:xccdf:fact:ethernet:MAC" type="string">02:00:00:AA:BB:05</fact>
+      <fact name="urn:xccdf:fact:asset:identifier:mac" type="string">02:00:00:AA:BB:05</fact>
+      <fact name="urn:xccdf:fact:asset:identifier:ipv4" type="string">127.0.0.1</fact>
+      <fact name="urn:xccdf:fact:asset:identifier:ipv4" type="string">192.0.2.7</fact>
+      <fact name="urn:xccdf:fact:asset:identifier:ipv4" type="string">198.51.100.7</fact>
+    </target-facts>
+    <platform idref="#package_dnf"/>
+    <platform idref="#package_pam"/>
+    <platform idref="#package_bash"/>
+    <platform idref="cpe:/o:almalinux:almalinux:9"/>
+    <platform idref="#ipv6_enabled"/>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_aide_installed" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_aide_build_database" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_aide_check_audit_tools" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_aide_periodic_cron_checking" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_configure_custom_crypto_policy_cis" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>fail</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-configure_custom_crypto_policy_cis:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_partition_for_dev_shm" role="full" time="2026-11-13T08:06:49+00:00" severity="low" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_partition_for_tmp" role="full" time="2026-11-13T08:06:49+00:00" severity="low" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_dconf_db_up_to_date" role="full" time="2026-11-13T08:06:49+00:00" severity="high" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_dconf_gnome_disable_user_list" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_gnome_gdm_disable_xdmcp" role="full" time="2026-11-13T08:06:49+00:00" severity="high" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_dconf_gnome_disable_autorun" role="full" time="2026-11-13T08:06:49+00:00" severity="low" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_dconf_gnome_screensaver_idle_delay" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_dconf_gnome_screensaver_lock_delay" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_dconf_gnome_screensaver_user_locks" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_dconf_gnome_session_idle_user_locks" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_sudo_installed" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sudo_add_use_pty" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sudo_custom_logfile" role="full" time="2026-11-13T08:06:49+00:00" severity="low" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sudo_remove_no_authenticate" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sudo_require_reauthentication" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_ensure_almalinux_gpgkey_installed" role="full" time="2026-11-13T08:06:49+00:00" severity="high" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-ensure_almalinux_gpgkey_installed:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_ensure_gpgcheck_globally_activated" role="full" time="2026-11-13T08:06:49+00:00" severity="high" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-ensure_gpgcheck_globally_activated:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_ensure_gpgcheck_never_disabled" role="full" time="2026-11-13T08:06:49+00:00" severity="high" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-ensure_gpgcheck_never_disabled:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_enable_authselect" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_banner_etc_issue_cis" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_banner_etc_issue_net_cis" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_banner_etc_motd_cis" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupowner_etc_issue" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_groupowner_etc_issue:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupowner_etc_issue_net" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_groupowner_etc_issue_net:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupowner_etc_motd" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_groupowner_etc_motd:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_owner_etc_issue" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_owner_etc_issue:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_owner_etc_issue_net" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_owner_etc_issue_net:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_owner_etc_motd" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_owner_etc_motd:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_etc_issue" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_permissions_etc_issue:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_etc_issue_net" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_permissions_etc_issue_net:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_etc_motd" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_permissions_etc_motd:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_dconf_gnome_banner_enabled" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_dconf_gnome_login_banner_text" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_pam_pwquality_installed" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-package_pam_pwquality_installed:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_password_pam_modules_in_authselect_profile" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>fail</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-accounts_password_pam_modules_in_authselect_profile:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_account_password_pam_faillock_password_auth" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_account_password_pam_faillock_system_auth" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_password_pam_pwhistory_enforce_for_root" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_password_pam_pwhistory_remember_password_auth" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_password_pam_pwhistory_remember_system_auth" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_deny" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_passwords_pam_faillock_unlock_time" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_password_pam_dictcheck" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_password_pam_difok" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_password_pam_enforce_root" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_password_pam_maxrepeat" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_password_pam_maxsequence" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_password_pam_minclass" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_password_pam_minlen" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_set_password_hashing_algorithm_libuserconf" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_set_password_hashing_algorithm_logindefs" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_set_password_hashing_algorithm_passwordauth" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_set_password_hashing_algorithm_systemauth" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_account_unique_id" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_group_unique_id" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_account_disable_post_pw_expiration" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_account_unique_name" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_maximum_age_login_defs" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_password_set_max_life_existing" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_password_set_warn_age_existing" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_password_warn_age_login_defs" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_set_post_pw_existing" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_password_all_shadowed" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_password_last_change_is_in_past" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_password_pam_unix_no_remember" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-accounts_password_pam_unix_no_remember:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_gid_passwd_group_same" role="full" time="2026-11-13T08:06:49+00:00" severity="low" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-gid_passwd_group_same:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_no_empty_passwords" role="full" time="2026-11-13T08:06:49+00:00" severity="high" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_no_empty_passwords_etc_shadow" role="full" time="2026-11-13T08:06:49+00:00" severity="high" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_no_forward_files" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_no_netrc_files" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_no_uid_except_zero" role="full" time="2026-11-13T08:06:49+00:00" severity="high" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_root_gid_zero" role="full" time="2026-11-13T08:06:49+00:00" severity="high" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_ensure_pam_wheel_group_empty" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_ensure_root_password_configured" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_groups_no_zero_gid_except_root" role="full" time="2026-11-13T08:06:49+00:00" severity="high" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-groups_no_zero_gid_except_root:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_no_invalid_shell_accounts_unlocked" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-no_invalid_shell_accounts_unlocked:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_no_password_auth_for_systemaccounts" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_no_shelllogin_for_systemaccounts" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_use_pam_wheel_group_for_su" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>fail</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-export export-name="oval:ssg-var_pam_wheel_group_for_su:var:1" value-id="xccdf_org.ssgproject.content_value_var_pam_wheel_group_for_su"/>
+        <check-content-ref name="oval:ssg-use_pam_wheel_group_for_su:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_tmout" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_user_dot_group_ownership" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_user_dot_user_ownership" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_user_interactive_home_directory_exists" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permission_user_init_files" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-export export-name="oval:ssg-var_user_initialization_files_regex:var:1" value-id="xccdf_org.ssgproject.content_value_var_user_initialization_files_regex"/>
+        <check-content-ref name="oval:ssg-file_permission_user_init_files:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_home_directories" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_permissions_home_directories:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_root_path_dirs_no_write" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-accounts_root_path_dirs_no_write:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_no_dirs_unowned_by_root" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-no_dirs_unowned_by_root:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_root_path_all_dirs" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-root_path_all_dirs:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_root_path_no_dot" role="full" time="2026-11-13T08:06:49+00:00" severity="unknown" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-root_path_no_dot:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_umask_etc_bashrc" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>fail</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-export export-name="oval:ssg-var_accounts_user_umask:var:1" value-id="xccdf_org.ssgproject.content_value_var_accounts_user_umask"/>
+        <check-content-ref name="oval:ssg-accounts_umask_etc_bashrc:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_umask_etc_login_defs" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_accounts_umask_etc_profile" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>fail</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-export export-name="oval:ssg-var_accounts_user_umask:var:1" value-id="xccdf_org.ssgproject.content_value_var_accounts_user_umask"/>
+        <check-content-ref name="oval:ssg-accounts_umask_etc_profile:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupowner_grub2_cfg" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupowner_user_cfg" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_owner_grub2_cfg" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_owner_user_cfg" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_grub2_cfg" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_user_cfg" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_grub2_password" role="full" time="2026-11-13T08:06:49+00:00" severity="high" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_ensure_journald_and_rsyslog_not_active_together" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_rsyslog_filecreatemode" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_rsyslog_files_groupownership" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_rsyslog_files_ownership" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_rsyslog_files_permissions" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_systemd-journal-remote_installed" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_service_systemd-journald_enabled" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_journald_compress" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_journald_storage" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_socket_systemd-journal-remote_disabled" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_firewalld_installed" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_service_firewalld_enabled" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_firewalld_loopback_traffic_restricted" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_firewalld_loopback_traffic_trusted" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_accept_ra" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_accept_redirects" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_accept_source_route" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_all_forwarding" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_accept_ra" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_accept_redirects" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_net_ipv6_conf_default_accept_source_route" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_accept_redirects" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_accept_source_route" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_log_martians" role="full" time="2026-11-13T08:06:49+00:00" severity="unknown" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_rp_filter" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_secure_redirects" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_accept_redirects" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_accept_source_route" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_log_martians" role="full" time="2026-11-13T08:06:49+00:00" severity="unknown" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_rp_filter" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_secure_redirects" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_icmp_echo_ignore_broadcasts" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_icmp_ignore_bogus_error_responses" role="full" time="2026-11-13T08:06:49+00:00" severity="unknown" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_tcp_syncookies" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_all_send_redirects" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_conf_default_send_redirects" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_net_ipv4_ip_forward" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_nftables_installed" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_service_nftables_disabled" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_dir_perms_world_writable_sticky_bits" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>fail</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-dir_perms_world_writable_sticky_bits:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_unauthorized_world_writable" role="full" time="2026-11-13T08:06:49+00:00" severity="medium" weight="1.000000">
+      <result>fail</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_permissions_unauthorized_world_writable:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_ungroupowned" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_permissions_ungroupowned:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_no_files_unowned_by_user" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_etc_security_opasswd" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_etc_security_opasswd:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupowner_backup_etc_group" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_groupowner_backup_etc_group:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupowner_backup_etc_gshadow" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_groupowner_backup_etc_gshadow:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupowner_backup_etc_passwd" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_groupowner_backup_etc_passwd:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupowner_backup_etc_shadow" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_groupowner_backup_etc_shadow:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupowner_etc_group" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_groupowner_etc_group:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupowner_etc_gshadow" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_groupowner_etc_gshadow:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupowner_etc_passwd" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_groupowner_etc_passwd:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupowner_etc_shadow" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_groupowner_etc_shadow:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupowner_etc_shells" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_groupowner_etc_shells:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_owner_backup_etc_group" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_owner_backup_etc_group:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_owner_backup_etc_gshadow" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_owner_backup_etc_gshadow:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_owner_backup_etc_passwd" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_owner_backup_etc_passwd:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_owner_backup_etc_shadow" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_owner_backup_etc_shadow:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_owner_etc_group" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_owner_etc_group:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_owner_etc_gshadow" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_owner_etc_gshadow:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_owner_etc_passwd" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_owner_etc_passwd:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_owner_etc_shadow" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_owner_etc_shadow:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_owner_etc_shells" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_owner_etc_shells:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_backup_etc_group" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_permissions_backup_etc_group:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_backup_etc_gshadow" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_permissions_backup_etc_gshadow:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_backup_etc_passwd" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_permissions_backup_etc_passwd:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_backup_etc_shadow" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_permissions_backup_etc_shadow:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_etc_group" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_permissions_etc_group:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_etc_gshadow" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_permissions_etc_gshadow:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_etc_passwd" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_permissions_etc_passwd:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_etc_shadow" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_permissions_etc_shadow:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_etc_shells" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-file_permissions_etc_shells:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_kernel_module_cramfs_disabled" role="full" time="2026-11-13T08:06:50+00:00" severity="low" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_kernel_module_freevxfs_disabled" role="full" time="2026-11-13T08:06:50+00:00" severity="low" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_kernel_module_hfs_disabled" role="full" time="2026-11-13T08:06:50+00:00" severity="low" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_kernel_module_hfsplus_disabled" role="full" time="2026-11-13T08:06:50+00:00" severity="low" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_kernel_module_jffs2_disabled" role="full" time="2026-11-13T08:06:50+00:00" severity="low" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_mount_option_dev_shm_nodev" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_mount_option_dev_shm_noexec" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_mount_option_dev_shm_nosuid" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_mount_option_home_nodev" role="full" time="2026-11-13T08:06:50+00:00" severity="unknown" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_mount_option_home_nosuid" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_mount_option_tmp_nodev" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_mount_option_tmp_noexec" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_mount_option_tmp_nosuid" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_mount_option_var_log_audit_nodev" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_mount_option_var_log_audit_noexec" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_mount_option_var_log_audit_nosuid" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_mount_option_var_log_nodev" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_mount_option_var_log_noexec" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_mount_option_var_log_nosuid" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_mount_option_var_nodev" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_mount_option_var_nosuid" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_mount_option_var_tmp_nodev" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_mount_option_var_tmp_noexec" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_mount_option_var_tmp_nosuid" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_kernel_yama_ptrace_scope" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_coredump_disable_backtraces" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_coredump_disable_storage" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sysctl_kernel_randomize_va_space" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_libselinux_installed" role="full" time="2026-11-13T08:06:50+00:00" severity="high" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_mcstrans_removed" role="full" time="2026-11-13T08:06:50+00:00" severity="low" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_grub2_enable_selinux" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_selinux_not_disabled" role="full" time="2026-11-13T08:06:50+00:00" severity="high" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_selinux_policytype" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_cron_installed" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_service_crond_enabled" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupowner_cron_d" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupowner_cron_daily" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupowner_cron_hourly" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupowner_cron_monthly" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupowner_cron_weekly" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupowner_crontab" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_owner_cron_d" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_owner_cron_daily" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_owner_cron_hourly" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_owner_cron_monthly" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_owner_cron_weekly" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_owner_crontab" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_cron_d" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_cron_daily" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_cron_hourly" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_cron_monthly" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_cron_weekly" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_crontab" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_at_allow_exists" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_at_deny_not_exist" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_cron_allow_exists" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_cron_deny_not_exist" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupowner_at_allow" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupowner_cron_allow" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_owner_cron_allow" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_at_allow" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_cron_allow" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_dhcp_removed" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-package_dhcp_removed:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_service_dnsmasq_disabled" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_bind_removed" role="full" time="2026-11-13T08:06:50+00:00" severity="low" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-package_bind_removed:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_ftp_removed" role="full" time="2026-11-13T08:06:50+00:00" severity="low" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-package_ftp_removed:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_vsftpd_removed" role="full" time="2026-11-13T08:06:50+00:00" severity="high" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-package_vsftpd_removed:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_httpd_removed" role="full" time="2026-11-13T08:06:50+00:00" severity="unknown" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-package_httpd_removed:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_nginx_removed" role="full" time="2026-11-13T08:06:50+00:00" severity="unknown" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-package_nginx_removed:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_cyrus-imapd_removed" role="full" time="2026-11-13T08:06:50+00:00" severity="unknown" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-package_cyrus-imapd_removed:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_dovecot_removed" role="full" time="2026-11-13T08:06:50+00:00" severity="unknown" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-package_dovecot_removed:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_has_nonlocal_mta" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_postfix_network_listening_disabled" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_service_rpcbind_disabled" role="full" time="2026-11-13T08:06:50+00:00" severity="low" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_service_nfs_disabled" role="full" time="2026-11-13T08:06:50+00:00" severity="unknown" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_chrony_installed" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_chronyd_specify_remote_server" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_chronyd_run_as_chrony_user" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_rsync_removed" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-package_rsync_removed:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_no_rsh_trust_files" role="full" time="2026-11-13T08:06:50+00:00" severity="high" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_telnet-server_removed" role="full" time="2026-11-13T08:06:50+00:00" severity="high" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-package_telnet-server_removed:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_telnet_removed" role="full" time="2026-11-13T08:06:50+00:00" severity="low" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-package_telnet_removed:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_tftp-server_removed" role="full" time="2026-11-13T08:06:50+00:00" severity="high" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-package_tftp-server_removed:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_tftp_removed" role="full" time="2026-11-13T08:06:50+00:00" severity="low" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-package_tftp_removed:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_squid_removed" role="full" time="2026-11-13T08:06:50+00:00" severity="unknown" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-package_squid_removed:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_samba_removed" role="full" time="2026-11-13T08:06:50+00:00" severity="unknown" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-package_samba_removed:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_package_net-snmp_removed" role="full" time="2026-11-13T08:06:50+00:00" severity="unknown" weight="1.000000">
+      <result>pass</result>
+      <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+        <check-content-ref name="oval:ssg-package_net-snmp_removed:def:1" href="ssg-almalinux9-oval.xml"/>
+      </check>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupowner_sshd_config" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupownership_sshd_private_key" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_groupownership_sshd_pub_key" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_owner_sshd_config" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_ownership_sshd_private_key" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_ownership_sshd_pub_key" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_sshd_config" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_sshd_private_key" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_file_permissions_sshd_pub_key" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sshd_set_keepalive" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sshd_set_idle_timeout" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_disable_host_auth" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sshd_disable_empty_passwords" role="full" time="2026-11-13T08:06:50+00:00" severity="high" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sshd_disable_forwarding" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sshd_disable_gssapi_auth" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sshd_disable_rhosts" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sshd_disable_root_login" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sshd_do_not_permit_user_env" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sshd_enable_pam" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sshd_enable_warning_banner_net" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sshd_limit_user_access" role="full" time="2026-11-13T08:06:50+00:00" severity="unknown" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sshd_set_login_grace_time" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sshd_set_loglevel_verbose" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sshd_set_max_auth_tries" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sshd_set_max_sessions" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <rule-result idref="xccdf_org.ssgproject.content_rule_sshd_set_maxstartups" role="full" time="2026-11-13T08:06:50+00:00" severity="medium" weight="1.000000">
+      <result>notapplicable</result>
+    </rule-result>
+    <score system="urn:xccdf:scoring:default" maximum="100.000000">79.513885</score>
+  </TestResult>
+</Benchmark>
