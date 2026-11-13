@@ -60,4 +60,11 @@ dconf update || :
 # the firewall's default zone is the SilikOS one (package silikos-security): incoming dropped, outgoing free.
 # The offline command also leaves a copy of the zone in /etc, which would hide the package's file on updates.
 firewall-offline-cmd --set-default-zone=silikos && rm -f /etc/firewalld/zones/silikos.xml || :
+# the speed profile (docs/SPEED.md): what the base starts and an engineer's workstation does not need is off from the
+# first start (kdump's arming, ModemManager, the storage-array daemon, multipathd and the wait for udev it brings,
+# rpcbind until asked, the hourly metadata download, the daily updatedb, the file indexer, GNOME Software in the
+# background). Nothing of docs/SECURITY.md is in it; the kernel's parameters are not touched. It writes down what it
+# changed: `silik speed undo` on the installed system puts it back, `silik speed` shows each item.
+# (SYSTEMD_OFFLINE: nothing runs here to be stopped; the units are off from the first start)
+SYSTEMD_OFFLINE=1 silik -q speed apply || :
 %end

@@ -695,7 +695,7 @@ class Command(unittest.TestCase):
         every_row_says_what_to_do(self, rows)
         self.assertEqual({r["area"] for r in rows}, set(silik.DOCTOR_AREAS))
         for c in silik.DOC_RAN:
-            self.assertRegex(c, r"^(rpm -q|systemctl (--user )?(show|list-units)|journalctl -q|lspci|modinfo|ip -details|podman ps|gsettings get)\b", c)
+            self.assertRegex(c, r"^(rpm -q|systemctl (--user )?(show|list-units|list-unit-files|is-active)|journalctl -q|lspci|modinfo|ip -details|podman ps|gsettings get)\b", c)
             self.assertNotIn("sudo", c)
 
     def test_the_command_line_the_completion_and_the_command_bar(self):

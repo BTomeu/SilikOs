@@ -2,6 +2,11 @@
 # silikos-ci-check: runs once on the first boot of the system the CI installed; one line per check on the serial port:
 #   SILIKOS-CI|<name>|ok or FAIL or info|<what was seen>
 # and SILIKOS-CI|DONE at the end. Read by tests/install/run.sh. Only in the CI's test installation.
+# (the measurement starts of tests/install/bench.sh, for which the host writes a file "phase" on the test's disk, are
+# not for these checks: they ran on the first boot)
+mkdir -p /run/silikci-phase && mount -o ro LABEL=SILIKCI /run/silikci-phase 2> /dev/null
+phase=$(cat /run/silikci-phase/phase 2> /dev/null); umount /run/silikci-phase 2> /dev/null
+[ -z "$phase" ] || exit 0
 out=/dev/ttyS0
 # (each line starts on a line of its own: the kernel and systemd write to the same port)
 say() { printf '\r\nSILIKOS-CI|%s|%s|%s\r\n' "$1" "$2" "$(echo "$3" | tr '\n|' ' /' | cut -c1-300)" > $out; }
@@ -36,6 +41,20 @@ is power.auto "$(systemctl is-enabled silikos-power-auto 2>&1) $(systemctl is-ac
 is power.trim "$(systemctl is-enabled fstrim.timer 2>&1)" enabled
 is power.profile "$(silik power --json 2>/dev/null | python3 -c 'import json, sys; print(json.load(sys.stdin)["profile"])' 2>&1)" performance
 say power.tuned info "$(tuned-adm active 2>&1)"
+# the speed profile: the kickstart applied it (in the installer, where nothing runs), so on this first start nothing
+# of it is on, the units it turned off do not run, and what it leaves alone is as before
+sp=$(silik -q speed --json 2> /dev/null)
+is speed.profile "$(echo "$sp" | python3 -c 'import json, sys; print(json.load(sys.stdin)["applied"])' 2>&1)" True
+say speed.items info "$(echo "$sp" | python3 -c 'import json, sys; print(" ".join("%s=%s" % (i["id"], i["state"]) for i in json.load(sys.stdin)["items"]))' 2>&1)"
+# (list-unit-files names the installed ones only: a unit the set does not bring is not a failure of the profile)
+is speed.units "$(systemctl list-unit-files --no-legend --no-pager kdump.service ModemManager.service libstoragemgmt.service multipathd.service multipathd.socket dnf-makecache.timer mlocate-updatedb.timer 2>&1 | awk '{print $2}' | sort -u | tr '\n' ' ')" "disabled "
+is speed.not-running "$(systemctl is-active kdump.service ModemManager.service libstoragemgmt.service multipathd.service 2>&1 | grep -c '^active')" 0
+is speed.rpcbind-on-demand "$(systemctl list-unit-files --no-legend --no-pager rpcbind.service rpcbind.socket 2>&1 | awk '{print $1 "=" $2}' | sort | tr '\n' ' ')" "rpcbind.service=disabled rpcbind.socket=enabled "
+is speed.software-not-started "$(pgrep -u tester -x gnome-software > /dev/null && echo runs || echo no)" no
+has speed.state "$(cat /var/lib/silikos/speed.json 2>&1 | tr -d ' \n' | cut -c1-200)" '"kdump":{"units":{"kdump.service"'
+has speed.doctor "$(silik doctor system 2>&1 | grep 'speed profile')" "ok"
+say speed.udev-settle info "$(systemctl is-active systemd-udev-settle.service 2>&1) (inactive: no start waits for udev to settle)"
+say speed.kept info "NetworkManager-wait-online $(systemctl is-enabled NetworkManager-wait-online.service 2>&1), firewalld $(systemctl is-active firewalld 2>&1), auditd $(systemctl is-active auditd 2>&1), chronyd $(systemctl is-active chronyd 2>&1), fstrim.timer $(systemctl is-enabled fstrim.timer 2>&1)"
 is security.ptrace_scope "$(sysctl -n kernel.yama.ptrace_scope 2>&1)" 1
 is security.dmesg_restrict "$(sysctl -n kernel.dmesg_restrict 2>&1)" 1
 has kernel.vsyscall "$(cat /proc/cmdline)" "vsyscall=xonly"
