@@ -355,6 +355,32 @@ class Isolated(Case):
         self.assertNotIn("--die-with-parent", box[-1])
 
 
+class Keyring(unittest.TestCase):
+    """a sandbox does not inherit the session's keyring of the kernel"""
+
+    def test_what_starts_in_the_sandbox_joins_a_new_session_keyring(self):
+        src = text("packages/silik-tools/files/silik")
+        self.assertIn("start_new_session=True,\n                                     preexec_fn=win_no_keys())", src)   # the normal box
+        self.assertIn("subprocess.run(argv, check=False, preexec_fn=win_no_keys())", src)                             # each program entering
+        body = src[src.index("def win_isolated_start"):src.index("def win_runtime_make")]
+        self.assertLess(body.index("win_no_keys()"), body.index("subprocess.Popen(win_xephyr("))                      # the isolated box
+
+    def test_the_call_gives_a_new_keyring(self):
+        join = silik.win_no_keys()
+        if os.uname().machine not in ("x86_64", "aarch64"):
+            self.assertIsNone(join)
+            return
+        self.assertTrue(callable(join))
+        # the session keyring's number, asked by a child before and after the call (keyctl GET_KEYRING_ID of -3)
+        code = ("import ctypes, os\nc = ctypes.CDLL(None).syscall\nnr = %d\n"
+                "print(c(ctypes.c_long(nr), ctypes.c_long(0), ctypes.c_long(-3), ctypes.c_long(0)))\n" % {"x86_64": 250, "aarch64": 219}[os.uname().machine])
+        import subprocess
+        ids = [subprocess.run([sys.executable, "-c", code], stdout=subprocess.PIPE, universal_newlines=True, preexec_fn=fn).stdout.strip() for fn in (None, join, join)]
+        if "-1" in ids or "" in ids:
+            self.skipTest("the kernel's keyrings cannot be asked here: %s" % ids)
+        self.assertEqual(len(set(ids)), 3, ids)             # each child of the call has a keyring of its own
+
+
 class Question(Case):
     """a file that was not run here before (the audit's B2)"""
 

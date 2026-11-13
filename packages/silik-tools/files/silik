@@ -1104,6 +1104,29 @@ def win_sandbox(name, d, show=(), net=True, info_fd=None, iso=None):
     return a + ["--remount-ro", "/", "--chdir", d, "--"]
 
 
+def win_no_keys():
+    """what a sandbox's first process and every program entering it call before they start: a new, empty session
+    keyring of the kernel (keyctl(KEYCTL_JOIN_SESSION_KEYRING, NULL)). Without it they inherit this session's, and
+    with it whatever the session keeps there and in the user keyring linked into it (a Kerberos ticket cache of
+    the KEYRING kind, CIFS credentials, an eCryptfs key): run on EL 9, a key of the session was read from inside the
+    box. Returns the function to call in the child, or None where the call is not known (not x86_64 or aarch64).
+    It is not the whole answer: a program of the same user can still link the USER keyring by its number (seen);
+    only a system-call filter would stop that (docs/WINDOWS.md)."""
+    nr = {"x86_64": 250, "aarch64": 219}.get(os.uname().machine)
+    if nr is None:
+        return None
+    try:
+        import ctypes
+        call = ctypes.CDLL(None).syscall
+    except (OSError, AttributeError):
+        return None
+    args = (ctypes.c_long(nr), ctypes.c_long(1), ctypes.c_long(0))
+
+    def join():
+        call(*args)
+    return join
+
+
 # -- an isolated sandbox's own display
 WIN_TITLE = {"en": "SilikOS: isolated Windows programs (%s)", "ca": "SilikOS: programes de Windows aïllats (%s)",
              "es": "SilikOS: programas de Windows aislados (%s)"}
@@ -1217,6 +1240,7 @@ def win_isolated_start(ctx, name, d, rt, show, net, fd, iso, tail, logf):
             # nothing of this command stays open in it (the prefix's lock above all: it would be held for ever)
             os.closerange(3, fd)
             os.closerange(fd + 1, 4096)
+            (win_no_keys() or (lambda: None))()         # (the X server and the sandbox: no key of the session's)
             log = os.open(logf, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             os.dup2(os.open(os.devnull, os.O_RDONLY), 0)
             os.dup2(log, 1)
@@ -1395,7 +1419,8 @@ def win_session(ctx, name, d, show=(), net=True, iso=False, sound=False):
         ctx.note(win_short(argv))
         if not iso:
             with open(logf, "wb") as log:
-                p = subprocess.Popen(argv, pass_fds=(fd,), stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
+                p = subprocess.Popen(argv, pass_fds=(fd,), stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True,
+                                     preexec_fn=win_no_keys())
 
             def ended():
                 return p.poll() is not None
@@ -1445,7 +1470,7 @@ def win_enter(ctx, d, s, cmd, cwd=None, display=True):
         return 0
     ctx.note(win_short(argv))
     try:
-        rc = subprocess.run(argv, check=False).returncode
+        rc = subprocess.run(argv, check=False, preexec_fn=win_no_keys()).returncode
     except OSError as e:
         print("silik: %s" % e, file=sys.stderr)
         return 126
