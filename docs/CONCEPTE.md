@@ -180,7 +180,8 @@ sense haver-ho executat de veritat. Les suposicions es marquen amb [A].
 - Tornar enrere d'una actualització (`silik rollback`) en un disc LVM de veritat.
 - Els paquets i les eines també es construeixen i es proven en màquines ARM de GitHub.
 - **Al costat de l'AlmaLinux de sèrie, a la mateixa màquina virtual**: SilikOS fa servir uns 155 MB menys de memòria
-  i arriba a l'escriptori uns 0,7 s més tard (la seva pantalla d'entrada va sobre Xorg). `docs/NUMEROS.md` §9.
+  i arriba a l'escriptori uns 0,7 s més tard (la seva sessió és X11, per les eines EDA; la de la base és Wayland).
+  `docs/NUMEROS.md` §9.
 - La ISO sense xarxa: s'instal·la i arrenca en una màquina sense targeta de xarxa; a la primera prova li faltaven
   els paquets dels releases (OpenOCD, les eines EDA), i s'està tornant a provar amb ells.
 
@@ -209,7 +210,7 @@ sense haver-ho executat de veritat. Les suposicions es marquen amb [A].
 
 **Següents passos proposats:**
 - Fer-lo servir una setmana al Ryzen i apuntar on falla (`docs/PRIMERA-HORA.md`).
-- La pantalla d'entrada sobre Wayland amb la sessió sobre Xorg, per recuperar els 0,7 s d'arrencada (no provat).
+- Mesurar l'arrencada en una màquina amb pantalla d'entrada (les de prova entren soles a la sessió).
 
 ## 8. Petit glossari
 

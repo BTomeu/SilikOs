@@ -197,7 +197,7 @@ GitHub (4096 MB de memòria, sense targeta gràfica), mesurat per `silik bench s
 el perfil de `silik speed` posat i dues després de `silik speed undo`. Són quatre captures d'una sola execució en una
 màquina virtual compartida: una primera mesura, no una mitjana.
 
-| Captura | Arrencada (nucli + initrd + espai d'usuari) | Pantalla d'inici | Escriptori | Memòria usada | Processos | Unitats en marxa |
+| Captura | Arrencada (nucli + initrd + espai d'usuari) | `gdm.service` engegat | Escriptori | Memòria usada | Processos | Unitats en marxa |
 |---|---|---|---|---|---|---|
 | perfil posat, 1 | 1,1 + 2,1 + 6,1 = 9,3 s | 5,7 s | 8,9 s | 990 MB | 99 | 44 |
 | perfil posat, 2 | 1,2 + 2,3 + 6,1 = 9,7 s | 6,0 s | 9,2 s | 982 MB | 99 | 44 |
@@ -224,7 +224,7 @@ a la mateixa màquina virtual (4 CPU, 4096 MB, KVM) del mateix runner, dues arre
 | | SilikOS 1 | SilikOS 2 | AlmaLinux 1 | AlmaLinux 2 |
 |---|---|---|---|---|
 | Arrencada: nucli + initrd + espai d'usuari | 1,34 + 3,11 + 7,62 = 12,07 s | 1,41 + 3,02 + 7,43 = 11,86 s | 1,37 + 3,06 + 6,93 = 11,37 s | 1,32 + 3,06 + 7,13 = 11,51 s |
-| Pantalla d'inici (gdm.service) | 7,34 s | 7,29 s | 7,23 s | 7,14 s |
+| `gdm.service` engegat | 7,34 s | 7,29 s | 7,23 s | 7,14 s |
 | Escriptori | 11,41 s | 11,26 s | 10,61 s | 10,56 s |
 | Memòria usada | 984 MB | 979 MB | 1135 MB | 1145 MB |
 | Memòria disponible (de 3655 MB) | 2671 MB | 2675 MB | 2520 MB | 2510 MB |
@@ -238,18 +238,19 @@ a la mateixa màquina virtual (4 CPU, 4096 MB, KVM) del mateix runner, dues arre
   menys. És el perfil de `silik speed`.
 - **Arrencada: SilikOS arriba a l'escriptori 0,65 a 0,85 s més tard** (11,26-11,41 contra 10,56-10,61 s), i l'espai
   d'usuari li costa 0,3 a 0,7 s més. No és més ràpid que la base en arrencar: és més lent.
-- On és la diferència: `plymouth-quit-wait.service` (acaba quan la pantalla d'inici és a punt) triga 4,70 s a SilikOS i
-  3,92 s a l'AlmaLinux, començant al mateix moment (2,87 i 2,77 s). SilikOS posa la pantalla d'inici i la sessió sobre
-  Xorg (`WaylandEnable=false`, per les eines EDA, que són programes X11: s'hi veuen `Xorg` i `gdm-x-session`);
-  l'AlmaLinux les posa sobre Wayland (`gdm-wayland-session`). Que els 0,8 s siguin d'arrencar Xorg per a la pantalla
-  d'inici és el que diuen aquestes dades, no una cosa provada [A]. De l'inici de sessió a l'escriptori, els dos triguen
-  el mateix (3,8 i 3,9 s).
+- On és la diferència: `plymouth-quit-wait.service` (acaba quan la primera pantalla gràfica és a punt) triga 4,70 s a
+  SilikOS i 3,92 s a l'AlmaLinux, començant al mateix moment (2,87 i 2,77 s). Les dues màquines de prova entren a la
+  sessió soles (`AutomaticLogin`): **no hi ha pantalla d'inici**, aquesta primera pantalla ja és la sessió de
+  l'usuari. La de SilikOS és X11 (`WaylandEnable=false`, per les eines EDA, que són programes X11: hi corren `Xorg` i
+  `gdm-x-session`); la de l'AlmaLinux és Wayland (`gdm-wayland-session`). O sigui: en aquesta màquina virtual la
+  sessió X11 triga uns 0,8 s més a ser-hi que la Wayland. Quina part és arrencar Xorg no s'ha mirat [A]. És el preu
+  d'una decisió presa (X11 per a l'EDA), no una cosa a arreglar sense canviar-la.
 - `systemd-binfmt.service` (0,59 s) és a la cadena crítica de SilikOS i no a la de la base (Wine i l'emulador d'x86 hi
   registren formats): `sysinit.target` hi arriba 0,13 s més tard.
 - Aquesta execució arrenca més lenta que les del CI del mateix dia (12 s contra 9,3 s, l'initrd 3,1 contra 2,1 s): és
   un altre runner. Per això la comparació només val dins d'una mateixa execució.
-- PROPOSTA (no provada): pantalla d'inici sobre Wayland i sessió de l'usuari sobre Xorg. Cal veure-ho en una màquina
-  virtual abans de dir que guanya res.
+- No mesurat: una màquina amb pantalla d'inici (les de prova no en tenen), on la pantalla d'inici podria anar sobre
+  Wayland i la sessió sobre Xorg; ni cap maquinari real.
 
 ## 10. Encara no mesurat
 
