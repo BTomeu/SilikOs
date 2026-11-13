@@ -128,6 +128,23 @@ class Files(unittest.TestCase):
                     "df -h / /boot", "rpm -qa | wc -l", "bench system --json", "speed undo"):
             self.assertIn(cmd, guest)
         self.assertNotRegex(guest, r"(?m)^(BENCH|UNIT|%end)$")                      # (it goes inside a kickstart's here-document)
+
+    def test_how_the_session_came_up_is_recorded_and_printed(self):
+        """the seconds between gdm and the desktop: the user's units by their time and the journal's lines, in the
+        run's own log (13/11/2026: the difference with the stock base was put on a login screen the test machines do
+        not have; the data to say where it goes were not being taken)"""
+        guest, host = read("tests/install/bench-guest.sh"), read("tests/install/bench.sh")
+        for cmd in ("systemd-analyze --user blame", "systemd-analyze --user critical-chain graphical-session.target",
+                    "journalctl -b -o short-monotonic", "} | block session"):
+            self.assertIn(cmd, guest)
+        self.assertLess(guest.index("} | block raw"), guest.index("} | block session"))
+        self.assertIn('("session", "-session.txt")', host)
+        self.assertIn('cat "$out/bench-$l-session.txt"', host)
+        # the journal's lines are chosen by a pattern grep accepts
+        pat = re.search(r"grep -E '([^']+)' \\\n", guest).group(1)
+        lines = "[ 7.1] vm gdm-x-session[12]: X.Org X Server 1.20\n[ 8.2] vm gnome-shell[13]: Enabling extension x\n[ 1.0] vm kernel: nothing\n"
+        p = subprocess.run(["grep", "-c", "-E", pat], input=lines, stdout=subprocess.PIPE, universal_newlines=True)
+        self.assertEqual(p.stdout.strip(), "2")
         check = read("tests/install/check.sh")
         early = check.index('[ -z "$phase" ] || exit 0')
         self.assertLess(early, check.index("has name.pretty"))                      # before the first check

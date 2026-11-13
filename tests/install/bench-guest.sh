@@ -65,6 +65,17 @@ case $phase in
       echo; echo "\$ rpm -qa | wc -l; rpm -qa --qf '%{SIZE}\\n' | awk '{s += \$1} END {print s}'"; rpm -qa | wc -l; rpm -qa --qf '%{SIZE}\n' | awk '{s += $1} END {printf "%d bytes\n", s}'
       echo; echo "\$ $silik speed"; $silik speed 2>&1
     } | block raw
+    # where the time between gdm and the desktop goes: the user's own units by the time each took, then the
+    # journal's lines of the display server, the session and the shell, with the seconds since the kernel started
+    { echo "\$ systemd-analyze --user   # as $user"; asuser systemd-analyze --user 2>&1 | head -3
+      echo; echo "\$ systemd-analyze --user blame | head -20"; asuser systemd-analyze --user blame --no-pager 2>&1 | head -20
+      echo; echo "\$ systemd-analyze --user critical-chain graphical-session.target"; asuser systemd-analyze --user critical-chain graphical-session.target --no-pager 2>&1 | head -24
+      echo; echo "\$ loginctl show-session (the user's): Type, Service"; loginctl show-session "$(loginctl list-sessions --no-legend | awk -v u="$user" '$3 == u { print $1; exit }')" -p Type -p Service -p Class 2>&1 | tr '\n' ' '
+      echo; echo; echo "\$ journalctl -b -o short-monotonic | grep (gdm, the display server, the session, the shell)"
+      journalctl -b -o short-monotonic --no-pager 2> /dev/null \
+        | grep -E 'gdm[-a-z]*\[|Xorg|X\.Org|Xwayland|gnome-session[-a-z]*\[|GNOME Shell started|Started GNOME Shell|org\.gnome\.Shell@|gnome-shell\[[0-9]+\]: (Enabling|Loading|Extension|JS (ERROR|WARNING))|New session [0-9c]+ of user|Reached target (GNOME|Graphical|Session|Basic|Main User|Current graphical)|Startup finished|plymouth-quit' \
+        | cut -c1-220 | head -90
+    } | block session
     finish "$(awk '/^MemTotal|^MemAvailable/ {printf "%s %d MB ", $1, $2 / 1024}' /proc/meminfo)" ;;
   *)
     finish "unknown phase" ;;

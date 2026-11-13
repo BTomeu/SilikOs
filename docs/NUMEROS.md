@@ -245,8 +245,9 @@ a la mateixa màquina virtual (4 CPU, 4096 MB, KVM) del mateix runner, dues arre
   `gdm-x-session`); la de l'AlmaLinux és Wayland (`gdm-wayland-session`). O sigui: en aquesta màquina virtual la
   sessió X11 triga uns 0,8 s més a ser-hi que la Wayland. Quina part és arrencar Xorg no s'ha mirat [A]. És el preu
   d'una decisió presa (X11 per a l'EDA), no una cosa a arreglar sense canviar-la.
-- `systemd-binfmt.service` (0,59 s) és a la cadena crítica de SilikOS i no a la de la base (Wine i l'emulador d'x86 hi
-  registren formats): `sysinit.target` hi arriba 0,13 s més tard.
+- `systemd-binfmt.service` (0,59 s) és a la cadena crítica de SilikOS i no a la de la base: el `ksh` de la base (el
+  demana silik-eda-compat, pels scripts dels fabricants) porta `/etc/binfmt.d/kshcomp.conf`, i amb un sol fitxer la
+  unitat ja s'engega. `sysinit.target` hi arriba 0,13 s més tard. Es deixa com està.
 - Aquesta execució arrenca més lenta que les del CI del mateix dia (12 s contra 9,3 s, l'initrd 3,1 contra 2,1 s): és
   un altre runner. Per això la comparació només val dins d'una mateixa execució.
 - No mesurat: una màquina amb pantalla d'inici (les de prova no en tenen), on la pantalla d'inici podria anar sobre

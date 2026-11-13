@@ -67,7 +67,7 @@ for label in labels:
         continue
     with open(os.path.join(out, "bench-%s.json" % label), "w") as fh:
         json.dump(cap, fh, indent=1)
-    for kind, suffix in (("text", ".txt"), ("raw", "-raw.txt")):
+    for kind, suffix in (("text", ".txt"), ("raw", "-raw.txt"), ("session", "-session.txt")):
         if (kind, label) in texts:
             with open(os.path.join(out, "bench-%s%s" % (label, suffix)), "w") as fh:
                 fh.write(texts[(kind, label)])
@@ -84,6 +84,9 @@ files=(); for l in "${labels[@]}"; do [ -f "$out/bench-$l.json" ] && files+=("$o
   if [ ${#files[@]} -gt 0 ]; then
     python3 "$root/packages/silik-tools/files/silik" bench compare "${files[@]}"
     for l in "${labels[@]}"; do [ -f "$out/bench-$l.txt" ] && { echo; echo "== $l"; cat "$out/bench-$l.txt"; }; done
+    # how each session came up: the user's units by the time they took, and the journal's lines of the display
+    # server, the session and the shell (where the seconds between gdm and the desktop go)
+    for l in "${labels[@]}"; do [ -f "$out/bench-$l-session.txt" ] && { echo; echo "== $l: the session's start"; cat "$out/bench-$l-session.txt"; }; done
   fi
   [ -z "$missing" ] || echo "no capture of: $missing (the console and the second serial port of that start: bench-start*.log, .out)"
 } > "$out/bench.txt"
