@@ -77,6 +77,11 @@ _silik() {
   if [ "$COMP_CWORD" -eq 2 ] && [ -n "$g" ] && [ -f "$pd/$g.py" ] && [[ " $pl " == *" $g "* ]]; then
     COMPREPLY=($(compgen -W "$(sed -n 's/^# words: //p' "$pd/$g.py" | head -1)" -- "$cur")); return
   fi
+  # a plugin's command with words of its own ("# words COMMAND: ..." in its head): silik disk tpm <TAB>. The word typed
+  # goes into sed's pattern only when it is a plain name, and what comes back is compared as text
+  if [ "$COMP_CWORD" -eq 3 ] && [ -n "$g" ] && [ -f "$pd/$g.py" ] && [[ " $pl " == *" $g "* ]] && [[ ${COMP_WORDS[2]} =~ ^[a-z][a-z0-9-]*$ ]]; then
+    _silik_names "$cur" "" < <(sed -n "s/^# words ${COMP_WORDS[2]}: //p" "$pd/$g.py" | head -1 | tr ' ' '\n'); return
+  fi
   # update: channel and its channels, --auto and its choices
   if [ "$g" = update ] && [ "$COMP_CWORD" -ge 2 ]; then
     case ${COMP_WORDS[COMP_CWORD-1]} in

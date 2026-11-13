@@ -1,0 +1,122 @@
+{
+ "blockdevices": [
+  {
+   "name": "nvme0n1",
+   "kname": "nvme0n1",
+   "path": "/dev/nvme0n1",
+   "type": "disk",
+   "fstype": null,
+   "fsver": null,
+   "uuid": null,
+   "mountpoints": [
+    null
+   ],
+   "children": [
+    {
+     "name": "nvme0n1p1",
+     "kname": "nvme0n1p1",
+     "path": "/dev/nvme0n1p1",
+     "type": "part",
+     "fstype": "xfs",
+     "fsver": null,
+     "uuid": "aaaa",
+     "mountpoints": [
+      "/"
+     ]
+    },
+    {
+     "name": "nvme0n1p2",
+     "kname": "nvme0n1p2",
+     "path": "/dev/nvme0n1p2",
+     "type": "part",
+     "fstype": "crypto_LUKS",
+     "fsver": "1",
+     "uuid": "11111111-2222-3333-4444-555555555555",
+     "mountpoints": [
+      null
+     ],
+     "children": [
+      {
+       "name": "home",
+       "kname": "dm-0",
+       "path": "/dev/mapper/home",
+       "type": "crypt",
+       "fstype": "xfs",
+       "fsver": null,
+       "uuid": "bbbb",
+       "mountpoints": [
+        "/home"
+       ]
+      }
+     ]
+    },
+    {
+     "name": "nvme0n1p3",
+     "kname": "nvme0n1p3",
+     "path": "/dev/nvme0n1p3",
+     "type": "part",
+     "fstype": "crypto_LUKS",
+     "fsver": "2",
+     "uuid": "99999999-2222-3333-4444-555555555555",
+     "mountpoints": [
+      null
+     ],
+     "children": [
+      {
+       "name": "luks-9",
+       "kname": "dm-1",
+       "path": "/dev/mapper/luks-9",
+       "type": "crypt",
+       "fstype": "LVM2_member",
+       "fsver": "LVM2 001",
+       "uuid": "dddd",
+       "mountpoints": [
+        null
+       ],
+       "children": [
+        {
+         "name": "vg-work",
+         "kname": "dm-2",
+         "path": "/dev/mapper/vg-work",
+         "type": "lvm",
+         "fstype": "xfs",
+         "fsver": null,
+         "uuid": "gggg",
+         "mountpoints": [
+          "/work"
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "nvme0n1p4",
+     "kname": "nvme0n1p4",
+     "path": "/dev/nvme0n1p4",
+     "type": "part",
+     "fstype": "LVM2_member",
+     "fsver": "LVM2 001",
+     "uuid": "hhhh",
+     "mountpoints": [
+      null
+     ],
+     "children": [
+      {
+       "name": "vg-work",
+       "kname": "dm-2",
+       "path": "/dev/mapper/vg-work",
+       "type": "lvm",
+       "fstype": "xfs",
+       "fsver": null,
+       "uuid": "gggg",
+       "mountpoints": [
+        "/work"
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

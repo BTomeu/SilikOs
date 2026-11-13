@@ -11,6 +11,7 @@ file only when its group is typed, so a plugin costs the other commands nothing 
 # silik-plugin: NAME
 # help: one line for `silik --help`
 # words: export show            (the group's commands: the shell's completion reads this line)
+# words show: all mine           (optional: the words after one of them, `silik NAME show <TAB>`)
 # state: experimental: why       (optional: what has not been run yet; `silik --help` says it before the help)
 """what the group does"""
 

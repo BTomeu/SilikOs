@@ -150,9 +150,16 @@ for example `/etc/sysctl.d/90-local.conf` with `kernel.yama.ptrace_scope = 0`.
 
 ## The owner's choice
 
-- **Disk encryption (LUKS).** Chosen in the installer's **Installation Destination** screen ("Encrypt my data"); the
-  kickstart never selects, erases or encrypts a disk. It cannot be added later by a command of ours: `status` shows
-  `▼ bad` on an unencrypted disk and says there is no command. The passphrase is asked at every start.
+- **Disk encryption (LUKS) and the boot chain** (`docs/DISK.md`). Chosen in the installer's **Installation
+  Destination** screen ("Encrypt my data"); the kickstart never selects, erases or encrypts a disk, and cannot
+  propose encryption without selecting one (`autopart --encrypted` makes the installer take every disk: read in
+  the installer's source, not done). `silik disk` says what is encrypted, the key slots of the volume, the TPM and
+  Secure Boot; on an unencrypted disk it and `silik secure status` say `▼ bad`, and the first login says it once.
+  No command of ours encrypts a disk in use. `silik disk tpm enroll` adds a TPM2 key slot with a PIN bound to the
+  Secure Boot state (PCR 7) and never removes the passphrase slot; without a PIN only when `--no-pin` is typed.
+  `silik disk recovery` adds a recovery key. Not covered: the initramfs and the kernel's arguments (not signed, not
+  in PCR 7), a running or suspended machine, the firmware. Run on a LUKS2 header in a file with a software TPM; an
+  installation and a start: the CI job `sealed-test`, not run yet.
 - **Secure Boot.** [A: the whole item; nothing of it was run] Works with the base's signed kernel. The NVIDIA driver
   is built on the machine (DKMS) and its module is signed with a key made on the machine, which the firmware must be
   told to trust once: `sudo mokutil --import /var/lib/dkms/mok.pub`, choose a one-time
@@ -270,15 +277,15 @@ What a system like GrapheneOS has and SilikOS does not, and why:
 | Property | There | Here |
 |---|---|---|
 | Verified boot of everything | every partition, keys the owner can set | Secure Boot covers the boot loader and the kernel when it is on; the initramfs and the kernel's arguments are not covered on bare metal. The kernel locks itself down under Secure Boot (the base's build) |
-| Disk always encrypted | always | a tick in the installer; `silik secure status` says bad without it. Proposing it ticked: needs an installer run |
+| Disk always encrypted | always | a tick in the installer; `silik secure status` and `silik disk` say bad without it, and the first login says it once. Ticked by the kickstart: not possible without the installer taking every disk (read) |
 | A hardened memory allocator | yes | no: none is packaged for EL 9, and changing glibc would end the binary identity with RHEL that the EDA tools need |
 | Every program in its own box, with its own permissions | yes | no: what the user starts runs as the user, on X11, where programs see each other's keys and windows. Wine has bubblewrap; an untrusted program belongs in `silik win vm` |
 | USB refused while locked | yes | not yet: the base ships USBGuard and GNOME 40 knows how to use it, and nothing here installs or configures it. First on the list, after a run with a real device |
 | Fast patches | frequent releases, installed in the background and in effect at the next restart | daily, automatic, with a snapshot to go back to; a kernel fix protects after a restart the owner does (the base has no live patches) |
 
-**The hardened level** exists (`silik secure level hardened`, below and `docs/HARDENED.md`). **Proposed and not
-done yet**: USBGuard at GNOME's "locked screen" level; encryption ticked in the installer and TPM unlock with a PIN;
-nothing listening beyond this machine (`rpcbind.socket` and avahi are the base's, and listen).
+**The hardened level** exists (`silik secure level hardened`, below and `docs/HARDENED.md`). TPM unlock with a
+PIN exists (`silik disk tpm enroll`, `docs/DISK.md`). **Proposed and not done yet**: USBGuard at GNOME's "locked
+screen" level; nothing listening beyond this machine (`rpcbind.socket` and avahi are the base's, and listen).
 
 Seen on an installed system (CI run 43509961201): the only things listening beyond the machine are the base's
 `rpcbind.socket` (port 111) and avahi (mDNS, which also announces the machine's name on every network it joins); the
@@ -291,7 +298,7 @@ are made of them); `noexec` on `/tmp` (vendor installers); kernel lockdown at "c
 
 ## What SilikOS does not do
 
-No antivirus, no USBGuard, no FIPS mode or CIS / STIG profile, no TPM unlock of the disk, no confinement of the
+No antivirus, no USBGuard, no FIPS mode or CIS / STIG profile, no encryption of a disk in use, no confinement of the
 vendor tools; at the default level no audit rules and no kernel lockdown beyond the base's (the hardened level
 sets both). `silik secure` reads and sets what is listed above.
 `silik audit` evaluates the system against a CIS, ANSSI or STIG profile of the base's own content and changes nothing;

@@ -631,7 +631,7 @@ class Kickstart(unittest.TestCase):
         body = s[s.index("\nxorriso -indev"):]
         self.assertIn('\nimplantisomd5 --force "$out"\n', body)
         self.assertEqual(body.split('implantisomd5 --force "$out"\n', 1)[1].strip(), 'ls -la "$out"')
-        ci = text(".github/workflows/ci.yml")               # every job that builds the ISO has the tool (arm, install, rollback-test, hardened-test...)
+        ci = text(".github/workflows/ci.yml")               # every job that builds the ISO has the tool (arm, install, rollback-test, hardened-test, sealed-test...)
         self.assertEqual(len(re.findall(r"ci_apt\.sh [^\n]*xorriso[^\n]*isomd5sum", ci)), len(re.findall(r"bash tools/build_iso\.sh\n", ci)))
         self.assertGreaterEqual(len(re.findall(r"bash tools/build_iso\.sh\n", ci)), 3)
 

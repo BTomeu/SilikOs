@@ -1,0 +1,22 @@
+[
+ {"address": "disk/status", "argv": ["disk"],
+  "en": "Disk: what is encrypted, the TPM, Secure Boot, what opens the disk at a start",
+  "ca": "Disc: què està xifrat, el TPM, el Secure Boot, què obre el disc en arrencar",
+  "es": "Disco: qué está cifrado, el TPM, el Secure Boot, qué abre el disco al arrancar", "terminal": true},
+ {"address": "disk/check", "argv": ["disk", "check"],
+  "en": "Disk: the same, and what to do so that it is neither opened nor lost (commands printed, none run)",
+  "ca": "Disc: el mateix, i què cal fer perquè ni l'obrin ni es perdi (ordres escrites, cap d'executada)",
+  "es": "Disco: lo mismo, y qué hacer para que ni lo abran ni se pierda (órdenes escritas, ninguna ejecutada)", "terminal": true},
+ {"address": "disk/tpm-enroll", "argv": ["disk", "tpm", "enroll"],
+  "en": "Disk: open it with the TPM and a PIN, bound to the Secure Boot state (the passphrase stays)",
+  "ca": "Disc: obre'l amb el TPM i un PIN, lligat a l'estat del Secure Boot (la contrasenya es queda)",
+  "es": "Disco: ábrelo con el TPM y un PIN, ligado al estado del Secure Boot (la contraseña se queda)", "terminal": true},
+ {"address": "disk/tpm-remove", "argv": ["disk", "tpm", "remove"],
+  "en": "Disk: take the TPM out of the unlocking (the passphrase again at every start)",
+  "ca": "Disc: treu el TPM del desbloqueig (la contrasenya altra vegada a cada arrencada)",
+  "es": "Disco: quita el TPM del desbloqueo (la contraseña otra vez en cada arranque)", "terminal": true},
+ {"address": "disk/recovery", "argv": ["disk", "recovery"],
+  "en": "Disk: add a recovery key (generated, shown once: for paper)",
+  "ca": "Disc: afegeix una clau de recuperació (generada, mostrada un sol cop: per al paper)",
+  "es": "Disco: añade una clave de recuperación (generada, mostrada una sola vez: para el papel)", "terminal": true}
+]

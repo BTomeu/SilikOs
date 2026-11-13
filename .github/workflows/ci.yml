@@ -371,3 +371,65 @@ jobs:
             build/hardened-test/*.log
             build/hardened-test/*.txt
             build/hardened-test/*.ks
+
+
+  # Data at rest and the boot chain (docs/DISK.md), in a virtual machine with the ISO: an unattended installation
+  # under UEFI whose kickstart says `autopart --encrypted` and names nothing else (what "Encrypt my data" makes on
+  # this ISO must be LUKS2 with argon2id), then seven starts of the installed system with the runner's OVMF firmware
+  # and a software TPM (swtpm): Secure Boot on and the passphrase typed on the serial console; `silik disk`;
+  # `silik disk tpm enroll` with a PIN; the PIN opens the disk; with Secure Boot off, and with another TPM, the PIN
+  # does not and the passphrase does; the first machine again; an empty and a wrong PIN; `silik disk tpm remove`;
+  # the passphrase again. The ISO is built here from the packages job's packages, as in rollback-test.
+  # continue-on-error: this job is new and has never run (written 13/11/2026 where no virtual machine, firmware or
+  # TPM could run): it must not stop the ISO or a release until it has passed. Each start is an annotation.
+  sealed-test:
+    needs: packages
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with: { persist-credentials: false }
+      - name: KVM for the runner's user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+      - name: Tools, the firmware, the software TPM, disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          bash tools/ci_apt.sh rpm createrepo-c xorriso mtools cpio isomd5sum qemu-system-x86 qemu-utils ovmf swtpm
+          ls -l /usr/share/OVMF/
+          # Ubuntu confines swtpm to the peers libvirt labels; here QEMU is started by hand. On this throw-away
+          # runner the profile is taken out (nothing of SilikOS; the test keeps the TPM's files in /tmp either way)
+          if [ -e /etc/apparmor.d/usr.bin.swtpm ]; then
+            sudo ln -sf /etc/apparmor.d/usr.bin.swtpm /etc/apparmor.d/disable/ && sudo apparmor_parser -R /etc/apparmor.d/usr.bin.swtpm || echo "the swtpm profile stays"
+          fi
+          df -h /
+      # our packages as the packages job built them (in EL 9, with the base's rpmbuild)
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with: { name: silikos-packages, path: build/repo }
+      - name: The ISO (the system alone)
+        run: |
+          createrepo_c --quiet build/repo && ls build/repo
+          bash tools/build_iso.sh
+      - name: An encrypted installation; Secure Boot, a TPM, silik disk; the PIN, and where it must not open the disk
+        run: bash tests/install/sealed.sh build/SilikOS-*-netinstall.iso build/sealed-test
+      - name: The report
+        if: always()
+        run: |
+          {
+            echo '### SilikOS sealed test (docs/DISK.md)'
+            echo '```'
+            cat build/sealed-test/report.txt 2>/dev/null || echo 'no report: see the consoles (artifact sealed-test)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        if: always()
+        with:
+          name: sealed-test
+          path: |
+            build/sealed-test/*.log
+            build/sealed-test/*.txt
+            build/sealed-test/*.ks

@@ -41,8 +41,12 @@ Provat: la ISO es construeix i s'instal·la a cada execució del CI. Des d'un US
 
 1. Arrenca de l'USB. Al menú, **Install SilikOS 9.8**.
 2. Tria l'idioma.
-3. **Installation Destination**: tria tu el disc. L'instal·lador no en tria ni n'esborra cap pel seu compte. Deixa
+3. **Installation Destination**: tria tu el disc. L'instal·lador no n'esborra cap fins que tu ho confirmes, però
+   mira bé quins surten marcats: amb més d'un disc pot ser que els marqui tots [llegit al codi de l'instal·lador,
+   no vist]; desmarca els que no vols tocar. Deixa
    "Automatic": fa el disc de manera que després es pugui tornar enrere d'una actualització (`silik rollback`).
+   Marca **Encrypt my data** i posa-hi una contrasenya llarga: l'instal·lador no ho marca tot sol, i sense xifrar
+   qui tingui el portàtil a les mans en llegeix el disc (`docs/DISK.md`; després, `silik disk`).
 4. Crea el teu usuari i comença. Quan acabi, reinicia i treu l'USB.
 
 Provat: instal·lació desatesa en màquina virtual (113 comprovacions bé a l'execució 43393494218). Amb les pantalles a
