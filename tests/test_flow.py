@@ -126,10 +126,17 @@ class Extension(unittest.TestCase):
                 self.assertNotIn(other, js)
 
     def test_nothing_runs_at_rest(self):
-        """no repeating timer, no repaint loop: one time limit for an application that never shows a window"""
-        self.assertEqual(self.flow.count("timeout_add"), 1)
+        """no repeating timer, no repaint loop: one time limit for an application that never shows a window; and in
+        the crystal glass modes one wait, asked for when a window behind a pane that is on the screen draws (its
+        picture is taken again then), which ends by itself"""
+        self.assertEqual(self.flow.count("timeout_add"), 2)
         limit = self.flow.split("timeout_add(")[1].split("}));")[0]
         self.assertIn("return GLib.SOURCE_REMOVE;", limit)
+        still = self.flow.split("    _stillSoon() {")[1].split("\n    }\n")[0]
+        self.assertEqual(still.count("timeout_add"), 1)
+        self.assertIn("if (this._stillId) return;", still)
+        self.assertIn("return GLib.SOURCE_REMOVE;", still)
+        self.assertEqual(self.flow.count("this._stillSoon()"), 2)       # a window drew; a window had no contents yet (a few times)
         self.assertNotIn("SOURCE_CONTINUE", self.flow + self.ext)
         # the extension's one time limit: Start's rows made before the first opening, once, a slice per idle moment
         # until they are all made (each slice asks for the next one only while rows are missing)

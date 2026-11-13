@@ -654,17 +654,26 @@ const RoundMask = GObject.registerClass({ GTypeName: 'SilikRoundMask' }, class R
    actor that is shown again is drawn from scratch, and the blur with it (measured in the rig: 7-11 ms more at each
    opening of Start then).
    The windows (a mode with windows: true): every window on the screen that reaches the glass has a picture of itself
-   (a Clutter.Clone of its actor: the same texture, nothing copied) in the glass, above the wallpaper and under the
-   same blur and mask, where the window is on the screen and in the windows' own order. The pictures follow the
-   windows: one that moves or changes size (its own signals), opens, closes, is minimised or brought back, changes
-   place in the stack or leaves with its workspace (the display's and the window manager's signals; each actor's
-   visibility) is brought in line at that signal: a walk of the windows on the screen, nothing drawn. (Put off to the
-   next frame, a window brought back from its key was sometimes left out until something else changed: the signal
-   comes before the window is shown, and nothing asked for another frame; seen in the rig.) A window that draws (a terminal that scrolls)
-   draws its picture too, and the glass is blurred again for that frame: that is the cost of these modes, paid only
-   while the pane is on the screen and only for windows that reach it (REACH: the blurred margin, or 0 for a window
-   under the pane itself). While the pane is hidden there are no pictures and no signals. The windows view (the
-   overview) shows the windows elsewhere: no pictures then. A window above the COMMAND bar's own is not behind it. */
+   in the glass, above the wallpaper and under the same blur and mask, where the window is on the screen and in the
+   windows' own order. A picture is a still of the window's own contents (the shell's own
+   Shell.util_get_content_for_window_actor, which the shell uses when a window changes size), not the window drawn a
+   second time: a window drawn again (a Clutter.Clone) made the glass blurred again at every frame the window drew,
+   and a terminal scrolling behind an open Start left the shell painting all the time (measured in the rig, software
+   rendering: 54 frames in 5 s where it paints 300, see docs/STATUS.md); and under the COMMAND bar, whose glass is
+   painted among the windows, it was drawn with the parts the window manager had left out of that frame.
+   The pictures follow the windows: one that moves or changes size (its own signals), opens, closes, is minimised or
+   brought back, changes place in the stack or leaves with its workspace (the display's and the window manager's
+   signals; each actor's visibility) is brought in line at that signal: a walk of the windows on the screen, nothing
+   drawn. (Put off to the next frame, a window brought back from its key was sometimes left out until something else
+   changed: the signal comes before the window is shown, and nothing asked for another frame; seen in the rig.) A
+   window that draws (a terminal that scrolls) has its picture taken again, at most once every STILL_MS for all the
+   windows of a pane: the glass is blurred again then, and that is the cost of these modes, paid only while the pane
+   is on the screen and only for windows that reach it (REACH: the blurred margin, or 0 for a window under the pane
+   itself). While the pane is hidden there are no pictures, no signals and no timer. The windows view (the overview)
+   shows the windows elsewhere: no pictures then. A window above the COMMAND bar's own is not behind it. */
+var STILL_MS = 200;                                  /* a window that draws: its picture again, five times a second at most */
+const STILL_TRIES = 5;                               /* a window without contents yet: asked again this many times */
+
 var Mica = class Mica {
     constructor(pane, monitor, inside, radius, mode, reach) {
         const s = St.ThemeContext.get_for_stage(global.stage).scale_factor;
@@ -691,8 +700,9 @@ var Mica = class Mica {
         if (this._windows) {
             this._winBox = new Clutter.Actor();
             this._glass.add_child(this._winBox);
-            this._clones = new Map();                        /* window actor -> its picture */
+            this._stills = new Map();                        /* window actor -> its picture */
             this._tracked = new Map();                       /* window actor -> [[object, signal id]...] */
+            this._drew = new Map();                          /* window actors that drew since their picture was taken (-> tries) */
         }
         if (inside) {
             pane.insert_child_below(this.actor, null);
@@ -743,27 +753,45 @@ var Mica = class Mica {
         } else {
             for (const [o, id] of this._winSigs) o.disconnect(id);
             this._winSigs = null;
+            if (this._stillId) { GLib.source_remove(this._stillId); this._stillId = 0; }
             for (const a of Array.from(this._tracked.keys())) this._untrack(a);
-            for (const c of this._clones.values()) c.destroy();
-            this._clones.clear();
+            this._drew.clear();
         }
     }
 
     _track(a) {
         const sync = () => this._wins(), w = a.meta_window;
         this._tracked.set(a, [[a, a.connect('notify::visible', sync)], [a, a.connect('destroy', () => this._untrack(a))],
-                              [w, w.connect('position-changed', sync)], [w, w.connect('size-changed', sync)]]);
+                              [a, a.connect('damaged', () => this._drawn(a))],
+                              [w, w.connect('position-changed', sync)], [w, w.connect('size-changed', () => { this._drew.set(a, 0); sync(); })]]);
     }
 
     _untrack(a) {
         for (const [o, id] of this._tracked.get(a) || []) try { o.disconnect(id); } catch (e) { /* the window has gone */ }
         this._tracked.delete(a);
-        const c = this._clones.get(a);
-        if (c) { c.destroy(); this._clones.delete(a); }
+        this._drew.delete(a);
+        const c = this._stills.get(a);
+        if (c) { c.destroy(); this._stills.delete(a); }
+    }
+
+    /* a window drew: if it has a picture here, the pictures are taken again once STILL_MS have passed */
+    _drawn(a) {
+        if (!this._stills.has(a)) return;
+        this._drew.set(a, 0);
+        this._stillSoon();
+    }
+
+    _stillSoon() {
+        if (this._stillId) return;
+        this._stillId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, STILL_MS, () => {
+            this._stillId = 0;
+            this._wins();
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     /* the pictures brought in line with the windows on the screen. A window is where the window manager says it is
-       (its buffer's rectangle, shadows included): its actor is moved there a moment after the signal */
+       (its actor is moved there a moment after the signal) */
     _wins() {
         if (!this._winSigs || !this._at || this._inWins) return;
         this._inWins = true;
@@ -780,22 +808,35 @@ var Mica = class Mica {
             here.add(a);
             if (!this._tracked.has(a)) this._track(a);
             if (Main.overview.visible || !a.visible || a.meta_window.minimized) continue;
-            const b = a.meta_window.get_buffer_rect();
-            if (b.x < x + w + r && b.x + b.width > x - r && b.y < y + h + r && b.y + b.height > y - r) want.push([a, b]);
+            const f = a.meta_window.get_frame_rect();
+            if (f.x < x + w + r && f.x + f.width > x - r && f.y < y + h + r && f.y + f.height > y - r) want.push([a, f]);
         }
         const wanted = new Set(want.map(([a]) => a));
+        let again = false;
         for (const a of Array.from(this._tracked.keys())) if (!here.has(a)) this._untrack(a);
-        for (const [a, c] of Array.from(this._clones)) if (!wanted.has(a)) { c.destroy(); this._clones.delete(a); }
-        want.forEach(([a, b], i) => {
-            let c = this._clones.get(a);
+        for (const [a, c] of Array.from(this._stills)) if (!wanted.has(a)) { c.destroy(); this._stills.delete(a); this._drew.delete(a); }
+        want.forEach(([a, f], i) => {
+            let c = this._stills.get(a);
             if (!c) {
-                c = new Clutter.Clone({ source: a });
-                this._clones.set(a, c);
+                c = new Clutter.Actor();
+                this._stills.set(a, c);
                 this._winBox.add_child(c);
+                this._drew.set(a, 0);
             }
-            c.set_position(b.x - x + m, b.y - y + m);
+            if (this._drew.has(a)) {                         /* its contents as they are now */
+                let content = null;
+                try { content = Shell.util_get_content_for_window_actor(a, f); } catch (e) { /* a window with no contents yet */ }
+                if (content) { c.content = content; this._drew.delete(a); }
+                /* (none yet, as a window just brought back from its key: asked again STILL_MS later, a few times; then
+                   at its next drawing) */
+                else if (this._drew.get(a) < STILL_TRIES) { this._drew.set(a, this._drew.get(a) + 1); again = true; }
+            }
+            c.set_position(f.x - x + m, f.y - y + m);
+            c.set_size(f.width, f.height);
             if (this._winBox.get_child_at_index(i) !== c) this._winBox.set_child_at_index(c, i);
         });
+        if (again) this._stillSoon();
+        else if (!this._stills.size && this._stillId) { GLib.source_remove(this._stillId); this._stillId = 0; }
     }
 
     destroy() {

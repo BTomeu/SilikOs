@@ -148,7 +148,9 @@ class Maps(unittest.TestCase):
         for d in re.findall(r"border-radius: ([^;]+);", css):
             radii |= set(re.findall(r"\d+", d))
         self.assertEqual(radii - {"0"}, {"6", "4", "5", "30"})          # (5: inside a 1 px frame; 30: the shell's own clip)
-        self.assertIn('font-family: "Cascadia Mono"', css)
+        # (bare words: the shell reads no second family in quotes, and then none at all)
+        self.assertIn("stage { font-family: Cascadia Mono, DejaVu Sans Mono, monospace;", css)
+        self.assertNotRegex(css, r'font-family:[^;]*"')
 
 
 class Package(unittest.TestCase):

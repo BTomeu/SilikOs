@@ -10,7 +10,9 @@
    a menu or a banner would need its own blur at each showing (the glass of the desktop's panes is kept from one frame
    to the next because they stay where they are), and a stylesheet cannot put one under them. The title bar and the
    lock and login screens keep the ink family. */
-stage { font-family: "Cascadia Mono", "DejaVu Sans Mono", monospace; font-size: 10pt;
+/* (the families as bare words: GNOME Shell 40 does not read a second family in quotes, warned "Couldn't parse family in
+   font property" at every change of a stylesheet and left the face to the desktop's font setting; seen in the rig) */
+stage { font-family: Cascadia Mono, DejaVu Sans Mono, monospace; font-size: 10pt;
   warning-color: #7a5c00; error-color: #b3261e; success-color: #1b7337; }
 /* the top bar: the ink slab, regular weight */
 #panel { background-color: #17181b; font-weight: normal; warning-color: #dcb53a; error-color: #f66d67; success-color: #61cb7c; }
@@ -40,7 +42,8 @@ stage { font-family: "Cascadia Mono", "DejaVu Sans Mono", monospace; font-size: 
   -arrow-box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18); }
 .popup-menu-content { padding: 6px 0; }
 .popup-menu-item { border-radius: 0; }
-/* the row under the pointer or the keyboard is inverse video, as a chosen row of Start */
+/* the row under the pointer or the keyboard: the hover grey of the desktop's keys; pressed, it is inverse video (the
+   shell's own rule: ink, or the accent) */
 .popup-menu-item.selected { background-color: #e6e5e0; color: #1a1b1e; }
 .popup-sub-menu { background-color: #eeede9; border-top: 1px solid #dcdad5; border-bottom: 1px solid #dcdad5; }
 .popup-separator-menu-item .popup-separator-menu-item-separator { margin: 6px 16px; }

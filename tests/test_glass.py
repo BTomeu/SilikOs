@@ -396,23 +396,37 @@ class Extension(unittest.TestCase):
         self.assertIn("this._m = 3 * mode.sigma * s;", self.flow)              # the margin follows the mode's blur
 
     def test_the_windows_behind_a_pane(self):
-        """the crystal modes: pictures of the windows (clones: nothing copied) under the same blur, kept in step by
-        the windows' signals, only while the pane is on the screen; never the BACKGROUND blur"""
+        """the crystal modes: stills of the windows under the same blur, kept in step by the windows' signals and
+        taken again, at most every STILL_MS, when a window draws; only while the pane is on the screen; never a window
+        drawn a second time (a clone: the blur at every frame), never the BACKGROUND blur"""
         mica = self.flow.split("var Mica = class Mica {")[1]
-        self.assertIn("new Clutter.Clone({ source: a })", mica)
+        self.assertIn("Shell.util_get_content_for_window_actor(a, f)", mica)
+        self.assertNotIn("Clutter.Clone", mica)
         for sig in ("'restacked'", "'map'", "'destroy'", "'minimize'", "'unminimize'", "'switch-workspace'", "'active-workspace-changed'",
-                    "'position-changed'", "'size-changed'", "'notify::visible'", "'showing'", "'hidden'"):
+                    "'position-changed'", "'size-changed'", "'notify::visible'", "'damaged'", "'showing'", "'hidden'"):
             self.assertIn(sig, mica, sig)
-        self.assertIn("this._watch(pane.visible);", mica)                      # a hidden pane: no pictures, no signals
+        self.assertIn("this._watch(pane.visible);", mica)                      # a hidden pane: no pictures, no signals, no timer
         off = mica.split("    _watch(on) {")[1].split("\n    }\n")[0].split("} else {")[1]
         self.assertIn("o.disconnect(id)", off)
-        self.assertIn("c.destroy()", off)
+        self.assertIn("GLib.source_remove(this._stillId)", off)
+        self.assertIn("this._untrack(a)", off)
+        self.assertIn("c.destroy()", mica.split("    _untrack(a) {")[1].split("\n    }\n")[0])
         self.assertIn("this._watch(false);", mica.split("    destroy() {")[1])
         self.assertIn("if (!this._windows ||", mica.split("    _watch(on) {")[1].split("\n")[1])     # the wallpaper modes: nothing
+        # a window that draws: one timer for the pane, not a picture at each frame
+        drawn = mica.split("    _drawn(a) {")[1].split("\n    }\n")[0]
+        self.assertIn("if (!this._stills.has(a)) return;", drawn)             # a window that is not behind the pane costs nothing
+        soon = mica.split("    _stillSoon() {")[1].split("\n    }\n")[0]
+        self.assertIn("if (this._stillId) return;", soon)
+        self.assertIn("GLib.timeout_add(GLib.PRIORITY_DEFAULT, STILL_MS", soon)
+        self.assertIn("this._drew.get(a) < STILL_TRIES", mica)                  # no contents yet: asked again, not for ever
+        ms = int(re.search(r"var STILL_MS = (\d+);", self.flow).group(1))
+        self.assertTrue(100 <= ms <= 500)
         wins = mica.split("    _winsNow() {")[1].split("\n    }\n")[0]
         self.assertIn("if (a === own) break;", wins)                           # the COMMAND bar: only what is under it
         self.assertIn("Main.overview.visible || !a.visible || a.meta_window.minimized", wins)
-        self.assertIn("a.meta_window.get_buffer_rect()", wins)
+        self.assertIn("a.meta_window.get_frame_rect()", wins)                  # a window reaches the pane, not its shadow
+        self.assertIn("if (this._drew.has(a)) {", wins)                        # a picture is taken only of a window that drew
         self.assertNotIn("later_add", mica)                                    # brought in line at the signal (see flow.js)
         # the piece that is always on the screen takes only the windows under itself
         self.assertIn("const PIECE_REACH = 0;", self.flow)
