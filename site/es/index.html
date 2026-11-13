@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SilikOS: un sistema para la estación de trabajo de ingeniería</title>
+<meta name="description" content="SilikOS es un sistema para la estación de trabajo de ingeniería sobre una base Enterprise Linux 9: diseño de chips y de placas, microcontroladores, el banco y programas de Windows en un solo escritorio. Un prototipo verificado en máquinas virtuales.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<link rel="alternate" hreflang="en" href="../index.html">
+<link rel="alternate" hreflang="ca" href="../ca/index.html">
+</head>
+<body>
+<header class="tb">
+<a class="mk" href="#what"><picture><source srcset="../img/mark.svg" media="(prefers-color-scheme: dark)"><img src="../img/mark-light.svg" width="35" height="20" alt="La marca SilikVolt"></picture><span>SilikOS</span></a>
+<div class="cmd" aria-hidden="true"><span class="cmd-pr">›</span><span class="cmd-path"></span><span class="cmd-cur"></span><span class="cmd-hint">teclas 1 a 5</span></div>
+<nav class="tb-r" aria-label="Idioma">
+<a href="../index.html" lang="en" hreflang="en">EN</a>
+<a href="../ca/index.html" lang="ca" hreflang="ca">CA</a>
+<a href="../es/index.html" lang="es" hreflang="es" aria-current="page">ES</a>
+<a class="gh" href="https://github.com/BTomeu/SilikOs">GitHub</a>
+</nav>
+</header>
+<nav class="rail" aria-label="Vistas">
+<a href="#what" accesskey="1" data-key="1"><span class="n">1</span>Qué es</a>
+<a href="#looks" accesskey="2" data-key="2"><span class="n">2</span>Aspectos</a>
+<a href="#commands" accesskey="3" data-key="3"><span class="n">3</span>Órdenes</a>
+<a href="#state" accesskey="4" data-key="4"><span class="n">4</span>Estado</a>
+<a href="#get" accesskey="5" data-key="5"><span class="n">5</span>Cómo tenerlo</a>
+<div class="rail-h">repositorio</div>
+<a class="x" href="https://github.com/BTomeu/SilikOs/blob/main/README.md">README.md</a>
+<a class="x" href="https://github.com/BTomeu/SilikOs/blob/main/docs/STATUS.md">docs/STATUS.md</a>
+<a class="x" href="https://github.com/BTomeu/SilikOs/blob/main/docs/BUILD.md">docs/BUILD.md</a>
+<a class="x" href="https://github.com/BTomeu/SilikOs/blob/main/SECURITY.md">SECURITY.md</a>
+</nav>
+<main>
+<section id="what">
+<h1>SilikOS</h1>
+<p class="lead">Un sistema para la estación de trabajo de ingeniería electrónica: diseño de chips y de placas, microcontroladores, el banco y programas de Windows en un solo escritorio, con una sola orden detrás de cada acción.</p>
+<p>Debajo hay Enterprise Linux 9: los paquetes y el núcleo de AlmaLinux, sin tocar, para que un programa hecho para Red Hat Enterprise Linux 9 encuentre el sistema que espera. SilikOS son paquetes encima: se instalan y se desinstalan como cualquier otro. Es un prototipo: <a href="#state">Estado</a> dice qué se ha ejecutado y qué no.</p>
+<figure class="pane">
+<a href="../img/command.png"><picture><source srcset="../img/command-narrow.png" media="(max-width: 560px)" width="1100" height="668"><img src="../img/command.png" width="1600" height="545" alt="El COMMAND bar con la dirección look/ escrita: la lista de direcciones de aspecto (look/bar, look/cobalt, look/glass, look/island y otras) con lo que hace cada una y, al pie, la línea que ejecutará Enter: $ silik look bar."></picture></a>
+<figcaption>El COMMAND bar (Super+Espacio): una dirección, qué hace y la línea que ejecutará. La imagen está recortada al panel (en una ventana estrecha, a su parte izquierda). El banco de pruebas del escritorio, 13/11/2026: GNOME Shell 40 en un contenedor AlmaLinux 9.8, dibujado sin tarjeta gráfica; la sesión está en catalán.</figcaption>
+</figure>
+<h2>partes</h2>
+<table>
+<tbody>
+<tr><th scope="row">base</th><td>AlmaLinux 9.8: sus paquetes y su núcleo, de sus repositorios, sin tocar. SilikOS lleva el número de versión de la base.</td></tr>
+<tr><th scope="row">escritorio</th><td>GNOME Shell 40 sobre X11 con la shell Silik: tres aspectos de la misma shell, una tinta sobre papel, un acento para quien lo quiera, Cascadia Mono, inglés, catalán y castellano.</td></tr>
+<tr><th scope="row"><code>silik</code></th><td>Una sola orden detrás de cada acción del escritorio. Muestra cada orden que ejecuta; <code>--dry-run</code> las muestra y no ejecuta nada.</td></tr>
+<tr><th scope="row">chips</th><td>Las herramientas EDA abiertas, compiladas para EL 9 desde las fuentes de sus autores: Xschem, ngspice, Qucs-S, Magic, KLayout, Netgen, Yosys, NVC, DEVSIM; Icarus Verilog, Verilator y GTKWave de EPEL. Cajas con un sistema EL6, EL7 o EL8 para versiones antiguas de las herramientas de los fabricantes.</td></tr>
+<tr><th scope="row">microcontroladores</th><td>El compilador GNU para ARM con su biblioteca de C, el depurador de la base, OpenOCD, dfu-util, las herramientas de ST-LINK, stm32flash, SDCC. El IDE de un fabricante (STM32CubeIDE, Code Composer Studio) se instala desde tu descarga.</td></tr>
+<tr><th scope="row">banco</th><td>CAN con SocketCAN, SavvyCAN, cantools y python-can, terminales serie y RS-485, sigrok y PulseView para analizadores lógicos.</td></tr>
+<tr><th scope="row">Windows</th><td>Un doble clic en un <code>.exe</code> lo ejecuta con Wine (nuestro Wine 11.0 compilado para EL 9) dentro de una caja que no ve el resto de la carpeta personal. La máquina virtual de Windows para lo que Wine no puede ejecutar está escrita; no se ha ejecutado.</td></tr>
+<tr><th scope="row">seguridad</th><td>SELinux en modo enforcing (el de la base), una zona del cortafuegos que descarta las conexiones entrantes, sshd apagado, actualizaciones instaladas cada día; el sistema nunca reinicia por su cuenta. <code>silik secure status</code> lo revisa.</td></tr>
+<tr><th scope="row">SilikStudio</th><td>La suite de ingeniería de SilikVolt como aplicación nativa: una ventana propia, la primera tecla del rail.</td></tr>
+</tbody>
+</table>
+<figure>
+<a href="../img/silikstudio.png"><img src="../img/silikstudio.png" width="1440" height="900" alt="SilikStudio en una sesión de SilikOS con el aspecto Silik: el resultado de una simulación de una vuelta de autocross, con las curvas de velocidad, potencia y estado de carga, una tabla de pérdidas de energía y los tiempos por sector." loading="lazy"></a>
+<figcaption>SilikStudio en SilikOS, en una sesión dentro de un contenedor, el 10/11/2026.</figcaption>
+</figure>
+<h2>hecho para</h2>
+<ul>
+<li>ingenieros de electrónica y de diseño de chips que necesitan una estación EL 9 para las herramientas EDA y un escritorio para lo demás;</li>
+<li>laboratorios de universidad: el flujo abierto (esquema, simulación, layout, LVS, síntesis) instalado, y probado con una orden;</li>
+<li>equipos de Formula Student y otros equipos de sistemas embebidos: compilador, depurador, programación, CAN y serie en un solo sistema, junto a SilikStudio.</li>
+</ul>
+<a class="next" href="#looks"><span class="n">2</span>Aspectos</a>
+</section>
+<section id="looks">
+<h1>Aspectos</h1>
+<p>Una shell, tres aspectos: <code>silik look island</code>, <code>silik look bar</code>, <code>silik look silik</code>. Por defecto, una tinta sobre papel; <code>silik look --accent</code> da un color (acero, cobalto, índigo silicio, violeta volt o amarillo chispa) a lo que está elegido, enfocado o en marcha. Las piezas flotantes son de vidrio sobre el fondo de pantalla desenfocado; <code>silik look --glass off</code> las hace de papel opaco.</p>
+<figure>
+<a href="../img/look-island.png"><img src="../img/look-island.png" width="1600" height="1000" alt="El escritorio de SilikOS con el aspecto isla: un gestor de archivos y un terminal abiertos, y una pieza flotante abajo con la tecla de Inicio, las aplicaciones y el reloj." loading="lazy"></a>
+<figcaption><b>isla</b>, el de por defecto: una pieza flotante abajo.</figcaption>
+</figure>
+<figure>
+<a href="../img/look-bar.png"><img src="../img/look-bar.png" width="1600" height="1000" alt="El mismo escritorio con el aspecto barra: una barra abajo con la tecla de Inicio, un campo de órdenes, las aplicaciones, los espacios de trabajo y el reloj." loading="lazy"></a>
+<figcaption><b>barra</b>: una barra abajo.</figcaption>
+</figure>
+<figure>
+<a href="../img/look-silik.png"><img src="../img/look-silik.png" width="1600" height="1000" alt="El mismo escritorio con el aspecto Silik: una línea de órdenes en la barra de título, un rail de teclas numeradas a la izquierda (SilikStudio, Archivos, Terminal, Editor de texto, Configuración) y una barra de estado con los campos de espacio, base, núcleo, equipo y energía." loading="lazy"></a>
+<figcaption><b>silik</b>: la línea de órdenes arriba, un rail de texto, una barra de estado.</figcaption>
+</figure>
+<figure>
+<a href="../img/start.png"><img src="../img/start.png" width="1600" height="1000" alt="El Inicio con el aspecto Silik: un panel que cuelga de la marca, con las categorías Todas, Rail, Ingeniería, Banco, Programas de Windows, Herramientas y Sistema, y las aplicaciones de la primera: COMMAND, GTKWave, KLayout, Magic, Netgen, ngspice, PulseView, Qucs-S, SavvyCAN, SilikStudio, Xschem y otras." loading="lazy"></a>
+<figcaption>El Inicio (la tecla Super): las aplicaciones por categoría, filtradas mientras escribes.</figcaption>
+</figure>
+<p>Las imágenes: el banco de pruebas del escritorio, 13/11/2026: GNOME Shell 40 en un contenedor AlmaLinux 9.8, dibujado sin tarjeta gráfica; la sesión está en catalán. Funciona como root, con un terminal de sustitución. Las imágenes del sistema tal como la CI lo instala en una máquina virtual están en la rama <a href="https://github.com/BTomeu/SilikOs/tree/ci-results">ci-results</a>.</p>
+<a class="next" href="#commands"><span class="n">3</span>Órdenes</a>
+</section>
+<section id="commands">
+<h1>Órdenes</h1>
+<p>Cada acción del escritorio pasa por <code>silik</code>, y <code>silik</code> muestra las órdenes que ejecuta. El COMMAND bar muestra la misma línea antes de Enter.</p>
+<table class="cmds">
+<tbody>
+<tr><th scope="row"><code>silik status</code></th><td>qué es este sistema: base, núcleo, paquetes de SilikOS, el escritorio</td></tr>
+<tr><th scope="row"><code>silik doctor</code></th><td>si el equipo está bien: sistema, seguridad, gráficos, banco, EDA, Windows, red. Cada línea dice ok, aviso, mal o desconocido, y la orden que lo arregla. Desconocido, nunca ok, para lo que no puede ver. No cambia nada</td></tr>
+<tr><th scope="row"><code>silik update</code></th><td>actualiza todos los paquetes y dice si hay que reiniciar; <code>--auto all</code>, <code>security</code> u <code>off</code> elige las actualizaciones automáticas diarias</td></tr>
+<tr><th scope="row"><code>silik look</code></th><td>el aspecto: <code>island</code>, <code>bar</code> o <code>silik</code>; <code>--accent</code>, <code>--glass on</code> u <code>off</code></td></tr>
+<tr><th scope="row"><code>silik eda tools</code></th><td>las herramientas EDA abiertas de este sistema; <code>silik eda try</code> les hace hacer trabajos de verdad juntas; <code>silik eda bench</code> y <code>tune</code> miden y eligen los hilos del simulador</td></tr>
+<tr><th scope="row"><code>silik eda create</code></th><td>una caja con un sistema EL6, EL7 o EL8 para una versión antigua de la herramienta de un fabricante; <code>enter</code>, <code>run</code>, <code>list</code></td></tr>
+<tr><th scope="row"><code>silik dev tools</code></th><td>las herramientas de microcontroladores de este sistema; <code>silik dev try</code> compila, depura y habla con una sonda</td></tr>
+<tr><th scope="row"><code>silik dev can</code></th><td>las interfaces CAN; <code>up can0 500k</code> enciende una; <code>silik dev serial</code> lista los puertos serie y qué son</td></tr>
+<tr><th scope="row"><code>silik dev install FILE</code></th><td>ejecuta el instalador de STM32CubeIDE o de Code Composer Studio que has descargado</td></tr>
+<tr><th scope="row"><code>silik win open FILE.exe</code></th><td>lo que ejecuta un doble clic: el programa dentro de su caja; <code>silik win apps</code> lista los programas de Windows instalados</td></tr>
+<tr><th scope="row"><code>silik power</code></th><td>el perfil de energía: <code>performance</code>, <code>balanced</code>, <code>saver</code> o <code>auto</code>, con el tuned de la base; <code>zram</code>, <code>trim</code></td></tr>
+<tr><th scope="row"><code>silik secure status</code></th><td>una revisión de la seguridad del sistema, que solo lee; <code>silik secure apply</code> pone los valores de SilikOS y muestra qué ejecuta</td></tr>
+</tbody>
+</table>
+<h2>qué escriben</h2>
+<p>Ejecutado el 13/11/2026 en un contenedor AlmaLinux 9.8 con cuatro paquetes de SilikOS (silik-tools, silik-dev, silik-eda-open, silik-win) y nuestro ngspice instalados, como usuario normal. Allí no hay escritorio ni hardware, y la mayoría de herramientas no están: la salida lo dice. Las líneas que empiezan por <code>$</code> son de <code>silik</code>: las órdenes que ejecuta. La salida de <code>silik</code> aquí está en inglés.</p>
+<pre><span class="o">›</span> <b>silik eda try sim</b>
+$ cp -r /usr/share/silikos/eda/try/. /home/eng/.cache/silikos/eda-try-8mf25udb
+$ cd /home/eng/.cache/silikos/eda-try-8mf25udb
+$ ngspice -b inverter.cir &gt; inverter.out
+● sim        an inverter&#x27;s output is high for a low input and low for a high one
+1 ok, 0 failed, 0 not run; the files: /home/eng/.cache/silikos/eda-try-8mf25udb</pre>
+<pre><span class="o">›</span> <b>silik --dry-run look bar --accent cobalt</b>
+$ gsettings set com.silikvolt.silikos.shell look bar
+$ gsettings set com.silikvolt.silikos.shell accent cobalt
+$ gsettings set org.gnome.desktop.interface gtk-theme SilikOS-cobalt
+$ gsettings set org.gnome.shell.extensions.user-theme name SilikOS-cobalt
+$ gsettings set org.gnome.desktop.interface icon-theme SilikOS-Colour</pre>
+<pre><span class="o">›</span> <b>silik --dry-run dev can up can0 500k</b>
+$ sudo ip link set can0 down
+$ sudo ip link set can0 type can bitrate 500000 restart-ms 100
+$ sudo ip link set can0 up
+can0 up at 500000 bit/s: `candump can0` shows its frames, `cansend can0 123#DEADBEEF` sends one</pre>
+<pre><span class="o">›</span> <b>silik doctor eda windows</b>
+eda
+◆ warn     EDA boxes          podman is not installed: no EL6 / EL7 / EL8 boxes
+                              fix: sudo dnf -y install podman
+◆ warn     open tools         1 of 13; missing: devsim gtkwave iverilog kicad klayout magic netgen nvc qucs-s verilator xschem yosys
+                              fix: sudo dnf -y install devsim gtkwave iverilog kicad klayout magic netgen nvc qucs-s verilator xschem yosys
+◆ warn     ngspice threads    2, its default, on 4 cores: transistor models evaluated on 2
+                              fix: silik eda tune   # silik eda bench measures first
+
+windows
+◆ warn     Wine               not installed: Windows programs do not run
+                              fix: sudo dnf -y install silik-wine silik-wine-mono silik-wine-gecko
+● ok       Wine prefixes      none yet (an installer opened with silik win open SETUP.exe makes &quot;default&quot;)
+● ok       sandbox            bubblewrap, user namespaces on
+? unknown  Windows VM         no /dev/kvm (inside a container)
+
+2 ok, 4 warn, 0 bad, 1 unknown (0.01 s)</pre>
+<a class="next" href="#state"><span class="n">4</span>Estado</a>
+</section>
+<section id="state">
+<h1>Estado</h1>
+<p>Un prototipo verificado en máquinas virtuales y contenedores, no un producto. El repositorio tiene dos tablas, verificado y no verificado, con cómo se ha ejecutado cada fila: <a href="https://github.com/BTomeu/SilikOs/blob/main/docs/STATUS.md">docs/STATUS.md</a>. Nada entra en la primera sin haberse ejecutado.</p>
+<h2>verificado</h2>
+<table>
+<thead><tr><th scope="col">qué</th><th scope="col">cómo</th></tr></thead>
+<tbody>
+<tr><th scope="row">instalación</th><td>La ISO se instala sola en una máquina virtual, el sistema instalado arranca y se revisa a sí mismo. GitHub Actions, workflow CI; la última ejecución completa cuando se escribió esta página: 11/11/2026, commit fa6c6e8, 86 comprobaciones correctas, ninguna fallida.</td></tr>
+<tr><th scope="row">escritorio</th><td>Los tres aspectos, el Inicio, el COMMAND bar, las pantallas de entrada y de bloqueo: en aquel sistema instalado, en su pantalla.</td></tr>
+<tr><th scope="row">chips</th><td><code>silik eda try</code> en aquel sistema instalado: 13 trabajos correctos (un inversor del esquema al layout y vuelta, un contador hasta puertas, un diodo en el simulador de dispositivos).</td></tr>
+<tr><th scope="row">Windows</th><td>Programas hechos para las pruebas (de 64 y de 32 bits, un instalador, un .msi, un programa .NET) funcionan con nuestro Wine dentro de la caja, con SELinux en modo enforcing, en aquel sistema instalado.</td></tr>
+<tr><th scope="row">microcontroladores</th><td><code>silik dev try</code>: 7 trabajos correctos (compilar, biblioteca de C, C++, depurar, sonda, DFU, ST-LINK) en un EL 9 limpio y en el sistema instalado. No había ninguna placa conectada.</td></tr>
+<tr><th scope="row">ARM</th><td>Los paquetes de SilikOS se construyen y se instalan sobre AlmaLinux 9 para aarch64 y <code>silik</code> funciona allí: en un contenedor emulado en la máquina de construcción.</td></tr>
+</tbody>
+</table>
+<h2>no verificado</h2>
+<ul>
+<li>ningún hardware real: controladores gráficos (NVIDIA), Wi-Fi, suspensión, un adaptador CAN en un bus, programar o depurar una placa, un analizador lógico;</li>
+<li>ninguna herramienta de fabricante: Cadence, Synopsys, Altium, STM32CubeIDE, Code Composer Studio;</li>
+<li>la máquina virtual de Windows;</li>
+<li>ARM en hardware ARM (solo emulado);</li>
+<li>qué hace cada perfil de energía en un portátil: consumo, horas de batería;</li>
+<li>lo que ha cambiado después de aquella instalación (el aspecto isla por defecto, los acentos, el vidrio, las herramientas de banco, <code>silik power</code>, <code>silik doctor</code>): ejecutado solo en contenedores.</li>
+</ul>
+<p>Todavía no hay un repositorio de paquetes firmado, así que un sistema instalado no recibe versiones nuevas de los paquetes de SilikOS; las actualizaciones de la base llegan de la base. La lista de arriba es la corta: <a href="https://github.com/BTomeu/SilikOs/blob/main/docs/STATUS.md">docs/STATUS.md</a> tiene todas las filas.</p>
+<a class="next" href="#get"><span class="n">5</span>Cómo tenerlo</a>
+</section>
+<section id="get">
+<h1>Cómo tenerlo</h1>
+<p>Hoy no hay ninguna ISO para descargar ni ningún repositorio de paquetes. Para probar SilikOS, construye el instalador desde el repositorio; pruébalo primero en una máquina virtual, porque nada se ha ejecutado en hardware real.</p>
+<pre>git clone https://github.com/BTomeu/SilikOs &amp;&amp; cd SilikOs
+bash tools/build_rpms.sh                # rpmbuild, createrepo_c
+python3 -m unittest discover -s tests   # Python 3.9 or later
+bash tools/build_iso.sh                 # xorriso, mtools, cpio, curl, gpg, isomd5sum; repo.almalinux.org</pre>
+<p><code>tools/build_rpms.sh</code> construye los paquetes y los metadatos de su repositorio; <code>tools/build_iso.sh</code>, la ISO de instalación por red. El instalador descarga el sistema base de los repositorios de AlmaLinux y de EPEL, así que la máquina necesita red. Nunca elige ni borra ningún disco: lo eliges tú. Los pasos, y cómo poner SilikOS en un AlmaLinux 9 ya instalado: <a href="https://github.com/BTomeu/SilikOs/blob/main/docs/BUILD.md">docs/BUILD.md</a>.</p>
+<h2>repositorio</h2>
+<table>
+<tbody>
+<tr><th scope="row"><a href="https://github.com/BTomeu/SilikOs">BTomeu/SilikOs</a></th><td>el código: paquetes, kickstart, instalador, pruebas</td></tr>
+<tr><th scope="row"><a href="https://github.com/BTomeu/SilikOs/blob/main/docs/STATUS.md">docs/STATUS.md</a></th><td>qué se ha ejecutado, y qué no</td></tr>
+<tr><th scope="row"><a href="https://github.com/BTomeu/SilikOs/blob/main/docs/BUILD.md">docs/BUILD.md</a></th><td>construir los paquetes y la ISO, instalar</td></tr>
+<tr><th scope="row"><a href="https://github.com/BTomeu/SilikOs/blob/main/docs/SECURITY.md">docs/SECURITY.md</a></th><td>qué configura el sistema, y por qué</td></tr>
+<tr><th scope="row"><a href="https://github.com/BTomeu/SilikOs/blob/main/SECURITY.md">SECURITY.md</a></th><td>avisar de una vulnerabilidad en privado</td></tr>
+</tbody>
+</table>
+<h2>licencia, marca</h2>
+<ul>
+<li>La licencia del código propio de SilikOS todavía no está elegida: hasta entonces, todos los derechos reservados. La base y las herramientas mantienen sus licencias. Cascadia Mono, la letra de esta página, tiene la <a href="../fonts/CascadiaMono-LICENSE.txt">SIL Open Font License</a>.</li>
+<li>Los nombres SilikOS, SilikStudio y SilikVolt y la marca SilikVolt no tienen licencia de reutilización.</li>
+<li>No hay software de ningún fabricante ni en el repositorio ni en el sistema: las herramientas EDA, Windows y los programas de Windows son licencias del usuario. SilikOS no está afiliado ni avalado por la AlmaLinux OS Foundation, Red Hat, ni los fabricantes y proyectos de las herramientas que nombra.</li>
+<li>Esta página no pone ninguna cookie, no cuenta nada y no pide nada a ningún otro servidor.</li>
+</ul>
+</section>
+</main>
+<footer class="sb">
+<span class="msg">listo</span>
+<span class="f"><span class="k">base</span><span class="v">EL 9.8</span></span>
+<span class="f"><span class="k">estado</span><span class="v">prototipo, verificado en MV</span></span>
+<span class="f"><span class="k">licencia</span><span class="v">no elegida</span></span>
+<span class="f"><span class="k">página del</span><span class="v">13/11/2026</span></span>
+</footer>
+<script>
+document.addEventListener('keydown', function (e) {
+  if (e.ctrlKey || e.altKey || e.metaKey || e.defaultPrevented) return;
+  var a = document.querySelector('.rail a[data-key="' + e.key + '"]');
+  if (a) { a.focus(); a.click(); }
+});
+</script>
+</body>
+</html>

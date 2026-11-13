@@ -1,61 +1,53 @@
+<picture><source media="(prefers-color-scheme: dark)" srcset="packages/silikos-branding/files/silikos-mark-light.svg"><img src="packages/silikos-branding/files/silikos-mark.svg" width="90" height="60" alt="The SilikVolt mark"></picture>
+
 # SilikOS (by SilikVolt)
 
-An engineering workstation system on an Enterprise Linux 9 base (AlmaLinux's packages and kernel, unchanged, so that
-EDA tools install and run), with the SilikVolt desktop on top, boxes for older EDA releases, and a layer for Windows
-programs. It carries the base's version (SilikOS 9.8) and says SilikOS wherever a person looks; programs still read
-an EL9 system. It is a try: `docs/STATUS.md` says what has been run and what has not.
+[![CI](https://github.com/BTomeu/SilikOs/actions/workflows/ci.yml/badge.svg)](https://github.com/BTomeu/SilikOs/actions/workflows/ci.yml)
 
-| Part | What it is | Where |
+English · [Català](README.ca.md) · [Español](README.es.md)
+
+SilikOS is an engineering workstation system for electronics: an Enterprise Linux 9 base (AlmaLinux's packages and
+kernel, unchanged, so that a program written for Red Hat Enterprise Linux 9 finds the system it expects), with the
+SilikVolt desktop, the open chip, embedded and bench tools and a layer for Windows programs as packages on top.
+
+It is a prototype verified in virtual machines and containers: [`docs/STATUS.md`](docs/STATUS.md) says what has
+been run and what has not.
+
+![The island look, the default: a file manager and a terminal open, one floating piece at the bottom with Start, the applications and the clock](docs/img/look-island.png)
+
+![The Silik look with Start open: a command line in the title bar, a text rail of numbered keys, a status bar; Start lists the applications by category](docs/img/look-silik-start.png)
+
+![The COMMAND bar with the address look/ typed: the look addresses with what each does, and at the foot the line Enter will run, $ silik look bar](docs/img/command-bar.png)
+
+![SilikStudio in SilikOS: the result of a lap simulation in its own window, the first key of the rail](docs/img/silikstudio.png)
+
+The first three: the desktop test rig on 13/11/2026 (GNOME Shell 40 in an AlmaLinux 9.8 container, drawn without a
+graphics card, session in Catalan; the third is cut to the pane). The fourth: a container session on 10/11/2026.
+Pictures of the system as the CI installs it in a virtual machine: branch [`ci-results`](../../tree/ci-results).
+
+## What you get
+
+Every action of the desktop goes through one command, `silik`. It prints each command it runs, and `--dry-run`
+prints them and runs nothing. The COMMAND bar (Super+Space) shows the same line before Enter.
+
+| Part | What it is | Commands |
 |---|---|---|
-| Base | AlmaLinux 9 packages and kernel, from its own repositories | `kickstart/silikos.ks` |
-| Desktop | GNOME Shell on X11 in three looks of the same shell (`silik look`): **island** (the default: one floating piece at the bottom), **bar** (one bar at the bottom) and **silik** (command line, text rail, status bar); one ink on paper, or an accent, alone or with coloured title bars (`silik look --accent`); the **COMMAND** bar on Super+Space | `packages/silikos-desktop`, `packages/silik-command` |
-| Tested by installing it | every change is built into an ISO, installed unattended in a virtual machine, booted and checked; the last report and pictures of the installed system are on the branch [`ci-results`](../../tree/ci-results). The last such run is of commit fa6c6e8 (11/11/2026): the workflows have not run since, and what changed after it was run in containers only (`docs/STATUS.md`) | `.github/workflows/ci.yml`, `tests/install/` |
-| Security | SELinux enforcing (the base's), a firewall zone that drops incoming connections, sshd off, every update installed daily by itself (`silik update --auto`, the desktop says when to restart), screen lock; `silik secure status` audits, `silik secure apply` sets; `docs/SECURITY.md` | `packages/silikos-security` |
-| SilikStudio | the SilikVolt suite as a native application: a window of its own, the first key of the rail, its programs in the PATH. Its package is built from SilikStudio's repository on EL 9 and put in `build/extra/` for the ISO | `tools/build_iso.sh`, `docs/img/silikstudio.png` |
-| `silik` | one command behind every action; prints what it runs; `--dry-run` | `packages/silik-tools` |
-| Power | `silik power`: performance, balanced, saver, or auto (performance on mains power, balanced on battery: the default of a new installation), through the base's tuned and tuned-ppd, so the system menu shows the same; zram swap offered, SSD trim weekly; `silik dev ccache` for firmware rebuilds (measured: a rebuild a third of the time) | `packages/silikos-power`, `docs/POWER.md` |
-| EDA | what Cadence / Synopsys tools ask of EL9, and EL6 / EL7 / EL8 boxes (`silik eda`); the open tools (Xschem, ngspice, Qucs-S, Magic, KLayout, Netgen, Yosys, NVC built here for EL 9 from their authors' sources; Icarus Verilog, Verilator, GTKWave from EPEL), `silik eda try` to see them work together, `silik eda bench` / `tune` for the simulator's speed | `packages/silik-eda-compat`, `packages/silik-eda-open`, `eda/`, `docs/EDA.md` |
-| Embedded | the GNU ARM compiler with its C library, the base's debugger, OpenOCD and dfu-util (built here for EL 9), ST-LINK's tools; `silik dev try` makes them do real jobs; `silik dev install FILE` runs the installer of STM32CubeIDE or Code Composer Studio that the user downloaded (their vendors' programs: not on the ISO) | `packages/silik-dev`, `dev/`, `docs/DEV.md` |
-| Windows | a double-click on an `.exe` runs it in a sandbox that does not see the rest of the home folder (`silik win open`); installed programs are applications of the desktop; a Windows virtual machine for what Wine cannot run. Wine is our own build for EL 9 (`silik-wine`, Wine 11.0), with Wine Mono and Wine Gecko as packages (.NET and HTML without a download dialog), on the ISO | `packages/silik-win`, `wine/`, `docs/WINDOWS.md` |
-| Name and look | os-release display names, boot menu, boot splash, login logo, backgrounds; the installer's screens | `packages/silikos-branding`, `installer/`, `brand/` |
+| Base | AlmaLinux 9.8: its packages and kernel from its own repositories, unchanged. SilikOS carries the base's version number and says SilikOS wherever a person looks; programs still read an EL9 system | `silik status`, `silik identity` |
+| Desktop | GNOME Shell 40 on X11 in three looks of the same shell: **island** (the default), **bar** and **silik**; one ink on paper, or an accent; Cascadia Mono; English, Catalan, Spanish | `silik look`, `silik look --accent`, `silik look --glass` |
+| Chips | the open EDA tools built here for EL 9 from their authors' sources (Xschem, ngspice, Qucs-S, Magic, KLayout, Netgen, Yosys, NVC, DEVSIM) and Icarus Verilog, Verilator, GTKWave from EPEL; boxes with an EL6 / EL7 / EL8 userland for older releases of the vendors' tools | `silik eda tools`, `silik eda try`, `silik eda bench`, `silik eda create` |
+| Embedded | the GNU ARM compiler with its C library, the base's debugger, OpenOCD, dfu-util, ST-LINK's tools, stm32flash, SDCC; the installer of STM32CubeIDE or Code Composer Studio that you downloaded | `silik dev tools`, `silik dev try`, `silik dev install FILE`, `silik dev ccache` |
+| Bench | CAN through SocketCAN, SavvyCAN, cantools, python-can, serial and RS-485 terminals, sigrok and PulseView | `silik dev can`, `silik dev serial` |
+| Windows | a double-click on an `.exe` runs it with Wine (our build of Wine 11.0 for EL 9, with Wine Mono and Wine Gecko) in a sandbox that does not see the rest of the home folder; a Windows virtual machine for what Wine cannot run | `silik win open`, `silik win apps`, `silik win vm` |
+| Health | one audit of the workstation: system, security, graphics, bench, EDA, Windows, network; ok / warn / bad / unknown and the command that fixes each; unknown, never ok, for what it cannot see | `silik doctor` |
+| Security and updates | SELinux enforcing (the base's), a firewall zone that drops incoming connections, sshd off, every update installed daily; the system never restarts by itself | `silik secure status`, `silik secure apply`, `silik update`, `silik update --auto` |
+| Power | performance, balanced, saver, or auto (performance on mains power, balanced on battery), through the base's tuned; zram swap offered, SSD trim weekly | `silik power` |
+| SilikStudio | the SilikVolt suite as a native application: a window of its own, the first key of the rail. Its package is built from SilikStudio's repository | |
 
-![SilikOS as installed by the CI](docs/img/installed.png)
+## Who it is for
 
-![Start, after the Super key, on the installed system](docs/img/installed-start.png)
-
-![A Windows program opened from the COMMAND bar, on the installed system](docs/img/installed-windows-program.png)
-
-![A Windows program put there by its installer, opened by its address, on the installed system](docs/img/installed-windows-installed.png)
-
-![KLayout on the installed system](docs/img/installed-klayout.png)
-
-![Qucs-S on the installed system: it finds our ngspice](docs/img/installed-qucs-s.png)
-
-![The login screen of the installed system](docs/img/installed-login.png)
-
-![The bar look on the installed system (`silik look bar`)](docs/img/installed-look-bar.png)
-
-![The island look on the installed system (`silik look island`)](docs/img/installed-look-island.png)
-
-The system as installed by the CI in a virtual machine on 10/11/2026 (a real session; the pictures of the last run: branch `ci-results`).
-
-![The SilikOS desktop](docs/img/desktop.png)
-
-![Start](docs/img/start.png)
-
-![SilikStudio in SilikOS](docs/img/silikstudio.png)
-
-The desktop as run on 10/11/2026 (GNOME Shell 40.10 in an AlmaLinux 9.8 container, software rendering; see
-`docs/STATUS.md` for what has and has not been run). The installer: `docs/img/installer.png`.
-
-```bash
-bash tools/build_rpms.sh          # every package of packages/ + repository metadata in build/repo (rpmbuild, createrepo_c)
-python3 -m unittest discover -s tests
-bash tools/build_iso.sh           # the network installer ISO (needs repo.almalinux.org)
-```
-
-Read `docs/PLAN.md` (decisions and phases), `docs/STATUS.md` (verified / not verified), `docs/HARDWARE.md`
-(Ryzen 7 5800HS + RTX 3050, Snapdragon X, SilikOS on ARM / aarch64), `docs/BUILD.md`.
+- Electronics and chip-design engineers who need an EL 9 workstation for the EDA tools and a desktop for the rest.
+- University labs: the open flow (schematic, simulation, layout, LVS, synthesis) installed, and tried by one command.
+- Formula Student and other embedded teams: compiler, debugger, flashing, CAN and serial on one system.
 
 ## State
 
@@ -64,6 +56,27 @@ A prototype verified in virtual machines and containers, not a product. Not run,
 STM32CubeIDE), the Windows virtual machine, ARM other than emulated. There is no signed package repository yet, so an
 installed system does not receive new versions of SilikOS's own packages. `docs/STATUS.md` has both tables, verified
 and not verified, with how each row was run.
+
+Tested by installing it: the workflow CI builds the ISO, installs it unattended in a virtual machine, boots the
+installed system and lets it check itself; the report and the pictures are on the branch
+[`ci-results`](../../tree/ci-results). The last complete run when this was written (13/11/2026) is of commit fa6c6e8
+(11/11/2026, 86 checks ok, none failed); what changed after it was run in containers only. The workflows were
+started again on 13/11/2026: the badge above is the CI's state.
+
+## Build and try
+
+There is no ISO to download yet. To try SilikOS, build the installer and use it in a virtual machine first:
+
+```bash
+bash tools/build_rpms.sh          # every package of packages/ + repository metadata in build/repo (rpmbuild, createrepo_c)
+python3 -m unittest discover -s tests
+bash tools/build_iso.sh           # the network installer ISO (needs repo.almalinux.org)
+```
+
+[`docs/BUILD.md`](docs/BUILD.md) has the steps and what each needs. Also: `docs/PLAN.md` (decisions and phases),
+`docs/HARDWARE.md` (Ryzen 7 5800HS + RTX 3050, Snapdragon X, SilikOS on ARM / aarch64), `docs/EDA.md`, `docs/DEV.md`,
+`docs/WINDOWS.md`, `docs/POWER.md`, `docs/CONCEPTE.md` (the idea from zero, in Catalan). `site/` is a static site
+with the same content (`tools/gen_site.py`; not deployed yet).
 
 ## Licence, brand, security
 

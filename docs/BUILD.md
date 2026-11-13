@@ -9,6 +9,7 @@
 | Installer ISO for ARM | `SILIK_ARCH=aarch64 bash tools/build_iso.sh` (AlmaLinux's aarch64 boot ISO: UEFI only) | the same |
 | The base's sources | `bash tools/fetch_base_sources.sh [--list] [--limit N]`: the source packages of the boot ISO's installer image, from vault.almalinux.org, each checked by AlmaLinux's signature | `xorriso`, `unsquashfs`, `rpm`, `gpg`; several GB |
 | Brand rasters (committed) | `bash tools/gen_brand.sh` | `rsvg-convert`, the Cascadia Mono font |
+| The site's pages (committed; `site/` is static, the server builds nothing) | `python3 tools/gen_site.py`; to look at it: `python3 -m http.server -d site` | Python >= 3.9 |
 
 The ISO is the base's boot image relabelled `SilikOS-9-x-x86_64` (`SilikOS-9-x-aarch64`: its kickstart copy takes the
 aarch64 package sources and leaves out the x86_64 kernel argument `vsyscall=xonly`), with `kickstart/silikos.ks`, the repository
