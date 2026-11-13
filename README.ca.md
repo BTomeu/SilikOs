@@ -62,16 +62,18 @@ ensenya i no executa res. El COMMAND bar (Super+Espai) ensenya la mateixa línia
 
 Un prototip verificat en màquines virtuals i contenidors, no un producte. No s'ha executat, entre d'altres: cap
 maquinari real (controladors gràfics, Wi-Fi, suspensió, adaptadors CAN, programar una placa), cap eina de fabricant
-(Cadence, Synopsys, Altium, STM32CubeIDE), la màquina virtual de Windows, ARM si no és emulat. El repositori d'on un sistema
+(Cadence, Synopsys, Altium, STM32CubeIDE), la màquina virtual de Windows, SilikOS instal·lat en una màquina ARM (els paquets i les eines es
+construeixen i es proven als runners ARM de GitHub). El repositori d'on un sistema
 instal·lat actualitzaria els paquets de SilikOS està construït però no publicat (`docs/REPO.md`): la clau de
 signatura l'ha de fer el propietari, de manera que un sistema instal·lat encara no en rep versions noves.
 `docs/STATUS.md` té les dues taules, verificat i no verificat, amb com s'ha executat cada fila.
 
 Provat instal·lant-lo: el workflow CI construeix la ISO, la instal·la sola en una màquina virtual, arrenca el sistema
 instal·lat i deixa que es revisi ell mateix; l'informe i les imatges són a la branca
-[`ci-results`](../../tree/ci-results). L'última execució completa quan es va escriure això (13/11/2026) és la del
-commit fa6c6e8 (11/11/2026, 86 comprovacions correctes, cap de fallada); el que ha canviat després s'ha executat només
-en contenidors. Els workflows es van tornar a engegar el 13/11/2026: la insígnia de dalt és l'estat de la CI.
+[`ci-results`](../../tree/ci-results). L'última execució completa quan es va escriure això és la 43436222754 del
+13/11/2026 (commit 4c4163f): 120 comprovacions correctes, cap de fallada, 15 GB de disc; el sistema instal·lat hi va
+arrencar en 9,3 s amb uns 985 MB en ús (una màquina virtual: `docs/NUMEROS.md`) i va tornar enrere d'una actualització
+en un disc LVM real (`docs/ROLLBACK.md`). La insígnia de dalt és l'estat de la CI.
 
 ## Construir-lo i provar-lo
 

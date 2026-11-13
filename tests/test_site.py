@@ -293,7 +293,7 @@ class Site(unittest.TestCase):
 
     def test_the_state_is_said(self):                                    # what is not verified is on the page, not only in docs/
         en = read("site/index.html")
-        for words in ("prototype", "not verified", "any real hardware", "any vendor tool", "no ISO to download", "no package repository",
+        for words in ("prototype", "not verified", "any real hardware", "any vendor tool", "no release to download", "no package repository",
                       "not chosen yet", "not affiliated", "docs/STATUS.md"):
             self.assertIn(words, en)
 

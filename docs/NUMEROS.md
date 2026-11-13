@@ -209,6 +209,9 @@ màquina virtual compartida: una primera mesura, no una mitjana.
   aquest soroll.
 - La mateixa execució: 113 comprovacions bé, 1 fallada (la de la prova mateixa, `look.default`, ja arreglada), 14G de
   disc després d'instal·lar.
+- Segona execució (run 43436222754, commit 4c4163f, el mateix dia; 120 comprovacions bé, cap de fallada, 15G de disc):
+  amb el perfil 9,3 i 9,3 s, escriptori a 8,8 s, 986 i 981 MB; sense, 9,7 i 9,9 s, escriptori a 9,1 i 9,3 s, 1607 i
+  1350 MB. Coincideix amb la primera.
 - No hi ha encara la mateixa mesura sobre l'AlmaLinux Workstation de sèrie (`.github/workflows/compare.yml`, a mà), ni
   en maquinari real.
 

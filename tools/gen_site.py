@@ -440,14 +440,14 @@ STATE = (
         ((("what", "how"), ("què", "com"), ("qué", "cómo")),),
         (("installation", "instal·lació", "instalación"), (
             "The ISO installs unattended in a virtual machine, the installed system boots and checks itself. "
-            "GitHub Actions, workflow CI; the last complete run when this page was written: 11/11/2026, commit "
-            "fa6c6e8, 86 checks ok, none failed.",
+            "GitHub Actions, workflow CI; the last complete run when this page was written: 13/11/2026, commit "
+            "4c4163f, 120 checks ok, none failed; it started in 9.3 s with about 985 MB in use.",
             "La ISO s'instal·la sola en una màquina virtual, el sistema instal·lat arrenca i es revisa ell mateix. "
-            "GitHub Actions, workflow CI; l'última execució completa quan es va escriure aquesta pàgina: 11/11/2026, "
-            "commit fa6c6e8, 86 comprovacions correctes, cap de fallada.",
+            "GitHub Actions, workflow CI; l'última execució completa quan es va escriure aquesta pàgina: 13/11/2026, "
+            "commit 4c4163f, 120 comprovacions correctes, cap de fallada; va arrencar en 9,3 s amb uns 985 MB en ús.",
             "La ISO se instala sola en una máquina virtual, el sistema instalado arranca y se revisa a sí mismo. "
-            "GitHub Actions, workflow CI; la última ejecución completa cuando se escribió esta página: 11/11/2026, "
-            "commit fa6c6e8, 86 comprobaciones correctas, ninguna fallida.")),
+            "GitHub Actions, workflow CI; la última ejecución completa cuando se escribió esta página: 13/11/2026, "
+            "commit 4c4163f, 120 comprobaciones correctas, ninguna fallida; arrancó en 9,3 s con unos 985 MB en uso.")),
         (("desktop", "escriptori", "escritorio"), (
             "The three looks, Start, the COMMAND bar, the login and lock screens: on that installed system, on its "
             "screen.",
@@ -479,12 +479,12 @@ STATE = (
             "`silik dev try`: 7 trabajos correctos (compilar, biblioteca de C, C++, depurar, sonda, DFU, ST-LINK) en "
             "un EL 9 limpio y en el sistema instalado. No había ninguna placa conectada.")),
         (("ARM", "ARM", "ARM"), (
-            "The SilikOS packages build and install on AlmaLinux 9 for aarch64 and `silik` runs there: in an emulated "
-            "container on the build machine.",
-            "Els paquets de SilikOS es construeixen i s'instal·len sobre AlmaLinux 9 per a aarch64 i `silik` hi "
-            "funciona: en un contenidor emulat a la màquina de construcció.",
-            "Los paquetes de SilikOS se construyen y se instalan sobre AlmaLinux 9 para aarch64 y `silik` funciona "
-            "allí: en un contenedor emulado en la máquina de construcción.")),
+            "The SilikOS packages build on AlmaLinux 9 for aarch64, and so do most of its tools, which pass their "
+            "trials there: on GitHub's ARM runners (a few under emulation only).",
+            "Els paquets de SilikOS es construeixen sobre AlmaLinux 9 per a aarch64, i la majoria de les seves eines "
+            "també, i hi passen les seves proves: als runners ARM de GitHub (unes quantes només sota emulació).",
+            "Los paquetes de SilikOS se construyen sobre AlmaLinux 9 para aarch64, y la mayoría de sus herramientas "
+            "también, y pasan allí sus pruebas: en los runners ARM de GitHub (unas cuantas solo bajo emulación).")),
     )),
     ("h2", ("not verified", "no verificat", "no verificado")),
     ("ul", (
@@ -498,17 +498,17 @@ STATE = (
          "cap eina de fabricant: Cadence, Synopsys, Altium, STM32CubeIDE, Code Composer Studio;",
          "ninguna herramienta de fabricante: Cadence, Synopsys, Altium, STM32CubeIDE, Code Composer Studio;"),
         ("the Windows virtual machine;", "la màquina virtual de Windows;", "la máquina virtual de Windows;"),
-        ("ARM on ARM hardware (emulated only);", "ARM en maquinari ARM (només emulat);",
-         "ARM en hardware ARM (solo emulado);"),
+        ("SilikOS installed on an ARM machine;", "SilikOS instal·lat en una màquina ARM;",
+         "SilikOS instalado en una máquina ARM;"),
         ("what each power profile does on a laptop: power drawn, battery hours;",
          "què fa cada perfil d'energia en un portàtil: consum, hores de bateria;",
          "qué hace cada perfil de energía en un portátil: consumo, horas de batería;"),
-        ("what changed after that installation run (the island look as the default, accents, glass, the bench "
-         "tools, `silik power`, `silik doctor`): run in containers only.",
-         "el que ha canviat després d'aquella instal·lació (l'aspecte illa per defecte, els accents, el vidre, les "
-         "eines de banc, `silik power`, `silik doctor`): executat només en contenidors.",
-         "lo que ha cambiado después de aquella instalación (el aspecto isla por defecto, los acentos, el vidrio, "
-         "las herramientas de banco, `silik power`, `silik doctor`): ejecutado solo en contenedores."),
+        ("what `silik --help` marks as experimental (a project's pinned tools, the bench test runner, the mirror "
+         "for a network without Internet, the vendors' requirement lists): run in containers or with stand-ins only.",
+         "el que `silik --help` marca com a experimental (les eines fixades d'un projecte, les proves de banc, el "
+         "mirall per a una xarxa sense Internet, les llistes de requisits dels fabricants): executat només en contenidors o amb substituts.",
+         "lo que `silik --help` marca como experimental (las herramientas fijadas de un proyecto, las pruebas de "
+         "banco, el espejo para una red sin Internet, las listas de requisitos de los fabricantes): ejecutado solo en contenedores o con sustitutos."),
     )),
     ("p", (
         "There is no signed package repository yet, so an installed system does not receive new versions of "
@@ -524,13 +524,17 @@ STATE = (
 
 GET = (
     ("p", (
-        "Today there is no ISO to download and no package repository. To try SilikOS, build the installer from the "
-        "repository; try it in a virtual machine first, since nothing has been run on real hardware.",
-        "Avui no hi ha cap ISO per baixar ni cap repositori de paquets. Per provar SilikOS, construeix l'instal·lador "
-        "des del repositori; prova'l primer en una màquina virtual, perquè res no s'ha executat en maquinari real.",
-        "Hoy no hay ninguna ISO para descargar ni ningún repositorio de paquetes. Para probar SilikOS, construye el "
-        "instalador desde el repositorio; pruébalo primero en una máquina virtual, porque nada se ha ejecutado en "
-        "hardware real.")),
+        "Today there is no release to download and no package repository published. The installer of the CI's last "
+        "green run is its artifact `silikos-iso` (GitHub Actions, with a GitHub account, for a limited time); or build "
+        "it from the repository. Try it in a virtual machine first, since nothing has been run on real hardware.",
+        "Avui no hi ha cap release per baixar ni cap repositori de paquets publicat. L'instal·lador de l'última "
+        "execució en verd de la CI és el seu artefacte `silikos-iso` (GitHub Actions, amb un compte de GitHub, durant un "
+        "temps limitat); o construeix-lo des del repositori. Prova'l primer en una màquina virtual, perquè res no s'ha "
+        "executat en maquinari real.",
+        "Hoy no hay ninguna release para descargar ni ningún repositorio de paquetes publicado. El instalador de la "
+        "última ejecución en verde de la CI es su artefacto `silikos-iso` (GitHub Actions, con una cuenta de GitHub, "
+        "durante un tiempo limitado); o constrúyelo desde el repositorio. Pruébalo primero en una máquina virtual, "
+        "porque nada se ha ejecutado en hardware real.")),
     ("pre", "git clone " + REPO + " && cd SilikOs\n"
             "bash tools/build_rpms.sh                # rpmbuild, createrepo_c\n"
             "python3 -m unittest discover -s tests   # Python 3.9 or later\n"

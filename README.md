@@ -57,16 +57,18 @@ prints them and runs nothing. The COMMAND bar (Super+Space) shows the same line 
 
 A prototype verified in virtual machines and containers, not a product. Not run, among others: any real hardware
 (graphics drivers, Wi-Fi, suspend, CAN adapters, flashing a board), any vendor tool (Cadence, Synopsys, Altium,
-STM32CubeIDE), the Windows virtual machine, ARM other than emulated. The repository an installed system would update
+STM32CubeIDE), the Windows virtual machine, SilikOS installed on an ARM machine (its packages and tools are built and tried on
+GitHub's ARM runners). The repository an installed system would update
 SilikOS's own packages from is built but not published (`docs/REPO.md`): its signing key is the owner's to make, so
 an installed system does not receive new versions of them yet. `docs/STATUS.md` has both tables, verified
 and not verified, with how each row was run.
 
 Tested by installing it: the workflow CI builds the ISO, installs it unattended in a virtual machine, boots the
 installed system and lets it check itself; the report and the pictures are on the branch
-[`ci-results`](../../tree/ci-results). The last complete run when this was written (13/11/2026) is of commit fa6c6e8
-(11/11/2026, 86 checks ok, none failed); what changed after it was run in containers only. The workflows were
-started again on 13/11/2026: the badge above is the CI's state.
+[`ci-results`](../../tree/ci-results). The last complete run when this was written is run 43436222754 of
+13/11/2026 (commit 4c4163f): 120 checks ok, none failed, 15 GB on disk; in it the installed system started in 9.3 s
+with about 985 MB in use (a virtual machine: `docs/NUMEROS.md`), and went back from an update on a real LVM disk
+(`docs/ROLLBACK.md`). The badge above is the CI's state.
 
 ## Build and try
 

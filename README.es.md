@@ -62,16 +62,17 @@ muestra y no ejecuta nada. El COMMAND bar (Super+Espacio) muestra la misma líne
 
 Un prototipo verificado en máquinas virtuales y contenedores, no un producto. No se ha ejecutado, entre otros: ningún
 hardware real (controladores gráficos, Wi-Fi, suspensión, adaptadores CAN, programar una placa), ninguna herramienta
-de fabricante (Cadence, Synopsys, Altium, STM32CubeIDE), la máquina virtual de Windows, ARM si no es emulado. El repositorio del que un
+de fabricante (Cadence, Synopsys, Altium, STM32CubeIDE), la máquina virtual de Windows, SilikOS instalado en una máquina ARM (los paquetes y las herramientas
+se construyen y se prueban en los runners ARM de GitHub). El repositorio del que un
 sistema instalado actualizaría los paquetes de SilikOS está construido pero no publicado (`docs/REPO.md`): la clave
 de firma la tiene que hacer el propietario, así que un sistema instalado todavía no recibe versiones nuevas. `docs/STATUS.md` tiene las dos tablas, verificado y no verificado, con cómo se ha ejecutado cada fila.
 
 Probado instalándolo: el workflow CI construye la ISO, la instala sola en una máquina virtual, arranca el sistema
 instalado y deja que se revise a sí mismo; el informe y las imágenes están en la rama
-[`ci-results`](../../tree/ci-results). La última ejecución completa cuando se escribió esto (13/11/2026) es la del
-commit fa6c6e8 (11/11/2026, 86 comprobaciones correctas, ninguna fallida); lo que ha cambiado después se ha ejecutado
-solo en contenedores. Los workflows se volvieron a poner en marcha el 13/11/2026: la insignia de arriba es el estado
-de la CI.
+[`ci-results`](../../tree/ci-results). La última ejecución completa cuando se escribió esto es la 43436222754 del
+13/11/2026 (commit 4c4163f): 120 comprobaciones correctas, ninguna fallida, 15 GB de disco; el sistema instalado
+arrancó en 9,3 s con unos 985 MB en uso (una máquina virtual: `docs/NUMEROS.md`) y volvió atrás de una actualización
+en un disco LVM real (`docs/ROLLBACK.md`). La insignia de arriba es el estado de la CI.
 
 ## Construirlo y probarlo
 

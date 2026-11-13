@@ -155,12 +155,12 @@ windows
 <table>
 <thead><tr><th scope="col">qué</th><th scope="col">cómo</th></tr></thead>
 <tbody>
-<tr><th scope="row">instalación</th><td>La ISO se instala sola en una máquina virtual, el sistema instalado arranca y se revisa a sí mismo. GitHub Actions, workflow CI; la última ejecución completa cuando se escribió esta página: 11/11/2026, commit fa6c6e8, 86 comprobaciones correctas, ninguna fallida.</td></tr>
+<tr><th scope="row">instalación</th><td>La ISO se instala sola en una máquina virtual, el sistema instalado arranca y se revisa a sí mismo. GitHub Actions, workflow CI; la última ejecución completa cuando se escribió esta página: 13/11/2026, commit 4c4163f, 120 comprobaciones correctas, ninguna fallida; arrancó en 9,3 s con unos 985 MB en uso.</td></tr>
 <tr><th scope="row">escritorio</th><td>Los tres aspectos, el Inicio, el COMMAND bar, las pantallas de entrada y de bloqueo: en aquel sistema instalado, en su pantalla.</td></tr>
 <tr><th scope="row">chips</th><td><code>silik eda try</code> en aquel sistema instalado: 13 trabajos correctos (un inversor del esquema al layout y vuelta, un contador hasta puertas, un diodo en el simulador de dispositivos).</td></tr>
 <tr><th scope="row">Windows</th><td>Programas hechos para las pruebas (de 64 y de 32 bits, un instalador, un .msi, un programa .NET) funcionan con nuestro Wine dentro de la caja, con SELinux en modo enforcing, en aquel sistema instalado.</td></tr>
 <tr><th scope="row">microcontroladores</th><td><code>silik dev try</code>: 7 trabajos correctos (compilar, biblioteca de C, C++, depurar, sonda, DFU, ST-LINK) en un EL 9 limpio y en el sistema instalado. No había ninguna placa conectada.</td></tr>
-<tr><th scope="row">ARM</th><td>Los paquetes de SilikOS se construyen y se instalan sobre AlmaLinux 9 para aarch64 y <code>silik</code> funciona allí: en un contenedor emulado en la máquina de construcción.</td></tr>
+<tr><th scope="row">ARM</th><td>Los paquetes de SilikOS se construyen sobre AlmaLinux 9 para aarch64, y la mayoría de sus herramientas también, y pasan allí sus pruebas: en los runners ARM de GitHub (unas cuantas solo bajo emulación).</td></tr>
 </tbody>
 </table>
 <h2>no verificado</h2>
@@ -168,16 +168,16 @@ windows
 <li>ningún hardware real: controladores gráficos (NVIDIA), Wi-Fi, suspensión, un adaptador CAN en un bus, programar o depurar una placa, un analizador lógico;</li>
 <li>ninguna herramienta de fabricante: Cadence, Synopsys, Altium, STM32CubeIDE, Code Composer Studio;</li>
 <li>la máquina virtual de Windows;</li>
-<li>ARM en hardware ARM (solo emulado);</li>
+<li>SilikOS instalado en una máquina ARM;</li>
 <li>qué hace cada perfil de energía en un portátil: consumo, horas de batería;</li>
-<li>lo que ha cambiado después de aquella instalación (el aspecto isla por defecto, los acentos, el vidrio, las herramientas de banco, <code>silik power</code>, <code>silik doctor</code>): ejecutado solo en contenedores.</li>
+<li>lo que <code>silik --help</code> marca como experimental (las herramientas fijadas de un proyecto, las pruebas de banco, el espejo para una red sin Internet, las listas de requisitos de los fabricantes): ejecutado solo en contenedores o con sustitutos.</li>
 </ul>
 <p>Todavía no hay un repositorio de paquetes firmado, así que un sistema instalado no recibe versiones nuevas de los paquetes de SilikOS; las actualizaciones de la base llegan de la base. La lista de arriba es la corta: <a href="https://github.com/BTomeu/SilikOs/blob/main/docs/STATUS.md">docs/STATUS.md</a> tiene todas las filas.</p>
 <a class="next" href="#get"><span class="n">5</span>Cómo tenerlo</a>
 </section>
 <section id="get">
 <h1>Cómo tenerlo</h1>
-<p>Hoy no hay ninguna ISO para descargar ni ningún repositorio de paquetes. Para probar SilikOS, construye el instalador desde el repositorio; pruébalo primero en una máquina virtual, porque nada se ha ejecutado en hardware real.</p>
+<p>Hoy no hay ninguna release para descargar ni ningún repositorio de paquetes publicado. El instalador de la última ejecución en verde de la CI es su artefacto <code>silikos-iso</code> (GitHub Actions, con una cuenta de GitHub, durante un tiempo limitado); o constrúyelo desde el repositorio. Pruébalo primero en una máquina virtual, porque nada se ha ejecutado en hardware real.</p>
 <pre>git clone https://github.com/BTomeu/SilikOs &amp;&amp; cd SilikOs
 bash tools/build_rpms.sh                # rpmbuild, createrepo_c
 python3 -m unittest discover -s tests   # Python 3.9 or later

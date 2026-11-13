@@ -155,12 +155,12 @@ windows
 <table>
 <thead><tr><th scope="col">what</th><th scope="col">how</th></tr></thead>
 <tbody>
-<tr><th scope="row">installation</th><td>The ISO installs unattended in a virtual machine, the installed system boots and checks itself. GitHub Actions, workflow CI; the last complete run when this page was written: 11/11/2026, commit fa6c6e8, 86 checks ok, none failed.</td></tr>
+<tr><th scope="row">installation</th><td>The ISO installs unattended in a virtual machine, the installed system boots and checks itself. GitHub Actions, workflow CI; the last complete run when this page was written: 13/11/2026, commit 4c4163f, 120 checks ok, none failed; it started in 9.3 s with about 985 MB in use.</td></tr>
 <tr><th scope="row">desktop</th><td>The three looks, Start, the COMMAND bar, the login and lock screens: on that installed system, on its screen.</td></tr>
 <tr><th scope="row">chips</th><td><code>silik eda try</code> on that installed system: 13 jobs ok (an inverter from schematic to layout and back, a counter down to gates, a diode in the device simulator).</td></tr>
 <tr><th scope="row">Windows</th><td>Programs written for the tests (64 and 32 bit, an installer, an .msi, a .NET program) run with our Wine in the sandbox, with SELinux enforcing, on that installed system.</td></tr>
 <tr><th scope="row">embedded</th><td><code>silik dev try</code>: 7 jobs ok (build, C library, C++, debug, probe, DFU, ST-LINK) in a clean EL 9 and on the installed system. No board was connected.</td></tr>
-<tr><th scope="row">ARM</th><td>The SilikOS packages build and install on AlmaLinux 9 for aarch64 and <code>silik</code> runs there: in an emulated container on the build machine.</td></tr>
+<tr><th scope="row">ARM</th><td>The SilikOS packages build on AlmaLinux 9 for aarch64, and so do most of its tools, which pass their trials there: on GitHub&#x27;s ARM runners (a few under emulation only).</td></tr>
 </tbody>
 </table>
 <h2>not verified</h2>
@@ -168,16 +168,16 @@ windows
 <li>any real hardware: graphics drivers (NVIDIA), Wi-Fi, suspend, a CAN adapter on a bus, flashing or debugging a board, a logic analyser;</li>
 <li>any vendor tool: Cadence, Synopsys, Altium, STM32CubeIDE, Code Composer Studio;</li>
 <li>the Windows virtual machine;</li>
-<li>ARM on ARM hardware (emulated only);</li>
+<li>SilikOS installed on an ARM machine;</li>
 <li>what each power profile does on a laptop: power drawn, battery hours;</li>
-<li>what changed after that installation run (the island look as the default, accents, glass, the bench tools, <code>silik power</code>, <code>silik doctor</code>): run in containers only.</li>
+<li>what <code>silik --help</code> marks as experimental (a project&#x27;s pinned tools, the bench test runner, the mirror for a network without Internet, the vendors&#x27; requirement lists): run in containers or with stand-ins only.</li>
 </ul>
 <p>There is no signed package repository yet, so an installed system does not receive new versions of SilikOS&#x27;s own packages; the base&#x27;s updates arrive from the base. The list above is the short one: <a href="https://github.com/BTomeu/SilikOs/blob/main/docs/STATUS.md">docs/STATUS.md</a> has every row.</p>
 <a class="next" href="#get"><span class="n">5</span>Get it</a>
 </section>
 <section id="get">
 <h1>Get it</h1>
-<p>Today there is no ISO to download and no package repository. To try SilikOS, build the installer from the repository; try it in a virtual machine first, since nothing has been run on real hardware.</p>
+<p>Today there is no release to download and no package repository published. The installer of the CI&#x27;s last green run is its artifact <code>silikos-iso</code> (GitHub Actions, with a GitHub account, for a limited time); or build it from the repository. Try it in a virtual machine first, since nothing has been run on real hardware.</p>
 <pre>git clone https://github.com/BTomeu/SilikOs &amp;&amp; cd SilikOs
 bash tools/build_rpms.sh                # rpmbuild, createrepo_c
 python3 -m unittest discover -s tests   # Python 3.9 or later

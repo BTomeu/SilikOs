@@ -155,12 +155,12 @@ windows
 <table>
 <thead><tr><th scope="col">què</th><th scope="col">com</th></tr></thead>
 <tbody>
-<tr><th scope="row">instal·lació</th><td>La ISO s&#x27;instal·la sola en una màquina virtual, el sistema instal·lat arrenca i es revisa ell mateix. GitHub Actions, workflow CI; l&#x27;última execució completa quan es va escriure aquesta pàgina: 11/11/2026, commit fa6c6e8, 86 comprovacions correctes, cap de fallada.</td></tr>
+<tr><th scope="row">instal·lació</th><td>La ISO s&#x27;instal·la sola en una màquina virtual, el sistema instal·lat arrenca i es revisa ell mateix. GitHub Actions, workflow CI; l&#x27;última execució completa quan es va escriure aquesta pàgina: 13/11/2026, commit 4c4163f, 120 comprovacions correctes, cap de fallada; va arrencar en 9,3 s amb uns 985 MB en ús.</td></tr>
 <tr><th scope="row">escriptori</th><td>Els tres aspectes, l&#x27;Inici, el COMMAND bar, les pantalles d&#x27;entrada i de bloqueig: en aquell sistema instal·lat, a la seva pantalla.</td></tr>
 <tr><th scope="row">xips</th><td><code>silik eda try</code> en aquell sistema instal·lat: 13 feines correctes (un inversor de l&#x27;esquema al layout i tornar, un comptador fins a portes, un díode al simulador de dispositius).</td></tr>
 <tr><th scope="row">Windows</th><td>Programes fets per a les proves (de 64 i de 32 bits, un instal·lador, un .msi, un programa .NET) funcionen amb el nostre Wine dins de la capsa, amb SELinux en mode enforcing, en aquell sistema instal·lat.</td></tr>
 <tr><th scope="row">microcontroladors</th><td><code>silik dev try</code>: 7 feines correctes (compilar, biblioteca de C, C++, depurar, sonda, DFU, ST-LINK) en un EL 9 net i al sistema instal·lat. No hi havia cap placa connectada.</td></tr>
-<tr><th scope="row">ARM</th><td>Els paquets de SilikOS es construeixen i s&#x27;instal·len sobre AlmaLinux 9 per a aarch64 i <code>silik</code> hi funciona: en un contenidor emulat a la màquina de construcció.</td></tr>
+<tr><th scope="row">ARM</th><td>Els paquets de SilikOS es construeixen sobre AlmaLinux 9 per a aarch64, i la majoria de les seves eines també, i hi passen les seves proves: als runners ARM de GitHub (unes quantes només sota emulació).</td></tr>
 </tbody>
 </table>
 <h2>no verificat</h2>
@@ -168,16 +168,16 @@ windows
 <li>cap maquinari real: controladors gràfics (NVIDIA), Wi-Fi, suspensió, un adaptador CAN en un bus, programar o depurar una placa, un analitzador lògic;</li>
 <li>cap eina de fabricant: Cadence, Synopsys, Altium, STM32CubeIDE, Code Composer Studio;</li>
 <li>la màquina virtual de Windows;</li>
-<li>ARM en maquinari ARM (només emulat);</li>
+<li>SilikOS instal·lat en una màquina ARM;</li>
 <li>què fa cada perfil d&#x27;energia en un portàtil: consum, hores de bateria;</li>
-<li>el que ha canviat després d&#x27;aquella instal·lació (l&#x27;aspecte illa per defecte, els accents, el vidre, les eines de banc, <code>silik power</code>, <code>silik doctor</code>): executat només en contenidors.</li>
+<li>el que <code>silik --help</code> marca com a experimental (les eines fixades d&#x27;un projecte, les proves de banc, el mirall per a una xarxa sense Internet, les llistes de requisits dels fabricants): executat només en contenidors o amb substituts.</li>
 </ul>
 <p>Encara no hi ha un repositori de paquets signat, de manera que un sistema instal·lat no rep versions noves dels paquets de SilikOS; les actualitzacions de la base arriben de la base. La llista de dalt és la curta: <a href="https://github.com/BTomeu/SilikOs/blob/main/docs/STATUS.md">docs/STATUS.md</a> té totes les files.</p>
 <a class="next" href="#get"><span class="n">5</span>Com tenir-lo</a>
 </section>
 <section id="get">
 <h1>Com tenir-lo</h1>
-<p>Avui no hi ha cap ISO per baixar ni cap repositori de paquets. Per provar SilikOS, construeix l&#x27;instal·lador des del repositori; prova&#x27;l primer en una màquina virtual, perquè res no s&#x27;ha executat en maquinari real.</p>
+<p>Avui no hi ha cap release per baixar ni cap repositori de paquets publicat. L&#x27;instal·lador de l&#x27;última execució en verd de la CI és el seu artefacte <code>silikos-iso</code> (GitHub Actions, amb un compte de GitHub, durant un temps limitat); o construeix-lo des del repositori. Prova&#x27;l primer en una màquina virtual, perquè res no s&#x27;ha executat en maquinari real.</p>
 <pre>git clone https://github.com/BTomeu/SilikOs &amp;&amp; cd SilikOs
 bash tools/build_rpms.sh                # rpmbuild, createrepo_c
 python3 -m unittest discover -s tests   # Python 3.9 or later
