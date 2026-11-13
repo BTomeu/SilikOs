@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=SilikOS disk notice
+Comment=Says once, at a login, that this computer's disk is not encrypted (silik disk; docs/DISK.md)
+Exec=silik -q disk notice
+NoDisplay=true
+OnlyShowIn=GNOME;
+X-GNOME-Autostart-Delay=30

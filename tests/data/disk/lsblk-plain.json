@@ -1,0 +1,93 @@
+{
+ "blockdevices": [
+  {
+   "name": "sda",
+   "kname": "sda",
+   "path": "/dev/sda",
+   "type": "disk",
+   "fstype": null,
+   "fsver": null,
+   "uuid": null,
+   "mountpoints": [
+    null
+   ],
+   "children": [
+    {
+     "name": "sda1",
+     "kname": "sda1",
+     "path": "/dev/sda1",
+     "type": "part",
+     "fstype": "vfat",
+     "fsver": "FAT32",
+     "uuid": "A1B2-C3D4",
+     "mountpoints": [
+      "/boot/efi"
+     ]
+    },
+    {
+     "name": "sda2",
+     "kname": "sda2",
+     "path": "/dev/sda2",
+     "type": "part",
+     "fstype": "xfs",
+     "fsver": null,
+     "uuid": "cccc",
+     "mountpoints": [
+      "/boot"
+     ]
+    },
+    {
+     "name": "sda3",
+     "kname": "sda3",
+     "path": "/dev/sda3",
+     "type": "part",
+     "fstype": "swap",
+     "fsver": "1",
+     "uuid": "eeee",
+     "mountpoints": [
+      "[SWAP]"
+     ]
+    },
+    {
+     "name": "sda4",
+     "kname": "sda4",
+     "path": "/dev/sda4",
+     "type": "part",
+     "fstype": "xfs",
+     "fsver": null,
+     "uuid": "aaaa",
+     "mountpoints": [
+      "/"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "sdb",
+   "kname": "sdb",
+   "path": "/dev/sdb",
+   "type": "disk",
+   "fstype": null,
+   "fsver": null,
+   "uuid": null,
+   "mountpoints": [
+    null
+   ],
+   "children": [
+    {
+     "name": "sdb1",
+     "kname": "sdb1",
+     "path": "/dev/sdb1",
+     "type": "part",
+     "fstype": "ext4",
+     "fsver": "1.0",
+     "uuid": "ffff",
+     "mountpoints": [
+      "/data",
+      "/run/media/ada/STICK"
+     ]
+    }
+   ]
+  }
+ ]
+}

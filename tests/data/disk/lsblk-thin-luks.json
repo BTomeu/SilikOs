@@ -1,0 +1,222 @@
+{
+ "blockdevices": [
+  {
+   "name": "zram0",
+   "kname": "zram0",
+   "path": "/dev/zram0",
+   "type": "disk",
+   "fstype": null,
+   "fsver": null,
+   "uuid": null,
+   "mountpoints": [
+    "[SWAP]"
+   ]
+  },
+  {
+   "name": "vda",
+   "kname": "vda",
+   "path": "/dev/vda",
+   "type": "disk",
+   "fstype": null,
+   "fsver": null,
+   "uuid": null,
+   "mountpoints": [
+    null
+   ],
+   "children": [
+    {
+     "name": "vda1",
+     "kname": "vda1",
+     "path": "/dev/vda1",
+     "type": "part",
+     "fstype": "vfat",
+     "fsver": "FAT32",
+     "uuid": "A1B2-C3D4",
+     "mountpoints": [
+      "/boot/efi"
+     ]
+    },
+    {
+     "name": "vda2",
+     "kname": "vda2",
+     "path": "/dev/vda2",
+     "type": "part",
+     "fstype": "xfs",
+     "fsver": null,
+     "uuid": "cccc",
+     "mountpoints": [
+      "/boot"
+     ]
+    },
+    {
+     "name": "vda3",
+     "kname": "vda3",
+     "path": "/dev/vda3",
+     "type": "part",
+     "fstype": "crypto_LUKS",
+     "fsver": "2",
+     "uuid": "5dfb24c2-2abf-45a1-83ed-f7f2ffb87407",
+     "mountpoints": [
+      null
+     ],
+     "children": [
+      {
+       "name": "luks-5dfb24c2-2abf-45a1-83ed-f7f2ffb87407",
+       "kname": "dm-0",
+       "path": "/dev/mapper/luks-5dfb24c2-2abf-45a1-83ed-f7f2ffb87407",
+       "type": "crypt",
+       "fstype": "LVM2_member",
+       "fsver": "LVM2 001",
+       "uuid": "dddd",
+       "mountpoints": [
+        null
+       ],
+       "children": [
+        {
+         "name": "almalinux-swap",
+         "kname": "dm-1",
+         "path": "/dev/mapper/almalinux-swap",
+         "type": "lvm",
+         "fstype": "swap",
+         "fsver": "1",
+         "uuid": "eeee",
+         "mountpoints": [
+          "[SWAP]"
+         ]
+        },
+        {
+         "name": "almalinux-pool00_tmeta",
+         "kname": "dm-2",
+         "path": "/dev/mapper/almalinux-pool00_tmeta",
+         "type": "lvm",
+         "fstype": null,
+         "fsver": null,
+         "uuid": null,
+         "mountpoints": [
+          null
+         ],
+         "children": [
+          {
+           "name": "almalinux-pool00-tpool",
+           "kname": "dm-4",
+           "path": "/dev/mapper/almalinux-pool00-tpool",
+           "type": "lvm",
+           "fstype": null,
+           "fsver": null,
+           "uuid": null,
+           "mountpoints": [
+            null
+           ],
+           "children": [
+            {
+             "name": "almalinux-root",
+             "kname": "dm-5",
+             "path": "/dev/mapper/almalinux-root",
+             "type": "lvm",
+             "fstype": "xfs",
+             "fsver": null,
+             "uuid": "aaaa",
+             "mountpoints": [
+              "/"
+             ]
+            },
+            {
+             "name": "almalinux-pool00",
+             "kname": "dm-6",
+             "path": "/dev/mapper/almalinux-pool00",
+             "type": "lvm",
+             "fstype": null,
+             "fsver": null,
+             "uuid": null,
+             "mountpoints": [
+              null
+             ]
+            },
+            {
+             "name": "almalinux-home",
+             "kname": "dm-7",
+             "path": "/dev/mapper/almalinux-home",
+             "type": "lvm",
+             "fstype": "xfs",
+             "fsver": null,
+             "uuid": "bbbb",
+             "mountpoints": [
+              "/home"
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "name": "almalinux-pool00_tdata",
+         "kname": "dm-3",
+         "path": "/dev/mapper/almalinux-pool00_tdata",
+         "type": "lvm",
+         "fstype": null,
+         "fsver": null,
+         "uuid": null,
+         "mountpoints": [
+          null
+         ],
+         "children": [
+          {
+           "name": "almalinux-pool00-tpool",
+           "kname": "dm-4",
+           "path": "/dev/mapper/almalinux-pool00-tpool",
+           "type": "lvm",
+           "fstype": null,
+           "fsver": null,
+           "uuid": null,
+           "mountpoints": [
+            null
+           ],
+           "children": [
+            {
+             "name": "almalinux-root",
+             "kname": "dm-5",
+             "path": "/dev/mapper/almalinux-root",
+             "type": "lvm",
+             "fstype": "xfs",
+             "fsver": null,
+             "uuid": "aaaa",
+             "mountpoints": [
+              "/"
+             ]
+            },
+            {
+             "name": "almalinux-pool00",
+             "kname": "dm-6",
+             "path": "/dev/mapper/almalinux-pool00",
+             "type": "lvm",
+             "fstype": null,
+             "fsver": null,
+             "uuid": null,
+             "mountpoints": [
+              null
+             ]
+            },
+            {
+             "name": "almalinux-home",
+             "kname": "dm-7",
+             "path": "/dev/mapper/almalinux-home",
+             "type": "lvm",
+             "fstype": "xfs",
+             "fsver": null,
+             "uuid": "bbbb",
+             "mountpoints": [
+              "/home"
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

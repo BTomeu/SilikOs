@@ -49,6 +49,8 @@ if /usr/bin/python3 -c 'import sys; sys.exit(sys.version_info[:2] != (3, 9))' 2>
   done
 fi
 install -Dm0644 %{_sourcedir}/silik.bash-completion %{buildroot}%{_datadir}/bash-completion/completions/silik
+# at a login, once: a disk that is not encrypted is said (silik disk notice; docs/DISK.md). Reads, changes nothing
+install -Dm0644 %{_sourcedir}/silik-disk-notice.desktop %{buildroot}%{_sysconfdir}/xdg/autostart/silik-disk-notice.desktop
 # the handbooks (files/doc: links to docs/*.md), for people and for `silik ask`, which searches them (docs/ASK.md)
 install -d %{buildroot}%{_docdir}/silik-tools && install -m0644 %{_sourcedir}/doc/*.md %{buildroot}%{_docdir}/silik-tools/
 # the USB devices SilikOS knows (silik doctor bench, silik dev can): IDs read from the drivers' tables and upstream rules
@@ -69,4 +71,5 @@ install -Dm0644 %{_sourcedir}/pci.tsv %{buildroot}%{_datadir}/silikos/pci.tsv
 %{_datadir}/silikos/kernel-aliases.tsv
 %{_datadir}/silikos/pci.tsv
 %{_datadir}/bash-completion/completions/silik
+%{_sysconfdir}/xdg/autostart/silik-disk-notice.desktop
 %{_docdir}/silik-tools
