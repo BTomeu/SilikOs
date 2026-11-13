@@ -37,8 +37,10 @@ pm_setup() {
       dnf -q -y install python3 > /dev/null
       case "$ID" in
         almalinux|rocky|rhel|centos)
-          dnf -q -y install dnf-plugins-core epel-release > /dev/null && dnf config-manager --set-enabled crb
-          [ -n "$direct" ] && direct_dnf ;;
+          dnf -q -y install dnf-plugins-core epel-release > /dev/null && dnf config-manager --set-enabled crb || return 1
+          # (as an `if`: `[ -n "" ] && ...` as the last command made the setup fail wherever BENCH_OS_DIRECT is not set,
+          # so AlmaLinux and SilikOS read "install failed" on GitHub's runners: run 43436445832)
+          if [ -n "$direct" ]; then direct_dnf; fi ;;
       esac ;;
     zypper)
       zypper -q -n refresh && zypper -q -n install python3 > /dev/null ;;

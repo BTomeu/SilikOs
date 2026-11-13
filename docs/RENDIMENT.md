@@ -82,12 +82,58 @@ Les línies originals (amb mínim i màxim de cada cel·la): `docs/rendiment-202
 En resum: per a feina de compilar i simular, l'espai d'usuari d'EL 9 **no és ni més ràpid ni més lent** que el
 d'Ubuntu o Fedora de manera que es noti, tret de Python (més lent) i de Yosys (més ràpid amb el build de SilikOS).
 
+## Als runners de GitHub, en x86_64 i en ARM (13/11/2026)
+
+Workflow Bench OS, execució 43436445832 (commit 8487422): el mateix mètode en una màquina de GitHub de cada
+arquitectura (4 processadors). **AlmaLinux 9, SilikOS i AlmaLinux 10 no hi surten**: un error del nostre script feia
+fallar la preparació de `dnf` a tota màquina sense `BENCH_OS_DIRECT` (arreglat després; la taula amb ells és la de dalt,
+d'una altra màquina, i no es poden barrejar les dues). Aquí hi ha per primer cop Debian estable, openSUSE i ARM.
+
+x86_64:
+
+| Càrrega | Ubuntu 24.04 | Debian estable | Fedora | openSUSE Tumbleweed |
+|---|---|---|---|---|
+| Build de firmware Cortex-M4 | 10,88 s · gcc 13.2.1 | 11,52 s · 14.2.1 | 12,18 s · 15.2.0 | 11,62 s · 15.3.0 |
+| Compilació nativa | 9,16 s · 13.3.0 | 9,66 s · 14.2.0 | 10,90 s · 16.2.1 | 13,24 s · 16.2.1 |
+| El programa compilat, executant-se | 5,30 s | 5,35 s | 5,17 s | 5,17 s |
+| Icarus Verilog | 6,39 s · 12.0 | 6,32 s · 12.0 | 5,89 s · 13.0 | 5,92 s · 13.0 |
+| Verilator, fer el model | 3,86 s · 5.020 | 4,25 s · 5.032 | 5,46 s · 5.046 | ha fallat |
+| Verilator, simular | 7,57 s | 7,66 s | 7,87 s | ha fallat |
+| ngspice, escala RC | 4,56 s · 42 | 6,36 s · 44.2 | 6,83 s · 47 | 6,18 s · 47 |
+| ngspice, oscil·ladors MOS | 3,61 s · 42 | 3,53 s · 44.2 | 4,89 s · 47 | 4,88 s · 47 |
+| Yosys, síntesi | 39,55 s · 0.33 | 22,47 s · 0.52 | 23,40 s · 0.67 | no empaquetat |
+| Python, log CAN | 3,60 s · 3.12.3 | 2,96 s · 3.13.5 | 3,48 s · 3.15.2 | 4,60 s · 3.13.16 |
+| Python, bucle numèric | 3,22 s | 3,08 s | 3,73 s | 4,60 s |
+| `xz -T1`, comprimir | 45,41 s · 5.4.5 | 43,72 s · 5.8.1 | 42,52 s · 5.8.3 | 45,73 s |
+| Instal·lar 4 paquets sense xarxa | 1,18 s · apt 2.8.4 | 1,16 s · apt 3.0.4 | 0,87 s · dnf 5.4.6 | 0,97 s |
+
+aarch64:
+
+| Càrrega | Ubuntu 24.04 | Debian estable | Fedora | openSUSE Tumbleweed |
+|---|---|---|---|---|
+| Build de firmware Cortex-M4 | 5,91 s · gcc 13.2.1 | 6,23 s · 14.2.1 | 6,24 s · 15.2.0 | 5,78 s · 15.3.0 |
+| Compilació nativa | 5,19 s · 13.3.0 | 5,67 s · 14.2.0 | 6,06 s · 16.2.1 | 7,18 s · 16.2.1 |
+| El programa compilat, executant-se | 3,68 s | 3,73 s | 3,69 s | 3,70 s |
+| Icarus Verilog | 5,94 s · 12.0 | 5,83 s · 12.0 | 5,11 s · 13.0 | 5,08 s · 13.0 |
+| Verilator, fer el model | 3,10 s · 5.020 | 3,39 s · 5.032 | 4,25 s · 5.046 | ha fallat |
+| Verilator, simular | 5,20 s | 4,96 s | 5,64 s | ha fallat |
+| ngspice, escala RC | 2,87 s · 42 | 3,10 s · 44.2 | 3,02 s · 47 | 2,87 s · 47 |
+| ngspice, oscil·ladors MOS | 3,27 s · 42 | 3,19 s · 44.2 | 3,83 s · 47 | 3,82 s · 47 |
+| Yosys, síntesi | 34,00 s · 0.33 | 19,53 s · 0.52 | 20,45 s · 0.67 | no empaquetat |
+| Python, log CAN | 2,93 s · 3.12.3 | 2,64 s · 3.13.5 | 2,99 s · 3.15.2 | 3,47 s · 3.13.16 |
+| Python, bucle numèric | 3,25 s | 3,27 s | 3,60 s | 3,58 s |
+| `xz -T1`, comprimir | 37,87 s · 5.4.5 | 37,31 s · 5.8.1 | 31,81 s · 5.8.3 | 31,32 s |
+| Instal·lar 4 paquets sense xarxa | 1,12 s · apt 2.8.4 | 1,06 s · apt 3.0.4 | 0,66 s · dnf 5.4.6 | 0,67 s |
+
+Les dues màquines no es poden comparar entre elles amb aquesta taula (no se sap quin processador és cadascuna: el log
+no ho diu), i una sola execució per màquina no dona el soroll. El que sí que es veu a totes dues: el Yosys 0.33
+d'Ubuntu triga gairebé el doble que el 0.52 de Debian i el 0.67 de Fedora, i el Verilator d'openSUSE no funciona
+amb aquest mètode.
+
 ## Què no s'ha mesurat
 
-- **Debian estable i openSUSE Tumbleweed:** el proxy d'aquesta sessió no deixa arribar als seus servidors de
-  paquets (403). Els scripts els cobreixen; els noms de paquets d'openSUSE són una suposició [A].
-- **ARM (aarch64)** i una segona màquina x86_64: el workflow "Bench OS" ho fa als runners de GitHub. Està escrit i
-  **no s'ha executat mai**.
+- **AlmaLinux 9, SilikOS i AlmaLinux 10 als runners de GitHub i en ARM:** la primera execució allà no els va
+  mesurar per un error del nostre script (arreglat); la següent execució del workflow els hi posarà.
 - **`xz` amb 500 MB:** trigava 7 minuts per passada; s'ha mesurat amb 64 MB.
 - **Arrencada, memòria en repòs, latència de l'escriptori, GPU, disc real, bateria:** res. Demanen maquinari real
   amb cada sistema instal·lat, no contenidors.

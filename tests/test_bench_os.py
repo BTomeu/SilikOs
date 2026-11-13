@@ -229,5 +229,18 @@ class Inputs(unittest.TestCase):
                 self.assertEqual(p.returncode, 0, "%s: %s" % (f, p.stdout))
 
 
+
+class Setup(unittest.TestCase):
+    def test_a_test_is_never_the_last_command_of_a_branch(self):
+        # (`[ -n "$x" ] && command ;;` as the last line of a case branch returns 1 when the test is false: the package
+        # manager's setup then "failed" on every machine without BENCH_OS_DIRECT, as on GitHub's runners, run 43436445832)
+        import re
+        for name in sorted(os.listdir(os.path.join(ROOT, "tools/bench_os"))):
+            if name.endswith(".sh"):
+                with open(os.path.join(ROOT, "tools/bench_os", name)) as f:
+                    for n, line in enumerate(f, 1):
+                        self.assertNotRegex(line, r"^\s*\[ [^\]]+ \] && [^|]*;;\s*$", "%s:%d" % (name, n))
+
+
 if __name__ == "__main__":
     unittest.main()
