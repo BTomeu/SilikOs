@@ -368,6 +368,9 @@ Result=success
 ExecMainStatus=0
 ExecMainExitTimestamp=
 """
+# rpm -q -a --qf '%{LONGSIZE}\t%{NAME}\n' (two kernels installed; an imported key is a row of the database too)
+WEIGHT = ("0\tgpg-pubkey\n1074968211\tarm-none-eabi-gcc-cs\n739000000\tlinux-firmware\n387000000\tfirefox\n293790\tsilik-tools\n"
+          "71000000\tkernel-core\n70000000\tkernel-core\n5242880\tbash\n")
 MEM = "MemTotal:       16000000 kB\nMemFree:         2000000 kB\nMemAvailable:    9000000 kB\nSwapTotal:       8000000 kB\nSwapFree:        8000000 kB\n"
 
 
@@ -387,6 +390,7 @@ def system(**kw):
           "base": "AlmaLinux release 9.8 (Moss Jungle Cat)", "kernel": "5.14.0-687.66.2.el9_8.x86_64", "rpm": (0, RPM),
           "show": (0, SHOW), "journal": (0, ""), "failed": (0, ""), "ufailed": (0, ""), "restart": None,
           "disks": {"/": disk(1, 100, 40), "/home": disk(1, 100, 40), "/var": disk(1, 100, 40)}, "meminfo": MEM, "now": NOW,
+          "weight": (0, WEIGHT),
           "container": False}
     st.update(kw)
     return st
@@ -395,7 +399,7 @@ def system(**kw):
 class System(unittest.TestCase):
     def test_a_healthy_system(self):
         rows = silik.doc_check_system(system())
-        self.assertEqual(states(rows), {"base": "ok", "packages": "ok", "restart": "ok", "updates": "ok", "disk/": "ok", "memory": "ok", "units": "ok"})
+        self.assertEqual(states(rows), {"base": "ok", "packages": "ok", "weight": "ok", "restart": "ok", "updates": "ok", "disk/": "ok", "memory": "ok", "units": "ok"})
         r = by_id(rows)
         self.assertIn("SilikOS 9.8 on AlmaLinux release 9.8", r["base"]["value"])
         self.assertIn("silik-tools 0.3.0", r["packages"]["value"])
@@ -405,10 +409,27 @@ class System(unittest.TestCase):
 
     def test_nothing_visible_is_never_ok(self):
         st = system(os={}, silikos=False, base="", rpm=(None, ""), show=(None, ""), journal=(None, ""), failed=(None, ""),
-                    ufailed=(None, ""), disks={"/": None, "/home": None, "/var": None}, meminfo="", container=True)
+                    ufailed=(None, ""), disks={"/": None, "/home": None, "/var": None}, meminfo="", container=True, weight=(None, ""))
         rows = silik.doc_check_system(st)
         self.assertNotIn("ok", states(rows).values())
         self.assertEqual(set(states(rows).values()), {"unknown"})
+
+    def test_weight(self):
+        # how many packages and how much they take, from the rpm database: read only, so ok whenever it is read
+        r = by_id(silik.doc_check_system(system()))["weight"]
+        self.assertEqual((r["state"], r["fix"]), ("ok", []))
+        self.assertEqual(r["value"], "7 packages, 2.2 GB installed (rpm's count; the disk: below); the largest: "
+                                     "arm-none-eabi-gcc-cs 1.0 GB, linux-firmware 704 MB, firefox 369 MB, kernel-core 67 MB, kernel-core 66 MB")
+        self.assertEqual(silik.rpm_sizes(WEIGHT + "not a row\n\t\nx\tbash\n")[-2:], [(5242880, "bash"), (293790, "silik-tools")])
+        # not readable, or empty (a system that is not rpm's): unknown, never ok
+        for w in ((None, ""), (1, ""), (0, ""), (0, "0\tgpg-pubkey\n"), None, OSError("no rpm")):
+            self.assertEqual(by_id(silik.doc_check_system(system(weight=w)))["weight"]["state"], "unknown", w)
+        st = system()
+        del st["weight"]                                                           # (a probe of before the row)
+        self.assertEqual(by_id(silik.doc_check_system(st))["weight"]["state"], "unknown")
+        # the probe asks rpm once, read only, beside the other reads
+        self.assertEqual(silik.later(lambda: 7)(), 7)
+        self.assertIsInstance(silik.later(lambda: 1 / 0)(), ZeroDivisionError)
 
     def test_packages_and_restart(self):
         rpm = RPM.replace("silik-dev\t", "x-silik-dev\t")

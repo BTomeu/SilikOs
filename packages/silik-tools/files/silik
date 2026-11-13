@@ -5392,6 +5392,7 @@ def user_bus():
 
 # ---- system
 def doc_probe_system():
+    weight = later(doc_probe_weight)               # (the rpm database, read while the rest is)
     disks = {}
     for mp in ("/", "/home", "/var"):
         try:
@@ -5411,6 +5412,7 @@ def doc_probe_system():
         lambda: doc_cmd(["systemctl", "--user", "list-units", "--failed", "--plain", "--no-legend", "--no-pager"]) if user_bus() else (None, "")])
     return {"os": os_release(), "silikos": os.path.exists("/etc/silikos-release"), "base": read("/etc/redhat-release").strip(),
             "kernel": os.uname().release, "rpm": rpm, "show": show, "journal": journal, "failed": failed, "ufailed": ufailed,
+            "weight": weight(),
             "restart": read(DOC_RESTART, None), "disks": disks, "meminfo": read("/proc/meminfo"), "now": time.time(),
             "speed": speed_probe(doc_cmd),
             "container": sec_container()}
@@ -5494,6 +5496,61 @@ def doc_updates(st, rows):
         doc_row(rows, "system", "updates", "automatic updates", "unknown", "%s; it has not run yet" % what, ["systemctl list-timers " + timer])
 
 
+# the weight of the installed system: how many packages and how much they take, as the rpm database has it (the
+# figures of a new installation, and of other systems, by the same count: docs/NUMEROS.md, tools/weigh.sh)
+DOC_WEIGHT_TOP = 5
+
+
+def later(fn):
+    """starts FN in a thread now; the callable it returns waits for FN's result (an exception is the result, as in par)"""
+    import threading
+    box = []
+
+    def run():
+        try:
+            box.append(fn())
+        except Exception as e:
+            box.append(e)
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+
+    def result(timeout=None):
+        t.join(timeout)
+        return box[0] if box else None
+    return result
+
+
+def doc_probe_weight():
+    """every installed package's size in bytes and its name: (exit code or None, text)"""
+    if not shutil.which("rpm"):
+        return None, ""
+    return doc_cmd(["rpm", "-q", "-a", "--qf", "%{LONGSIZE}\t%{NAME}\n"], timeout=30)
+
+
+def rpm_sizes(text):
+    """[(bytes, name)] of `rpm -q -a --qf '%{LONGSIZE}\t%{NAME}\n'`, the largest first (several kernels: several rows)"""
+    out = []
+    for l in text.splitlines():
+        b, tab, name = l.partition("\t")
+        if tab and b.isdigit() and name and name != "gpg-pubkey":      # (imported keys are rows of the database, not packages)
+            out.append((int(b), name))
+    return sorted(out, key=lambda r: (-r[0], r[1]))
+
+
+def doc_weight(st, rows):
+    """the row `weight` of the area system: read only, so ok whenever it can be read"""
+    w = st.get("weight")
+    rc, out = w if isinstance(w, tuple) and len(w) == 2 else (None, "")
+    pk = rpm_sizes(out) if rc == 0 else []
+    if rc is None:
+        doc_row(rows, "system", "weight", "weight", "unknown", "rpm is not on this system, or its database did not answer")
+    elif not pk:
+        doc_row(rows, "system", "weight", "weight", "unknown", "the rpm database has no package" + (" (inside a container)" if st.get("container") else ""))
+    else:
+        doc_row(rows, "system", "weight", "weight", "ok", "%d packages, %s installed (rpm's count; the disk: below); the largest: %s"
+                % (len(pk), size(sum(b for b, _ in pk)), ", ".join("%s %s" % (n, size(b)) for b, n in pk[:DOC_WEIGHT_TOP])))
+
+
 def doc_check_system(st):
     rows, osr, here = [], st["os"], " (inside a container)" if st["container"] else ""
     shown = osr.get("PRETTY_NAME") if st["silikos"] else ""
@@ -5526,6 +5583,7 @@ def doc_check_system(st):
         else:
             doc_row(rows, "system", "packages", "SilikOS packages", "ok", val)
 
+    doc_weight(st, rows)
     newest = max(kernels)[1] if kernels else ""
     if st["restart"] is not None:
         doc_row(rows, "system", "restart", "restart", "warn", "an update waits for a restart%s" % (" (since %s)" % st["restart"].strip()[:16].replace("T", " ") if st["restart"].strip() else ""),
