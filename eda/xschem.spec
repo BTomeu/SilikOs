@@ -6,7 +6,7 @@ Summary:        Xschem, schematic capture for VLSI and mixed-signal circuits (up
 License:        GPL-2.0-or-later
 URL:            https://xschem.sourceforge.io
 Source0:        xschem-%{version}.tar.gz
-ExclusiveArch:  x86_64
+ExclusiveArch:  x86_64 aarch64
 BuildRequires:  gcc make flex bison gawk tcl-devel tk-devel libX11-devel libXpm-devel libXrender-devel libxcb-devel
 BuildRequires:  cairo-devel libjpeg-turbo-devel
 Requires:       tcl tk gawk xterm

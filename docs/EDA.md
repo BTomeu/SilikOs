@@ -48,8 +48,10 @@ The vendors' tools and the EL6 / EL7 userlands are x86_64 programs. On an aarch6
 with that reason; `silik eda create NAME --el 7 --arch amd64` makes the box under emulation (`podman create --arch
 amd64`), which needs an x86_64 emulator registered with binfmt_misc: EL 9 and EPEL 9 have no qemu-user-static for
 aarch64, so it is installed by hand, slow, and no vendor supports it (not run). There is no vsyscall page on ARM:
-`silik eda kernel-arg` has nothing to set. Of the open tools, ngspice builds and does its trial on aarch64 (emulated,
-12/11/2026); the other recipes are still x86_64 only (`docs/HARDWARE.md`).
+`silik eda kernel-arg` has nothing to set. Of the open tools, ngspice, Netgen, Xschem and Magic (and nng, a
+library KiCad needs) build and do their trials on aarch64 (emulated, 12-13/11/2026: `ExclusiveArch: x86_64 aarch64`); the other recipes name x86_64 only
+until they are built and tried there: the workflow ARM candidates (`tools/arm_candidate.sh`) tries each on an ARM
+runner. The table, recipe by recipe: `docs/ARM.md`.
 
 ## What an installer sees
 

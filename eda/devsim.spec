@@ -13,7 +13,14 @@ License:        Apache-2.0 AND LGPL-2.1-or-later AND BSD-3-Clause
 URL:            https://devsim.org
 Source0:        devsim-%{version}.tar.gz
 ExclusiveArch:  x86_64
-BuildRequires:  cmake gcc gcc-c++ gcc-gfortran libquadmath-devel make bison flex zlib-devel python3-devel
+BuildRequires:  cmake gcc gcc-c++ gcc-gfortran make bison flex zlib-devel python3-devel
+# (128-bit floats through libquadmath are an x86_64 thing: EL 9 has no libquadmath for aarch64. There upstream's own
+# build, scripts/build_manylinux_2_28.sh, takes its configuration "nofloat128": extended precision from Boost's
+# cpp_bin_float, no quad-precision LU routines. Written as upstream's script does it [A: on emulated aarch64 it
+# configured and was compiling when its time limit stopped it, 13/11/2026; not finished: workflow ARM candidates])
+%ifarch x86_64
+BuildRequires:  libquadmath-devel
+%endif
 # BLAS and LAPACK are loaded when the module is imported: the base's OpenBLAS (its one-thread library,
 # libopenblas.so.0, the package openblas-serial; no Intel MKL here)
 Requires:       python3 openblas-serial
@@ -33,19 +40,27 @@ Upstream's source, unmodified, built on EL 9 by SilikVolt (eda/devsim.spec); its
 export CMAKE=cmake CMAKE_CXX_FLAGS="" CC=gcc CXX=g++ F77=gfortran PYTHON3_BIN=python3 PYTHON3_ARCHIVE=""
 export PYTHON3_INCLUDE=$(python3 -c "from sysconfig import get_paths as gp; print(gp()['include'])")
 # the steps of upstream's scripts/build_manylinux_2_28.sh, without its MKL
-(cd external/symdiff && bash ../symdiff_centos.sh && cd linux_x86_64_release && make %{?_smp_mflags})
+(cd external/symdiff && bash ../symdiff_centos.sh && cd linux_%{_arch}_release && make %{?_smp_mflags})
+%ifarch x86_64
 (cd external/getrf && bash setup_centos6.sh && cd build && make %{?_smp_mflags})
+%endif
 (cd external/umfpack_lgpl && bash setup_centos6.sh && cd build && make %{?_smp_mflags})
-mkdir -p linux_x86_64_release && cd linux_x86_64_release
+mkdir -p linux_%{_arch}_release && cd linux_%{_arch}_release
+%ifarch x86_64
 cmake -DCMAKE_BUILD_TYPE=release -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER=gcc -DDEVSIM_CONFIG=centos_6 \
   -DDEVSIM_EXTENDED_PRECISION=ON -DMKL_PARDISO=OFF -DPYTHON3=ON -DPYTHON3_INCLUDE=$PYTHON3_INCLUDE ..
+%else
+cmake -DCMAKE_BUILD_TYPE=release -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER=gcc -DDEVSIM_CONFIG=nofloat128 \
+  -DDEVSIM_EXTENDED_PRECISION=ON -DDEVSIM_CPP_BIN_FLOAT=ON -DEIGEN_DENSE_EXTENDED=ON -DMKL_PARDISO=OFF -DPYTHON3=ON \
+  -DPYTHON3_INCLUDE=$PYTHON3_INCLUDE ..
+%endif
 make %{?_smp_mflags}
 
 %install
 # the layout of upstream's wheel (dist/package_linux.sh, dist/bdist_wheel/setup.py): the package `devsim`
 d=%{buildroot}%{python3_sitearch}/devsim
 mkdir -p $d %{buildroot}%{_datadir}/devsim %{buildroot}%{_docdir}/devsim
-cp -p linux_x86_64_release/src/main/devsim_py3.so dist/__init__.py $d/
+cp -p linux_%{_arch}_release/src/main/devsim_py3.so dist/__init__.py $d/
 cp -rp python_packages umfpack $d/
 cp -p external/umfpack_lgpl/build/libumfpack_lgpl.so $d/umfpack/
 # DEVSIM asks the system for "libopenblas.so", the name a development package gives; the base's library is

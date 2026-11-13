@@ -54,7 +54,9 @@ make install DESTDIR=%{buildroot}
 rm -rf %{buildroot}%{_infodir} %{buildroot}%{_includedir} %{buildroot}%{_datadir}/locale %{buildroot}%{_prefix}/lib/bfd-plugins
 rm -f %{buildroot}%{_prefix}/lib/lib{bfd,opcodes,ctf,ctf-nobfd,sframe}* %{buildroot}%{_prefix}/lib/*.la
 rm -f %{buildroot}%{_bindir}/c++filt %{buildroot}%{_mandir}/man1/c++filt.1*
-rm -rf %{buildroot}%{_prefix}/x86_64-pc-linux-gnu      # (binutils' tool folder: copies of the sd* programs of /usr/bin)
+# (binutils' tool folder, named after the machine it was configured on: x86_64-pc-linux-gnu, on ARM aarch64-...-linux-gnu
+# [A: not built there yet]: copies of the sd* programs of /usr/bin)
+rm -rf %{buildroot}%{_prefix}/*-linux-gnu
 rmdir --ignore-fail-on-non-empty %{buildroot}%{_prefix}/lib 2> /dev/null || :
 for f in %{buildroot}%{_bindir}/*; do [ ! -e %{_bindir}/${f##*/} ] || { echo "error: ${f##*/} is a program of the system already" >&2; exit 1; }; done
 find %{buildroot} -path '*/share/sdcc' -prune -o -print | sed 's|^%{buildroot}||' | sort

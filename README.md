@@ -78,7 +78,7 @@ bash tools/build_iso.sh           # the network installer ISO (needs repo.almali
 ```
 
 [`docs/BUILD.md`](docs/BUILD.md) has the steps and what each needs. Also: `docs/PLAN.md` (decisions and phases),
-`docs/HARDWARE.md` (Ryzen 7 5800HS + RTX 3050, Snapdragon X, SilikOS on ARM / aarch64), `docs/DRIVERS.md` (which hardware the base's
+`docs/HARDWARE.md` (Ryzen 7 5800HS + RTX 3050, Snapdragon X), `docs/ARM.md` (SilikOS on ARM / aarch64), `docs/DRIVERS.md` (which hardware the base's
 kernel has a driver for; `silik hw check`), `docs/EDA.md`, `docs/DEV.md`,
 `docs/WINDOWS.md`, `docs/POWER.md`, `docs/CONCEPTE.md` (the idea from zero, in Catalan). `site/` is a static site
 with the same content (`tools/gen_site.py`; not deployed yet).

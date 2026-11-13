@@ -9,6 +9,8 @@
 # commit written there (or in the recipe's "# source: URL COMMIT" lines), a recipe's "# archive: URL SHA256" lines
 # (further release archives it builds with) by their sha256, PyPI's archives by the sha256 of
 # dev/pylab-requirements.txt. Nothing of the sources is kept in this repository.
+# SILIK_TRY_ARCH=1: try the recipe on this machine's architecture though its ExclusiveArch does not name it yet (the
+# copy the build is made from is widened: tools/try_arch.sh; a trial, not a package to keep: workflow ARM candidates).
 # tools/build_iso.sh puts every build/extra/*.rpm into the ISO.
 # (A source package rebuilds by itself: `rpmbuild --rebuild --define "dist .el9" NAME-*.src.rpm` on EL 9.)
 set -euo pipefail
@@ -94,6 +96,9 @@ cp "$root/eda/common.inc" "$top/SOURCES/common.inc"
 { echo "%global upver $ver"
   sed -e 's|^%include %{_specdir_eda}/common.inc$|%include %{_sourcedir}/common.inc|' -e '0,/^Name:/{/^Name:/a Source100:      common.inc
 }' "$root/dev/$name.spec"; } > "$spec"
+# SILIK_TRY_ARCH=1: try the recipe on this machine's architecture though its ExclusiveArch does not name it yet (the
+# copy is widened, never the recipe: tools/try_arch.sh; workflow ARM candidates)
+[ "${SILIK_TRY_ARCH:-}" != 1 ] || bash "$root/tools/try_arch.sh" "$spec"
 defs=(--define "_topdir $top" --define "dist .el9")
 rpmbuild -bs "${defs[@]}" "$spec"
 cp "$top"/SRPMS/"$name"-*.src.rpm "$root/build/srpm/"

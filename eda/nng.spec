@@ -6,7 +6,7 @@ Summary:        nng, a messaging library (upstream's source built for SilikOS / 
 License:        MIT
 URL:            https://nng.nanomsg.org
 Source0:        nng-%{version}.tar.gz
-ExclusiveArch:  x86_64
+ExclusiveArch:  x86_64 aarch64
 BuildRequires:  cmake gcc gcc-c++ make
 
 %description

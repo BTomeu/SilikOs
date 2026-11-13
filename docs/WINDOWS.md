@@ -168,7 +168,11 @@ that have the prefix's runtime folder mounted).
   both and would have been refused (fixed 12/11/2026; the new one not run either: no KVM here).
 - On ARM (aarch64): Windows 11 for ARM, `virt` machine, AAVMF (edk2-aarch64), the installation disc on USB, disk and
   network virtio with virtio-win's ARM64 drivers (`--drivers virtio-win.iso`, "Load driver" in Setup), a RAM
-  framebuffer; without `/dev/kvm` (a VM in Hyper-V on a Windows on ARM laptop) it says why it cannot (`docs/HARDWARE.md`).
+  framebuffer; without `/dev/kvm` (a VM in Hyper-V on a Windows on ARM laptop) it says why it cannot.
+- `silik win routes [--json]` says which of these ways the machine has, from what it sees (Wine, KVM, virt-install;
+  on ARM also the page size, an x86_64 emulator, a Hyper-V host). There is no Wine for ARM in SilikOS: the route there
+  is Windows 11 for ARM in the virtual machine, which runs x86 programs through Windows' own emulation (PROPOSAL,
+  with the other routes and what the vendors say: `docs/ARM.md`).
 - Windows and the programs need their own licences.
 
 ## Altium Designer

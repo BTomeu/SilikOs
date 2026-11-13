@@ -20,9 +20,9 @@ EL 9 (`dev/trial.sh`) and kept in the release `dev-tools`; the CI's ISO takes th
 the git tree at the tag v0.12.0, so it calls itself "0.12.0-snapshot".
 
 On ARM (aarch64) the same stack is there: EPEL 9 has the compiler, newlib and stlink for aarch64, and the recipes of
-OpenOCD, dfu-util and stm32flash build there (`ExclusiveArch: x86_64 aarch64`; built and tried on emulated aarch64,
-12/11/2026: `docs/STATUS.md`; the workflow's ARM jobs are written, not run). SavvyCAN, sigrok, SDCC and silik-pylab
-are x86_64 only until built there (`docs/HARDWARE.md`).
+OpenOCD, dfu-util, stm32flash and silik-pylab build there (`ExclusiveArch: x86_64 aarch64`; built and tried on
+emulated aarch64, 12-13/11/2026: `docs/STATUS.md`; the workflow's ARM jobs are written, not run). SavvyCAN, sigrok
+and SDCC name x86_64 only until they are built and tried there (the workflow ARM candidates; `docs/ARM.md`).
 
 A debug probe is usable by the person at the screen without joining a group: OpenOCD's device rules are installed
 with `TAG+="uaccess"` only (upstream's file also names a group `plugdev`, which EL 9 does not have), and stlink

@@ -1,0 +1,65 @@
+# What SilikOS still lacks on ARM (aarch64), in one run: every recipe of eda/ and dev/ whose ExclusiveArch does not
+# name aarch64 yet is built on GitHub's ARM runner in an `almalinux:9` container (with the recipes of ours it uses
+# first), from a copy of the recipe widened to this architecture (SILIK_TRY_ARCH=1: tools/try_arch.sh; the recipe
+# itself is not touched), then tried in a clean container (eda/trial.sh, dev/trial.sh): tools/arm_candidate.sh.
+# Nothing is published: the packages are artifacts of the run, to look at. The run's summary is one table: built,
+# tried, or failed with its last error lines. A recipe that was built AND tried may then name aarch64 (its
+# ExclusiveArch, the ARM matrices of the workflows EDA tools / Dev tools, tests/test_arm.py); the same script runs by
+# hand on any ARM machine with docker. By hand only: these builds take hours and change nothing.
+# The matrix is the list `bash tools/arm_candidate.sh --list` gives (tests/test_arm.py holds them equal).
+# (Written 13/11/2026; not run on GitHub yet: docs/STATUS.md)
+name: ARM candidates
+on:
+  workflow_dispatch:
+# read-only: the builds run upstream's build code; nothing is written to the repository or its releases
+permissions:
+  contents: read
+jobs:
+  try:
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: [devsim, kicad, klayout, nvc, opencascade, qucs-s, yosys, savvycan, sdcc, sigrok]
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - name: Build ${{ matrix.tool }} for aarch64 in an almalinux:9 container, then try it in a clean one
+        run: |
+          uname -m; df -h . | tail -1
+          bash tools/arm_candidate.sh ${{ matrix.tool }}
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: armtry-result-${{ matrix.tool }}
+          path: build/arm-candidates/
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: armtry-rpm-${{ matrix.tool }}
+          path: build/extra/*.rpm
+          if-no-files-found: ignore
+          compression-level: 0
+          retention-days: 14
+
+  # one table of the whole run (a recipe whose job gave no result is said too)
+  summary:
+    needs: try
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: armtry-result-*
+          path: results
+          merge-multiple: true
+      - name: What ARM still lacks
+        run: |
+          mkdir -p results
+          bash tools/arm_candidate.sh --summary results | tee -a "$GITHUB_STEP_SUMMARY"

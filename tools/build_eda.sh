@@ -9,6 +9,9 @@
 # have the sha256 written there; the build stops otherwise.
 #   SILIK_EDA_TAG=<tag> SILIK_EDA_PIN=<commit or sha256>   another tag than the one of eda/versions, with its own pin
 #   SILIK_EDA_REPO=<owner/repo>   where the release `eda-tools` is (default BTomeu/SilikOs)
+#   SILIK_TRY_ARCH=1   try the recipe on this machine's architecture though its ExclusiveArch does not name it yet: the
+#                      copy the build is made from is widened (tools/try_arch.sh), never the recipe; a trial, not a
+#                      package to keep (workflow ARM candidates)
 # Lines of a recipe this script reads:
 #   # needs: epel          the build (and the package) uses EPEL 9
 #   # git: submodules      the source tree is taken with its git submodules, each at the commit the tag names
@@ -66,6 +69,9 @@ cp "$root/eda/common.inc" "$top/SOURCES/common.inc"
 { echo "%global upver $ver"
   sed -e 's|^%include %{_specdir_eda}/common.inc$|%include %{_sourcedir}/common.inc|' -e '0,/^Name:/{/^Name:/a Source100:      common.inc
 }' "$root/eda/$name.spec"; } > "$spec"
+# SILIK_TRY_ARCH=1: try the recipe on this machine's architecture though its ExclusiveArch does not name it yet (the
+# copy is widened, never the recipe: tools/try_arch.sh; workflow ARM candidates)
+[ "${SILIK_TRY_ARCH:-}" != 1 ] || bash "$root/tools/try_arch.sh" "$spec"
 defs=(--define "_topdir $top" --define "dist .el9")
 rpmbuild -bs "${defs[@]}" "$spec"
 cp "$top"/SRPMS/"$name"-*.src.rpm "$root/build/srpm/"
@@ -77,8 +83,10 @@ if [ -n "$uses" ]; then
     f=$(ls "$root"/build/deps/"$u"-[0-9]*.rpm "$root"/build/extra/"$u"-[0-9]*.rpm 2> /dev/null | grep -v '\.src\.rpm$' | head -1 || true)
     if [ -z "$f" ]; then
       rel=${SILIK_EDA_REPO:-BTomeu/SilikOs}
-      asset=$(curl -fsSL --retry 3 "https://api.github.com/repos/$rel/releases/tags/eda-tools" | grep -o "\"browser_download_url\": *\"[^\"]*/$u-[0-9][^\"]*\\.rpm\"" | sed 's/.*"\(https[^"]*\)"/\1/' | grep -v '\.src\.rpm$' | head -1 || true)
-      [ -n "$asset" ] || { echo "error: $name needs our package $u: not in build/deps, build/extra or the release eda-tools of $rel" >&2; exit 1; }
+      # (this machine's architecture: the x86_64 builds are in the release eda-tools, the ARM ones in eda-tools-aarch64)
+      m=$(uname -m); rtag=eda-tools; [ "$m" = x86_64 ] || rtag=eda-tools-$m
+      asset=$(curl -fsSL --retry 3 "https://api.github.com/repos/$rel/releases/tags/$rtag" | grep -o "\"browser_download_url\": *\"[^\"]*/$u-[0-9][^\"]*\\.rpm\"" | sed 's/.*"\(https[^"]*\)"/\1/' | grep -E "\\.($m|noarch)\\.rpm\$" | head -1 || true)
+      [ -n "$asset" ] || { echo "error: $name needs our package $u: not in build/deps, build/extra or the release $rtag of $rel" >&2; exit 1; }
       f=$root/build/deps/$(basename "$asset"); curl -fL --retry 3 -o "$f" "$asset"
     fi
     echo "uses: $(basename "$f")"; got+=("$f")

@@ -10,7 +10,7 @@ Summary:        Magic, the VLSI layout tool (upstream's source built for SilikOS
 License:        HPND-UC-export-US AND LicenseRef-magic-Juniper-bplane AND LicenseRef-magic-USC-scmos
 URL:            http://opencircuitdesign.com/magic/
 Source0:        magic-%{version}.tar.gz
-ExclusiveArch:  x86_64
+ExclusiveArch:  x86_64 aarch64
 BuildRequires:  gcc gcc-c++ make m4 python3 tcsh tcl-devel tk-devel libX11-devel cairo-devel mesa-libGL-devel mesa-libGLU-devel
 BuildRequires:  ncurses-devel readline-devel zlib-devel
 Requires:       tcl tk
