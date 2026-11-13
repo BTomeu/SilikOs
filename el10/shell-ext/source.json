@@ -1,0 +1,47 @@
+{
+ "made_from": {
+  "extension.js": "b84191119ec11b83cc8f52eaf30d6a0a43ca94c5cbfd4d389393eaba1b0ad206",
+  "flow.js": "d53cd03a1c94e83a0ad924cea09edc9805e096337721b8b0577fa0c23b0eeea1"
+ },
+ "rules": {
+  "extension.js": {
+   "cairo-color": 2,
+   "command-late-class": 1,
+   "command-window": 1,
+   "console": 2,
+   "esm-imports": 1,
+   "extension-class": 1,
+   "extension-dir": 2,
+   "helpers": 1,
+   "helpers-reset": 1,
+   "laters-add": 2,
+   "laters-remove": 1,
+   "mtk-rectangle": 1,
+   "no-init": 1,
+   "orientation": 9,
+   "popmodal": 1,
+   "pushmodal": 1,
+   "recent-files": 1,
+   "scroll-util": 1,
+   "scrollview-child": 1,
+   "st-icontheme": 1,
+   "textdecoder": 2
+  },
+  "flow.js": {
+   "blur-radius": 1,
+   "child-added": 1,
+   "esm-exports-class": 2,
+   "esm-exports-class-end": 2,
+   "esm-exports-func": 5,
+   "esm-exports-var": 5,
+   "esm-imports": 1,
+   "icon-name": 1,
+   "laters-add": 1,
+   "laters-remove": 1,
+   "mtk-rectangle": 1,
+   "orientation": 0,
+   "orientation-bar": 1,
+   "snippet-hook": 1
+  }
+ }
+}

@@ -1,0 +1,18 @@
+# AlmaLinux release 10.2 (Lavender Lion), x86_64, 2026-11-13
+devsim                     resolves (10 names)
+kicad-footprints           resolves (3 names)
+kicad-packages3d           resolves (3 names)
+kicad-symbols              resolves (3 names)
+kicad-templates            resolves (3 names)
+kicad                      resolves (40 names); built first, ours: opencascade opencascade-devel nng ngspice 
+klayout                    resolves (14 names)
+magic                      resolves (15 names)
+netgen                     resolves (8 names)
+ngspice                    resolves (18 names)
+nng                        resolves (4 names)
+nvc                        resolves (12 names)
+opencascade                resolves (13 names)
+qucs-s                     resolves (13 names)
+xschem                     resolves (13 names)
+yosys                      DOES NOT RESOLVE: missing gcc-toolset-14-gcc gcc-toolset-14-gcc-c++
+dfu-util                   resolves (3 names)

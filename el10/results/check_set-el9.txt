@@ -1,0 +1,2 @@
+# AlmaLinux release 9.8 (Olive Jaguar), x86_64, 2026-11-13; sources: appstream baseos crb epel extras 
+## 1. names our packages ask for
