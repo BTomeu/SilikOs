@@ -84,56 +84,74 @@ d'Ubuntu o Fedora de manera que es noti, tret de Python (més lent) i de Yosys (
 
 ## Als runners de GitHub, en x86_64 i en ARM (13/11/2026)
 
-Workflow Bench OS, execució 43436445832 (commit 8487422): el mateix mètode en una màquina de GitHub de cada
-arquitectura (4 processadors). **AlmaLinux 9, SilikOS i AlmaLinux 10 no hi surten**: un error del nostre script feia
-fallar la preparació de `dnf` a tota màquina sense `BENCH_OS_DIRECT` (arreglat després; la taula amb ells és la de dalt,
-d'una altra màquina, i no es poden barrejar les dues). Aquí hi ha per primer cop Debian estable, openSUSE i ARM.
+**x86_64, amb tots set sistemes.** Workflow Bench OS, execució 43450793847 (commit 4da5ceb), en una màquina de
+GitHub de 4 processadors: el mateix mètode que la taula de dalt, en una altra màquina (no es poden barrejar les
+dues). És la primera amb AlmaLinux 9, SilikOS i AlmaLinux 10 a GitHub: a l'anterior (43436445832) un error del nostre
+script feia fallar la preparació de `dnf`. Després del temps, la versió de l'eina.
 
-x86_64:
+| Càrrega | AlmaLinux 9 | SilikOS | Ubuntu 24.04 | Debian estable | Fedora | openSUSE Tumbleweed | AlmaLinux 10 |
+|---|---|---|---|---|---|---|---|
+| Build de firmware Cortex-M4 | 6,04 s · 12.4.0 | 6,22 s · 12.4.0 | 6,26 s · 13.2.1 | 6,65 s · 14.2.1 | 7,34 s · 15.2.0 | 6,80 s · 15.3.0 | 7,05 s · 14.1.0 |
+| Compilació nativa | 5,23 s · 11.5.0 | 5,12 s · 11.5.0 | 5,61 s · 13.3.0 | 5,68 s · 14.2.0 | 6,48 s · 16.2.1 | 7,32 s · 16.2.1 | 6,31 s · 14.3.1 |
+| Enllaçat natiu | 0,07 s · 2.35.2-72.el9 | 0,07 s · 2.35.2-72.el9 | 0,06 s · 2.42 | 0,06 s · 2.44 | 0,07 s · 2.47.20260726 | 0,07 s · 2.47.0.20260921-3 | 0,07 s · 2.41-63.el10.alma.1 |
+| El programa compilat, executant-se | 4,72 s · 11.5.0 | 4,78 s · 11.5.0 | 5,00 s · 13.3.0 | 4,84 s · 14.2.0 | 4,92 s · 16.2.1 | 4,82 s · 16.2.1 | 4,96 s · 14.3.1 |
+| Icarus Verilog | 3,60 s · 12.0 | 3,59 s · 12.0 | 3,85 s · 12.0 | 3,54 s · 12.0 | 3,57 s · 13.0 | 3,31 s · 13.0 | 3,69 s · 13.0 |
+| Verilator, fer el model | 2,28 s · 5.022 / 11.5.0 | 2,07 s · 5.022 / 11.5.0 | 2,56 s · 5.020 / 13.3.0 | 2,66 s · 5.032 / 14.2.0 | 3,73 s · 5.046 / 16.2.1 | ha fallat | 3,03 s · 5.030 / 14.3.1 |
+| Verilator, simular | 4,42 s · 5.022 | 4,35 s · 5.022 | 4,40 s · 5.020 | 4,25 s · 5.032 | 4,79 s · 5.046 | ha fallat | 4,59 s · 5.030 |
+| ngspice, escala RC | no empaquetat | 2,56 s · 47 | 2,64 s · 42 | 3,20 s · 44.2 | 3,77 s · 47 | 3,59 s · 47 | no empaquetat |
+| ngspice, oscil·ladors MOS | no empaquetat | 2,01 s · 47 | 2,13 s · 42 | 1,98 s · 44.2 | 3,11 s · 47 | 2,87 s · 47 | no empaquetat |
+| Yosys, síntesi | no empaquetat | 7,91 s · 0.70+post | 24,15 s · 0.33 | 14,32 s · 0.52 | 16,08 s · 0.67+post | no empaquetat | no empaquetat |
+| Python, log CAN | 2,18 s · 3.9.25 | 2,14 s · 3.9.25 | 2,27 s · 3.12.3 | 1,78 s · 3.13.5 | 2,13 s · 3.15.2 | 2,61 s · 3.13.16 | 2,29 s · 3.12.15 |
+| Python, bucle numèric | 2,40 s · 3.9.25 | 2,34 s · 3.9.25 | 1,85 s · 3.12.3 | 1,89 s · 3.13.5 | 2,19 s · 3.15.2 | 2,72 s · 3.13.16 | 2,05 s · 3.12.15 |
+| `xz -T1`, comprimir | 31,27 s · 5.2.5 | 27,24 s · 5.2.5 | 32,71 s · 5.4.5 | 32,50 s · 5.8.1 | 31,47 s · 5.8.3 | 27,45 s · ? | 27,28 s · 5.6.2 |
+| `xz -T1`, descomprimir | 0,48 s · 5.2.5 | 0,47 s · 5.2.5 | 0,45 s · 5.4.5 | 0,34 s · 5.8.1 | 0,33 s · 5.8.3 | 0,33 s · ? | 0,33 s · 5.6.2 |
+| `zstd -T1`, comprimir | 0,16 s · 1.5.5 | 0,16 s · 1.5.5 | 0,17 s · 1.5.5 | 0,18 s · 1.5.7 | 0,16 s · 1.5.7 | 0,17 s · 1.5.7 | 0,16 s · 1.5.5 |
+| `zstd -T1`, descomprimir | 0,04 s · 1.5.5 | 0,04 s · 1.5.5 | 0,05 s · 1.5.5 | 0,05 s · 1.5.7 | 0,04 s · 1.5.7 | 0,04 s · 1.5.7 | 0,04 s · 1.5.5 |
+| Instal·lar 4 paquets sense xarxa | 0,82 s · 4.14.0 | 0,80 s · 4.14.0 | 1,12 s · 2.8.4 | 0,96 s · 3.0.4 | 0,61 s · 5.4.6.0 | 0,71 s · ? | 0,70 s · 4.20.0 |
 
-| Càrrega | Ubuntu 24.04 | Debian estable | Fedora | openSUSE Tumbleweed |
-|---|---|---|---|---|
-| Build de firmware Cortex-M4 | 10,88 s · gcc 13.2.1 | 11,52 s · 14.2.1 | 12,18 s · 15.2.0 | 11,62 s · 15.3.0 |
-| Compilació nativa | 9,16 s · 13.3.0 | 9,66 s · 14.2.0 | 10,90 s · 16.2.1 | 13,24 s · 16.2.1 |
-| El programa compilat, executant-se | 5,30 s | 5,35 s | 5,17 s | 5,17 s |
-| Icarus Verilog | 6,39 s · 12.0 | 6,32 s · 12.0 | 5,89 s · 13.0 | 5,92 s · 13.0 |
-| Verilator, fer el model | 3,86 s · 5.020 | 4,25 s · 5.032 | 5,46 s · 5.046 | ha fallat |
-| Verilator, simular | 7,57 s | 7,66 s | 7,87 s | ha fallat |
-| ngspice, escala RC | 4,56 s · 42 | 6,36 s · 44.2 | 6,83 s · 47 | 6,18 s · 47 |
-| ngspice, oscil·ladors MOS | 3,61 s · 42 | 3,53 s · 44.2 | 4,89 s · 47 | 4,88 s · 47 |
-| Yosys, síntesi | 39,55 s · 0.33 | 22,47 s · 0.52 | 23,40 s · 0.67 | no empaquetat |
-| Python, log CAN | 3,60 s · 3.12.3 | 2,96 s · 3.13.5 | 3,48 s · 3.15.2 | 4,60 s · 3.13.16 |
-| Python, bucle numèric | 3,22 s | 3,08 s | 3,73 s | 4,60 s |
-| `xz -T1`, comprimir | 45,41 s · 5.4.5 | 43,72 s · 5.8.1 | 42,52 s · 5.8.3 | 45,73 s |
-| Instal·lar 4 paquets sense xarxa | 1,18 s · apt 2.8.4 | 1,16 s · apt 3.0.4 | 0,87 s · dnf 5.4.6 | 0,97 s |
+- AlmaLinux 9 i SilikOS porten els mateixos binaris de la base: on aquesta taula els separa (`xz`: 31,27 contra
+  27,24 s amb el mateix xz 5.2.5; Verilator: 2,28 contra 2,07 s) és el soroll d'una sola execució en una màquina
+  compartida, un 10-15 %. Cap diferència d'aquesta mida entre dues columnes vol dir res.
+- El que SilikOS hi afegeix és el que la base no empaqueta: ngspice 47 i Yosys 0.70 (els nostres paquets). Yosys
+  0.70 sintetitza en 7,91 s el que el 0.33 d'Ubuntu fa en 24,15 s i el 0.67 de Fedora en 16,08 s: és la versió i
+  com està compilada, no el sistema.
+- On la base va per darrere: el Python 3.9 en el bucle numèric (2,34-2,40 s contra 1,85 s del 3.12 d'Ubuntu).
 
-aarch64:
+**aarch64, els mateixos set**, la feina ARM de la mateixa execució (una màquina ARM de GitHub, 4 processadors):
 
-| Càrrega | Ubuntu 24.04 | Debian estable | Fedora | openSUSE Tumbleweed |
-|---|---|---|---|---|
-| Build de firmware Cortex-M4 | 5,91 s · gcc 13.2.1 | 6,23 s · 14.2.1 | 6,24 s · 15.2.0 | 5,78 s · 15.3.0 |
-| Compilació nativa | 5,19 s · 13.3.0 | 5,67 s · 14.2.0 | 6,06 s · 16.2.1 | 7,18 s · 16.2.1 |
-| El programa compilat, executant-se | 3,68 s | 3,73 s | 3,69 s | 3,70 s |
-| Icarus Verilog | 5,94 s · 12.0 | 5,83 s · 12.0 | 5,11 s · 13.0 | 5,08 s · 13.0 |
-| Verilator, fer el model | 3,10 s · 5.020 | 3,39 s · 5.032 | 4,25 s · 5.046 | ha fallat |
-| Verilator, simular | 5,20 s | 4,96 s | 5,64 s | ha fallat |
-| ngspice, escala RC | 2,87 s · 42 | 3,10 s · 44.2 | 3,02 s · 47 | 2,87 s · 47 |
-| ngspice, oscil·ladors MOS | 3,27 s · 42 | 3,19 s · 44.2 | 3,83 s · 47 | 3,82 s · 47 |
-| Yosys, síntesi | 34,00 s · 0.33 | 19,53 s · 0.52 | 20,45 s · 0.67 | no empaquetat |
-| Python, log CAN | 2,93 s · 3.12.3 | 2,64 s · 3.13.5 | 2,99 s · 3.15.2 | 3,47 s · 3.13.16 |
-| Python, bucle numèric | 3,25 s | 3,27 s | 3,60 s | 3,58 s |
-| `xz -T1`, comprimir | 37,87 s · 5.4.5 | 37,31 s · 5.8.1 | 31,81 s · 5.8.3 | 31,32 s |
-| Instal·lar 4 paquets sense xarxa | 1,12 s · apt 2.8.4 | 1,06 s · apt 3.0.4 | 0,66 s · dnf 5.4.6 | 0,67 s |
+| Càrrega | AlmaLinux 9 | SilikOS | Ubuntu 24.04 | Debian estable | Fedora | openSUSE Tumbleweed | AlmaLinux 10 |
+|---|---|---|---|---|---|---|---|
+| Build de firmware Cortex-M4 | 5,56 s · 12.4.0 | 5,52 s · 12.4.0 | 5,62 s · 13.2.1 | 5,92 s · 14.2.1 | 6,11 s · 15.2.0 | 5,64 s · 15.3.0 | 6,45 s · 14.1.0 |
+| Compilació nativa | 5,46 s · 11.5.0 | 5,65 s · 11.5.0 | 5,04 s · 13.3.0 | 5,32 s · 14.2.0 | 5,88 s · 16.2.1 | 7,02 s · 16.2.1 | 6,08 s · 14.3.1 |
+| Enllaçat natiu | 0,07 s · 2.35.2-72.el9 | 0,08 s · 2.35.2-72.el9 | 0,06 s · 2.42 | 0,06 s · 2.44 | 0,05 s · 2.47.20260726 | 0,06 s · 2.47.0.20260921-3 | 0,06 s · 2.41-63.el10.alma.1 |
+| El programa compilat, executant-se | 3,97 s · 11.5.0 | 3,96 s · 11.5.0 | 3,69 s · 13.3.0 | 3,68 s · 14.2.0 | 3,72 s · 16.2.1 | 3,71 s · 16.2.1 | 3,71 s · 14.3.1 |
+| Icarus Verilog | 6,10 s · 12.0 | 6,10 s · 12.0 | 5,95 s · 12.0 | 5,83 s · 12.0 | 5,12 s · 13.0 | 5,08 s · 13.0 | 6,04 s · 13.0 |
+| Verilator, fer el model | 2,81 s · 5.022 / 11.5.0 | 2,78 s · 5.022 / 11.5.0 | 3,01 s · 5.020 / 13.3.0 | 3,17 s · 5.032 / 14.2.0 | 3,95 s · 5.046 / 16.2.1 | ha fallat | 3,68 s · 5.030 / 14.3.1 |
+| Verilator, simular | 5,20 s · 5.022 | 5,18 s · 5.022 | 5,18 s · 5.020 | 4,91 s · 5.032 | 5,60 s · 5.046 | ha fallat | 5,08 s · 5.030 |
+| ngspice, escala RC | no empaquetat | sense paquet ARM publicat | 2,74 s · 42 | 2,98 s · 44.2 | 2,78 s · 47 | 2,80 s · 47 | no empaquetat |
+| ngspice, oscil·ladors MOS | no empaquetat | sense paquet ARM publicat | 3,21 s · 42 | 3,12 s · 44.2 | 3,73 s · 47 | 3,72 s · 47 | no empaquetat |
+| Yosys, síntesi | no empaquetat | sense paquet ARM publicat | 32,22 s · 0.33 | 17,65 s · 0.52 | 18,07 s · 0.67+post | no empaquetat | no empaquetat |
+| Python, log CAN | 3,10 s · 3.9.25 | 3,10 s · 3.9.25 | 2,94 s · 3.12.3 | 2,63 s · 3.13.5 | 2,97 s · 3.15.2 | 3,48 s · 3.13.16 | 3,03 s · 3.12.15 |
+| Python, bucle numèric | 4,03 s · 3.9.25 | 4,03 s · 3.9.25 | 3,24 s · 3.12.3 | 3,17 s · 3.13.5 | 3,60 s · 3.15.2 | 3,56 s · 3.13.16 | 3,25 s · 3.12.15 |
+| `xz -T1`, comprimir | 37,56 s · 5.2.5 | 35,26 s · 5.2.5 | 33,12 s · 5.4.5 | 31,90 s · 5.8.1 | 28,59 s · 5.8.3 | 27,63 s · ? | 34,38 s · 5.6.2 |
+| `xz -T1`, descomprimir | 0,45 s · 5.2.5 | 0,45 s · 5.2.5 | 0,45 s · 5.4.5 | 0,43 s · 5.8.1 | 0,43 s · 5.8.3 | 0,42 s · ? | 0,43 s · 5.6.2 |
+| `zstd -T1`, comprimir | 0,25 s · 1.5.5 | 0,24 s · 1.5.5 | 0,25 s · 1.5.5 | 0,27 s · 1.5.7 | 0,24 s · 1.5.7 | 0,24 s · 1.5.7 | 0,25 s · 1.5.5 |
+| `zstd -T1`, descomprimir | 0,07 s · 1.5.5 | 0,07 s · 1.5.5 | 0,07 s · 1.5.5 | 0,08 s · 1.5.7 | 0,07 s · 1.5.7 | 0,07 s · 1.5.7 | 0,07 s · 1.5.5 |
+| Instal·lar 4 paquets sense xarxa | 0,93 s · 4.14.0 | 0,96 s · 4.14.0 | 0,89 s · 2.8.4 | 0,93 s · 3.0.4 | 0,66 s · 5.4.6.0 | 0,66 s · ? | 1,03 s · 4.20.0 |
 
-Les dues màquines no es poden comparar entre elles amb aquesta taula (no se sap quin processador és cadascuna: el log
-no ho diu), i una sola execució per màquina no dona el soroll. El que sí que es veu a totes dues: el Yosys 0.33
-d'Ubuntu triga gairebé el doble que el 0.52 de Debian i el 0.67 de Fedora, i el Verilator d'openSUSE no funciona
-amb aquest mètode.
+- A ARM, SilikOS no hi té ngspice ni Yosys: els nostres paquets d'aquestes eines es construeixen i es proven per a
+  ARM (workflow EDA tools) però el release `eda-tools` encara només porta els d'x86_64.
+- La resta de files de SilikOS són les de la base, com a x86_64: on se separen d'AlmaLinux 9 (`xz`: 37,56 contra
+  35,26 s) és soroll.
+
+Les dues màquines no es poden comparar entre elles amb aquestes taules (no se sap quin processador és cadascuna: el
+log no ho diu), i una sola execució per màquina no dona el soroll. El que sí que es veu a totes dues: el Yosys 0.33
+d'Ubuntu triga molt més que el 0.52 de Debian i el 0.67 de Fedora, el Python 3.9 de la base és el més lent en el
+bucle numèric, i el Verilator d'openSUSE no funciona amb aquest mètode.
 
 ## Què no s'ha mesurat
 
-- **AlmaLinux 9, SilikOS i AlmaLinux 10 als runners de GitHub i en ARM:** la primera execució allà no els va
-  mesurar per un error del nostre script (arreglat); la següent execució del workflow els hi posarà.
+- **ngspice i Yosys de SilikOS en ARM:** el release `eda-tools` no en porta els paquets ARM.
 - **`xz` amb 500 MB:** trigava 7 minuts per passada; s'ha mesurat amb 64 MB.
 - **Arrencada, memòria en repòs, latència de l'escriptori, GPU, disc real, bateria:** res. Demanen maquinari real
   amb cada sistema instal·lat, no contenidors.
