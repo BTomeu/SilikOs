@@ -7,7 +7,8 @@
 #   BENCH_OS_LOG_MB    megabytes of the CAN log Python reads (200)
 #   BENCH_OS_BLOB_MB   megabytes of the file xz and zstd compress (64: xz does about 1 MB/s on it)
 #   BENCH_OS_APPEND=1  add to results.jsonl instead of starting it again (a later line of a cell replaces an earlier)
-#   and bench.sh's: BENCH_OS_RUNS, BENCH_OS_CPUS, BENCH_OS_NET, BENCH_OS_CA, BENCH_OS_DIRECT, BENCH_OS_KEEP
+#   and bench.sh's: BENCH_OS_RUNS, BENCH_OS_CPUS, BENCH_OS_NET, BENCH_OS_CA, BENCH_OS_DIRECT, BENCH_OS_REGISTRY;
+#   BENCH_OS_KEEP=1    keep the systems' images afterwards (by default each is removed: disk)
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 export BENCH_OS_OUT=${BENCH_OS_OUT:-$here/../../build/bench-os}
@@ -26,11 +27,15 @@ if [ ! -e "$data/ready" ]; then
 fi
 results=$BENCH_OS_OUT/results.jsonl
 [ -n "${BENCH_OS_APPEND:-}" ] || : > "$results"
-left=""
+left=""; todo="$systems "
 for s in $systems; do
   before=$(wc -l < "$results")
   bash "$here/bench.sh" "$s" >> "$results" || echo "run_all.sh: $s could not be run" >&2
   [ "$(wc -l < "$results")" -gt "$before" ] || left="$left $s"
+  # the system's image goes when no later system is made from it (disk; BENCH_OS_KEEP=1 keeps them all)
+  todo=${todo#* }; image=$(bash "$here/bench.sh" "$s" --image); later=""
+  for t in $todo; do [ "$t" = "$s" ] || [ "$(bash "$here/bench.sh" "$t" --image)" != "$image" ] || later=1; done
+  [ -n "$later" ] || [ -n "${BENCH_OS_KEEP:-}" ] || ${BENCH_OS_DOCKER:-docker} rmi "$image" > /dev/null 2>&1 || true
 done
 python3 "$here/table.py" "$results" > "$BENCH_OS_OUT/results.md"
 [ -z "$left" ] || printf '\nNot run on this machine (image or repositories not reachable):%s.\n' "$left" >> "$BENCH_OS_OUT/results.md"

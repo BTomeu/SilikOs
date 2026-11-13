@@ -9,21 +9,26 @@
 #   BENCH_OS_NET       the network of the installing container (bridge; `host` when a proxy listens on the machine)
 #   BENCH_OS_CA        a certificate authority file to trust inside (a proxy that re-signs HTTPS)
 #   BENCH_OS_DIRECT=1  the distributions' main servers over HTTPS instead of their mirror lists (same proxy)
-#   BENCH_OS_KEEP=1    keep the system's image afterwards (by default it is removed: disk)
+#   BENCH_OS_REGISTRY  where the official images are taken from (docker.io; a mirror of it when it answers "too many
+#                      requests", as it did to the session that wrote this: mirror.gcr.io)
+# bench.sh SYSTEM --image prints the image's name and does nothing else. The image is left on the machine
+# (run_all.sh removes it when no later system needs it).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 system=${1:?usage: bench.sh SYSTEM [WORKLOAD...]}; shift
 all="firmware native digital analog synth python compress pkg"
 [ $# -gt 0 ] && all="$*"
 case "$system" in
-  almalinux-9|silikos-9) image=almalinux:9 ;;
-  almalinux-10)          image=almalinux:10 ;;
-  ubuntu-24.04)          image=ubuntu:24.04 ;;
-  debian-stable)         image=debian:stable ;;
-  fedora)                image=fedora:latest ;;
+  almalinux-9|silikos-9) image=library/almalinux:9 ;;
+  almalinux-10)          image=library/almalinux:10 ;;
+  ubuntu-24.04)          image=library/ubuntu:24.04 ;;
+  debian-stable)         image=library/debian:stable ;;
+  fedora)                image=library/fedora:latest ;;
   opensuse-tumbleweed)   image=opensuse/tumbleweed:latest ;;
   *) echo "bench.sh: unknown system $system" >&2; exit 2 ;;
 esac
+image=${BENCH_OS_REGISTRY:-docker.io}/$image
+[ "${1:-}" = --image ] && { echo "$image"; exit 0; }
 docker=${BENCH_OS_DOCKER:-docker}
 out=${BENCH_OS_OUT:-$here/../../build/bench-os}; mkdir -p "$out"; out=$(cd "$out" && pwd)
 [ -d "$out/data/c" ] || { echo "bench.sh: no inputs in $out/data (run_all.sh makes them)" >&2; exit 1; }
@@ -67,7 +72,4 @@ $docker run --rm --network none --cpus "$cpus" --cpuset-cpus "0-$((cpus - 1))" -
   "${mounts[@]}" "${env[@]}" "$made" \
   bash -c 's=$1; shift; for w in "$@"; do bash "/bench/w_$w.sh" "$s" measure; done; true' sh "$system" $all \
   | grep --line-buffered '^{' || true
-if [ -z "${BENCH_OS_KEEP:-}" ]; then
-  $docker rmi "$made" > /dev/null 2>&1 || true
-  $docker rmi "$image" > /dev/null 2>&1 || true
-fi
+$docker rmi "$made" > /dev/null 2>&1 || true
