@@ -246,7 +246,7 @@ What a system like GrapheneOS has and SilikOS does not, and why:
 | A hardened memory allocator | yes | no: none is packaged for EL 9, and changing glibc would end the binary identity with RHEL that the EDA tools need |
 | Every program in its own box, with its own permissions | yes | no: what the user starts runs as the user, on X11, where programs see each other's keys and windows. Wine has bubblewrap; an untrusted program belongs in `silik win vm` |
 | USB refused while locked | yes | not yet: the base ships USBGuard and GNOME 40 knows how to use it, and nothing here installs or configures it. First on the list, after a run with a real device |
-| Fast patches | monthly, with live reboot prompts | daily, automatic, with a snapshot to go back to; a kernel fix protects after a restart the owner does (the base has no live patches) |
+| Fast patches | frequent releases, installed in the background and in effect at the next restart | daily, automatic, with a snapshot to go back to; a kernel fix protects after a restart the owner does (the base has no live patches) |
 
 **Proposed and not done** (each has a cost an engineer pays; the owner decides): a `hardened` level of `silik
 secure` for a laptop that travels — Secure Boot and encryption required, the kernel locked down and module
