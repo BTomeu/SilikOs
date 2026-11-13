@@ -117,8 +117,17 @@ class Plan(unittest.TestCase):
         self.assertEqual(runs(silik.manifest_plan(have, want, prune=True)), ["sudo dnf -y remove ksh.x86_64"])
 
     def test_install_and_downgrade_are_exact_versions(self):
-        steps = silik.manifest_plan(man([BASH, "glibc-0:2.34-284.el9.x86_64"]), man([BASH, KSH, "glibc-0:2.34-283.el9.x86_64"]))
+        have, want = man([BASH, "glibc-0:2.34-284.el9.x86_64"]), man([BASH, KSH, "glibc-0:2.34-283.el9.x86_64"])
+        steps = silik.manifest_plan(have, want, downgrade=True)
         self.assertEqual(runs(steps), ["sudo dnf -y install ksh-3:1.0.6-7.el9.x86_64", "sudo dnf -y downgrade glibc-0:2.34-283.el9.x86_64"])
+
+    def test_a_newer_package_is_not_taken_back_because_a_file_says_so(self):
+        """the audit of 13/11/2026: a manifest from elsewhere could take sudo, or any package, back to a build with a
+        fault repaired since. Only with --downgrade"""
+        have, want = man([BASH, "sudo-0:1.9.5p2-10.el9.x86_64"]), man([BASH, KSH, "sudo-0:1.9.5p2-1.el9.x86_64"])
+        steps = silik.manifest_plan(have, want, prune=True, kernel=True)
+        self.assertEqual(runs(steps), ["sudo dnf -y install ksh-3:1.0.6-7.el9.x86_64"])
+        self.assertIn("1 packages are newer here than in the manifest: kept (--downgrade", says(steps))
 
     def test_the_kernel_is_left_alone_without_kernel(self):
         have, want = man([BASH], [K1]), man([BASH], [K2])
@@ -160,24 +169,68 @@ class Plan(unittest.TestCase):
         want["kernel"]["args"] = ["quiet", "rhgb", "vsyscall=xonly", "a b", "x=$(id)", "init=/bin/sh"]
         self.assertEqual(runs(silik.manifest_plan(man(), want)), ["sudo dnf -y install ksh-3:1.0.6-7.el9.x86_64"])
         steps = silik.manifest_plan(man(), want, kernel=True)
-        self.assertEqual(runs(steps), ["sudo dnf -y install ksh-3:1.0.6-7.el9.x86_64", "sudo grubby --update-kernel=ALL --args=init=/bin/sh"])
+        self.assertEqual(runs(steps), ["sudo dnf -y install ksh-3:1.0.6-7.el9.x86_64"])
+        self.assertIn("kernel arguments a manifest may not set", says(steps))
+        self.assertIn("init=/bin/sh", says(steps))
         self.assertEqual([w for k, w in steps if k == "silik"], [])
         self.assertIn("not plain words (not set): 'a b' 'x=$(id)'", says(steps))
         self.assertIn("not an image's name", says(steps))
+
+    def test_a_manifest_cannot_hand_the_machine_over_at_the_next_start(self):
+        """with --kernel, these went to grubby as written (run by the audit: the boot entry then had init=FILE,
+        selinux=0 and systemd.debug_shell)"""
+        bad = ["init=/home/victim/Downloads/x", "rdinit=/x", "selinux=0", "enforcing=0", "systemd.debug_shell", "systemd.mask=firewalld.service",
+               "rd.break", "mitigations=off", "lockdown=none", "pti=off", "audit=0", "module_blacklist=x", "nokaslr", "vsyscall=native", "quiet=1", "crashkernel"]
+        good = ["mitigations=auto,nosmt", "lockdown=integrity", "init_on_alloc=1", "slab_nomerge", "transparent_hugepage=madvise", "crashkernel=1G-4G:192M,4G-64G:256M",
+                "rd.driver.blacklist=nouveau", "isolcpus=2-3"]
+        for w in bad:
+            self.assertFalse(silik.kernel_arg_from_a_manifest(w), w)
+        for w in good:
+            self.assertTrue(silik.kernel_arg_from_a_manifest(w), w)
+        want = man()
+        want["kernel"]["args"] = list(want["kernel"]["args"]) + bad + good
+        steps = silik.manifest_plan(man(), want, kernel=True, prune=True)
+        self.assertEqual(runs(steps), ["sudo grubby --update-kernel=ALL --args=" + " ".join(sorted(good))])
+        for w in bad:
+            self.assertIn(w, says(steps))
+
+    def test_prune_never_takes_a_protection_off(self):
+        have, want = man(), man()
+        have["kernel"]["args"] = list(have["kernel"]["args"]) + ["lockdown=integrity", "init_on_alloc=1", "vsyscall=none", "hugepages=64"]
+        have["kernel"]["args"] = [w for w in have["kernel"]["args"] if not w.startswith("vsyscall=x")]
+        steps = silik.manifest_plan(have, want, kernel=True, prune=True)
+        removed = " ".join(r for r in runs(steps) if "--remove-args" in r)
+        self.assertIn("hugepages=64", removed)
+        for w in ("lockdown=integrity", "init_on_alloc=1", "vsyscall=none"):
+            self.assertNotIn(w, removed)
+            self.assertIn(w, says(steps))
 
     def test_settings_go_through_silik(self):
         want = man()
         want["settings"].update(look="bar", accent="steel", glass="off", update_auto="security")
         want["settings"]["power"] = {"auto": False, "profile": "saver", "ac": "performance", "battery": "balanced"}
         steps = silik.manifest_plan(man(), want)
-        self.assertEqual([w for k, w in steps if k == "silik"],
-                         [["look", "bar", "--accent", "steel", "--glass", "off"], ["power", "saver"], ["update", "--auto", "security"]])
+        # (this machine updates everything, the manifest only security advisories: not lowered from a file)
+        self.assertEqual([w for k, w in steps if k == "silik"], [["look", "bar", "--accent", "steel", "--glass", "off"], ["power", "saver"]])
+        self.assertIn("not lowered from a manifest (silik update --auto security)", says(steps))
+        want["settings"]["update_auto"] = "off"
+        self.assertNotIn(["update", "--auto", "off"], [w for k, w in silik.manifest_plan(man(), want) if k == "silik"])
+        have = man()
+        have["settings"]["update_auto"] = "off"
+        want["settings"]["update_auto"] = "all"
+        self.assertIn(["update", "--auto", "all"], [w for k, w in silik.manifest_plan(have, want) if k == "silik"])
         want["settings"]["power"] = {"auto": True, "profile": None, "ac": "balanced", "battery": "saver"}
         self.assertIn(["power", "auto", "--ac", "balanced", "--battery", "saver"], [w for k, w in silik.manifest_plan(man(), want) if k == "silik"])
         # a value silik does not know is not handed on
         want["settings"].update(look="x; rm", accent="?", glass="maybe", update_auto="never")
         want["settings"]["power"] = {"auto": False, "profile": "turbo"}
         self.assertEqual([w for k, w in silik.manifest_plan(man(), want) if k == "silik"], [])
+
+    def test_a_box_is_not_made_from_an_image_a_file_names(self):
+        want = man(boxes=[{"name": "tools", "image": "evil.example/x/centos:7", "el": "7"}])
+        steps = silik.manifest_plan(man(), want, prune=True, kernel=True, downgrade=True)
+        self.assertEqual([w for k, w in steps if k == "silik"], [])
+        self.assertIn("not made from a manifest (silik eda create tools --el 7 --image evil.example/x/centos:7)", says(steps))
 
     def test_boxes_are_made_never_removed(self):
         want = man(boxes=[{"name": "ic616", "image": "docker.io/library/centos:6", "el": "6"},

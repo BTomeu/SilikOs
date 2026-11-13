@@ -543,6 +543,74 @@ class Use(Base):
         self.assertRegex(out, r"\? metadata signature")
 
 
+class WhoDecidesTheChecks(unittest.TestCase):
+    """the audit of 13/11/2026 (run: a hand-made mirror installed an unsigned tzdata-9999 as root, twice over): the
+    mirror's manifest said which repositories dnf checks, and the unsigned own repository could replace any package"""
+
+    def text(self, repos, key=False, unsigned=False):
+        return mirror.repo_text("http://lab:8000", {"repos": repos}, key, unsigned)
+
+    def section(self, text, name):
+        return text.split("[%s%s]" % (mirror.PREFIX, name))[1].split("\n[")[0].splitlines()
+
+    def test_the_manifest_cannot_turn_a_check_off(self):
+        t = self.text({"BaseOS": {"key": None}, "AppStream": {}, "epel": {"key": "nothing"}})
+        for r, k in (("BaseOS", "almalinux"), ("AppStream", "almalinux"), ("epel", "epel")):
+            sec = self.section(t, r)
+            self.assertIn("gpgcheck=1", sec, r)
+            self.assertIn("enabled=1", sec, r)
+            self.assertIn("gpgkey=file://" + os.path.join(mirror.KEY_DIR, mirror.KEYS[k][0]), sec, r)
+
+    def test_the_unsigned_own_repository_is_off_without_the_mirrors_key(self):
+        sec = self.section(self.text({"BaseOS": {}, "silikos": {}}), "silikos")
+        self.assertIn("enabled=0", sec)
+        self.assertIn("gpgcheck=0", sec)
+        sec = self.section(self.text({"BaseOS": {}, "silikos": {}}, key=True), "silikos")
+        self.assertIn("enabled=1", sec)
+        self.assertIn("repo_gpgcheck=1", sec)               # its metadata, which lists every package's checksum, is signed
+        sec = self.section(self.text({"BaseOS": {}, "silikos": {}}, unsigned=True), "silikos")
+        self.assertIn("enabled=1", sec)                     # the person said so, and was told what it means
+        self.assertIn("repo_gpgcheck=0", sec)
+
+    def test_the_own_repository_brings_only_its_own_names(self):
+        import fnmatch
+        sec = self.section(self.text({"silikos": {}}, key=True), "silikos")
+        inc = [l for l in sec if l.startswith("includepkgs=")]
+        self.assertEqual(len(inc), 1)
+        globs = inc[0].split("=", 1)[1].split()
+        for base in ("glibc", "tzdata", "bash", "sudo", "kernel", "kernel-core", "openssl", "systemd", "dnf", "rpm", "polkit", "selinux-policy", "python3"):
+            self.assertFalse([g for g in globs if fnmatch.fnmatch(base, g)], base)
+        names = set()
+        for spec in subprocess.run(["git", "ls-files", "*.spec"], cwd=ROOT, stdout=subprocess.PIPE, universal_newlines=True).stdout.split():
+            text = read(spec)
+            main = re.search(r"(?m)^Name:\s+(\S+)", text).group(1)
+            names.add(main)
+            for sub in re.findall(r"(?m)^%package\s+(-n\s+)?(\S+)", text):
+                names.add(sub[1] if sub[0] else main + "-" + sub[1])
+        self.assertGreater(len(names), 25)
+        for n in sorted(names):
+            self.assertTrue([g for g in globs if fnmatch.fnmatch(n, g)], "%s: a package SilikOS builds that its own repository would not bring" % n)
+
+    def test_a_repository_name_that_is_not_one(self):
+        import types
+        stub = types.SimpleNamespace(die=lambda msg, rc=1: sys.exit(rc))       # (the plugin's silik, when it runs inside it)
+        before, mirror.silik = getattr(mirror, "silik", None), stub
+        try:
+            for bad in ("../x", "a b", "keys", "x/y", ""):
+                with self.assertRaises(SystemExit):
+                    self.text({bad: {}})
+        finally:
+            mirror.silik = before
+
+    def test_the_words_say_it(self):
+        src = read("packages/silik-tools/files/plugins/mirror.py")
+        self.assertIn("SilikOS's own packages are NOT taken from this mirror", src)
+        self.assertIn('x.add_argument("--unsigned"', src)
+        self.assertNotIn('m["repos"][r].get("key")', src)
+        self.assertNotIn('v.get("key") for v in m["repos"].values()', src)
+        self.assertIn("installed an unsigned `tzdata-9999` as root", read("docs/OFFLINE.md"))
+
+
 class Pack(Base):
     def test_the_whole_mirror_and_a_delta_cross_the_air_gap(self):
         self.create()

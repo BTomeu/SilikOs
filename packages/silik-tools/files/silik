@@ -53,7 +53,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.9.0"
+VERSION = "0.9.1"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -111,8 +111,14 @@ class Ctx:
         d = os.environ.get("XDG_RUNTIME_DIR")
         if not d or not os.path.isdir(d):
             return
+        # The folder must be this user's own, and the file is not opened through a link. (The audit of 13/11/2026,
+        # run: after `su` without a dash root keeps the user's XDG_RUNTIME_DIR; a link silik-last -> /etc/FILE put
+        # there by that user was written through by root's next silik command.)
         try:
-            with open(os.path.join(d, "silik-last"), "w") as f:
+            if os.lstat(d).st_uid != os.geteuid():
+                return
+            fd = os.open(os.path.join(d, "silik-last"), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+            with os.fdopen(fd, "w") as f:
                 f.write(time.strftime("%H:%M") + " " + " ".join(shlex.quote(a) for a in argv) + "\n")
         except OSError:
             pass
@@ -8625,6 +8631,31 @@ def vendor_names(ctx, a):
 MANIFEST = 1
 KERNEL_ARGS_OF_THE_DISK = ("BOOT_IMAGE", "root", "rootflags", "ro", "rw", "resume", "rd.lvm.lv", "rd.luks.uuid", "rd.md.uuid", "initrd")
 KERNEL_ARG = re.compile(r"^[A-Za-z0-9_.-]+(=[A-Za-z0-9_.,:/@+%-]*)?$")
+# What a manifest may ask of the kernel's command line (the audit of 13/11/2026: with --kernel, a manifest's `init=FILE`,
+# `selinux=0` or `systemd.debug_shell` went to grubby as written: root at the next start for whoever wrote the file).
+# Only what a workstation is tuned with, by name, and by value where a value can lower a protection (None: the bare
+# word). Anything else is said and never set: the person sets it by hand, knowing why.
+KERNEL_ARGS_FROM_A_MANIFEST = {
+    "quiet": None, "rhgb": None, "nomodeset": None, "crashkernel": r"[A-Za-z0-9,:@-]+", "vsyscall": r"none|xonly|emulate",
+    "mitigations": r"auto(,nosmt)?", "pti": r"on", "lockdown": r"integrity|confidentiality", "module.sig_enforce": r"1", "audit": r"1",
+    "init_on_alloc": r"1", "init_on_free": r"1", "slab_nomerge": None, "page_alloc.shuffle": r"1", "randomize_kstack_offset": r"1|on",
+    "debugfs": r"off|no-mount", "intel_iommu": r"on", "amd_iommu": r"on",
+    "transparent_hugepage": r"always|madvise|never", "hugepages": r"\d+", "hugepagesz": r"\d+[KMG]", "default_hugepagesz": r"\d+[KMG]",
+    "isolcpus": r"[\d,-]+", "nohz_full": r"[\d,-]+", "rcu_nocbs": r"[\d,-]+", "mem_sleep_default": r"s2idle|deep",
+    "usbcore.autosuspend": r"-?\d+", "nvidia-drm.modeset": r"[01]", "rd.driver.blacklist": r"nouveau", "modprobe.blacklist": r"nouveau",
+}
+# arguments that protect: --prune never takes one of them off because a manifest does not have it
+KERNEL_ARGS_THAT_PROTECT = ("lockdown", "module.sig_enforce", "audit", "init_on_alloc", "init_on_free", "slab_nomerge", "page_alloc.shuffle",
+                            "randomize_kstack_offset", "pti", "mitigations", "debugfs", "intel_iommu", "amd_iommu")
+
+
+def kernel_arg_from_a_manifest(w):
+    """may a manifest set this kernel argument?"""
+    name, eq, val = w.partition("=")
+    if name not in KERNEL_ARGS_FROM_A_MANIFEST:
+        return False
+    rx = KERNEL_ARGS_FROM_A_MANIFEST[name]
+    return not eq if rx is None else bool(eq and re.fullmatch(rx, val))
 KERNEL_SOURCE = re.compile(r"^kernel(-rt)?-\d")     # the source package of the kernel and of what is built with it (perf, bpftool...)
 INSTALLED_QF = "%{name}\t%{epoch}\t%{version}\t%{release}\t%{arch}\t%{from_repo}\t%{sourcerpm}"
 
@@ -8834,7 +8865,7 @@ def manifest_diff(have, want):
     return out
 
 
-def manifest_plan(have, want, prune=False, kernel=False):
+def manifest_plan(have, want, prune=False, kernel=False, downgrade=False):
     """the steps that bring this machine (HAVE) to the manifest WANT, in order: ("run", argv) a command; ("silik",
     args) a silik command; ("say", text) what is not done and why. Packages are never removed without PRUNE; the
     kernel's packages and arguments are left alone without KERNEL; a box and a kernel are never removed"""
@@ -8859,8 +8890,10 @@ def manifest_plan(have, want, prune=False, kernel=False):
     d = pkg_diff(have.get("packages"), want.get("packages"))
     if d["install"]:
         steps.append(("run", ["sudo", "dnf", "-y", "install"] + d["install"]))
-    if d["downgrade"]:
+    if d["downgrade"] and downgrade:
         steps.append(("run", ["sudo", "dnf", "-y", "downgrade"] + d["downgrade"]))
+    elif d["downgrade"]:    # (an older build may have a fault repaired since: never taken back because a file says so)
+        steps.append(("say", "%d packages are newer here than in the manifest: kept (--downgrade takes them back to the manifest's versions)" % len(d["downgrade"])))
     if d["remove"]:
         if prune:
             steps.append(("run", ["sudo", "dnf", "-y", "remove"] + d["remove"]))
@@ -8882,6 +8915,15 @@ def manifest_plan(have, want, prune=False, kernel=False):
     if odd:         # (a word with a space or a quote in it would be more than one argument)
         steps.append(("say", "kernel arguments of the manifest that are not plain words (not set): " + " ".join(repr(w) for w in odd)))
         add = [w for w in add if w not in odd]
+    no = [w for w in add if not kernel_arg_from_a_manifest(w)]
+    if no:          # (init=, selinux=0, systemd.*, rd.break ...: they hand the machine over or turn a protection off)
+        steps.append(("say", "kernel arguments a manifest may not set (they can turn a protection off or hand the machine over; "
+                             "set one by hand if you know why it is there): " + " ".join(no)))
+        add = [w for w in add if w not in no]
+    keep = [w for w in rem if w.split("=", 1)[0] in KERNEL_ARGS_THAT_PROTECT or w == "vsyscall=none"]
+    if keep and prune and kernel:
+        steps.append(("say", "kernel arguments here that protect this machine and are not in the manifest: kept: " + " ".join(keep)))
+    rem = [w for w in rem if w not in keep]
     if (add or rem) and not kernel:     # (an argument can turn a protection off: the kernel's switch covers them too)
         steps.append(("say", "the kernel's arguments differ (the manifest has %s; here %s): left alone (--kernel sets the manifest's)" % (
             " ".join(add) or "none more", " ".join(rem) or "none more")))
@@ -8918,7 +8960,12 @@ def manifest_plan(have, want, prune=False, kernel=False):
     elif wp.get("auto") is False and wp.get("profile") in words and (hp.get("auto") or hp.get("profile") != wp["profile"]):
         steps.append(("silik", ["power", wp["profile"]]))
     if ws.get("update_auto") in [k for k, _ in UPDATE_AUTO] and ws["update_auto"] != hs.get("update_auto"):
-        steps.append(("silik", ["update", "--auto", ws["update_auto"]]))
+        more = {"off": 0, "security": 1, "all": 2}      # a manifest brings more updates, never fewer
+        if more[ws["update_auto"]] > more.get(hs.get("update_auto"), 0):
+            steps.append(("silik", ["update", "--auto", ws["update_auto"]]))
+        else:
+            steps.append(("say", "the manifest has the automatic updates %s and this machine %s: not lowered from a manifest (silik update --auto %s)" % (
+                ws["update_auto"], hs.get("update_auto") or "unknown", ws["update_auto"])))
     hx = set(b["name"] for b in have.get("boxes") or [])
     made = False
     for b in want.get("boxes") or []:
@@ -8931,6 +8978,11 @@ def manifest_plan(have, want, prune=False, kernel=False):
         img = b.get("image")
         if img and img != EL[el]["image"] and not re.match(r"^[A-Za-z0-9][A-Za-z0-9._/:@-]*$", str(img)):
             steps.append(("say", "the box %s names an image that is not an image's name: not made" % n))
+            continue
+        if img and img != EL[el]["image"] and not str(img).startswith("localhost/"):
+            # (a box has the home folder and the host's network: an image from a registry a file names is not pulled)
+            steps.append(("say", "the box %s is of the image %s, not SilikOS's own for EL %s: not made from a manifest (silik eda create %s --el %s --image %s)" % (
+                n, img, el, n, el, img)))
             continue
         steps.append(("silik", ["eda", "create", n, "--el", el] + (["--image", img] if img and img != EL[el]["image"] else [])))
         made = True
@@ -8986,7 +9038,7 @@ def manifest_diff_cmd(ctx, a):
 
 def manifest_apply(ctx, a):
     want = manifest_read(a.file)
-    steps = manifest_plan(manifest_now(ctx), want, prune=a.prune, kernel=a.kernel)
+    steps = manifest_plan(manifest_now(ctx), want, prune=a.prune, kernel=a.kernel, downgrade=a.downgrade)
     if steps and steps[0][0] == "stop":
         die(steps[0][1])
     if not [s for s in steps if s[0] != "say"]:
@@ -9049,7 +9101,8 @@ def plugins():
             continue
         try:
             st = os.stat(path)
-            if st.st_uid not in (0, mine) or st.st_mode & 0o002:
+            # (its owner is root or this user, and nobody else may write it: not everyone, and no group but root's)
+            if st.st_uid not in (0, mine) or st.st_mode & 0o002 or (st.st_mode & 0o020 and st.st_gid != 0):
                 continue
             with open(path, encoding="utf-8") as fh:
                 head = fh.read(800)
@@ -9345,6 +9398,7 @@ def parser(only=None):
         x = mf.add_parser("apply", help="the dnf transaction and the silik commands that bring this machine to FILE, each printed")
         x.add_argument("file"); x.add_argument("--prune", action="store_true", help="also remove the packages (and kernel arguments) that are here and not in FILE")
         x.add_argument("--kernel", action="store_true", help="also install the kernel packages of FILE and set its kernel arguments (otherwise the kernel is left alone)")
+        x.add_argument("--downgrade", action="store_true", help="also take packages that are newer here back to FILE's versions (otherwise they are kept)")
         x.set_defaults(fn=manifest_apply)
     sn = s.add_parser("snapshot", help="snapshots of / (LVM thin, snapm): list | create [NAME] | delete NAME | status | setup (no command: status)")
     sn.add_argument("--json", action="store_true"); sn.set_defaults(fn=snap_status)

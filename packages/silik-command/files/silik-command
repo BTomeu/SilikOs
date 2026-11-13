@@ -539,7 +539,10 @@ def log_line(item):
         with os.fdopen(fd, "a") as f:
             if os.fstat(fd).st_mode & 0o077:
                 os.fchmod(fd, 0o600)                # (a log made before this, or under a umask of 0)
-            f.write("%s  %s\n$ %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), item.address, item.twin))
+            # (a line typed after `$` may carry a password or a token as an argument: that it was run is kept, the
+            # line is not. What the bar's own entries run is always a silik command or a program's name)
+            f.write("%s  %s\n$ %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), item.address,
+                                        "(a command line typed in the bar: not kept)" if item.address == "$" else item.twin))
         if os.stat(STATE).st_mode & 0o077:
             os.chmod(STATE, 0o700)
     except OSError:

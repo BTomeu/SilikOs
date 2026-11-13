@@ -1,5 +1,5 @@
 Name:           silik-command
-Version:        0.8.0
+Version:        0.8.1
 Release:        1%{?dist}
 Summary:        The SilikOS COMMAND bar: type an address, run it, see its command line
 License:        LicenseRef-SilikVolt

@@ -807,20 +807,42 @@ def enabled_repos(ctx):
     return [i for i in ids if not i.startswith(PREFIX)]
 
 
-def repo_text(url, m, mirror_key):
+# The names SilikOS's own repository may bring (dnf's includepkgs): its own packages and the tools it builds because
+# the base has none. Nothing of the base: an own repository that offered a `glibc` or a `tzdata` would not be taken.
+# (tests/test_mirror.py holds this list to the specs of packages/, eda/, dev/ and wine/.)
+OWN_INCLUDE = ("silik-*", "silikos-*", "ngspice*", "magic*", "netgen*", "xschem*", "klayout*", "yosys*", "nvc*", "qucs-s*", "devsim*",
+               "kicad*", "opencascade*", "nng*", "openocd*", "dfu-util*", "stm32flash*", "savvycan*", "sigrok*", "libsigrok*",
+               "libserialport*", "pulseview*", "sdcc*")
+
+
+def own_on(mirror_key, unsigned):
+    """is the mirror's repository of SilikOS's own packages enabled on this machine? Those packages are not signed:
+    with the mirror's key the metadata that lists them (and their checksums) is; without it nothing says they are
+    the ones the mirror was made with, so they are left off unless the person says so (--unsigned)"""
+    return bool(mirror_key or unsigned)
+
+
+def repo_text(url, m, mirror_key, unsigned=False):
+    """the repository file `use` writes. What decides the checks is THIS machine, never the mirror's manifest (the
+    audit of 13/11/2026: a manifest with "key": null turned gpgcheck off for a repository called BaseOS, and the
+    unsigned own repository replaced a package of the base; both run): every source's packages are checked against
+    this machine's key of that source, and the own repository is as own_on() says, with only its own names"""
     out = ["# written by `silik mirror use %s`; `silik mirror use off` removes it and puts the other repositories back" % url]
     for r in sorted(m["repos"]):
-        which = m["repos"][r].get("key")
-        keys = []
-        if which in KEYS:
-            keys.append("file://" + os.path.join(KEY_DIR, KEYS[which][0]))
+        if not NAME.match(r) or r == "keys":
+            die("the mirror names a repository %r: not a name a source can have here" % r)
+        own = r == OWN
+        keys = [] if own else ["file://" + os.path.join(KEY_DIR, KEYS[key_of(r)][0])]
         if mirror_key:
             keys.append("file://" + os.path.join(KEY_DIR, MIRROR_KEY))
-        out += ["", "[%s%s]" % (PREFIX, r), "name=SilikOS mirror - %s" % r, "baseurl=%s/%s" % (url, r), "enabled=1",
+        out += ["", "[%s%s]" % (PREFIX, r), "name=SilikOS mirror - %s" % r, "baseurl=%s/%s" % (url, r),
+                "enabled=%d" % (1 if not own or own_on(mirror_key, unsigned) else 0),
                 # the packages of the base: their signatures against this machine's own keys of the base, never
                 # against a key the mirror brings. SilikOS's own packages are not signed today
-                "gpgcheck=%d" % (1 if which in KEYS else 0),
+                "gpgcheck=%d" % (0 if own else 1),
                 "repo_gpgcheck=%d" % (1 if mirror_key else 0)]
+        if own:
+            out.append("includepkgs=" + " ".join(OWN_INCLUDE))
         if keys:
             out.append("gpgkey=" + " ".join(keys))
         out += ["metadata_expire=1h", "skip_if_unavailable=0"]
@@ -872,7 +894,7 @@ def use(ctx, a):
     # a key of the base this machine lacks (EPEL's, before epel-release is installed): the mirror's copy is taken
     # only when its fingerprint is the one written in this file; any other key stays out
     added_keys = []
-    for which in sorted(set(v.get("key") for v in m["repos"].values()) & set(KEYS)):
+    for which in sorted(set(key_of(r) for r in m["repos"] if r != OWN) & set(KEYS)):       # (by this machine's table)
         name, want = KEYS[which]
         if os.path.isfile(os.path.join(KEY_DIR, name)):
             continue
@@ -893,7 +915,14 @@ def use(ctx, a):
             say("%s is not on this machine, and the mirror's copy is not taken (%s): the packages of %s will not "
                 "install until the base's own package brings it" % (name, "fingerprint " + " ".join(fps) if fps else "gpg cannot read it", which))
         os.remove(tmp)
-    put(ctx, repo_text(url, m, bool(a.key)), os.path.join(REPOS_DIR, REPO_FILE))
+    put(ctx, repo_text(url, m, bool(a.key), a.unsigned), os.path.join(REPOS_DIR, REPO_FILE))
+    if OWN in m["repos"] and not own_on(bool(a.key), a.unsigned):
+        say("SilikOS's own packages are NOT taken from this mirror: they are not signed, and without the mirror's key "
+            "nothing says they are the ones it was made with. `silik mirror create --sign KEYID` and `use URL --key "
+            "FILE` (the metadata is then checked), or `use URL --unsigned` if you trust the mirror and the network to it")
+    elif OWN in m["repos"] and not a.key:
+        say("SilikOS's own packages are taken from this mirror WITHOUT a signature (--unsigned): whoever controls the "
+            "mirror, or the network to it, chooses them. Only the names of SilikOS's own packages are taken")
     st.update({"url": url, "since": st.get("since") or time.strftime("%Y-%m-%dT%H:%M:%S"),
                "disabled": sorted(set(st["disabled"]) | set(ids)), "repos": sorted(m["repos"]),
                "generation": m.get("generation"), "key": bool(a.key),
@@ -970,8 +999,9 @@ def status(ctx, a):
             ", ".join("%s %s" % kv for kv in sorted(mi["repos"].items())), mi["keep"]))
         say("%s metadata    %s" % (("●", "as its manifest says") if mi["metadata_as_manifest"] else
                                    ("▼", "NOT what its manifest says: " + " ".join(mi["differs"]))))
-        say("· signatures  packages: checked by dnf against this machine's keys of the base at every installation; "
-            "metadata: %s" % ("signed by %s" % mi["signed"] if mi["signed"] else "not signed"))
+        say("· signatures  the base's packages: checked by dnf against this machine's keys of the base at every "
+            "installation; SilikOS's own: not signed (taken only with the mirror's key, or with --unsigned); metadata: %s"
+            % ("signed by %s" % mi["signed"] if mi["signed"] else "not signed"))
     elif mi:
         say("? mirror      %s does not answer: nothing is known about it" % mi["url"])
     return 0 if not mi or (mi["reachable"] and mi.get("metadata_as_manifest")) else 1
@@ -1098,6 +1128,8 @@ def register(group, silik_module):
     x = sub.add_parser("use", help="this machine's dnf at a mirror (URL or folder); `use off`: everything as it was")
     x.add_argument("target", metavar="URL|DIR|off")
     x.add_argument("--key", metavar="FILE", help="the mirror's own key: its metadata is then checked too (repo_gpgcheck)")
+    x.add_argument("--unsigned", action="store_true", help="also take SilikOS's own packages from a mirror that is not signed "
+                   "(they carry no signature: whoever controls the mirror or the network to it chooses them)")
     x.set_defaults(fn=use)
     x = sub.add_parser("status", help="is a mirror in use, and what it holds")
     x.add_argument("target", nargs="?", metavar="URL|DIR")

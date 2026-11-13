@@ -1,4 +1,16 @@
 # bash completion for silik
+# Names that silik lists (boxes, Wine prefixes, vendors' tools) are completed by comparing text, never handed to
+# `compgen -W`, which expands its list as the shell would: a folder named with $(...) in it ran its command at the
+# TAB key (the audit of 13/11/2026, run). A name with anything but letters, digits, dot, dash and underscore is left out.
+#   _silik_names CUR "FIXED WORDS" < names, one a line
+_silik_names() {
+  local cur=$1 n; COMPREPLY=()
+  while IFS= read -r n; do
+    case $n in ''|*[!A-Za-z0-9._-]*) continue;; esac
+    [[ $n == "$cur"* ]] && COMPREPLY+=("$n")
+  done
+  for n in $2; do [[ $n == "$cur"* ]] && COMPREPLY+=("$n"); done
+}
 _silik() {
   local cur=${COMP_WORDS[COMP_CWORD]} g=${COMP_WORDS[1]}
   # look: a look, --accent and its accents, --glass and its modes, --wallpaper and its sheets, at any place after the word look
@@ -38,7 +50,7 @@ _silik() {
   # vendor check / prepare: the tools of the vendors' data, in any number; vendor lib: library names (none to offer)
   if [ "$g" = vendor ] && [ "$COMP_CWORD" -ge 3 ]; then
     case ${COMP_WORDS[2]} in
-      check|prepare) COMPREPLY=($(compgen -W "$(silik -q vendor list --json 2>/dev/null | sed -n 's/^  "tool": "\(.*\)",$/\1/p') --all --json" -- "$cur"));;
+      check|prepare) _silik_names "$cur" "--all --json" < <(silik -q vendor list --json 2>/dev/null | sed -n 's/^  "tool": "\(.*\)",$/\1/p');;
       list) COMPREPLY=($(compgen -W "--json" -- "$cur"));;
     esac
     return
@@ -87,8 +99,8 @@ _silik() {
          update) COMPREPLY=($(compgen -W "--auto --no-snapshot" -- "$cur"));;
        esac;;
     3) case "$g ${COMP_WORDS[2]}" in
-         "eda setup"|"eda enter"|"eda run"|"eda rm") COMPREPLY=($(compgen -W "$(silik -q eda list 2>/dev/null | awk '$1 != "no" {print $1}')" -- "$cur"));;
-         "win run"|"win install"|"win stop"|"win rm") COMPREPLY=($(compgen -W "$(silik -q win list 2>/dev/null | grep -v '^no ') --no-net --no-sandbox" -- "$cur"));;
+         "eda setup"|"eda enter"|"eda run"|"eda rm") _silik_names "$cur" "" < <(silik -q eda list 2>/dev/null | awk '$1 != "no" {print $1}');;
+         "win run"|"win install"|"win stop"|"win rm") _silik_names "$cur" "--no-net --no-sandbox" < <(silik -q win list 2>/dev/null | grep -v '^no ');;
          "win open") COMPREPLY=($(compgen -W "--prefix --no-net --no-sandbox" -- "$cur") $(compgen -f -- "$cur"));;
          "win vm") COMPREPLY=($(compgen -W "create start stop app usb" -- "$cur"));;
          "hw nvidia") COMPREPLY=($(compgen -W "install status --source" -- "$cur"));;
