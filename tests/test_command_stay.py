@@ -343,6 +343,32 @@ class Width(unittest.TestCase):
         self.assertGreater(longest, 60)         # (the titles that widened it are still there: the case is real)
 
 
+class Log(unittest.TestCase):
+    def test_the_session_log_is_the_users_alone(self):
+        """0700 / 0600 whatever the umask (seen 0777 / 0666 in a session whose umask was 0), and a log that was loose
+        before is tightened; a link put in its place is not written through"""
+        it = bar.Item("sys/status", "status", ["silik", "status"])
+        with tempfile.TemporaryDirectory() as d:
+            st, old = os.path.join(d, "state"), os.umask(0)
+            try:
+                with mock.patch.object(bar, "STATE", st):
+                    bar.log_line(it)
+                    log = os.path.join(st, "session.log")
+                    self.assertEqual((stat.S_IMODE(os.stat(st).st_mode), stat.S_IMODE(os.stat(log).st_mode)), (0o700, 0o600))
+                    os.chmod(st, 0o777)
+                    os.chmod(log, 0o666)
+                    bar.log_line(it)
+                    self.assertEqual((stat.S_IMODE(os.stat(st).st_mode), stat.S_IMODE(os.stat(log).st_mode)), (0o700, 0o600))
+                    self.assertEqual(read(log).count("$ silik status"), 2)
+                    os.unlink(log)
+                    target = os.path.join(d, "elsewhere")
+                    os.symlink(target, log)
+                    bar.log_line(it)                                # (refused, and said to nobody: the bar goes on)
+                    self.assertFalse(os.path.exists(target))
+            finally:
+                os.umask(old)
+
+
 class Check(unittest.TestCase):
     def test_the_installed_systems_check_cannot_hang(self):
         """bar.stays: a second call that is not taken would open its own window and wait for a key nobody presses"""
