@@ -1,0 +1,56 @@
+Last metadata expiration check: 0:01:56 ago on Fri Nov 13 07:32:50 2026.
+Error: 
+ Problem 1: package yelp-2:40.3-3.el9_8.1.x86_64 from ks-AppStream requires libwebkit2gtk-4.0.so.37()(64bit), but none of the providers can be installed
+  - cannot install the best candidate for the job
+  - package webkit2gtk3-2.52.3-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.52.4-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.52.5-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.54.0-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.54.1-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.54.2-0.el9_8.1.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.54.2-0.el9_8.2.x86_64 from ks-AppStream is filtered out by exclude filtering
+ Problem 2: package gnome-initial-setup-40.4-4.el9.x86_64 from ks-AppStream requires libwebkit2gtk-4.0.so.37()(64bit), but none of the providers can be installed
+  - conflicting requests
+  - package webkit2gtk3-2.52.3-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.52.4-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.52.5-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.54.0-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.54.1-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.54.2-0.el9_8.1.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.54.2-0.el9_8.2.x86_64 from ks-AppStream is filtered out by exclude filtering
+ Problem 3: package evolution-3.40.4-12.el9.x86_64 from ks-AppStream requires libwebkit2gtk-4.0.so.37()(64bit), but none of the providers can be installed
+  - conflicting requests
+  - package webkit2gtk3-2.52.3-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.52.4-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.52.5-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.54.0-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.54.1-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.54.2-0.el9_8.1.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.54.2-0.el9_8.2.x86_64 from ks-AppStream is filtered out by exclude filtering
+ Problem 4: package evolution-ews-3.40.4-3.el9.x86_64 from ks-AppStream requires libemail-engine.so()(64bit), but none of the providers can be installed
+  - package evolution-ews-3.40.4-3.el9.x86_64 from ks-AppStream requires libevolution-util.so()(64bit), but none of the providers can be installed
+  - package evolution-ews-3.40.4-3.el9.x86_64 from ks-AppStream requires libevolution-mail.so()(64bit), but none of the providers can be installed
+  - package evolution-ews-3.40.4-3.el9.x86_64 from ks-AppStream requires libevolution-shell.so()(64bit), but none of the providers can be installed
+  - package evolution-ews-3.40.4-3.el9.x86_64 from ks-AppStream requires libevolution-calendar.so()(64bit), but none of the providers can be installed
+  - package evolution-ews-3.40.4-3.el9.x86_64 from ks-AppStream requires libevolution-mail-formatter.so()(64bit), but none of the providers can be installed
+  - package evolution-ews-3.40.4-3.el9.x86_64 from ks-AppStream requires evolution >= 3.40.4, but none of the providers can be installed
+  - package evolution-3.40.4-12.el9.x86_64 from ks-AppStream requires libwebkit2gtk-4.0.so.37()(64bit), but none of the providers can be installed
+  - conflicting requests
+  - package webkit2gtk3-2.52.3-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.52.4-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.52.5-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.54.0-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.54.1-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.54.2-0.el9_8.1.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.54.2-0.el9_8.2.x86_64 from ks-AppStream is filtered out by exclude filtering
+ Problem 5: package evolution-help-3.40.4-12.el9.noarch from ks-AppStream requires evolution = 3.40.4-12.el9, but none of the providers can be installed
+  - package evolution-3.40.4-12.el9.x86_64 from ks-AppStream requires libwebkit2gtk-4.0.so.37()(64bit), but none of the providers can be installed
+  - conflicting requests
+  - package webkit2gtk3-2.52.3-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.52.4-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.52.5-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.54.0-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.54.1-1.el9_8.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.54.2-0.el9_8.1.x86_64 from ks-AppStream is filtered out by exclude filtering
+  - package webkit2gtk3-2.54.2-0.el9_8.2.x86_64 from ks-AppStream is filtered out by exclude filtering
+(try to add '--skip-broken' to skip uninstallable packages or '--nobest' to use not only best candidate packages)

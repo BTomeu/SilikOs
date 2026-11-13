@@ -5,6 +5,7 @@
 | Packages + repository | `bash tools/build_rpms.sh` (and their source packages in `build/srpm/`) | `rpmbuild`, `createrepo_c` (any Linux; nothing is compiled) |
 | Tests | `python3 -m unittest discover -s tests` | Python >= 3.9 |
 | Dependency names | `bash tools/check_deps.sh` | an EL9 system with its repositories and EPEL |
+| The weight (packages, download, installed size; nothing is installed) | `bash tools/weigh.sh [--json] [--plan] [--leave-out A,B]`; other systems: `bash tools/weigh_others.sh`; the day's numbers: `docs/NUMEROS.md` | docker or podman, `python3`, the network |
 | Installer ISO | `bash tools/build_iso.sh [AlmaLinux-9-…-boot.iso]` (the base ISO is checked first: its sha256 against AlmaLinux's signed `CHECKSUM`) | `xorriso`, `mtools`, `cpio`, `curl`, `gpg`, `implantisomd5` (isomd5sum), repo.almalinux.org |
 | Installer ISO for ARM | `SILIK_ARCH=aarch64 bash tools/build_iso.sh` (AlmaLinux's aarch64 boot ISO: UEFI only) | the same |
 | The base's sources | `bash tools/fetch_base_sources.sh [--list] [--limit N]`: the source packages of the boot ISO's installer image, from vault.almalinux.org, each checked by AlmaLinux's signature | `xorriso`, `unsquashfs`, `rpm`, `gpg`; several GB |
@@ -22,7 +23,7 @@ repositories, so the machine needs a network (cable or a phone's USB tether if t
 With the ISO (write it to a USB stick): language, keyboard and time zone, then **Installation Destination** (choose the
 disk and how to use it: nothing is preselected or erased), **User Creation**, Begin Installation. A cable or a phone's
 USB tether connects by itself; with Wi-Fi only, join the network in **Network & Host Name** and then open
-**Installation Source** once more. About 750 packages (1.2 GB) are downloaded.
+**Installation Source** once more. About 1530 packages (2.5 GB) are downloaded (resolved on 13/11/2026: `docs/NUMEROS.md`).
 
 Without the ISO, on an installed AlmaLinux / Rocky / RHEL 9 Workstation:
 
