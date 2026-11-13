@@ -31,6 +31,7 @@ jobs:
         run: |
           if [ -s build/bench-os/results.md ]; then
             cat build/bench-os/results.md >> "$GITHUB_STEP_SUMMARY"
+            cat build/bench-os/results.md           # (also in the log: the summary and the artifact cannot be read through every proxy)
           else
             echo "No table: the run stopped before any measurement." >> "$GITHUB_STEP_SUMMARY"
           fi
