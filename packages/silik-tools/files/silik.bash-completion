@@ -19,7 +19,7 @@ _silik() {
   fi
   # doctor: its areas, in any number
   if [ "$g" = doctor ] && [ "$COMP_CWORD" -ge 2 ]; then
-    COMPREPLY=($(compgen -W "system security graphics hardware bench eda windows network --json --verbose" -- "$cur")); return
+    COMPREPLY=($(compgen -W "system security graphics hardware power bench eda windows network --json --verbose" -- "$cur")); return
   fi
   # hw check --from FILE; hw driver add NAME; hw nvidia install --source WHICH
   if [ "$g" = hw ] && [ "$COMP_CWORD" -ge 4 ]; then
@@ -72,7 +72,7 @@ _silik() {
          win) COMPREPLY=($(compgen -W "list open create run install stop rm sync apps routes vm" -- "$cur"));;
          hw)  COMPREPLY=($(compgen -W "probe check nvidia driver" -- "$cur"));;
          dev) COMPREPLY=($(compgen -W "tools try install can serial ccache" -- "$cur"));;
-         power) COMPREPLY=($(compgen -W "show performance balanced saver auto apply zram trim --json" -- "$cur"));;
+         power) COMPREPLY=($(compgen -W "show performance balanced saver auto apply check charge profiles zram trim --json" -- "$cur"));;
          speed) COMPREPLY=($(compgen -W "show apply undo --json" -- "$cur"));;
          bench) COMPREPLY=($(compgen -W "system compare" -- "$cur"));;
          identity) COMPREPLY=($(compgen -W "show silikos base" -- "$cur"));;
@@ -99,6 +99,9 @@ _silik() {
          "dev can") COMPREPLY=($(compgen -W "list up down --fd --listen" -- "$cur"));;
          "dev ccache"|"power zram"|"power trim") COMPREPLY=($(compgen -W "on off" -- "$cur"));;
          "power auto") COMPREPLY=($(compgen -W "--ac --battery" -- "$cur"));;
+         "power check") COMPREPLY=($(compgen -W "--battery --json" -- "$cur"));;
+         "power charge") COMPREPLY=($(compgen -W "80 100 apply" -- "$cur"));;
+         "power profiles") COMPREPLY=($(compgen -W "silikos base" -- "$cur"));;
          "snapshot status"|"snapshot list") COMPREPLY=($(compgen -W "--json" -- "$cur"));;
          "snapshot delete") COMPREPLY=($(compgen -W "--yes" -- "$cur"));;
          "update --auto") COMPREPLY=($(compgen -W "all security off" -- "$cur"));;

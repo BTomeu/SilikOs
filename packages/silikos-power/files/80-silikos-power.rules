@@ -1,3 +1,6 @@
 # silik power auto: a mains supply (or a USB-C one) plugged or unplugged runs the automatic choice again, when it is
 # on (try-restart does nothing to a service that is not running). A battery's own changes (its level) are not acted on.
 SUBSYSTEM=="power_supply", ACTION=="change", ATTR{type}=="Mains|USB", RUN+="/usr/bin/systemctl --no-block try-restart silikos-power-auto.service"
+# silik power charge: a battery that appears (one put in, or its driver loaded after the start) gets the charge
+# limit again, when one was asked for (the same try-restart: nothing while the service is off)
+SUBSYSTEM=="power_supply", ACTION=="add", ATTR{type}=="Battery", RUN+="/usr/bin/systemctl --no-block try-restart silikos-power-charge.service"
