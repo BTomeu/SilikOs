@@ -12,7 +12,7 @@ Summary:        DEVSIM, TCAD semiconductor device simulation (upstream's source 
 License:        Apache-2.0 AND LGPL-2.1-or-later AND BSD-3-Clause
 URL:            https://devsim.org
 Source0:        devsim-%{version}.tar.gz
-ExclusiveArch:  x86_64
+ExclusiveArch:  x86_64 aarch64
 BuildRequires:  cmake gcc gcc-c++ gcc-gfortran make bison flex zlib-devel python3-devel
 # (128-bit floats through libquadmath are an x86_64 thing: EL 9 has no libquadmath for aarch64. There upstream's own
 # build, scripts/build_manylinux_2_28.sh, takes its configuration "nofloat128": extended precision from Boost's

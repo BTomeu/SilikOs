@@ -7,7 +7,7 @@ Summary:        Qucs-S, schematic capture and simulation with SPICE (upstream's 
 License:        GPL-2.0-or-later
 URL:            https://ra3xdh.github.io/
 Source0:        qucs-s-%{version}.tar.gz
-ExclusiveArch:  x86_64
+ExclusiveArch:  x86_64 aarch64
 BuildRequires:  cmake gcc-c++ make flex bison gperf dos2unix mesa-libGL-devel
 BuildRequires:  qt6-qtbase-devel qt6-qtsvg-devel qt6-qttools-devel qt6-qtcharts-devel qt6-linguist
 # it simulates with ngspice (ours: eda/ngspice.spec); a weak dependency, so that the package installs alone

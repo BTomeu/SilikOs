@@ -25,7 +25,7 @@ License:        GPL-2.0-or-later AND GPL-3.0-or-later AND BSL-1.0
 URL:            https://sdcc.sourceforge.net
 Source0:        sdcc-%{version}.tar.bz2
 Source1:        %{boost}-b2-nodocs.tar.xz
-ExclusiveArch:  x86_64
+ExclusiveArch:  x86_64 aarch64
 BuildRequires:  gcc gcc-c++ make bison flex zlib-devel readline-devel ncurses-devel texinfo bzip2 xz
 
 %description

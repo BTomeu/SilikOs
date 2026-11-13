@@ -10,7 +10,7 @@ Summary:        Yosys, Verilog synthesis (upstream's source built for SilikOS / 
 License:        ISC AND MIT-Modern-Variant AND MIT AND BSD-2-Clause AND BSD-3-Clause-flex AND BSL-1.0 AND (BSD-3-Clause OR GPL-3.0-only) AND LicenseRef-Public-Domain
 URL:            https://yosyshq.net/yosys/
 Source0:        yosys-%{version}.tar.gz
-ExclusiveArch:  x86_64
+ExclusiveArch:  x86_64 aarch64
 # upstream asks for CMake 3.28 and C++20: EL 9.8's cmake and its GCC 14 toolset (the base's GCC 11 is too old for it;
 # the program still runs on the base's own libraries)
 BuildRequires:  cmake >= 3.28 make gcc-toolset-14-gcc gcc-toolset-14-gcc-c++ bison flex python3 pkgconf-pkg-config git

@@ -6,7 +6,7 @@ Summary:        SavvyCAN, a CAN bus analyser: capture, DBC decoding, graphs, fra
 License:        MIT
 URL:            https://github.com/collin80/SavvyCAN
 Source0:        savvycan-%{version}.tar.gz
-ExclusiveArch:  x86_64
+ExclusiveArch:  x86_64 aarch64
 BuildRequires:  gcc-c++ make qt5-qtbase-devel qt5-qtserialbus-devel qt5-qtserialport-devel qt5-qtdeclarative-devel qt5-qttools-devel libusbx-devel
 
 %description

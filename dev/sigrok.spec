@@ -17,7 +17,7 @@ Source0:        libsigrok-0bc2487778e660f4d3116729b6f4aee2b1996bb0.tar.gz
 Source1:        libsigrokdecode-71f451443029322d57376214c330b518efd84f88.tar.gz
 Source2:        sigrok-cli-f44dd91347e7ac797cefc23162b9fcf0b7329f1f.tar.gz
 Source3:        pulseview-af02198741b4e57c9f9b796bd5e6c0f2ae9f2f2b.tar.gz
-ExclusiveArch:  x86_64
+ExclusiveArch:  x86_64 aarch64
 BuildRequires:  gcc gcc-c++ make cmake autoconf automake libtool pkgconfig glib2-devel glibmm24-devel libzip-devel
 BuildRequires:  libusbx-devel libftdi-devel libserialport-devel hidapi-devel bluez-libs-devel python3-devel doxygen
 BuildRequires:  qt5-qtbase-devel qt5-qtsvg-devel qt5-qttools-devel qt5-linguist boost-devel

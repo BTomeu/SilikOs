@@ -344,7 +344,7 @@ class Packages(unittest.TestCase):
 
     def test_the_arm_builds_are_the_recipes_that_say_aarch64(self):
         arm = sorted(r.split("/")[1] for r, a in self.recipes().items() if "aarch64" in a and r.startswith("dev/"))
-        self.assertEqual(arm, ["dfu-util", "openocd", "silik-pylab", "stm32flash"])    # (each built and tried under emulation)
+        self.assertEqual(arm, ["dfu-util", "openocd", "savvycan", "sdcc", "sigrok", "silik-pylab", "stm32flash"])    # (each built and tried: under emulation, or on GitHub's ARM runners, run 43402306588)
         wf = text(".github/workflows/dev.yml")
         m = re.search(r"build-arm:.*?tool: \[([^\]]+)\]", wf, re.S)
         self.assertEqual(sorted(x.strip() for x in m.group(1).split(",")), arm)
@@ -358,7 +358,7 @@ class Packages(unittest.TestCase):
 
     def test_the_eda_arm_builds_are_the_recipes_that_say_aarch64(self):
         arm = sorted(r.split("/")[1] for r, a in self.recipes().items() if "aarch64" in a and r.startswith("eda/"))
-        self.assertEqual(arm, ["magic", "netgen", "ngspice", "nng", "xschem"])   # (each built and tried under emulation)
+        self.assertEqual(arm, ["devsim", "klayout", "magic", "netgen", "ngspice", "nng", "nvc", "opencascade", "qucs-s", "xschem", "yosys"])   # (each built and tried: under emulation, or on GitHub's ARM runners, run 43402306588)
         wf = text(".github/workflows/eda.yml")
         for job in ("build-arm", "keep-arm"):
             m = re.search(r"\n  %s:.*?tool: \[([^\]]+)\]" % job, wf, re.S)
@@ -496,7 +496,8 @@ class Candidates(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stderr)
         rows = [l for l in p.stdout.splitlines() if l.startswith("| ") and not l.startswith("| Recipe")]
         self.assertEqual(sorted(l.split("|")[1].strip() for l in rows), want)
-        self.assertIn("| %s | ok | ok | 12 min | it did its small job |" % want[0], rows)
+        if len(want) > 1:           # (with one candidate left, its one result file is the failed one written last)
+            self.assertIn("| %s | ok | ok | 12 min | it did its small job |" % want[0], rows)
         self.assertIn("| %s | failed | not run | 1 min | No match for argument: something-devel |" % want[-1], rows)
         if len(want) > 2:
             self.assertIn("| %s | no result | not run | | the job gave no result" % want[1], p.stdout)

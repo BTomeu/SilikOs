@@ -6,7 +6,7 @@ Summary:        NVC, a VHDL compiler and simulator (upstream's source built for 
 License:        GPL-3.0-or-later
 URL:            https://www.nickg.me.uk/nvc/
 Source0:        nvc-%{version}.tar.gz
-ExclusiveArch:  x86_64
+ExclusiveArch:  x86_64 aarch64
 BuildRequires:  gcc gcc-c++ make flex pkgconf-pkg-config llvm-devel elfutils-devel libzstd-devel zlib-devel libffi-devel
 BuildRequires:  check-devel which
 

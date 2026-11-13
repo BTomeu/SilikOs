@@ -327,7 +327,7 @@ class Recipes(unittest.TestCase):
         built = [t.strip() for m in re.findall(r"tool: \[([^\]]*)\]", wf) for t in m.split(",")]   # (both build jobs)
         # (the x86_64 jobs' loops; the third is the ARM trial's: tests/test_arm.py)
         tried, kept, arm = [l for l in wf.splitlines() if l.strip().startswith("for t in ")]
-        self.assertIn("for t in openocd dfu-util stm32flash silik-pylab stack; do", arm)
+        self.assertIn("for t in openocd dfu-util stm32flash silik-pylab savvycan sigrok sdcc stack; do", arm)
         for n in names:
             spec = text("dev/%s.spec" % n)
             self.assertIn("Name:           " + n, spec)

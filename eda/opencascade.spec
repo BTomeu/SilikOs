@@ -6,7 +6,7 @@ Summary:        Open CASCADE Technology, the 3D modelling kernel (upstream's sou
 License:        LGPL-2.1-only WITH OCCT-exception-1.0
 URL:            https://dev.opencascade.org
 Source0:        opencascade-%{version}.tar.gz
-ExclusiveArch:  x86_64
+ExclusiveArch:  x86_64 aarch64
 BuildRequires:  cmake gcc gcc-c++ make ninja-build
 BuildRequires:  freetype-devel fontconfig-devel mesa-libGL-devel mesa-libEGL-devel libX11-devel libXext-devel libXmu-devel libXi-devel
 

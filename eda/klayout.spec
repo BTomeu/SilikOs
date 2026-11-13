@@ -10,7 +10,7 @@ Summary:        KLayout, viewer and editor for mask layouts (upstream's source b
 License:        GPL-2.0-or-later
 URL:            https://www.klayout.de
 Source0:        klayout-%{version}.tar.gz
-ExclusiveArch:  x86_64
+ExclusiveArch:  x86_64 aarch64
 BuildRequires:  gcc-c++ make which qt5-qtbase-devel qt5-qttools-devel qt5-qtmultimedia-devel qt5-qtxmlpatterns-devel
 BuildRequires:  qt5-qtsvg-devel ruby ruby-devel python3-devel zlib-devel libcurl-devel expat-devel
 # rubygems: without it KLayout's Ruby interpreter stops at its start and the program exits (seen in the test
