@@ -631,7 +631,7 @@ class Kickstart(unittest.TestCase):
         body = s[s.index("\nxorriso -indev"):]
         self.assertIn('\nimplantisomd5 --force "$out"\n', body)
         self.assertEqual(body.split('implantisomd5 --force "$out"\n', 1)[1].strip(), 'ls -la "$out"')
-        self.assertEqual(len(re.findall(r"ci_apt\.sh [^\n]*xorriso[^\n]*isomd5sum", text(".github/workflows/ci.yml"))), 3)   # (jobs arm, install, rollback-test)
+        self.assertEqual(len(re.findall(r"ci_apt\.sh [^\n]*xorriso[^\n]*isomd5sum", text(".github/workflows/ci.yml"))), 4)   # (jobs arm, install, rollback-test, sealed-test)
 
 
 if __name__ == "__main__":
