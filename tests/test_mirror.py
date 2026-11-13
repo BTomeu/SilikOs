@@ -433,7 +433,7 @@ class Use(Base):
         before = {f: open(self.j("reposd", f), "rb").read() for f in os.listdir(self.j("reposd"))}
         os.remove(self.j("log"))
         out = self.ok("mirror", "use", self.m)
-        self.assertIn("$ dnf config-manager --set-disabled baseos epel", out)           # (printed; dnf's own tool)
+        self.assertRegex(out, r"(?m)^\$ (sudo )?dnf config-manager --set-disabled baseos epel$")           # (printed; dnf's own tool)
         self.assertIn("2 repositories disabled, not deleted: baseos epel", out)
         self.assertEqual(sorted(os.listdir(self.j("reposd"))), ["base.repo", "epel.repo", "silikos-mirror.repo"])
         repo = open(self.j("reposd/silikos-mirror.repo")).read()
@@ -453,7 +453,7 @@ class Use(Base):
         # a second `use` (another address) keeps the first one's record of what was there before
         self.ok("mirror", "use", "file://" + self.m)
         out = self.ok("mirror", "use", "off")
-        self.assertIn("$ dnf config-manager --set-enabled baseos epel", out)
+        self.assertRegex(out, r"(?m)^\$ (sudo )?dnf config-manager --set-enabled baseos epel$")
         self.assertIn("2 of 2 repository files are byte for byte as before", out)
         self.assertEqual({f: open(self.j("reposd", f), "rb").read() for f in os.listdir(self.j("reposd"))}, before)
         self.assertEqual(os.listdir(self.j("state")), [])
