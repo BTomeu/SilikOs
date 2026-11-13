@@ -114,6 +114,8 @@ case $stage in
   if [ -n "$(entry_of snapm.snapset "$u")" ] && [ -n "$(entry_of snapm.revert "$u")" ]; then say snapshot.boot-entries ok "Snapshot $(entry_of snapm.snapset "$u"), Revert $(entry_of snapm.revert "$u")"
   else say snapshot.boot-entries FAIL "no entry with snapm.snapset=$u and snapm.revert=$u in /boot/loader/entries: $(ls /boot/loader/entries | tr '\n' ' ')"; fi
   has snapshot.boom-list "$(boom list 2>&1 | tr '\n' ';')" "$(uname -r)"
+  # (boom's OS profile, which silik makes before the first snapshot: snapm's own way fails for the name "SilikOS")
+  has snapshot.boom-profile "$(grep -h '^BOOM_OS_UNAME_PATTERN\|^BOOM_OS_NAME' /boot/boom/profiles/*.profile 2>&1 | tr '\n' ' ')" 'BOOM_OS_UNAME_PATTERN="el9"'
   say snapshot.boot-space info "$(df -h /boot | tail -1 | awk '{ print $4 " free of " $2 }'); the snapshots' kernel copies: $(du -sch /boot/boom/cache /boot/*.boom[0-9]* 2> /dev/null | tail -1 | cut -f1)"
 
   # step 8: the prune (seven more automatic snapshots, five are kept)

@@ -51,6 +51,33 @@ KERNEL = text("kernel").strip() or "5.14.0-611.5.1.el9_7.x86_64"
 if name == "sudo":
     os.execvp(args[0], args)
 
+PROFILES = os.path.join(BOOT, "boom/profiles")
+# boom 1.6.8 wrote this file itself (`boom profile create --from-host --uname-pattern el9`, os-release NAME="SilikOS")
+PROFILE = """BOOM_OS_ID="c5cca5e262791423bd215d54e560db2f1415f296"
+BOOM_OS_NAME="SilikOS"
+BOOM_OS_SHORT_NAME="almalinux"
+BOOM_OS_VERSION="9.8 (Olive Jaguar)"
+BOOM_OS_VERSION_ID="9.8"
+BOOM_OS_KERNEL_PATTERN="/vmlinuz-%{version}"
+BOOM_OS_INITRAMFS_PATTERN="/initramfs-%{version}.img"
+BOOM_OS_ROOT_OPTS_LVM2="rd.lvm.lv=%{lvm_root_lv}"
+BOOM_OS_ROOT_OPTS_BTRFS="rootflags=%{btrfs_subvolume}"
+BOOM_OS_OPTIONS="root=%{root_device} ro %{root_opts}"
+BOOM_OS_TITLE="%{os_name} %{os_version_id} (%{version})"
+BOOM_OS_OPTIONAL_KEYS=""
+BOOM_OS_UNAME_PATTERN="@PATTERN@"
+"""
+
+
+def profile_for(kernel):
+    import re
+    for f in os.listdir(PROFILES) if os.path.isdir(PROFILES) else []:
+        with open(os.path.join(PROFILES, f)) as fh:
+            m = re.search(r'^BOOM_OS_UNAME_PATTERN="([^"]+)"', fh.read(), re.M)
+        if m and re.search(m.group(1), kernel):
+            return True
+    return False
+
 if name == "snapm":
     sets = state("snapsets.json", [])
     if os.environ.get("SNAPM_FAIL") or text("snapm-fail").strip():
@@ -110,6 +137,13 @@ if name == "snapm":
             sys.exit(1)
         ts = int(state("now", 1763100000))
         s = {"name": nm, "timestamp": ts, "uuid": str(uuidlib.uuid5(uuidlib.UUID("952f0e38-24a1-406d-adf6-0e9fb3c707d8"), nm + str(ts))), "status": "Active"}
+        if (opt.get("bootable") or opt.get("b") or opt.get("revert") or opt.get("r")) and not profile_for(KERNEL):
+            # snapm 0.7.0 with boom 1.6.8 and no OS profile for the kernel, on a system boom's heuristic does not
+            # know (run on EL 9.8 with NAME="SilikOS"): the volume is made, the boot entries are not
+            sets.append(s)
+            save("snapsets.json", sets)
+            print("ERROR - Command failed: Error calling boom to create default OsProfile: Could not determine uname pattern for 'SilikOS'", file=sys.stderr)
+            sys.exit(1)
         if opt.get("bootable") or opt.get("b"):
             s["bootentry"] = entry(s, "snapset")
         if opt.get("revert") or opt.get("r"):
@@ -218,6 +252,12 @@ if name == "grub2-reboot":
     sys.exit(0)
 
 if name == "boom":
+    if args[:2] == ["profile", "create"]:
+        os.makedirs(PROFILES, exist_ok=True)
+        with open(os.path.join(PROFILES, "c5cca5e262791423bd215d54e560db2f1415f296-almalinux9.8.profile"), "w") as f:
+            f.write(PROFILE.replace("@PATTERN@", args[args.index("--uname-pattern") + 1]))
+        print("Created profile with os_id c5cca5e:")
+        sys.exit(0)
     if args[:2] == ["entry", "delete"]:
         b = args[args.index("--boot-id") + 1]
         hit = [f for f in os.listdir(ENTRIES) if f.startswith("%s-%s" % (MID, b))]

@@ -3695,8 +3695,9 @@ SNAP_MANUAL = "manual"           # `silik snapshot create` without a name: manua
 SNAP_CONF = "/etc/silikos/snapshot.conf"
 # PROPOSAL values (docs/ROLLBACK.md): the snapshots kept, the days they are kept, the pool's limits for a new one.
 # size_policy: snapm's own default asks the pool for twice what / holds (200%USED), which a pool half full never has;
-# a thin snapshot takes no space when made, and what guards the pool are the two limits and its autoextension
-SNAP_DEFAULTS = {"keep": 5, "days": 14, "pool_data_max": 70.0, "pool_meta_max": 50.0, "size_policy": "100%FREE"}
+# 100%FREE is refused by its rounding up to a sector (run with snapm 0.7.0's SizePolicy). A thin snapshot takes no
+# space when made: 50%FREE always passes, and what guards the pool are the two limits and its autoextension
+SNAP_DEFAULTS = {"keep": 5, "days": 14, "pool_data_max": 70.0, "pool_meta_max": 50.0, "size_policy": "50%FREE"}
 SNAP_PROFILE = "silikos-thin"    # /etc/lvm/profile/silikos-thin.profile (silikos-security): the pool grows by itself
 SNAP_CMDLINE = "/proc/cmdline"
 SNAP_BOOT = "/boot"
@@ -3748,6 +3749,10 @@ def snap_booted(text=None):
 def snap_devno():
     d = os.stat("/").st_dev
     return "%d:%d" % (os.major(d), os.minor(d))
+
+
+def snap_kernel():
+    return os.uname().release
 
 
 def snap_root(devno=None):
@@ -3912,7 +3917,7 @@ def boot_image_need(boot=None, kernel=None):
     (vmlinuz-VERSION.boom0); nothing for an image it already has. None when the kernel's files are not readable"""
     import hashlib
     boot = boot or SNAP_BOOT
-    kernel = kernel or os.uname().release
+    kernel = kernel or snap_kernel()
     need = 0
     for f in ("vmlinuz-%s" % kernel, "initramfs-%s.img" % kernel):
         p = os.path.join(boot, f)
@@ -3975,9 +3980,43 @@ def snap_guard(ctx, root, conf, prune=True):
     return no, st["pool"]
 
 
+def boom_profile_missing(boot=None, kernel=None):
+    """whether boom has no OS profile for the running kernel (/boot/boom/profiles/*.profile, a line
+    BOOM_OS_UNAME_PATTERN="el9" that the kernel's release matches). True also when the folder cannot be read (it
+    is root's): making the profile again changes nothing"""
+    d = os.path.join(boot or SNAP_BOOT, "boom/profiles")
+    try:
+        names = os.listdir(d)
+    except OSError:
+        return True
+    for n in names:
+        m = re.search(r'^BOOM_OS_UNAME_PATTERN="([^"]+)"', read(os.path.join(d, n)), re.M)
+        try:
+            if m and re.search(m.group(1), kernel or snap_kernel()):
+                return False
+        except re.error:
+            pass
+    return True
+
+
+def boom_profile(ctx):
+    """boom's OS profile for this system, made before the first snapshot that can be started. snapm makes one by
+    itself only for the names boom knows (Red Hat Enterprise Linux, CentOS Stream, Fedora); for any other its
+    snapshot fails after the volume is made: "Could not determine uname pattern for 'SilikOS'" (run with snapm 0.7.0
+    and boom 1.6.8 on EL 9.8). boom's own command makes the same profile when told the pattern, from /etc/os-release
+    and this start's kernel line: so only on a normal start (a snapshot's or a Revert entry's line carries snapm's
+    own argument, which every later entry would inherit)"""
+    if snap_booted()[0] or not boom_profile_missing():
+        return
+    m = re.search(r"\.(el[0-9]+)", snap_kernel())
+    if m:
+        ctx.run(as_root(["boom", "profile", "create", "--from-host", "--uname-pattern", m.group(1)]), check=False)
+
+
 def snap_make(ctx, name, conf, autoindex):
     """snapm makes the snapshot of / with its two boot entries; its name (with the index snapm gave it), or '' when
     snapm failed (it says why itself)"""
+    boom_profile(ctx)
     argv = ["snapm", "snapset", "create", "--bootable", "--revert", "--size-policy", conf["size_policy"]] + (["--autoindex"] if autoindex else []) + ["--json", name, "/"]
     rc, out = ctx.run(as_root(argv), check=False, capture=True)
     if ctx.dry:
@@ -4231,6 +4270,7 @@ def snap_setup(ctx, a):
     if not pool or pool["profile"] != SNAP_PROFILE:
         ctx.run(as_root(["lvchange", "--metadataprofile", SNAP_PROFILE, name]))
     ctx.run(as_root(["lvchange", "--monitor", "y", name]))            # (dmeventd watches the pool: it is what extends it)
+    boom_profile(ctx)
     if ctx.query(["systemctl", "is-enabled", "fstrim.timer"], any_rc=True).strip() != "enabled":
         ctx.run(as_root(["systemctl", "enable", "--now", "fstrim.timer"]))
     if not ctx.dry:

@@ -134,7 +134,7 @@ class System:
     """a made-up system: what / is on (sysfs), /boot with its entries, the stand-in tools and their state"""
 
     def __init__(self, root="thin", snapm=True, cmdline="", sets=(), data="41.20", meta="11.05", profile="silikos-thin", freed=0.0,
-                 euid=0, kernels=(K2,), running=K2, boot_free=600 * MIB, lvs=True, check=100, cached=False):
+                 euid=0, kernels=(K2,), running=K2, boot_free=600 * MIB, lvs=True, check=100, cached=False, profile_made=False):
         self.__dict__.update(locals())
 
     def path(self, *p):
@@ -178,7 +178,6 @@ class System:
     def __enter__(self):
         if not hasattr(self, "d"):
             self.make()
-        real_need = silik.boot_image_need
         self.patches = [mock.patch.object(silik, "SYSFS", self.path("sys")),
                         mock.patch.object(silik, "snap_devno", lambda: "253:0"),
                         mock.patch.object(silik, "SNAP_CMDLINE", self.path("cmdline")),
@@ -189,7 +188,7 @@ class System:
                         mock.patch.object(silik, "SNAP_CONF", self.path("etc/snapshot.conf")),
                         mock.patch.object(silik, "SNAP_HOOK", self.path("hook")),
                         mock.patch.object(silik, "boot_free", lambda boot=None: self.boot_free),
-                        mock.patch.object(silik, "boot_image_need", lambda boot=None, kernel=None: real_need(boot, kernel or self.running)),
+                        mock.patch.object(silik, "snap_kernel", lambda: self.running),
                         mock.patch.object(silik.time, "time", lambda: float(NOW)),
                         mock.patch.object(silik.os, "geteuid", lambda: self.euid)]
         for p in self.patches:
@@ -242,6 +241,8 @@ class System:
             write(self.path("vgs.json"), json.dumps({"silikos": {"vg_name": "silikos", "vg_free": "48318382080"}}))
         self.env = mock.patch.dict(os.environ, {"STANDIN": self.d, "PATH": self.path("bin") + os.pathsep + os.environ.get("PATH", "")})
         self.env.start()
+        if self.sets or self.profile_made:      # boom's OS profile for this kernel: a system that has made a snapshot before
+            subprocess.run(["boom", "profile", "create", "--from-host", "--uname-pattern", "el9"], stdout=subprocess.DEVNULL, check=True)
         for s in self.sets:                     # made by the stand-in snapm itself: its entries are in /boot as boom writes them
             write(self.path("now"), str(NOW - int(s["age"] * DAY)))
             subprocess.run(["snapm", "snapset", "create"] + (["-b", "-r"] if s["entries"] else []) + [s["name"], "/"], stdout=subprocess.DEVNULL, check=True)
@@ -362,7 +363,7 @@ class TheToolsFormats(unittest.TestCase):
 class Configuration(unittest.TestCase):
     def test_the_shipped_file_is_the_defaults(self):
         self.assertEqual(silik.snap_conf(os.path.join(SEC, "files/snapshot.conf")), silik.SNAP_DEFAULTS)
-        self.assertEqual(silik.SNAP_DEFAULTS, {"keep": 5, "days": 14, "pool_data_max": 70.0, "pool_meta_max": 50.0, "size_policy": "100%FREE"})
+        self.assertEqual(silik.SNAP_DEFAULTS, {"keep": 5, "days": 14, "pool_data_max": 70.0, "pool_meta_max": 50.0, "size_policy": "50%FREE"})
         self.assertIn("PROPOSAL", text("packages/silikos-security/files/snapshot.conf"))
 
     def test_values_and_what_is_not_one(self):
@@ -371,7 +372,7 @@ class Configuration(unittest.TestCase):
             f.flush()
             c = silik.snap_conf(f.name)
         self.assertEqual((c["keep"], c["days"], c["pool_data_max"]), (3, 30, 85.0))
-        self.assertEqual((c["pool_meta_max"], c["size_policy"]), (50.0, "100%FREE"))       # not a percentage, not a size policy: the defaults
+        self.assertEqual((c["pool_meta_max"], c["size_policy"]), (50.0, "50%FREE"))       # not a percentage, not a size policy: the defaults
         self.assertNotIn("other", c)
         for ok in ("100%FREE", "25%SIZE", "200%USED", "2G", "512MiB"):
             self.assertTrue(silik.SNAP_POLICY_RE.match(ok), ok)
@@ -380,7 +381,7 @@ class Configuration(unittest.TestCase):
         """200%USED asks the pool for twice what / holds: every create names a policy"""
         with System() as s:
             self.assertEqual(run("snapshot", "create")[0], 0)
-            self.assertIn("--size-policy 100%FREE", s.calls("snapm")[-1])
+            self.assertIn("--size-policy 50%FREE", s.calls("snapm")[-1])
 
 
 class Prune(unittest.TestCase):
@@ -529,7 +530,7 @@ class Create(unittest.TestCase):
         with System() as s:
             code, out, err = run("snapshot", "create")
             self.assertEqual(code, 0, err)
-            self.assertEqual(s.calls("snapm")[-1], "snapset create --bootable --revert --size-policy 100%FREE --autoindex --json manual /")
+            self.assertEqual(s.calls("snapm")[-1], "snapset create --bootable --revert --size-policy 50%FREE --autoindex --json manual /")
             self.assertIn("$ snapm snapset create --bootable --revert", out)        # every command is printed
             self.assertIn("silik: snapshot manual.0 of / made", out)
             self.assertIn("silik rollback manual.0", out)
@@ -538,10 +539,33 @@ class Create(unittest.TestCase):
             self.assertEqual(run("snapshot", "create")[0], 0)
             self.assertEqual([x["name"] for x in s.state("snapsets.json")], ["manual.0", "manual.1"])
 
-    def test_a_name(self):
+    def test_booms_os_profile_is_made_first(self):
+        """snapm makes it by itself only for the names boom knows; for "SilikOS" its snapshot fails after the volume
+        is made (run with snapm 0.7.0 and boom 1.6.8): silik makes the profile before the first snapshot"""
         with System() as s:
+            r = subprocess.run(["snapm", "snapset", "create", "-b", "-r", "bare", "/"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+            self.assertEqual(r.returncode, 1)
+            self.assertIn("Could not determine uname pattern for 'SilikOS'", r.stderr)
+            os.unlink(s.path("log"))
+            self.assertTrue(silik.boom_profile_missing())
+            self.assertEqual(run("snapshot", "create")[0], 0)
+            self.assertEqual(s.calls("boom"), ["profile create --from-host --uname-pattern el9"])
+            order = [c[0] for c in s.log() if c[0] in ("boom", "snapm")]
+            self.assertEqual(order, ["boom", "snapm"])
+            self.assertFalse(silik.boom_profile_missing())
+            self.assertEqual(run("snapshot", "create")[0], 0)
+            self.assertEqual(len(s.calls("boom")), 1)                                # once: it is there now
+            self.assertTrue(silik.boom_profile_missing(kernel="6.8.0-45-generic"))   # not for a kernel that is not EL's
+
+    def test_no_profile_is_made_from_a_revert_entry_s_kernel_line(self):
+        with System(cmdline="snapm.revert=%s" % UUID1) as s:
+            run("snapshot", "create")
+            self.assertEqual(s.calls("boom"), [])
+
+    def test_a_name(self):
+        with System(profile_made=True) as s:
             self.assertEqual(run("snapshot", "create", "before-vivado")[0], 0)
-            self.assertEqual(s.calls("snapm")[-1], "snapset create --bootable --revert --size-policy 100%FREE --json before-vivado /")
+            self.assertEqual(s.calls("snapm")[-1], "snapset create --bootable --revert --size-policy 50%FREE --json before-vivado /")
 
     def test_snapm_fails(self):
         with System() as s:
@@ -556,7 +580,7 @@ class Create(unittest.TestCase):
             self.assertEqual(s.log(), [])
             lines = [l for l in out.splitlines() if l.startswith("$ ")]
             self.assertEqual(lines[0], "$ sudo lvs --reportformat json --units b --nosuffix -o %s /dev/mapper/silikos-root" % silik.LVS_FIELDS)
-            self.assertEqual(lines[-1], "$ sudo snapm snapset create --bootable --revert --size-policy 100%FREE --autoindex --json manual /")
+            self.assertEqual(lines[-1], "$ sudo snapm snapset create --bootable --revert --size-policy 50%FREE --autoindex --json manual /")
             self.assertNotIn("made", out)                                           # a dry run claims nothing
 
     def test_list_and_delete(self):
@@ -630,7 +654,7 @@ class BeforeAnUpdate(unittest.TestCase):
             self.assertEqual(names, ["silikos-update.%d" % i for i in range(6, 11)])       # the new one and the four before it
             calls = s.calls("snapm")
             create = next(i for i, c in enumerate(calls) if c.startswith("snapset create"))
-            self.assertEqual(calls[create], "snapset create --bootable --revert --size-policy 100%FREE --autoindex --json silikos-update /")
+            self.assertEqual(calls[create], "snapset create --bootable --revert --size-policy 50%FREE --autoindex --json silikos-update /")
             self.assertTrue(all("delete" not in c for c in calls[:create]))                 # the snapshot, then the prune
             self.assertEqual(len(s.entries()), 1 + 2 * 5)                                   # the pruned ones' boot entries went with them
             self.assertFalse(os.path.exists(s.path("run/no-snapshot")))

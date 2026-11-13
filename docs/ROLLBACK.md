@@ -39,7 +39,7 @@ des de la snapshot: paquets, `/etc`, `/var`, `/opt` (les instal·lacions EDA a `
 
 | Peça | Estat | On |
 |---|---|---|
-| `silik snapshot list / create / delete / status / setup`, `silik rollback [NOM] / finish / --packages` | escrit; 98 tests amb substituts de les eines; **no executat sobre LVM** | `packages/silik-tools/files/silik`, `tests/test_rollback.py`, `tests/standins/tool.py` |
+| `silik snapshot list / create / delete / status / setup`, `silik rollback [NOM] / finish / --packages` | escrit; 100 tests amb substituts de les eines; **no executat sobre LVM** | `packages/silik-tools/files/silik`, `tests/test_rollback.py`, `tests/standins/tool.py` |
 | Ganxo abans d'actualitzar (`/usr/libexec/silikos/pre-update-snapshot`), a les dues unitats d'actualització i a `silik update` | escrit; executat en un contenidor EL 9.8 amb el dnf real (res a actualitzar; alguna cosa a actualitzar; dnf sense xarxa) | `packages/silikos-security` |
 | Les unitats no corren arrencant d'una snapshot (`ConditionKernelCommandLine=!snapm.snapset`) ni mentre s'espera després d'un rollback | escrit; `systemd-analyze verify` (systemd 252) no hi troba res | `silikos-update.service`, `silikos-security-update.service` |
 | `silik rollback finish` sol, a l'arrencada "Revert" (`silikos-rollback-finish.service`, `ConditionKernelCommandLine=snapm.revert`) | escrit; no arrencat mai | `packages/silikos-security` |
@@ -52,7 +52,7 @@ des de la snapshot: paquets, `/etc`, `/var`, `/opt` (les instal·lacions EDA a `
 | Volum propi per a `/opt/eda`; `silik rescue usb` (ReaR); passos 7, 9, 11 i 12 del pla; xifratge; un disc amb un altre sistema | **no fet**: continua sent PROPOSTA | |
 
 **Valors PROPOSTA** (`/etc/silikos/snapshot.conf`, cap mesurat): es conserven 5 snapshots d'actualització i 14 dies;
-cap snapshot nova amb el pool per sobre del 70 % de dades o el 50 % de metadades; `size_policy = 100%FREE`.
+cap snapshot nova amb el pool per sobre del 70 % de dades o el 50 % de metadades; `size_policy = 50%FREE`.
 
 ### En què s'aparta del disseny de la secció 3, i per què
 
@@ -60,9 +60,16 @@ cap snapshot nova amb el pool per sobre del 70 % de dades o el 50 % de metadades
   *o* edat). Aquí la snapshot només es fa abans d'una actualització i la poda vol les dues regles: es crea amb
   `snapm snapset create --bootable --revert --autoindex silikos-update /` i es poda amb `snapm snapset delete`
   (només les `silikos-update.N`; una feta a mà no es poda mai; la més nova es conserva sempre).
-- **`--size-policy` explícit.** Per defecte snapm demana al pool espai lliure per al doble del que ocupa `/`
-  (`200%USED`, llegit a `snapm(8)` i a `_snapm.py`): un pool mig ple no el té mai i la snapshot fallaria. Una
-  snapshot thin no ocupa res en crear-se; el que protegeix el pool són els dos llindars i l'autoextensió.
+- **`--size-policy` explícit (`50%FREE`).** Per defecte snapm demana al pool espai lliure per al doble del que
+  ocupa `/` (`200%USED`, llegit a `snapm(8)` i a `_snapm.py`): un pool mig ple no el té mai i la snapshot fallaria.
+  `100%FREE` tampoc serveix: snapm arrodoneix cap amunt a un sector i es refusa a si mateix (executat amb el
+  `SizePolicy` de snapm 0.7.0: demana 35944689152 bytes quan n'hi ha 35944688675 de lliures). Una snapshot thin no
+  ocupa res en crear-se; el que protegeix el pool són els dos llindars i l'autoextensió.
+- **El perfil de boom el fa `silik`** abans de la primera snapshot (`boom profile create --from-host
+  --uname-pattern el9`). snapm el crea sol només per als noms que boom coneix (Red Hat Enterprise Linux, CentOS
+  Stream, Fedora); amb `NAME="SilikOS"` a `/etc/os-release` falla *després* d'haver fet el volum: `Could not
+  determine uname pattern for 'SilikOS'` (executat amb el codi de snapm 0.7.0 i boom 1.6.8 a EL 9.8). El perfil es
+  fa només en una arrencada normal: pren les opcions de la línia del kernel d'aquella arrencada.
 - **Després d'un rollback les actualitzacions automàtiques esperen** (`/etc/silikos/update.hold`, que escriu
   `finish`): si no, l'endemà a les 6 es tornaria a instal·lar el que ha trencat la màquina. `silik update` (a mà,
   amb snapshot abans) acaba l'espera; la barra d'estat i `silik doctor` ho diuen. **Decisió del propietari**: la
@@ -84,7 +91,9 @@ Llegit o executat a EL 9.8 (contenidor, 13/11/2026):
 - **snapm 0.7.0**: opcions de `snapset create/delete/revert/list` (`command.py`, `snapm(8)`); el JSON de
   `snapset list --json -o ...`, generat pel seu propi codi d'informes amb conjunts inventats; noms vàlids (sense
   `_`); `snapm.snapset=UUID` i `snapm.revert=UUID` a la línia del kernel; el revert esborra l'entrada "Snapshot" i
-  deixa la "Revert"; sense device-mapper acaba amb `ERROR - Command failed: ...` i codi 1.
+  deixa la "Revert"; sense device-mapper acaba amb `ERROR - Command failed: ...` i codi 1; l'entrada "Snapshot"
+  munta la resta d'`/etc/fstab` (`/boot`, `/home`) amb `systemd.mount-extra` (`build_snapset_mount_list`); el seu
+  `SizePolicy` i la creació del perfil de boom s'han executat (a dalt).
 - **boom 1.6.8**: ha escrit ell mateix les entrades (`MACHINEID-BOOTID7-VERSIÓ.conf`, sense clau `id`), la còpia
   de kernel i initramfs (`/boot/boom/cache/SHA1.img` i `vmlinuz-VERSIÓ.boom0`: dues còpies per imatge, cap si ja
   la té), i `boom entry delete --boot-id ID` (les opcions van després de `entry delete`).
@@ -95,7 +104,8 @@ Llegit o executat a EL 9.8 (contenidor, 13/11/2026):
 - **grubby 8.40, grub2 2.06, kernel-install de systemd 252, 20-grub.install, 50-dracut.install**: llegits (què
   escriuen i què esborren; instal·lar qualsevol kernel el posa per defecte).
 - **anaconda 34.25.7.14**: `default_scheme = LVM_THINP` a `[Storage]` (a `anaconda.conf`, `rhvh.conf`,
-  `ovirt.conf`); `autopart` sense `--type` pren aquest valor (`automatic_module.py`).
+  `ovirt.conf`); `autopart` sense `--type` pren aquest valor (`automatic_module.py`); el seu codi de configuració,
+  executat amb el nostre fitxer de producte, dona LVM_THINP per a SilikOS.
 
 Suposat, no vist enlloc on es pogués executar — **[A]**:
 - [A] Un volum thin es reconeix a sysfs com un dispositiu amb uuid `LVM-` que té per sota el `-tpool` del pool
@@ -110,7 +120,10 @@ Suposat, no vist enlloc on es pogués executar — **[A]**:
 - [A] `kernel-install remove` funciona sense `/lib/modules/VERSIÓ` (els scripts llegits no el necessiten).
 - [A] El merge d'una snapshot thin de `/` acaba en activar el volum a l'arrencada "Revert", abans que corri
   `finish`. Si encara no ha acabat, `finish` deixa les entrades i cal tornar-lo a executar (el test ho detecta).
-- [A] L'entrada "Snapshot" munta `/boot` (snapm hi posa els muntatges d'`/etc/fstab`).
+- [A] `snapm snapset revert` demanat des de la mateixa snapshot arrencada (muntada com a `/`): el merge queda
+  per a la propera activació del volum (és el que diu la documentació de LVM per a un origen o una snapshot en ús).
+- [A] SELinux deixa fer la snapshot i el `finish` des d'un servei de systemd (corren sense confinar, com
+  `dnf-automatic`); cap política pròpia.
 - [A] La reserva que deixa l'instal·lador al grup de volums (el test n'informa el percentatge i només exigeix ≥ 5 %).
 - [A] En un runner de GitHub, la instal·lació en un disc de 80 GB (dispers) crea `/home`.
 
