@@ -426,6 +426,9 @@ def compile_plan(plan, sets=None, out="RESULTS"):
     for o in c.steps:
         if o["do"] == "can.stop" and o["task"] != "all" and o["task"] not in tasks:
             err((o["line"], "step %s: task = %s is not a can.send step with `every` (%s)" % (o["name"], o["task"], ", ".join(sorted(tasks)) or "the plan has none")))
+    for op in c.steps:                                   # every variable of a command a step runs is known now, not at the bench
+        if op.get("command") in c.commands:
+            c.argv(op["command"], {"file": op.get("file") or ""} if op["do"] == "flash" else None)
     for name, (v, n) in c.commands.items():
         if name not in used:
             c.argv(name, {"file": ""})                    # (its variables are checked all the same)
@@ -1688,6 +1691,7 @@ class Run:
                     self.step(op, "not run: interrupted")
             for t in list(self.tasks):                  # nothing is left being sent
                 self.stop_task(t)
+                self.mark = self.clock()                # (the teardown looks at the bus from when the sending stopped)
             for op in [o for o in self.c.steps if o["phase"] == "teardown"]:
                 # (always, once the bench was opened: it is left safe)
                 self.step(op, None if opened else stop_why or "not run: interrupted")
@@ -1975,6 +1979,8 @@ def cmd_run(o, plan, libs=None):
         c = load_plan(plan, o.sets, o.out)
         if c.bench:
             raise BenchError("\n".join(c.bench))
+        if os.path.exists(os.path.join(o.out, "result.json")):
+            raise BenchError("%s holds a run's result already: a run is a record, it is not written over (another --out)" % o.out)
     except (PlanError, BenchError) as e:
         print("silik hil: " + str(e).replace("\n", "\nsilik hil: "), file=sys.stderr)
         return 2

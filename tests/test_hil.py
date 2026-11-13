@@ -138,13 +138,14 @@ class FakeLibs:
         return {"stand-in": "1"}
 
 
-# a small ECU on the tests' bus: a heartbeat every 40 ms (state, counter); a command is answered with a status
+# a small ECU on the tests' bus: a heartbeat every 40 ms (state, counter); a command is answered with a status.
+# (The tests' tolerances are wide and the slow heartbeat very slow: they must hold on a machine busy with other work)
 SIM = '''import time
 
 
 def simulate(bus, stop, args=()):
     fault = args[0] if args else "none"
-    period = 0.120 if fault == "slow" else 0.040
+    period = 0.400 if fault == "slow" else 0.040
     due, counter, state = time.monotonic(), 0, 1
     while not stop.is_set():
         now = time.monotonic()
@@ -314,6 +315,8 @@ command = hello
         self.assertRegex(errors("[bus b]\ninterface = pcan\nchannel = x\n" + step), r"\[bus b\] interface: socketcan .* or virtual")
         self.assertRegex(errors("[step s]\ndo = power\nstate = on\n"), r"one way to switch")
         self.assertRegex(errors("[commands]\nm = true\n[step s]\ndo = measure\ncommand = m\n"), r"limits: min, max or both, or equals")
+        self.assertRegex(errors("[commands]\nx = echo ${nope}\n[step s]\ndo = run\ncommand = x\n"), r"t\.plan:2: no variable `nope`")
+        self.assertRegex(errors("[commands]\nx = echo ${file}\n[step s]\ndo = run\ncommand = x\n"), r"t\.plan:2: no variable `file`")    # (a flash step's)
         many = errors("[step a]\ndo = wait\n[step b]\ndo = wait\nfor = 3\n")                   # (every mistake, not the first)
         self.assertEqual([l.split(":")[1] for l in many.splitlines()], ["1", "5"])
 
@@ -363,16 +366,16 @@ do = can.expect
 req = SYS-1
 message = Heartbeat
 where = State == Ready
-timeout = 500 ms
+timeout = 2 s
 
 [step period]
 do = can.expect
 req = SYS-2
 message = Heartbeat
-period = 40 ms +- 30 ms
+period = 40 ms +- 150 ms
 count = 5
 always = Counter changes
-timeout = 2 s
+timeout = 3 s
 
 [step quiet]
 do = can.silence
@@ -397,7 +400,7 @@ do = can.expect
 req = SYS-4
 message = Heartbeat
 where = State == Run
-timeout = 300 ms
+timeout = 2 s
 
 [step raw]
 do = can.send
@@ -427,7 +430,7 @@ class Can(Bench):
         self.assertEqual((res["verdict"], res["exit"], res["counts"]["pass"]), ("pass", 0, 9))
         p = self.step(res, "period")["measured"]
         self.assertEqual((p["period_ms"]["n"], p["frames"], p["timestamps"]), (4, 5, "sender"))
-        self.assertLess(p["period_ms"]["max_deviation"], 30)
+        self.assertLess(p["period_ms"]["max_deviation"], 150)
         self.assertEqual(self.step(res, "answer")["measured"]["last"], {"Enabled": 1, "Output": 50})
         self.assertEqual(self.step(res, "raw-answer")["measured"]["last"]["byte1"], 7)
         self.assertEqual([r["verdict"] for r in res["requirements"]], ["pass"] * 5)
@@ -439,7 +442,7 @@ class Can(Bench):
         self.assertEqual(sorted(s["t_start"] for s in res["steps"]), [s["t_start"] for s in res["steps"]])
 
     def test_a_fault_fails_the_step_that_looks_at_it(self):
-        for fault, failed, why in (("slow", ["period"], r"Heartbeat at [0-9.]+ s came 1[0-9][0-9]\.[0-9]+ ms after the one before: not 40 ms \+- 30 ms"),
+        for fault, failed, why in (("slow", ["period"], r"Heartbeat at [0-9.]+ s came [3-9][0-9][0-9]\.[0-9]+ ms after the one before: not 40 ms \+- 150 ms"),
                                    ("stuck", ["period"], r"`Counter changes` does not hold \(Counter = 7, as in the frame before\)"),
                                    ("mute", ["answer", "raw-answer"], r"0 of 1 Status where Enabled == 1, Output in 49..51 in 300 ms \(0 frames of it seen\)"),
                                    ("half", ["answer", "raw-answer"], r"1 frames of it seen; the last one: Enabled=1, Output=25")):
@@ -475,7 +478,7 @@ task = cyclic
 
 [step settle]
 do = wait
-for = 60 ms
+for = 300 ms
 
 [step quiet]
 do = can.silence
@@ -525,19 +528,27 @@ for = 150 ms
         import signal
         before = signal.getsignal(signal.SIGINT)
 
-        def keys():                    # Ctrl-C while the first step waits, and once more right after
+        over = threading.Event()
+
+        def keys():                    # Ctrl-C once the bench is open and the first step waits, and once more right after
+            while not os.path.exists(os.path.join(self.out, "can-can.log")):
+                time.sleep(0.01)
             time.sleep(0.3)
             os.kill(os.getpid(), signal.SIGINT)
-            time.sleep(0.05)
-            os.kill(os.getpid(), signal.SIGINT)
+            time.sleep(0.1)
+            if not over.is_set():
+                os.kill(os.getpid(), signal.SIGINT)
         threading.Thread(target=keys, daemon=True).start()
-        rc, res, out = self.run_plan(HEAD + "[step long]\ndo = wait\nreq = R-1\nfor = 20 s\n[step next]\ndo = wait\nfor = 1 ms\n"
-                                            "[teardown off]\ndo = can.send\nid = 0x201\ndata = 00 00\nreq = SAFE-1\n"
-                                            "[teardown settle]\ndo = wait\nfor = 200 ms\n")
+        try:
+            rc, res, out = self.run_plan(HEAD + "[step long]\ndo = wait\nreq = R-1\nfor = 20 s\n[step next]\ndo = wait\nfor = 1 ms\n"
+                                                "[teardown off]\ndo = can.send\nid = 0x201\ndata = 00 00\nreq = SAFE-1\n"
+                                                "[teardown settle]\ndo = wait\nfor = 1500 ms\n")
+        finally:
+            over.set()
         self.assertEqual((rc, self.verdicts(res)), (2, {"long": "not-run", "next": "not-run", "off": "pass", "settle": "pass"}), out)
         self.assertEqual((res["error"], self.step(res, "long")["why"], self.step(res, "next")["why"]),
                          ("interrupted at the keyboard", "interrupted while it ran", "not run: interrupted"))
-        self.assertLess(res["seconds"], 5)
+        self.assertLess(res["seconds"], 15)                             # (not the step's 20 s)
         self.assertEqual(res["buses"]["can"]["sent"], 1)                # (the teardown's frame went out)
         self.assertIs(signal.getsignal(signal.SIGINT), before)
 
@@ -882,6 +893,17 @@ for = 1 ms
         self.assertRegex(res["started"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
         self.assertEqual(sorted(os.listdir(self.out)), ["can-can.log", "junit.xml", "plan.txt", "report.txt", "result.json"])
 
+    def test_a_run_is_a_record_and_is_not_written_over(self):
+        plan = "[step w]\ndo = wait\nfor = 1 ms\n"
+        rc, res, out = self.run_plan(plan)
+        with open(os.path.join(self.out, "result.json")) as f:
+            first = f.read()
+        rc, _, out = self.run_plan(plan)
+        self.assertEqual(rc, 2)
+        self.assertIn("holds a run's result already", out)
+        with open(os.path.join(self.out, "result.json")) as f:
+            self.assertEqual(f.read(), first)
+
     def test_the_report_is_the_traceability_matrix_and_comes_back_from_the_folder(self):
         rc, res, out = self.run_it()
         with open(os.path.join(self.out, "report.txt")) as f:
@@ -944,16 +966,16 @@ for = 1 ms
 
 # ------------------------------------------------------------------ timing
 class Timing(Bench):
-    PERIOD = HEAD + "[step period]\ndo = can.expect\nreq = SYS-2\nmessage = Heartbeat\nperiod = 40 ms +- %s\ncount = 3\ntimeout = 2 s\n"
+    PERIOD = HEAD + "[step period]\ndo = can.expect\nreq = SYS-2\nmessage = Heartbeat\nperiod = 40 ms +- %s\ncount = 3\ntimeout = 3 s\n"
 
     def test_the_machine_is_measured_and_the_number_is_in_the_result(self):
-        rc, res, out = self.run_plan(self.PERIOD % "30 ms")
+        rc, res, out = self.run_plan(self.PERIOD % "150 ms")
         self.assertEqual(rc, 0, out)
         t = res["timing"]
-        self.assertEqual((t["frames"], t["period_ms"], t["tightest_ms"], t["refused"], t["forced"]), (20, 5.0, 30.0, [], False))
-        self.assertTrue(0 <= t["median_ms"] <= t["max_ms"] < 30, t)
+        self.assertEqual((t["frames"], t["period_ms"], t["tightest_ms"], t["refused"], t["forced"]), (20, 5.0, 150.0, [], False))
+        self.assertTrue(0 <= t["median_ms"] <= t["max_ms"] < 150, t)
         self.assertRegex(hil.report_text(res), r"timing     this machine, at the start of the run: 20 frames 5 ms apart across the virtual bus "
-                                               r"came off by at most [0-9.]+ ms \(median [0-9.]+ ms\); the plan's tightest period tolerance: 30 ms")
+                                               r"came off by at most [0-9.]+ ms \(median [0-9.]+ ms\); the plan's tightest period tolerance: 150 ms")
         shutil.rmtree(self.out)
         rc, res, out = self.run_plan(HEAD + "[step w]\ndo = wait\nfor = 1 ms\n")
         self.assertEqual((rc, res["timing"]), (0, None))               # (no period asked: nothing to measure)
@@ -1092,7 +1114,7 @@ class Example(Bench):
         out = buf.getvalue()
         for line in ("t.plan: stand-in ECU", "9 steps (0 setup, 8 test, 1 teardown); requirements: SYS-1, SYS-2, SYS-3, SYS-4, SYS-5",
                      "bus can: virtual t0, database ecu.dbc", "this plan is a program", "the messages and signals the steps name are in the database",
-                     "the plan's tightest period tolerance is 30 ms", "ok: `silik hil run"):
+                     "the plan's tightest period tolerance is 150 ms", "ok: `silik hil run"):
             self.assertIn(line, out)
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):

@@ -217,7 +217,8 @@ and the three `on-answer` (Output=12.5 instead of 25); exit status 1 each time.
 
 ## The results
 
-A folder per run (`--out DIR`; default `hil-results/PLAN-DATE-TIME` in the current folder):
+A folder per run (`--out DIR`; default `hil-results/PLAN-DATE-TIME` in the current folder). A run is a record: a
+folder that holds a result already is not written over (exit 2).
 
 | File | What |
 |---|---|
@@ -314,6 +315,7 @@ given with each row, on 4 cores):
 |---|---|---|
 | the runner's measurement repeated 60 times (60 x 100 frames, 10 ms apart) | 4.5 to 6.5 | largest deviation of a series of 100: best 1.99 ms, median 4.83 ms, nine in ten under 9.93 ms, worst 45.83 ms; a typical frame (the median deviation of a series): 0.047 ms |
 | the same again, some minutes later | 6.4 to 5.5 | best 0.33 ms, median 6.00 ms, nine in ten under 15.74 ms, worst 21.68 ms; a typical frame: 0.018 ms |
+| a third time, the machine less busy | 2.2 to 4.1 | best 0.18 ms, median 3.45 ms, nine in ten under 5.37 ms, worst 9.83 ms; a typical frame: 0.031 ms |
 | `ecu.plan` 30 times (`silik hil run`, the installed packages) | 11.1 to 6.4 | **28 passed; 2 were refused with exit 2** (the machine measured 23.8 and 23.9 ms, more than the plan's 20 ms); none failed. Its heartbeat step (9 periods of 100 ms) was off by at most 0.056 ms in the best run, 1.44 ms in the median one, 18.15 ms in the worst |
 
 So on this machine, loaded as it was, a tolerance of a few milliseconds is not checkable in user space, and the
@@ -369,7 +371,7 @@ needs no extra package. USB serial ports and debug probes belong to the person a
 
 ## What was run, and what was not
 
-Run (13/11/2026): the unit tests (`tests/test_hil.py`, 50: the parser, each step type against stand-ins, a pty as the
+Run (13/11/2026): the unit tests (`tests/test_hil.py`, 51, ten times over on 3.9 with the whole suite: the parser, each step type against stand-ins, a pty as the
 serial port, shell scripts as the flasher, the supply and the meter, the JUnit file against the schema's rules, the
 candump log, the timing rule with a stand-in that is 2 ms off) on Python 3.13 (host), 3.9 (the container: the
 system's) and 3.12 with python-can and cantools (the container: `silik-python`); the example on the installed
