@@ -74,7 +74,7 @@ first)
   say first.layout info "$(lsblk -n -o NAME,TYPE,FSTYPE,FSVER,MOUNTPOINTS | tr -s ' ' | tr '\n' ';')"
   if [ -n "$luks" ]; then say first.luks-device ok "$luks"; else say first.luks-device FAIL "/ ($root_src) is on no LUKS volume"; fi
   # (what the installer's "Encrypt my data" makes: its defaults, nothing named by the test's kickstart)
-  is first.luks-version "$(cryptsetup luksDump "$luks" 2>&1 | sed -n 's/^Version: *//p')" 2
+  is first.luks-version "$(cryptsetup luksDump "$luks" 2>&1 | sed -n 's/^Version:[[:space:]]*//p')" 2
   is first.pbkdf "$(cryptsetup luksDump "$luks" 2>&1 | sed -n 's/^[[:space:]]*PBKDF: *//p' | sort -u | tr '\n' ' ')" "argon2id "
   say first.cipher info "$(cryptsetup luksDump "$luks" 2>&1 | grep -m2 -i 'cipher\b' | tr -s ' \t' ' ' | tr '\n' ';')"
   is first.slots-before "$(slots)" "0:passphrase"
