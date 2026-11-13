@@ -8,6 +8,9 @@
 #   silik-command [--query TEXT] [--theme light|dark] [--list TEXT] [--lang en|ca|es]
 #   --list prints the matches of TEXT as "address<TAB>twin" and exits (no window: tests, scripts).
 # Python 3.9, GTK 3 through python3-gobject; the logic above the "window" line has no GTK in it.
+# It stays: Esc, Enter or a click elsewhere hide the window and the process keeps it; the next `silik-command` asks
+# that one to show itself (a socket in the user's runtime folder) and ends. A window that is already loaded is on the
+# screen in a tenth of the time (docs/STATUS.md). Without a runtime folder it opens and ends as before.
 import json
 import os
 import re
@@ -504,10 +507,14 @@ def launch(item, t=None):
     argv = held(item.argv, t) if item.terminal else item.argv
     log_line(item)
     try:
-        subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-        return True
+        p = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     except OSError:
         return False
+    # (the bar stays, and the program is its child: someone must take its end, or it is a zombie until the bar next
+    # starts a program. Seen in the rig: `Zs gnome-terminal <defunct>`)
+    import threading
+    threading.Thread(target=p.wait, daemon=True).start()
+    return True
 
 
 PLUGIN_DIR = os.environ.get("SILIK_PLUGIN_DIR") or "/usr/share/silikos/python/plugins"
@@ -547,6 +554,100 @@ def all_items(lang, started=None):
     apps = app_items(desktop_dirs(), lang)       # read while silik answers
     boxes, prefixes, programs = (silik_json_read(p) for p in started)
     return system_items(TEXT[lang], boxes, prefixes, programs, vendor_tools()) + plugin_items(lang) + apps
+
+
+# ------------------------------------------------------------------ the bar that stays
+# One line over a socket in the user's runtime folder (theirs alone, mode 0700; the socket 0600): HELLO, the
+# desktop's startup id, then the words of the command line, NUL between them. The answer is "ok" (the window is being
+# shown) or anything else (this bar cannot serve it: the caller opens its own). A request shows the bar with a query
+# in it and nothing else: nothing typed into the socket is ever run. /usr/bin/silik-command (silik-command-launch)
+# speaks the same line without loading this file; the tests hold the two equal.
+SOCKET = "silik-command.sock"
+HELLO = "silik-command 1"
+
+
+def socket_path(env=None):
+    """where a bar that stays listens, or None: no runtime folder (a bare X session, a test), or SILIK_COMMAND_ONCE"""
+    env = os.environ if env is None else env
+    d = env.get("XDG_RUNTIME_DIR")
+    return os.path.join(d, SOCKET) if d and os.path.isdir(d) and not env.get("SILIK_COMMAND_ONCE") else None
+
+
+def request_line(argv, startup_id=""):
+    return b"\0".join(x.encode("utf-8", "surrogateescape") for x in [HELLO, startup_id] + list(argv)) + b"\n"
+
+
+def request_read(data):
+    """(startup id, the words) of a request line, or None when it is not one"""
+    parts = [x.decode("utf-8", "surrogateescape") for x in data.rstrip(b"\n").split(b"\0")]
+    return (parts[1], parts[2:]) if len(parts) >= 2 and parts[0] == HELLO and data.endswith(b"\n") else None
+
+
+def hand_over(path, argv, startup_id="", timeout=1.0):
+    """ask the bar that stays to show itself; True when it said it does"""
+    import socket
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        s.settimeout(timeout)
+        s.connect(path)
+        s.sendall(request_line(argv, startup_id))
+        return s.recv(8)[:2] == b"ok"
+    except OSError:
+        return False
+    finally:
+        s.close()
+
+
+def listen(path):
+    """the listening socket at PATH, or None: another bar holds it (it answers), or it cannot be made. A socket file
+    nobody answers at (a bar that was killed) is replaced"""
+    import socket
+    for again in (True, False):
+        srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            old = os.umask(0o177)
+            try:
+                srv.bind(path)
+            finally:
+                os.umask(old)
+            srv.listen(4)
+            srv.setblocking(False)
+            return srv
+        except OSError:
+            srv.close()
+            probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            try:
+                probe.settimeout(0.5)
+                probe.connect(path)
+                return None                 # (someone answers: that bar stays, this one is a window of its own)
+            except OSError:
+                if not again:
+                    return None
+                try:
+                    os.unlink(path)
+                except OSError:
+                    return None
+            finally:
+                probe.close()
+    return None
+
+
+def arguments(argv):
+    """the command line read: {"query", "theme", "lang", "list"} (theme and lang None when not given), or, for a line
+    that is help or wrong, (exit status, what to say)"""
+    o = {"query": "", "theme": None, "lang": None, "list": None}
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a in ("--query", "--theme", "--lang", "--list") and i + 1 < len(argv):
+            o[a[2:]] = argv[i + 1]
+            i += 1
+        elif a in ("-h", "--help"):
+            return 0, "silik-command [--query TEXT] [--theme light|dark] [--list TEXT] [--lang en|ca|es]"
+        else:
+            return 2, "silik-command: unknown option " + a
+        i += 1
+    return o
 
 
 # ------------------------------------------------------------------ window
@@ -634,26 +735,37 @@ def css_values(theme, composited, glass):
     return v
 
 
-def run_window(query, theme, lang, started=None):
+def run_window(query, theme, lang, started=None, path=None, given=(None, None)):
+    """the window. PATH: the socket to stay at (None: the bar ends when its window closes). GIVEN: the --theme and
+    --lang of this bar's own command line: a request with others is not served (its caller opens its own window)"""
     import gi
     gi.require_version("Gtk", "3.0")
     gi.require_version("Gdk", "3.0")
     from gi.repository import Gdk, GLib, Gtk, Pango
 
     t = TEXT[lang]
-    if theme not in THEMES:
-        theme = desktop_theme()
+    fixed = theme in THEMES     # (--theme, SILIK_THEME: kept. Else the desktop's, read again at each showing)
     items = all_items(lang, started)
     css = Gtk.CssProvider()
-    vals = css_values(theme, Gdk.Screen.get_default().is_composited(), glass_mode())
-    try:
-        css.load_from_data((CSS % vals).encode())
-    except GLib.Error:
-        # (seen in the rig, 13/11/2026, about once in thirty openings on a busy machine: GTK refused this stylesheet with
-        # "Invalid number for color value" at its first number, and the bar did not open. The sheet is valid and the
-        # next reading takes it; why the first did not is not known [A])
-        css.load_from_data((CSS % vals).encode())
-    Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+    screen = Gdk.Screen.get_default()
+    style = {}
+
+    def restyle():
+        vals = css_values(theme if fixed else desktop_theme(), screen.is_composited(), glass_mode())
+        if vals == style.get("vals"):
+            return
+        sheet = (CSS % vals).encode()
+        try:
+            css.load_from_data(sheet)
+        except GLib.Error:
+            # (seen in the rig, 13/11/2026, about once in thirty openings on a busy machine: GTK refused this stylesheet
+            # with "Invalid number for color value" at its first number, and the bar did not open. The sheet is valid
+            # and the next reading takes it; why the first did not is not known [A])
+            css.load_from_data(sheet)
+        style["vals"] = vals
+
+    restyle()
+    Gtk.StyleContext.add_provider_for_screen(screen, css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
     win = Gtk.Window(title="SilikOS COMMAND")
     win.set_decorated(False)
@@ -729,10 +841,108 @@ def run_window(query, theme, lang, started=None):
         twin.set_text("$ " + it.twin if it else "")
         keys.set_text("Enter %s   Tab %s   Esc %s" % (t["fill"] if it and it.fill else t["run"], t["complete"], t["close"]))
 
+    # ---- the bar that stays: its window hides, a request shows it again
+    srv = listen(path) if path else None
+    stay = {"on": srv is not None}
+    try:
+        born = os.stat(__file__).st_mtime_ns
+    except OSError:
+        born = None
+
+    def close(*_):
+        if not stay["on"]:
+            Gtk.main_quit()
+            return
+        win.hide()
+        asked[:] = []
+
+    def leave():
+        """no longer the bar that stays: the socket is given up at once, the process ends when its window closes"""
+        stay["on"] = False
+        try:
+            srv.close()
+            os.unlink(path)
+        except OSError:
+            pass
+        if not win.get_visible():
+            GLib.idle_add(Gtk.main_quit)
+
+    def reload():
+        """the lists again (boxes, prefixes, programs, desktop entries), asked with the window already on the screen
+        and taken when the three have answered; the rows are drawn again only when something changed"""
+        calls = [silik_json_start(a) for a in SILIK_LISTS]
+        until = time.time() + 5
+
+        def ready():
+            if time.time() < until and any(p is not None and p.poll() is None for p in calls):
+                return True
+            new = all_items(lang, calls)
+            if [(i.address, i.title, i.argv, i.terminal) for i in new] != [(i.address, i.title, i.argv, i.terminal) for i in items]:
+                items[:] = new
+                refresh()
+            return False
+
+        GLib.timeout_add(20, ready)
+
+    def now():
+        """the X server's time: a window shown again with it takes the focus (with the time of the last key this
+        window saw, the window manager may leave the focus where it is)"""
+        try:
+            gi.require_version("GdkX11", "3.0")
+            from gi.repository import GdkX11
+            w = win.get_window()
+            if isinstance(w, GdkX11.X11Window):
+                return GdkX11.x11_get_server_time(w)
+        except Exception:       # (not an X11 window, no GdkX11)
+            pass
+        return Gdk.CURRENT_TIME
+
+    def show(q, startup_id=""):
+        restyle()
+        asked[:] = []
+        if entry.get_text() == q:
+            refresh()
+        else:
+            entry.set_text(q)       # ("changed": refresh)
+        if startup_id:
+            win.set_startup_id(startup_id)
+        win.show_all()
+        win.present_with_time(now())
+        entry.grab_focus()
+        entry.set_position(-1)
+        GLib.timeout_add(60, lambda: reload() and False)        # (not while the window is being put on the screen)
+
+    def request(_fd, _cond):
+        try:
+            c, _ = srv.accept()
+        except OSError:
+            return stay["on"]
+        answer = b"no\n"
+        try:
+            c.settimeout(0.5)
+            r = request_read(c.recv(65536))
+            o = arguments(r[1]) if r is not None else None
+            try:
+                same = born is not None and os.stat(__file__).st_mtime_ns == born
+            except OSError:
+                same = False
+            if not same:        # (the package was updated under this bar: the caller opens the new one, which stays)
+                leave()
+            elif isinstance(o, dict) and o["list"] is None and (o["theme"], o["lang"]) == tuple(given):
+                answer = b"ok\n"
+            c.sendall(answer)       # (said before the window is drawn: the caller is not kept waiting for it)
+        except OSError:
+            answer = b""
+        finally:
+            c.close()
+        if answer[:2] == b"ok":
+            show(o["query"], r[0])
+        return stay["on"]
+
     def key(_w, ev):
         k = ev.keyval
         if k == Gdk.KEY_Escape:
-            Gtk.main_quit()
+            close()
             return True
         if k in (Gdk.KEY_Down, Gdk.KEY_Up) and shown:
             r = lst.get_selected_row()
@@ -757,7 +967,7 @@ def run_window(query, theme, lang, started=None):
                 entry.set_position(-1)
                 return True
             if it and launch(it, TEXT[lang]):
-                Gtk.main_quit()
+                close()
             return True
         return False
 
@@ -765,46 +975,43 @@ def run_window(query, theme, lang, started=None):
     lst.connect("row-selected", selected)
     win.connect("key-press-event", key)
     win.connect("destroy", Gtk.main_quit)
-    win.connect("focus-out-event", lambda *_: Gtk.main_quit() if not os.environ.get("SILIK_COMMAND_STAY") else False)
+    win.connect("delete-event", lambda *_: bool(close()) or stay["on"])
+    win.connect("focus-out-event", lambda *_: bool(close()) if not os.environ.get("SILIK_COMMAND_STAY") else False)
+    if srv is not None:
+        GLib.io_add_watch(srv.fileno(), GLib.PRIORITY_DEFAULT, GLib.IO_IN, request)
     entry.set_text(query)
     refresh()
     win.show_all()
     entry.grab_focus()
     entry.set_position(-1)
-    Gtk.main()
+    try:
+        Gtk.main()
+    finally:
+        if stay["on"]:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
 
 
 def main(argv):
-    query, theme, lang, list_only = "", os.environ.get("SILIK_THEME", ""), lang_of(), None
-    i = 0
-    while i < len(argv):
-        a = argv[i]
-        if a in ("--query", "--theme", "--lang", "--list") and i + 1 < len(argv):
-            v = argv[i + 1]
-            i += 1
-            if a == "--query":
-                query = v
-            elif a == "--theme":
-                theme = v
-            elif a == "--lang":
-                lang = v if v in TEXT else lang
-            else:
-                list_only = v
-        elif a in ("-h", "--help"):
-            print(__doc__ or "silik-command [--query TEXT] [--theme light|dark] [--list TEXT] [--lang en|ca|es]")
-            return 0
-        else:
-            print("silik-command: unknown option " + a, file=sys.stderr)
-            return 2
-        i += 1
-    if list_only is not None:
-        q = list_only.strip()
+    o = arguments(argv)
+    if isinstance(o, tuple):
+        print(o[1], file=sys.stderr if o[0] else sys.stdout)
+        return o[0]
+    lang = o["lang"] if o["lang"] in TEXT else lang_of()
+    if o["list"] is not None:
+        q = o["list"].strip()
         asked = (q[1:].strip(), ask_items(q[1:].strip(), lang)) if q[:1] == "?" and q[1:].strip() else None
-        for it in match(all_items(lang) if asked is None else [], list_only, TEXT[lang], limit=50, asked=asked):
+        for it in match(all_items(lang) if asked is None else [], o["list"], TEXT[lang], limit=50, asked=asked):
             print("%s\t%s" % (it.address, it.twin))
         return 0
+    path = socket_path()
+    if path and hand_over(path, argv, os.environ.get("DESKTOP_STARTUP_ID", "")):
+        return 0                # the bar that stays shows itself
     started = [silik_json_start(a) for a in SILIK_LISTS]     # they answer while GTK loads
-    run_window(query, theme, lang, started)
+    theme = o["theme"] if o["theme"] is not None else os.environ.get("SILIK_THEME", "")
+    run_window(o["query"], theme, lang, started, path, (o["theme"], o["lang"]))
     return 0
 
 

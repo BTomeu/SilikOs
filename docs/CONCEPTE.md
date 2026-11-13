@@ -94,6 +94,9 @@ Amb **Super+Espai** s'obre una barra on s'escriu el que es vol: el nom d'una apl
 `dev/can`, `win/vm-usb` o `look/island`. Tot el que fa l'escriptori passa per una sola ordre, `silik`, i **sempre
 ensenya la línia que executa**: res es fa d'amagat.
 
+La barra **es queda carregada** després del primer cop: en tancar-la s'amaga, i el Super+Espai següent només li
+demana que torni. Al banc de proves surt en uns 50 ms en lloc d'uns 190 (`docs/STATUS.md`).
+
 ### L'ordre `silik`
 
 És el cervell del sistema. Exemples:
@@ -155,13 +158,13 @@ portàtil de veritat (consum, hores de bateria).
 
 Tot està en un repositori de GitHub. Hi ha tres maneres de comprovar que funciona, de més ràpida a més real:
 
-1. **Proves automàtiques** (323 ara mateix): comproven el codi de `silik`, els fitxers de l'escriptori, les regles
+1. **Proves automàtiques** (més de 1100 ara mateix): comproven el codi de `silik`, els fitxers de l'escriptori, les regles
    de colors…, en segons.
 2. **El banc de proves**: un escriptori GNOME de veritat dins d'un contenidor, on s'instal·len els paquets i es fan
    fotos de pantalla. Totes les imatges dels colors, les icones, SavvyCAN o PulseView surten d'aquí.
 3. **La instal·lació real**: GitHub construeix la **ISO** (el disc d'instal·lació), la instal·la sola en una màquina
-   virtual, engega el sistema instal·lat, el revisa (86 comprovacions la darrera vegada) i desa fotos de pantalla. És
-   la prova que compta.
+   virtual, engega el sistema instal·lat, el revisa (120 comprovacions la darrera vegada) i desa fotos de pantalla.
+   És la prova que compta.
 
 Cada eina que compilem nosaltres passa per una **prova de veritat** en un sistema net: el simulador ha de simular, el
 descodificador ha de descodificar, la finestra ha d'obrir-se. No n'hi ha prou que «s'instal·li».
@@ -169,30 +172,29 @@ descodificador ha de descodificar, la finestra ha d'obrir-se. No n'hi ha prou qu
 **Regla de la casa:** el fitxer `docs/STATUS.md` té dues taules, *verificat* i *no verificat*. Res passa a la primera
 sense haver-ho executat de veritat. Les suposicions es marquen amb [A].
 
-## 7. En quin punt som (12/11/2026)
+## 7. En quin punt som (13/11/2026)
 
-**Fet i provat:**
-- Instal·lació desatesa completa a GitHub: es va fer el darrer cop amb 86 comprovacions correctes.
-- Eines d'EDA, microcontroladors i Wine dins de la ISO.
-- Els tres aspectes de l'escriptori.
+**Fet i provat en una instal·lació de veritat (màquina virtual, a GitHub):**
+- Instal·lació desatesa completa: la darrera, 120 comprovacions bé i cap de fallada (run 43436222754).
+- Eines d'EDA, microcontroladors i Wine dins de la ISO; els tres aspectes de l'escriptori, els accents, el vidre.
+- Tornar enrere d'una actualització (`silik rollback`) en un disc LVM de veritat.
+- Els paquets i les eines també es construeixen i es proven en màquines ARM de GitHub.
+- **Al costat de l'AlmaLinux de sèrie, a la mateixa màquina virtual**: SilikOS fa servir uns 155 MB menys de memòria
+  i arriba a l'escriptori uns 0,7 s més tard (la seva pantalla d'entrada va sobre Xorg). `docs/NUMEROS.md` §9.
+- La ISO sense xarxa: s'instal·la i arrenca en una màquina sense targeta de xarxa; a la primera prova li faltaven
+  els paquets dels releases (OpenOCD, les eines EDA), i s'està tornant a provar amb ells.
 
 **Fet i provat al banc, encara no en una instal·lació real:**
-- Els accents i les icones de color.
-- L'aspecte illa per defecte.
-- Les actualitzacions automàtiques.
-- Les eines CAN i el banc (SavvyCAN, cantools, PulseView…).
+- Les eines CAN i el banc (SavvyCAN, cantools, PulseView…) amb maquinari de veritat: no hi ha hagut cap adaptador.
 - SDCC i el firmware fx2lafw (sense cap analitzador real connectat).
-- Els programes Qt (SavvyCAN, PulseView, KLayout) amb l'aspecte i l'accent de SilikOS.
-- La secció Banc a l'Inici, i l'Inici que s'obre més ràpid (de 64–76 ms a 15–17 ms amb 152 aplicacions).
-- El vidre de l'illa, l'Inici i el COMMAND bar (encès per defecte), amb fons clars, foscos i fotos, a 1x i a 2x.
+- L'Inici que s'obre més ràpid (de 64–76 ms a 15–17 ms amb 152 aplicacions) i el COMMAND bar que es queda carregat.
 
-**Aturat per decisions o coses del propietari:**
-- **GitHub no executa feines** per un problema de facturació del compte. Fins que s'arregli, no es pot construir la
-  ISO nova ni provar res en instal·lació real (Settings → Billing and plans).
-- **Repositori propi de paquets.** Perquè els paquets de SilikOS també s'actualitzin sols, cal:
-  - un lloc públic per als paquets: el repositori de codi és privat, i un ordinador instal·lat no hi pot baixar res;
-  - una clau de signatura que genera i guarda el propietari.
-- **KiCad**: compilat, però la seva prova es va quedar a mitges per la facturació.
+**Només ho pot fer el propietari:**
+- **Activar GitHub Pages** (Settings → Pages → Source: GitHub Actions): és on es publicarà el repositori de paquets.
+- **La clau de signatura** dels paquets (`docs/REPO.md`): la genera i la guarda el propietari.
+- **Triar la llicència** del codi.
+
+**No provat enlloc:** cap maquinari real (ni el Ryzen, ni una sonda, ni un adaptador CAN, ni un USB d'instal·lació).
 
 **A ARM (aarch64), provat en un contenidor ARM emulat en aquesta màquina (12/11/2026):**
 - Els paquets de SilikOS són els mateixos per a les dues arquitectures: es construeixen i s'instal·len sobre AlmaLinux 9
@@ -206,8 +208,8 @@ sense haver-ho executat de veritat. Les suposicions es marquen amb [A].
 - Al Snapdragon X: com a màquina virtual Hyper-V (no provat). Detall: `docs/HARDWARE.md`.
 
 **Següents passos proposats:**
-- Una ISO que instal·li sense xarxa.
-- Que l'ordre `silik` i el COMMAND bar arrenquin més ràpid (s'està mesurant).
+- Fer-lo servir una setmana al Ryzen i apuntar on falla (`docs/PRIMERA-HORA.md`).
+- La pantalla d'entrada sobre Wayland amb la sessió sobre Xorg, per recuperar els 0,7 s d'arrencada (no provat).
 
 ## 8. Petit glossari
 

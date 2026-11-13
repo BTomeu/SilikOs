@@ -218,7 +218,9 @@ class CommandBar(unittest.TestCase):
         src = text(os.path.join(ROOT, "packages", "silik-command", "files", "silik-command"))
         self.assertIn('schema.has_key("glass")', src)
         self.assertIn('settings.get_string("glass-mode") if schema.has_key("glass-mode") else "on"', src)   # (a desktop before the modes)
-        self.assertIn("css_values(theme, Gdk.Screen.get_default().is_composited(), glass_mode())", src)
+        # (read at every showing: the bar stays, and `silik look --glass` may have been run since it was last shown)
+        self.assertIn("css_values(theme if fixed else desktop_theme(), screen.is_composited(), glass_mode())", src)
+        self.assertIn("    def show(q, startup_id=\"\"):\n        restyle()\n", src)
         mode = src.split("def glass_mode():")[1].split("\ndef ")[0]
         self.assertIn('if not settings.get_boolean("glass"):\n            return None', mode)      # the switch first
         self.assertIn("except Exception:", mode)

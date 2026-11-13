@@ -1,0 +1,44 @@
+#!/usr/bin/python3 -IS
+# SilikOS — /usr/bin/silik-command. The COMMAND bar itself is /usr/share/silikos/python/silik_command.py
+# (packages/silik-command/files/silik-command). A bar that was opened before stays, hidden, with its window loaded:
+# this asks it to show itself and ends, without loading anything of the bar (python3-gobject, GTK: most of a
+# start). When no bar answers, the bar is imported from here, so that Python takes it compiled from its __pycache__,
+# and this process becomes the bar that stays.
+# (-I: nothing from the environment or the user's own folders; -S: the site module is not imported for a hand-over,
+# 2-3 ms of each start. The bar needs it, for python3-gobject: it is called below.)
+# The line sent is silik_command.request_line()'s: the tests hold the two equal.
+import os
+import sys
+
+
+def hand_over(argv):
+    """ask the bar that stays to show itself; True when it said it does"""
+    d = os.environ.get("XDG_RUNTIME_DIR")
+    if not d or os.environ.get("SILIK_COMMAND_ONCE") or "--list" in argv or "-h" in argv or "--help" in argv:
+        return False
+    path = os.path.join(d, "silik-command.sock")
+    if not os.path.exists(path):
+        return False
+    import socket
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        s.settimeout(1.0)
+        s.connect(path)
+        words = ["silik-command 1", os.environ.get("DESKTOP_STARTUP_ID", "")] + argv
+        s.sendall(b"\0".join(x.encode("utf-8", "surrogateescape") for x in words) + b"\n")
+        return s.recv(8)[:2] == b"ok"
+    except OSError:
+        return False
+    finally:
+        s.close()
+
+
+if hand_over(sys.argv[1:]):
+    sys.exit(0)
+import site  # noqa: E402
+
+site.main()
+sys.path.insert(0, "/usr/share/silikos/python")
+import silik_command  # noqa: E402
+
+sys.exit(silik_command.main(sys.argv[1:]))

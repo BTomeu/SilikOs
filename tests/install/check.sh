@@ -96,6 +96,26 @@ has desktop.user-theme "$(asuser gnome-extensions info user-theme@gnome-shell-ex
 is desktop.user-theme-name "$(asuser gsettings get org.gnome.shell.extensions.user-theme name)" "'SilikOS'"
 has desktop.shell-stylesheet "$(tr '\0' '\n' < /proc/$(pgrep -u tester -x gnome-shell | head -1)/environ 2> /dev/null | grep '^G_RESOURCE_OVERLAYS=' | cut -c1-90)" "/org/gnome/shell/theme/gnome-shell.css=/usr/share/themes/SilikOS"
 has desktop.super-space "$(asuser gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings)" "silik-command"
+# the COMMAND bar stays: its first opening keeps the process and a socket of the user's alone; the next
+# `silik-command` asks that one and ends (the launcher, without loading the bar). Seen from outside: the window, the
+# socket, one process after two calls. (SILIK_COMMAND_STAY: the window is not hidden when the focus goes elsewhere)
+if insession xwininfo -root > /dev/null 2>&1; then
+  asuser systemd-run --quiet --user --collect -p WorkingDirectory=/home/tester -E DISPLAY=:0 -E SILIK_COMMAND_STAY=1 silik-command > /dev/null 2>&1
+  barmap() { insession xwininfo -name 'SilikOS COMMAND' 2> /dev/null | sed -n 's/^ *Map State: //p' | head -1; }
+  st=""; for i in $(seq 1 20); do sleep 1; st=$(barmap); [ "$st" = IsViewable ] && break; done
+  sock=$(stat -c '%a %U' /run/user/$uid/silik-command.sock 2>&1)
+  t0=$(date +%s%N); insession silik-command --query sys/doctor > /dev/null 2>&1; rc=$?; ms=$(( ($(date +%s%N) - t0) / 1000000 ))
+  sleep 1
+  n=$(pgrep -u tester -f 'bin/silik-comman[d]' | wc -l)
+  if [ "$st" = IsViewable ] && [ "$sock" = "600 tester" ] && [ $rc = 0 ] && [ "$n" = 1 ] && [ "$(barmap)" = IsViewable ]; then
+    say bar.stays ok "the window $st, the socket $sock, the second call exit $rc in $ms ms (through systemd-run), $n process"
+  else
+    say bar.stays FAIL "the window '$st' then '$(barmap)', the socket '$sock', the second call exit $rc, $n process(es)"
+  fi
+  pkill -u tester -f 'bin/silik-comman[d]'
+else
+  say bar.stays info "no X display to look at"
+fi
 # the three looks (silik, bar, island): the setting is there with its default, the running shell takes each one
 # (seen from outside: the room it leaves to windows; the rail and the top bar are gone in bar and island) without an
 # error of the extension, and the session ends in the default one. Their pictures are tests/install/run.sh's.
