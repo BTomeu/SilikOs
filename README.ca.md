@@ -44,6 +44,7 @@ ensenya i no executa res. El COMMAND bar (Super+Espai) ensenya la mateixa línia
 | Salut | una sola revisió de l'equip: sistema, seguretat, gràfics, banc, EDA, Windows, xarxa; ok / avís / malament / desconegut i l'ordre que ho arregla; desconegut, mai ok, per al que no pot veure | `silik doctor` |
 | Seguretat i actualitzacions | SELinux en mode enforcing (el de la base), una zona del tallafoc que descarta les connexions entrants, sshd apagat, totes les actualitzacions instal·lades cada dia; el sistema no reinicia mai pel seu compte | `silik secure status`, `silik secure apply`, `silik update`, `silik update --auto` |
 | Energia | rendiment, equilibrat, estalvi o automàtic (rendiment endollat, equilibrat amb bateria), amb el tuned de la base; s'ofereix swap zram; trim de l'SSD cada setmana | `silik power` |
+| Velocitat | el que la base engega o manté en marxa i una estació de treball d'enginyeria no necessita està apagat des de la primera arrencada (nou elements; res de seguretat, cap paràmetre del nucli, res esborrat), i una ordre ho torna a posar; el sistema mesura la seva pròpia arrencada i memòria. Encara no es diu cap temps d'arrencada: les mesures esperen el CI | `silik speed`, `silik speed apply`, `silik speed undo`, `silik bench system` |
 | SilikStudio | la suite de SilikVolt com a aplicació nativa: una finestra pròpia, la primera tecla del rail. El seu paquet es construeix des del repositori de SilikStudio | |
 
 ## Per a qui és

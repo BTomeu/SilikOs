@@ -42,6 +42,7 @@ prints them and runs nothing. The COMMAND bar (Super+Space) shows the same line 
 | Health | one audit of the workstation: system, security, graphics, bench, EDA, Windows, network; ok / warn / bad / unknown and the command that fixes each; unknown, never ok, for what it cannot see | `silik doctor` |
 | Security and updates | SELinux enforcing (the base's), a firewall zone that drops incoming connections, sshd off, every update installed daily; the system never restarts by itself | `silik secure status`, `silik secure apply`, `silik update`, `silik update --auto` |
 | Power | performance, balanced, saver, or auto (performance on mains power, balanced on battery), through the base's tuned; zram swap offered, SSD trim weekly | `silik power` |
+| Speed | what the base starts or keeps running and an engineer's workstation does not need is off from the first start (nine items; nothing of security, no kernel parameter, nothing removed), and one command puts each back; the system measures its own start and memory. No start time is claimed yet: the measurements wait for the CI | `silik speed`, `silik speed apply`, `silik speed undo`, `silik bench system` |
 | SilikStudio | the SilikVolt suite as a native application: a window of its own, the first key of the rail. Its package is built from SilikStudio's repository | |
 
 ## Who it is for

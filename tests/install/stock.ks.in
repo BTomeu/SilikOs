@@ -1,0 +1,16 @@
+# ======================================================================================================================
+# CI ONLY (tests/install/stock.ks.in). NEVER PART OF THE SHIPPED KICKSTART OR OF THE ISO.
+# The stock AlmaLinux 9 Workstation, for the comparison (tests/install/compare.sh): the base's own package sources and
+# its Workstation environment, nothing of SilikOS, nothing changed after the installation. What kickstart/silikos.ks
+# installs on top of exactly this is what the comparison measures.
+# ======================================================================================================================
+url --url=https://repo.almalinux.org/almalinux/9/BaseOS/x86_64/os/
+repo --name=AppStream --baseurl=https://repo.almalinux.org/almalinux/9/AppStream/x86_64/os/
+network --bootproto=dhcp --device=link --activate --onboot=yes
+xconfig --startxonboot
+selinux --enforcing
+firewall --enabled
+
+%packages
+@^workstation-product-environment
+%end

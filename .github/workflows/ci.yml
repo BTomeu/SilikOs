@@ -16,12 +16,13 @@ on:
     workflows: ['Wine', 'EDA tools', 'Dev tools']
     types: [completed]
     branches: [main]
-# a push replaces the run in progress (newer code); a run started because Wine / EDA tools / Dev tools ended waits for
-# the one in progress instead of cancelling it (13/11/2026: the first installation test of the public repository was
-# cancelled 25 minutes in when Dev tools ended; with EDA tools running for hours it would be cancelled again and again)
+# one run at a time, and a run in progress is never cancelled: the next one waits for it, and of several waiting only
+# the newest runs (GitHub keeps one pending run per group). (13/11/2026: the first installation test of the public
+# repository was cancelled 25 minutes in when Dev tools ended, and the next by a push: with several pushes an hour and
+# EDA tools running for hours, no installation test would ever finish)
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'workflow_run' }}
+  cancel-in-progress: false
 # read-only by default; the job results writes the branch ci-results, a tag's release job the release
 permissions:
   contents: read
@@ -145,6 +146,28 @@ jobs:
             cat build/install-test/report.txt 2>/dev/null || echo 'no report: see the installer console (artifact install-test)'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+      # the measurement starts of tests/install/run.sh (its step 4, tests/install/bench.sh): `silik bench system` on the
+      # installed system, two starts with the speed profile and two after `silik speed undo` (docs/SPEED.md)
+      - name: Start and memory of the installed system, with the speed profile and after its undo
+        if: always()
+        run: |
+          {
+            echo '### Start and memory: the speed profile (on-1, on-2), then after `silik speed undo` (undo-1, undo-2)'
+            echo '```'
+            cat build/install-test/bench.txt 2>/dev/null || echo 'no measurement: see the consoles of the measurement starts (artifact install-bench)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: install-bench
+          if-no-files-found: ignore
+          path: |
+            build/install-test/bench.txt
+            build/install-test/bench-*.json
+            build/install-test/bench-*.txt
+            build/install-test/bench-start*.log
+            build/install-test/bench-start*.out
       - uses: actions/upload-artifact@v4
         if: always()
         with:

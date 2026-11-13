@@ -1,0 +1,61 @@
+# Compare: SilikOS beside the stock AlmaLinux 9 Workstation it is made on. Both are installed, unattended, in the same
+# virtual machine on the same runner and measured with the same program (`silik bench system`: how the system
+# started, when the login screen and the desktop were up, memory and processes two minutes later), two starts each
+# (tests/install/compare.sh; docs/SPEED.md). By hand only: it installs two systems (about an hour).
+# Its table is the result (the run's summary and the artifact compare); nothing is built for the system here.
+name: Compare
+on:
+  workflow_dispatch:
+# read-only
+permissions:
+  contents: read
+jobs:
+  bench-compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - name: KVM for the runner's user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+      - name: Tools and disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          bash tools/ci_apt.sh rpm createrepo-c xorriso mtools cpio isomd5sum qemu-system-x86 qemu-utils
+          df -h /
+      - name: Packages and the SilikOS ISO
+        # (the ISO of this job carries the SilikOS packages and what they require from the base and EPEL; not the
+        # packages of the releases wine-*, eda-tools and dev-tools, which add programs, not services)
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src almalinux:9 bash -c 'dnf -y -q install rpm-build createrepo_c > /dev/null && bash tools/build_rpms.sh'
+          sudo chown -R "$(id -u):$(id -g)" build
+          bash tools/build_iso.sh
+          ls -la build/SilikOS-*-netinstall.iso build/iso/AlmaLinux-9-latest-x86_64-boot.iso
+      - name: Install both, measure both
+        run: bash tests/install/compare.sh build/SilikOS-*-netinstall.iso build/iso/AlmaLinux-9-latest-x86_64-boot.iso build/compare
+      - name: The table
+        if: always()
+        run: |
+          {
+            echo '### SilikOS and the stock AlmaLinux 9 Workstation, same virtual machine, same runner'
+            echo '```'
+            cat build/compare/compare.txt 2>/dev/null || echo 'no table: see the consoles (artifact compare)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compare
+          if-no-files-found: ignore
+          path: |
+            build/compare/compare.txt
+            build/compare/*/bench.txt
+            build/compare/*/bench-*.json
+            build/compare/*/bench-*.txt
+            build/compare/*/*.log
+            build/compare/*/bench-start*.out
+            build/compare/*/ci.ks

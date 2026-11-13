@@ -7,7 +7,10 @@
 #   3. QEMU boots that disk; the system reports its own checks on the serial port (check.sh), the screen is saved
 #      (the desktop, Start after the Super key, the COMMAND bar after Super+Space, a Windows program and the open EDA
 #      tools opened from it, the lock screen and its prompt, the session after the password, the login screen)
-#   OUT_DIR (default build/install-test): install.log, boot.log, report.txt, *.png;  exit 0 when no check failed
+#   4. QEMU boots that disk six more times to measure it (bench.sh): its start and its memory with the speed profile
+#      and after `silik speed undo`
+#   OUT_DIR (default build/install-test): install.log, boot.log, report.txt, *.png, bench.txt, bench-*.json;
+#   exit 0 when no check failed
 #   SILIK_CI_APPEND="..."   more installer boot options, e.g. on a build machine behind a proxy:
 #                           "inst.proxy=http://10.0.2.2:PORT inst.noverifyssl" (10.0.2.2 is the host, seen from the VM)
 # Needs qemu-system-x86_64, qemu-img, xorriso, mtools, python3; ImageMagick for PNG (else the pictures stay .ppm);
@@ -38,6 +41,11 @@ grep -vE '^(graphical|firstboot --enable)$' "$work/shipped.ks" > "$work/ci.ks"
 python3 - "$here/ci.ks.in" "$here/check.sh" >> "$work/ci.ks" <<'EOF'
 import sys
 print(open(sys.argv[1]).read().replace("@CHECK@", open(sys.argv[2]).read().rstrip("\n")))
+EOF
+# the service of the measurement starts (bench.ks.in, bench-guest.sh: step 4)
+python3 - "$here/bench.ks.in" "$here/bench-guest.sh" >> "$work/ci.ks" <<'EOF'
+import sys
+print(open(sys.argv[1]).read().replace("@BENCH@", open(sys.argv[2]).read().rstrip("\n")))
 EOF
 cp "$work/ci.ks" "$out/ci.ks"
 dd if=/dev/zero of="$work/ks.img" bs=1M count=8 status=none
@@ -196,6 +204,16 @@ s = socket.socket(socket.AF_UNIX); s.connect(sys.argv[1]); time.sleep(0.3); s.se
 EOF
 fi
 wait $qpid 2> /dev/null || true
+
+# 4. the measurement starts (tests/install/bench.sh): the installed system as the kickstart left it, with the speed
+#    profile, measured on two starts; then `silik speed undo` and two more, so that what the profile gives is a
+#    difference measured on the same machine in the same hour. SILIK_CI_BENCH=0 leaves them out. They do not decide
+#    whether the installation test passes: a measure that fails is a warning.
+if [ "${SILIK_CI_BENCH:-1}" = 1 ] && [ $done_ = 1 ]; then
+  bash "$here/bench.sh" "$out/disk.qcow2" "$out/ks.img" "$out" settle measure:on-1 measure:on-2 undo measure:undo-1 measure:undo-2 \
+    || { echo "the measurement starts did not all give a capture (bench.txt, bench-start*.log)"
+         [ -z "${GITHUB_ACTIONS:-}" ] || echo "::warning title=SilikOS bench::the measurement starts did not all give a capture (artifact install-bench)"; }
+fi
 rm -f "$out/disk.qcow2" "$out/ks.img"
 
 # the report

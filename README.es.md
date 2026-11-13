@@ -44,6 +44,7 @@ muestra y no ejecuta nada. El COMMAND bar (Super+Espacio) muestra la misma líne
 | Salud | una sola revisión del equipo: sistema, seguridad, gráficos, banco, EDA, Windows, red; ok / aviso / mal / desconocido y la orden que lo arregla; desconocido, nunca ok, para lo que no puede ver | `silik doctor` |
 | Seguridad y actualizaciones | SELinux en modo enforcing (el de la base), una zona del cortafuegos que descarta las conexiones entrantes, sshd apagado, todas las actualizaciones instaladas cada día; el sistema nunca reinicia por su cuenta | `silik secure status`, `silik secure apply`, `silik update`, `silik update --auto` |
 | Energía | rendimiento, equilibrado, ahorro o automático (rendimiento enchufado, equilibrado con batería), con el tuned de la base; se ofrece swap zram; trim del SSD cada semana | `silik power` |
+| Velocidad | lo que la base arranca o mantiene en marcha y una estación de trabajo de ingeniería no necesita está apagado desde el primer arranque (nueve elementos; nada de seguridad, ningún parámetro del núcleo, nada borrado), y una orden lo vuelve a poner; el sistema mide su propio arranque y memoria. Aún no se dice ningún tiempo de arranque: las medidas esperan al CI | `silik speed`, `silik speed apply`, `silik speed undo`, `silik bench system` |
 | SilikStudio | la suite de SilikVolt como aplicación nativa: una ventana propia, la primera tecla del rail. Su paquete se construye desde el repositorio de SilikStudio | |
 
 ## Para quién es

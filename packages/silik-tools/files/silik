@@ -12,6 +12,8 @@
 #               | serial [--json] | ccache [on | off]   embedded development, buses; the compiler cache
 #   silik power [show | performance | balanced | saver | auto [--ac P --battery P] | apply] [--json]
 #               | zram [on | off] | trim [on | off]   the power profile (tuned), zram swap, SSD trim
+#   silik speed [show [--json] | apply [ITEM...] | undo [ITEM...]]   what a start and a session do not need, off
+#   silik bench system [--json] [--label L] [--wait S] | compare FILE...   how this system started, what it holds at rest
 #   silik hw    probe | nvidia install | nvidia status
 #   silik identity show | silikos | base
 #   silik look  [silik | bar | island] [--json]     the desktop's look; no argument: which one is in use
@@ -3666,6 +3668,792 @@ def power_trim(ctx, a):
     return 0
 
 
+# ------------------------------------------------------------------ speed
+# `silik speed`: what an installed EL 9 Workstation starts or runs in the background that an engineer's workstation
+# does not need, turned off (docs/SPEED.md has each one: what it is, what stops working without it, why). Like
+# `silik secure`: speed_probe reads the system, speed_rows judges what was read and runs nothing (the tests feed it
+# made-up systems), speed_plan lists the commands. `apply` turns off what is on, through the base's own tools
+# (systemctl disable, a dconf defaults file, an autostart entry that hides the base's), and writes down what it
+# changed (SPEED_STATE); `undo` puts back exactly that. Nothing is removed or masked: a unit that is off still starts
+# when asked by name, by its socket or by D-Bus. Nothing of docs/SECURITY.md is in the list (firewalld, SELinux,
+# auditd, the update timers, chronyd, fstrim stay). The kernel's parameters are not touched.
+SPEED_STATE = os.environ.get("SILIK_SPEED_STATE") or "/var/lib/silikos/speed.json"
+SPEED_DCONF = "/etc/dconf/db/local.d/30-silikos-speed"     # system defaults (a user's own setting wins); `dconf update`
+# gnome-session reads <data dir>/gnome/autostart before /etc/xdg/autostart, and an entry seen first wins: one with
+# Hidden=true here keeps the base's entry of the same name from starting, without touching the base's file
+SPEED_AUTOSTART = "/usr/local/share/gnome/autostart"
+SPEED_SYSROOT = ""          # (the tests' made-up systems live in a folder)
+SPEED_FSTAB = "/etc/fstab"
+SPEED_MULTIPATH = "/etc/multipath.conf"
+SPEED_HIDDEN = "[Desktop Entry]\nType=Application\nName=%s\nComment=not started with the session (silik speed); `silik speed undo %s` puts it back\nHidden=true\n"
+SPEED = (
+    {"id": "kdump", "name": "crash dumps", "units": ("kdump.service",),
+     "what": "kdump.service arms a second kernel at every start and builds its initramfs again after each kernel update",
+     "lose": "no memory dump is kept after a kernel crash (the memory set aside for it is the kernel's crashkernel= argument: docs/SPEED.md)"},
+    {"id": "modem", "name": "mobile broadband", "units": ("ModemManager.service",), "keep": "modem",
+     "what": "ModemManager runs from the start and asks every serial device that is plugged in whether it is a modem",
+     "lose": "a mobile broadband modem (4G / 5G) is not managed"},
+    {"id": "storage-arrays", "name": "storage arrays", "units": ("libstoragemgmt.service",),
+     "what": "libstoragemgmt's daemon (lsmd) runs from the start, for external storage arrays",
+     "lose": "lsmcli, and what GNOME Disks shows of an external storage array"},
+    {"id": "multipath", "name": "multipath storage", "units": ("multipathd.service", "multipathd.socket"), "keep": "multipath",
+     "what": "multipathd.service cannot start without /etc/multipath.conf, but while it is enabled every start waits for udev to settle (systemd-udev-settle.service)",
+     "lose": "nothing while there is no /etc/multipath.conf; multipath storage set up later needs it on again"},
+    {"id": "rpcbind", "name": "RPC port mapper", "units": ("rpcbind.service",), "keep": "nfs",
+     "what": "rpcbind runs from the start; its socket (rpcbind.socket, which stays) starts it when an NFS v3 mount or rpcinfo asks",
+     "lose": "nothing: it starts on demand"},
+    {"id": "makecache", "name": "hourly package metadata", "units": ("dnf-makecache.timer",),
+     "what": "dnf downloads the repositories' metadata every hour, from ten minutes after each start",
+     "lose": "the first dnf command of a day reads the metadata first; the daily update (silik update --auto) reads it anyway"},
+    {"id": "locate", "name": "locate database", "units": ("mlocate-updatedb.timer",),
+     "what": "updatedb walks every folder of the disks once a day (right after the start when the machine was off at night)",
+     "lose": "`locate` has no database, or an old one, until `sudo updatedb` is run"},
+    {"id": "indexer", "name": "file indexer", "installed": "/usr/libexec/tracker-miner-fs-3",
+     "dconf": (("org/freedesktop/tracker/miner/files", (("index-recursive-directories", "@as []"), ("index-single-directories", "@as []"))),),
+     "what": "Tracker's miner reads the documents of the home folder to index their content, and again when they change",
+     "lose": "search by content in Files (names are still found); a user's own setting wins"},
+    {"id": "software", "name": "GNOME Software in the background", "installed": "/etc/xdg/autostart/org.gnome.Software.desktop",
+     "autostart": ("org.gnome.Software.desktop",), "dconf": (("org/gnome/software", (("download-updates", "false"),)),),
+     "what": "GNOME Software starts with every session, stays in memory, checks for updates and downloads them (PackageKit)",
+     "lose": "Software's own notices of updates: the updates are the daily timer's (silik update --auto); Software opens from Start as before"},
+)
+SPEED_IDS = tuple(i["id"] for i in SPEED)
+# what a start of this system does not need to wait for or run, read and kept on purpose (docs/SPEED.md says why)
+SPEED_KEPT = (
+    ("NetworkManager-wait-online.service", "the daily update, NFS mounts and remote logging start after the network is up; the login screen does not wait for it"),
+    ("plymouth-quit-wait.service", "it only waits for the boot splash to hand over to the login screen: the quiet boot is the brand's"),
+    ("virtqemud.service", "it starts virtual machines marked to start with the system, and leaves by itself after two idle minutes"),
+    ("tuned.service", "the power profiles (silik power)"),
+    ("firewalld.service auditd.service chronyd.service fstrim.timer silikos-update.timer", "security (docs/SECURITY.md)"),
+)
+
+
+def speed_online():
+    """True when systemd runs this system and can stop or start a unit now; False in an installer's %post (a chroot)
+    and in a container without it, where `systemctl disable` still changes what the next start does. SYSTEMD_OFFLINE=1
+    (systemd's own variable for package and installer scripts; systemctl obeys it too) says so outright"""
+    if os.environ.get("SYSTEMD_OFFLINE", "").lower() in ("1", "true", "yes", "on") or not os.path.isdir("/run/systemd/system"):
+        return False
+    try:
+        a, b = os.stat("/"), os.stat("/proc/1/root/")
+        return (a.st_dev, a.st_ino) == (b.st_dev, b.st_ino)
+    except OSError:
+        return True         # (not root: PID 1's root is not ours to read; a user's shell is not an installer's chroot)
+
+
+def speed_keep():
+    """{reason id: why}: what this machine has that an item of the profile serves; the item is then left on"""
+    keep = {}
+    try:
+        ww = sorted(n for n in os.listdir(os.path.join(SYSFS, "class/net")) if n.startswith("ww"))
+    except OSError:
+        ww = []
+    try:
+        ww += sorted(os.listdir(os.path.join(SYSFS, "class/wwan")))
+    except OSError:
+        pass
+    if ww:
+        keep["modem"] = "a mobile broadband modem is in this machine (%s)" % ww[0]
+    if os.path.exists(SPEED_MULTIPATH):
+        keep["multipath"] = "%s exists" % SPEED_MULTIPATH
+    for line in read(SPEED_FSTAB).splitlines():
+        f = line.split("#", 1)[0].split()
+        if len(f) >= 3 and f[2] in ("nfs", "nfs4"):
+            keep["nfs"] = "an NFS mount in %s (%s)" % (SPEED_FSTAB, f[1])
+            break
+    return keep
+
+
+def speed_units(out):
+    """{unit: state} from `systemctl list-unit-files --no-legend UNIT...` (UNIT STATE [PRESET]; a unit that is not
+    installed has no line)"""
+    res = {}
+    for l in out.splitlines():
+        f = l.split()
+        if len(f) >= 2 and "." in f[0]:
+            res[f[0]] = f[1]
+    return res
+
+
+def speed_state(path=None):
+    """what `silik speed apply` wrote down: {"items": {id: {"units": {unit: {"enabled", "active"}}, "dconf", "files"}},
+    "undone": [ids turned back on by name]}"""
+    try:
+        st = json.loads(read(path or SPEED_STATE) or "{}")
+    except ValueError:
+        st = {}
+    if not isinstance(st, dict):
+        st = {}
+    st["items"] = st["items"] if isinstance(st.get("items"), dict) else {}
+    st["undone"] = [x for x in st.get("undone", []) if x in SPEED_IDS] if isinstance(st.get("undone"), list) else []
+    return st
+
+
+def speed_dconf_text(ids):
+    """the dconf defaults file of the items IDS (keyfile), '' when none of them has a setting"""
+    sec = {}
+    for it in SPEED:
+        if it["id"] in ids:
+            for path, keys in it.get("dconf", ()):
+                sec.setdefault(path, []).extend(keys)
+    if not sec:
+        return ""
+    out = ["# SilikOS: written by `silik speed apply`, removed by `silik speed undo` (docs/SPEED.md). System defaults:",
+           "# a user's own setting wins."]
+    for path in sorted(sec):
+        out += ["", "[%s]" % path] + ["%s=%s" % kv for kv in sec[path]]
+    return "\n".join(out) + "\n"
+
+
+def speed_dconf_has(text, it):
+    """True when the dconf defaults file TEXT sets every key of the item as the profile does"""
+    have, sec = set(), None
+    for l in text.splitlines():
+        l = l.strip()
+        if l.startswith("[") and l.endswith("]"):
+            sec = l[1:-1]
+        elif "=" in l and not l.startswith("#"):
+            k, v = l.split("=", 1)
+            have.add((sec, k.strip(), v.strip()))
+    return all((path, k, v) in have for path, keys in it.get("dconf", ()) for k, v in keys)
+
+
+def speed_probe(cmd=None):
+    """what `silik speed` reads (nothing is changed). CMD: the read-only command runner (silik doctor's notes them)"""
+    cmd = cmd or sec_cmd
+    units = sorted(set(u for it in SPEED for u in it.get("units", ())))
+    rc, out = cmd(["systemctl", "list-unit-files", "--no-legend", "--no-pager"] + units)
+    online = speed_online()
+    active = {}
+    if online and rc == 0:
+        _, aout = cmd(["systemctl", "is-active"] + units)        # one word per unit, in order
+        words = aout.split()
+        if len(words) == len(units):
+            active = {u: w in ("active", "activating", "reloading") for u, w in zip(units, words)}
+    hidden = {}
+    for it in SPEED:
+        for n in it.get("autostart", ()):
+            t = read(os.path.join(SPEED_AUTOSTART, n), None)
+            hidden[n] = None if t is None else any(l.strip().replace(" ", "").lower() == "hidden=true" for l in t.splitlines())
+    return {"systemctl": rc, "units": speed_units(out) if rc == 0 else {}, "active": active, "online": online,
+            "installed": {it["id"]: os.path.exists(SPEED_SYSROOT + it["installed"]) for it in SPEED if it.get("installed")},
+            "dconf": read(SPEED_DCONF), "hidden": hidden, "keep": speed_keep(), "state": speed_state()}
+
+
+def speed_rows(st):
+    """one row per item of the profile: state off (as the profile has it) | on (as the base has it) | kept (on, and
+    `silik speed apply` leaves it: why) | absent (not on this system) | unknown; nothing is run"""
+    rows = []
+    for it in SPEED:
+        r = {"id": it["id"], "name": it["name"], "what": it["what"], "lose": it["lose"], "units": list(it.get("units", ())), "why": ""}
+        on, parts, absent = False, [], False
+        if it.get("units"):
+            have = {u: st["units"][u] for u in it["units"] if u in st["units"]}
+            if st["systemctl"] != 0:
+                r["state"], r["value"] = "unknown", "systemd's unit files are not readable here"
+                rows.append(r)
+                continue
+            absent = not have
+            on = any(v.startswith("enabled") for v in have.values())
+            # (a unit just turned off in an installer, or by hand without --now, runs until the next start)
+            run = [u for u in have if st["active"].get(u)]
+            parts.append(", ".join("%s %s" % (u, have[u]) for u in sorted(have)) + (" (%s still runs until the next start)" % ", ".join(run) if run and not on else ""))
+        else:
+            absent = not st["installed"].get(it["id"], True)
+            for n in it.get("autostart", ()):
+                if not st["hidden"].get(n):
+                    on = True
+                parts.append("%s %s" % (n, "not started with the session" if st["hidden"].get(n) else "starts with every session"))
+            if it.get("dconf"):
+                ok = speed_dconf_has(st["dconf"], it)
+                on = on or not ok
+                parts.append(", ".join("%s=%s" % kv for _, keys in it["dconf"] for kv in keys) if ok else "the base's defaults")
+        if absent:
+            r["state"], r["value"] = "absent", "not on this system"
+        elif not on:
+            r["state"], r["value"] = "off", "; ".join(parts)
+        else:
+            why = st["keep"].get(it.get("keep", "")) or ("turned back on by name (silik speed undo %s)" % it["id"] if it["id"] in st["state"]["undone"] else "")
+            r["state"], r["value"], r["why"] = ("kept" if why else "on"), "; ".join(parts), why
+        rows.append(r)
+    return rows
+
+
+def speed_applied(rows):
+    """True when nothing of the profile is left to turn off (off, kept for a reason, or not on this system)"""
+    return all(r["state"] in ("off", "kept", "absent") for r in rows)
+
+
+def speed_pick(ids):
+    bad = [i for i in ids if i not in SPEED_IDS]
+    if bad:
+        die("silik speed: no item %s; the items are %s" % (" ".join(bad), " ".join(SPEED_IDS)), 2)
+    return [it for it in SPEED if not ids or it["id"] in ids]
+
+
+def speed_write(ctx, path, text, say=None):
+    """a file of the system written as root, with what goes in it (or SAY, a line about it) printed after the command"""
+    argv = as_root(["install", "-D", "-m", "0644", "/dev/stdin", path])
+    ctx.echo(argv)
+    if not ctx.quiet:
+        print("".join("    | %s\n" % l for l in (text if say is None else say).splitlines()), end="", flush=True)
+    if ctx.dry:
+        return 0
+    ctx.note(argv)
+    try:
+        return subprocess.run(argv, input=text, universal_newlines=True).returncode
+    except OSError:
+        return 127
+
+
+def speed_plan(st, ids=()):
+    """(steps, notes) of `silik speed apply [ID...]` on the system `st`. A step: ("run", argv) | ("write", path, text)
+    | ("state", new state). Without IDS: every item that is on, but for those kept for a reason (this machine has
+    what the item serves, or it was turned back on by name); an item named is turned off whatever the reason"""
+    steps, notes = [], []
+    rows = {r["id"]: r for r in speed_rows(st)}
+    state = json.loads(json.dumps(st["state"]))
+    now_off, dconf_before = [], set(i for i, rec in state["items"].items() if rec.get("dconf"))
+    for it in speed_pick(ids):
+        r = rows[it["id"]]
+        if r["state"] == "unknown":
+            notes.append("%s: %s, nothing changed" % (it["id"], r["value"]))
+            continue
+        if r["state"] == "absent" or r["state"] == "off":
+            continue
+        if r["state"] == "kept" and not ids:
+            notes.append("%s: left on, %s" % (it["id"], r["why"]))
+            continue
+        rec = state["items"].setdefault(it["id"], {})
+        if it.get("units"):
+            on = [u for u in it["units"] if st["units"].get(u, "").startswith("enabled")]
+            if on:
+                steps.append(("run", as_root(["systemctl", "disable"] + (["--now"] if st["online"] else []) + on)))
+                for u in on:        # (the first record of a unit is what it was before any apply)
+                    rec.setdefault("units", {}).setdefault(u, {"enabled": True, "active": st["active"].get(u)})
+        for n in it.get("autostart", ()):
+            if not st["hidden"].get(n):
+                path = os.path.join(SPEED_AUTOSTART, n)
+                steps.append(("write", path, SPEED_HIDDEN % (it["name"], it["id"])))
+                if path not in rec.setdefault("files", []):
+                    rec["files"].append(path)
+        if it.get("dconf"):
+            rec["dconf"] = True
+        if it["id"] in state["undone"]:
+            state["undone"].remove(it["id"])
+        now_off.append(it["id"])
+    dconf_after = set(i for i, rec in state["items"].items() if rec.get("dconf"))
+    if dconf_after != dconf_before or any(not speed_dconf_has(st["dconf"], it) for it in SPEED if it["id"] in dconf_after and it["id"] in now_off):
+        steps.append(("write", SPEED_DCONF, speed_dconf_text(dconf_after)))
+        steps.append(("run", as_root(["dconf", "update"])))
+    if now_off:
+        state["applied"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+        steps.append(("state", state))
+    return steps, notes
+
+
+def speed_unplan(st, ids=()):
+    """(steps, notes) of `silik speed undo [ID...]`: what apply wrote down, put back; nothing else is touched. An
+    item named is remembered as the user's choice (a later `silik speed apply` leaves it on)"""
+    steps, notes = [], []
+    state = json.loads(json.dumps(st["state"]))
+    dconf_before = set(i for i, rec in state["items"].items() if rec.get("dconf"))
+    done = []
+    for it in speed_pick(ids):
+        rec = state["items"].get(it["id"])
+        if rec is None:
+            if ids:
+                notes.append("%s: `silik speed apply` did not change it on this system, nothing to put back" % it["id"])
+                if it["id"] not in state["undone"]:
+                    state["undone"].append(it["id"])
+                    done.append(it["id"])
+            continue
+        units = rec.get("units") or {}
+        # (a unit turned off in an installer was not seen running or not: it is started, as a start of the base does)
+        start = sorted(u for u, was in units.items() if was.get("enabled") and was.get("active") is not False and st["online"])
+        only = sorted(u for u, was in units.items() if was.get("enabled") and u not in start)
+        if start:
+            steps.append(("run", as_root(["systemctl", "enable", "--now"] + start)))
+        if only:
+            steps.append(("run", as_root(["systemctl", "enable"] + only)))
+        for path in rec.get("files") or []:
+            if path.startswith(SPEED_AUTOSTART + "/"):          # (only what apply itself made)
+                steps.append(("run", as_root(["rm", "-f", path])))
+        del state["items"][it["id"]]
+        if ids and it["id"] not in state["undone"]:
+            state["undone"].append(it["id"])
+        done.append(it["id"])
+    dconf_after = set(i for i, rec in state["items"].items() if rec.get("dconf"))
+    if dconf_after != dconf_before:
+        text = speed_dconf_text(dconf_after)
+        steps.append(("write", SPEED_DCONF, text) if text else ("run", as_root(["rm", "-f", SPEED_DCONF])))
+        steps.append(("run", as_root(["dconf", "update"])))
+    if done:
+        if not state["items"]:
+            state.pop("applied", None)
+        steps.append(("state", state))
+    return steps, notes
+
+
+def speed_do(ctx, steps, undo=False):
+    """runs the steps in order; the commands that failed. What apply meant to change is written down even when a
+    command failed (putting back a unit that stayed on changes nothing); an undo with a failure keeps the note as it
+    was, so that it can be run again"""
+    failed = []
+    for s in steps:
+        if s[0] == "run":
+            rc, _ = ctx.run(s[1], check=False)
+            if rc != 0:
+                failed.append(" ".join(shlex.quote(x) for x in s[1]))
+        elif s[0] == "write":
+            if speed_write(ctx, s[1], s[2]) != 0:
+                failed.append("write " + s[1])
+        elif s[0] == "state":
+            if failed and undo:
+                print("silik: %s is left as it was: a command above failed; run `silik speed undo` again" % SPEED_STATE, file=sys.stderr)
+            elif speed_write(ctx, SPEED_STATE, json.dumps(s[1], indent=1, sort_keys=True) + "\n",
+                             "what apply changed, for undo: %s" % (" ".join(sorted(s[1]["items"])) or "nothing")) != 0:
+                failed.append("write " + SPEED_STATE)
+    return failed
+
+
+def speed_print(rows, st):
+    lines = []
+    for r in rows:
+        lines.append("%s %-7s %-15s %s: %s" % ("●" if r["state"] == "off" else " ", r["state"], r["id"], r["name"],
+                                                r["value"] + ("; kept: " + r["why"] if r["why"] else "")))
+        if r["state"] in ("on", "kept", "unknown"):
+            lines.append("%-25s %s" % ("", r["what"]))
+            lines.append("%-25s off: %s" % ("", r["lose"]))
+    n = {k: sum(1 for r in rows if r["state"] == k) for k in ("off", "on", "kept", "absent", "unknown")}
+    lines.append("%d off, %d on, %d kept, %d not on this system%s" % (n["off"], n["on"], n["kept"], n["absent"], ", %d unknown" % n["unknown"] if n["unknown"] else ""))
+    lines.append("`silik speed apply [ITEM...]` turns off what is on; `silik speed undo [ITEM...]` puts back what apply changed%s"
+                 % (" (it changed: %s)" % " ".join(sorted(st["state"]["items"])) if st["state"]["items"] else ""))
+    text = "\n".join(lines)
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        print(text.encode("ascii", "replace").decode("ascii"))
+
+
+def speed_show(ctx, a):
+    st = speed_probe()
+    rows = speed_rows(st)
+    if getattr(a, "json", False):
+        print(json.dumps({"items": rows, "applied": speed_applied(rows), "online": st["online"], "changed": sorted(st["state"]["items"]),
+                          "undone": st["state"]["undone"], "state_file": SPEED_STATE}, indent=1))
+    else:
+        speed_print(rows, st)
+    return 1 if any(r["state"] == "unknown" for r in rows) else 0
+
+
+def speed_apply(ctx, a):
+    st = speed_probe()
+    steps, notes = speed_plan(st, a.items)
+    failed = speed_do(ctx, steps)
+    for n in notes:
+        print(n)
+    for f in failed:
+        print("silik: failed: " + f, file=sys.stderr)
+    if not steps and not any("nothing changed" in n for n in notes):
+        print("nothing to turn off: the items%s are off, kept for a reason or not on this system" % (" named" if a.items else " of the profile"))
+    elif not st["online"] and not ctx.dry:
+        print("systemd does not run here (an installer, a container): the units are off from the next start")
+    print("`silik speed` shows each item; `silik bench system` measures the start and the memory")
+    return 1 if failed else 0
+
+
+def speed_undo(ctx, a):
+    st = speed_probe()
+    steps, notes = speed_unplan(st, a.items)
+    failed = speed_do(ctx, steps, undo=True)
+    for n in notes:
+        print(n)
+    for f in failed:
+        print("silik: failed: " + f, file=sys.stderr)
+    if not any(s[0] != "state" for s in steps):
+        print("nothing to put back: `silik speed apply` has changed nothing%s on this system" % (" of these" if a.items else ""))
+    else:
+        print("put back as it was before `silik speed apply`; what belongs to the session takes effect at the next login")
+    return 1 if failed else 0
+
+
+def doc_speed(st, rows):
+    """the row of `silik doctor system`: is the speed profile applied"""
+    sp = st.get("speed")
+    if sp is None:
+        return
+    items = speed_rows(sp)
+    n = {k: [r["id"] for r in items if r["state"] == k] for k in ("off", "on", "kept", "absent", "unknown")}
+    if n["unknown"] and not n["on"]:
+        doc_row(rows, "system", "speed", "speed profile", "unknown", "systemd's unit files are not readable here%s" % (" (inside a container)" if st.get("container") else ""),
+                ["silik speed"])
+    elif n["on"]:
+        doc_row(rows, "system", "speed", "speed profile", "warn", "%d of %d background services run as the base has them: %s" % (len(n["on"]), len(items) - len(n["absent"]), " ".join(n["on"])),
+                ["silik speed apply", "silik speed   # what each one is, and what stops working without it"])
+    else:
+        doc_row(rows, "system", "speed", "speed profile", "ok", "%d off%s%s" % (len(n["off"]), ", %d kept (%s)" % (len(n["kept"]), " ".join(n["kept"])) if n["kept"] else "",
+                                                                             ", %d not on this system" % len(n["absent"]) if n["absent"] else ""))
+
+
+# ------------------------------------------------------------------ bench
+# `silik bench system`: how this system started and what it holds at rest, measured with the base's own tools and
+# read from /proc: systemd-analyze (firmware, loader, kernel, initrd, userspace), its blame and the chain to
+# graphical.target, when the login screen and the session were up, memory, the largest processes, units, disk,
+# packages. One capture is one sample: `silik bench compare A.json B.json ...` puts several side by side (the CI's
+# installation test takes them on an installed system with the speed profile and without it: docs/SPEED.md). The
+# parsers are of systemd 252's output (EL 9): tests/test_bench_system.py.
+BENCH_SPANS = {"y": 31557600.0, "month": 2629800.0, "w": 604800.0, "d": 86400.0, "h": 3600.0, "min": 60.0, "s": 1.0, "ms": 1e-3, "us": 1e-6,
+               "\u03bcs": 1e-6, "\u00b5s": 1e-6}
+
+
+def bench_span(text):
+    """seconds of a systemd time span ("1min 2.345s", "934ms", "12us"), None when it is not one"""
+    total, seen = 0.0, False
+    for num, unit in re.findall(r"([0-9]+(?:\.[0-9]+)?)\s*([a-z\u03bc\u00b5]+)", text.strip()):
+        if unit not in BENCH_SPANS:
+            return None
+        total += float(num) * BENCH_SPANS[unit]
+        seen = True
+    return round(total, 6) if seen and re.fullmatch(r"(?:\s*[0-9]+(?:\.[0-9]+)?\s*[a-z\u03bc\u00b5]+)+\s*", text) else None
+
+
+def bench_time(text):
+    """`systemd-analyze time`: {"finished": True, "firmware_s", "loader_s", "kernel_s", "initrd_s", "userspace_s",
+    "total_s", "target", "target_s"} (a part the machine does not report is absent); {"finished": False} before the
+    start is over; {} when the text is something else"""
+    if "not yet finished" in text:
+        return {"finished": False}
+    m = re.search(r"Startup finished in (.+)", text)
+    if not m:
+        return {}
+    out = {"finished": True}
+    line = m.group(1)
+    head, eq, tot = line.partition("=")
+    for part in head.split("+"):
+        pm = re.match(r"\s*(.+?)\s*\((firmware|loader|kernel|initrd|userspace)\)\s*$", part)
+        if pm and bench_span(pm.group(1)) is not None:
+            out[pm.group(2) + "_s"] = bench_span(pm.group(1))
+    if eq and bench_span(tot) is not None:
+        out["total_s"] = bench_span(tot)
+    m = re.search(r"^(\S+) reached after (.+?) in userspace", text, re.M)
+    if m and bench_span(m.group(2)) is not None:
+        out["target"], out["target_s"] = m.group(1), bench_span(m.group(2))
+    return out
+
+
+def bench_blame(text, top=25):
+    """`systemd-analyze blame`: [{"unit", "s"}], the slowest first (its order), at most TOP"""
+    out = []
+    for l in text.splitlines():
+        f = l.split()
+        if len(f) >= 2 and bench_span(" ".join(f[:-1])) is not None:
+            out.append({"unit": f[-1], "s": bench_span(" ".join(f[:-1]))})
+    return out[:top]
+
+
+def bench_chain(text):
+    """`systemd-analyze critical-chain UNIT`: [{"unit", "at_s", "took_s", "depth"}] from the unit down to what it
+    waited for (at_s: when it was up or started, after the "@"; took_s: how long it took to start, after the "+")"""
+    out = []
+    for l in text.splitlines():
+        m = re.match(r"^([\s│└├─]*)(\S+\.[a-z]+)((?:\s+[@+][^@+]*)+)$", l)
+        if not m:
+            continue
+        row = {"unit": m.group(2), "at_s": None, "took_s": None, "depth": len(m.group(1)) // 2}
+        for sign, span in re.findall(r"([@+])([^@+]+)", m.group(3)):
+            row["at_s" if sign == "@" else "took_s"] = bench_span(span)
+        out.append(row)
+    return out
+
+
+def bench_meminfo(text):
+    """/proc/meminfo as `free -m` shows it, in MB: total, used, free, buff_cache, available, swap_total, swap_used;
+    {} when it is not readable. used is total - available, as EL 9.8's free gives it (procps-ng 3.3.17, seen beside
+    this on 13/11/2026: not the older total - free - buffers - cache, which is what it is when the kernel gives no
+    MemAvailable)"""
+    kb = {}
+    for l in text.splitlines():
+        k, _, v = l.partition(":")
+        if v.split() and v.split()[0].isdigit():
+            kb[k.strip()] = int(v.split()[0])
+    if "MemTotal" not in kb:
+        return {}
+    cache = kb.get("Buffers", 0) + kb.get("Cached", 0) + kb.get("SReclaimable", 0)
+    mb = lambda x: int(round(x / 1024.0))
+    used = kb["MemTotal"] - kb["MemAvailable"] if "MemAvailable" in kb else kb["MemTotal"] - kb.get("MemFree", 0) - cache
+    return {"total_mb": mb(kb["MemTotal"]), "used_mb": mb(used), "free_mb": mb(kb.get("MemFree", 0)),
+            "buff_cache_mb": mb(cache), "available_mb": mb(kb["MemAvailable"]) if "MemAvailable" in kb else None,
+            "swap_total_mb": mb(kb.get("SwapTotal", 0)), "swap_used_mb": mb(kb.get("SwapTotal", 0) - kb.get("SwapFree", 0))}
+
+
+def bench_processes(root="/proc", skip=None):
+    """(processes, kernel threads): each process {"pid", "name", "user", "rss_kb", "pss_kb" (None when its memory map
+    is not ours to read), "cmd"}, the largest resident set first; a kernel thread has no memory of its own. SKIP: a
+    process id left out (the one that measures)"""
+    import pwd
+    procs, kthreads, names = [], 0, {}
+    try:
+        pids = [p for p in os.listdir(root) if p.isdigit() and p != str(skip)]
+    except OSError:
+        return [], 0
+    for pid in pids:
+        d = os.path.join(root, pid)
+        st = {}
+        for l in read(os.path.join(d, "status")).splitlines():
+            k, _, v = l.partition(":")
+            st[k] = v.strip()
+        if "Name" not in st:
+            continue                    # (gone meanwhile)
+        if "VmRSS" not in st:
+            kthreads += 1
+            continue
+        uid = st.get("Uid", "").split()[0] if st.get("Uid") else ""
+        if uid not in names:
+            try:
+                names[uid] = pwd.getpwuid(int(uid)).pw_name
+            except (KeyError, ValueError):
+                names[uid] = uid
+        pss = None
+        for l in read(os.path.join(d, "smaps_rollup")).splitlines():
+            if l.startswith("Pss:") and l.split()[1].isdigit():
+                pss = int(l.split()[1])
+                break
+        argv = read(os.path.join(d, "cmdline")).split("\0")
+        cmd = " ".join(argv).strip()
+        full = os.path.basename(argv[0]) if argv and argv[0] else ""
+        if full.startswith(st["Name"]) and len(st["Name"]) == 15:      # (the kernel keeps 15 letters of a name)
+            st["Name"] = full
+        procs.append({"pid": int(pid), "name": st["Name"], "user": names[uid], "rss_kb": int(st["VmRSS"].split()[0]) if st["VmRSS"].split()[0].isdigit() else 0,
+                      "pss_kb": pss, "cmd": cmd[:160]})
+    procs.sort(key=lambda p: (-p["rss_kb"], p["pid"]))
+    return procs, kthreads
+
+
+def bench_usec(text):
+    """seconds of a `systemctl show -p ...TimestampMonotonic --value` answer (microseconds; 0: never), or None"""
+    t = text.strip()
+    return round(int(t) / 1e6, 3) if t.isdigit() and int(t) > 0 else None
+
+
+def bench_session(cmd):
+    """(user, seconds after the kernel started at which that user's graphical session was up), from the user's own
+    systemd: graphical-session.target. As root: the first user with a session folder in /run/user whose systemd
+    answers. (None, None) when there is none"""
+    import pwd
+    prop = ["show", "graphical-session.target", "-p", "ActiveEnterTimestampMonotonic", "--value"]
+    if os.geteuid() != 0:
+        rc, out = cmd(["systemctl", "--user"] + prop) if user_bus() else (None, "")
+        try:
+            me = pwd.getpwuid(os.geteuid()).pw_name
+        except KeyError:
+            me = str(os.geteuid())
+        return (me, bench_usec(out)) if rc == 0 and bench_usec(out) is not None else (None, None)
+    try:
+        uids = sorted(int(u) for u in os.listdir("/run/user") if u.isdigit() and int(u) >= 1000)
+    except OSError:
+        uids = []
+    for uid in uids:
+        try:
+            name = pwd.getpwuid(uid).pw_name
+        except KeyError:
+            continue
+        rc, out = cmd(["systemctl", "--user", "--machine=%s@.host" % name] + prop)
+        if rc == 0 and bench_usec(out) is not None:
+            return name, bench_usec(out)
+    return None, None
+
+
+def bench_disk(mp):
+    """size, used and free MB of the file system at MP; None when it is not one of its own (/boot inside /)"""
+    try:
+        s = os.statvfs(mp)
+        if mp != "/" and os.stat(mp).st_dev == os.stat("/").st_dev:
+            return None
+    except OSError:
+        return None
+    mb = 1024 * 1024
+    return {"size_mb": s.f_blocks * s.f_frsize // mb, "used_mb": (s.f_blocks - s.f_bfree) * s.f_frsize // mb, "free_mb": s.f_bavail * s.f_frsize // mb}
+
+
+def bench_capture(label=""):
+    """one capture of this system, as `silik bench system --json` prints it; what cannot be read is None or absent,
+    never a guess"""
+    cmd = sec_cmd
+    osr = os_release()
+    cap = {"label": label, "date": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "silik": VERSION,
+           "system": {"name": osr.get("PRETTY_NAME") or None, "base": read("/etc/redhat-release").strip() or None, "kernel": os.uname().release,
+                      "arch": host_arch(), "cpus": os.cpu_count(), "virt": (cmd(["systemd-detect-virt"])[1] or None)}}
+    up = read("/proc/uptime").split()
+    cap["uptime_s"] = float(up[0]) if up else None
+    rc, out = cmd(["systemd-analyze", "time"])
+    boot = bench_time(out) if rc is not None else {}
+    cap["boot"] = boot or {"finished": None}
+    cap["boot"]["login_screen_s"] = bench_usec(cmd(["systemctl", "show", "gdm.service", "-p", "ActiveEnterTimestampMonotonic", "--value"])[1])
+    user, at = bench_session(cmd)
+    cap["boot"]["desktop_s"], cap["boot"]["desktop_user"] = at, user
+    cap["blame"] = bench_blame(cmd(["systemd-analyze", "blame", "--no-pager"])[1])
+    cap["chain"] = bench_chain(cmd(["systemd-analyze", "critical-chain", "graphical.target", "--no-pager"])[1])
+    cap["memory"] = bench_meminfo(read("/proc/meminfo"))
+    crash = read("/sys/kernel/kexec_crash_size").strip()
+    cap["kernel"] = {"cmdline": read("/proc/cmdline").strip() or None, "crash_reserved_mb": int(crash) // (1024 * 1024) if crash.isdigit() else None,
+                     "crash_loaded": {"1": True, "0": False}.get(read("/sys/kernel/kexec_crash_loaded").strip())}
+    procs, kthreads = bench_processes(skip=os.getpid())
+    pss = [p["pss_kb"] for p in procs]
+    cap["processes"] = {"count": len(procs), "kernel_threads": kthreads, "rss_sum_mb": sum(p["rss_kb"] for p in procs) // 1024,
+                        "pss_sum_mb": sum(pss) // 1024 if procs and all(x is not None for x in pss) else None, "largest": procs[:25],
+                        "names": sorted(set(p["name"] for p in procs))}
+    rc, out = cmd(["systemctl", "list-units", "--state=running", "--no-legend", "--no-pager", "--plain"])
+    run = [l.split()[0] for l in out.splitlines() if l.split()] if rc == 0 else None
+    rc2, out2 = cmd(["systemctl", "list-unit-files", "--state=enabled", "--no-legend", "--no-pager"])
+    rc3, out3 = cmd(["systemctl", "list-units", "--failed", "--no-legend", "--no-pager", "--plain"])
+    cap["units"] = {"running": len(run) if run is not None else None, "running_services": len([u for u in run if u.endswith(".service")]) if run is not None else None,
+                    "running_names": run, "enabled_files": len([l for l in out2.splitlines() if l.split()]) if rc2 == 0 else None,
+                    "failed": [l.split()[0] for l in out3.splitlines() if l.split()] if rc3 == 0 else None}
+    cap["disk"] = {"/": bench_disk("/"), "/boot": bench_disk("/boot")}
+    try:
+        cap["disk"]["initramfs_mb"] = sum(os.path.getsize(os.path.join("/boot", f)) for f in os.listdir("/boot") if f.startswith("initramfs-")) // (1024 * 1024)
+    except OSError:
+        cap["disk"]["initramfs_mb"] = None
+    rc, out = cmd(["rpm", "-qa", "--qf", "%{SIZE}\n"], timeout=60) if shutil.which("rpm") else (None, "")
+    sizes = [int(x) for x in out.split() if x.isdigit()] if rc == 0 else []
+    cap["packages"] = {"count": len(sizes) if sizes else None, "size_mb": sum(sizes) // (1024 * 1024) if sizes else None}
+    rows = speed_rows(speed_probe(cmd))
+    cap["speed"] = {"applied": speed_applied(rows), "items": {r["id"]: r["state"] for r in rows}}
+    return cap
+
+
+def bench_s(v, unit=" s"):
+    return "?" if v is None else ("%.3f" % v).rstrip("0").rstrip(".") + unit if isinstance(v, float) else "%s%s" % (v, unit)
+
+
+def bench_print(cap, top=12):
+    s, b, m, k, p, u, d = cap["system"], cap["boot"], cap["memory"], cap["kernel"], cap["processes"], cap["units"], cap["disk"]
+    L = []
+    L.append("%-14s %s, kernel %s, %s CPUs%s; %s, up %s%s" % ("system", s["name"] or s["base"] or "?", s["kernel"], s["cpus"], ", " + s["virt"] if s["virt"] and s["virt"] != "none" else "",
+                                                             cap["date"], ago(cap["uptime_s"] or 0), "; label " + cap["label"] if cap["label"] else ""))
+    if b.get("finished"):
+        parts = ["%s %s" % (w, bench_s(b[w + "_s"])) for w in ("firmware", "loader", "kernel", "initrd", "userspace") if b.get(w + "_s") is not None]
+        L.append("%-14s %s = %s%s" % ("start", " + ".join(parts), bench_s(b.get("total_s")),
+                                      "; %s after %s of userspace" % (b["target"], bench_s(b["target_s"])) if b.get("target") else ""))
+    else:
+        L.append("%-14s %s" % ("start", "not over yet (jobs still run: systemctl list-jobs)" if b.get("finished") is False else "systemd-analyze gives no times here"))
+    L.append("%-14s %s" % ("login screen", "%s after the kernel started (gdm.service)" % bench_s(b["login_screen_s"]) if b.get("login_screen_s") is not None else "not seen (no gdm.service up)"))
+    L.append("%-14s %s" % ("desktop", "%s after the kernel started (%s's session, graphical-session.target)" % (bench_s(b["desktop_s"]), b["desktop_user"]) if b.get("desktop_s") is not None
+                           else "not seen (no graphical session whose systemd answers)"))
+    for i, r in enumerate(cap["blame"][:10]):
+        L.append("%-14s %9s  %s" % ("slowest units" if i == 0 else "", bench_s(r["s"]), r["unit"]))
+    for i, r in enumerate(cap["chain"]):
+        L.append("%-14s %s%s%s%s" % ("chain" if i == 0 else "", "  " * r["depth"], r["unit"], " @" + bench_s(r["at_s"], "s") if r["at_s"] is not None else "",
+                                     " +" + bench_s(r["took_s"], "s") if r["took_s"] is not None else ""))
+    if m:
+        L.append("%-14s %d MB: %d used, %d buffers and cache, %s available; swap %d of %d MB used%s" % (
+            "memory", m["total_mb"], m["used_mb"], m["buff_cache_mb"], m["available_mb"] if m["available_mb"] is not None else "?", m["swap_used_mb"], m["swap_total_mb"],
+            "; %d MB set aside for a crash kernel (%s)" % (k["crash_reserved_mb"], "armed" if k["crash_loaded"] else "not armed") if k["crash_reserved_mb"] else ""))
+    L.append("%-14s %d (and %d kernel threads); resident %d MB%s" % ("processes", p["count"], p["kernel_threads"], p["rss_sum_mb"],
+                                                                    ", proportional %d MB" % p["pss_sum_mb"] if p["pss_sum_mb"] is not None else " (shared pages counted in each)"))
+    L.append("%-14s %s running (%s services), %s enabled unit files, failed: %s" % ("units", bench_s(u["running"], ""), bench_s(u["running_services"], ""), bench_s(u["enabled_files"], ""),
+                                                                                   "?" if u["failed"] is None else " ".join(u["failed"]) or "none"))
+    for i, r in enumerate(p["largest"][:top]):
+        L.append("%-14s %6d MB  %-10s %s" % ("largest" if i == 0 else "", r["rss_kb"] // 1024, r["user"][:10], r["name"]))
+    for mp in ("/", "/boot"):
+        if d.get(mp):
+            L.append("%-14s %d MB used of %d" % ("disk " + mp, d[mp]["used_mb"], d[mp]["size_mb"]))
+    if d.get("initramfs_mb"):
+        L.append("%-14s %d MB of initramfs images in /boot" % ("", d["initramfs_mb"]))
+    pk = cap["packages"]
+    L.append("%-14s %s" % ("packages", "%d, %d MB (rpm's sizes)" % (pk["count"], pk["size_mb"]) if pk["count"] else "rpm does not answer"))
+    sp = cap["speed"]["items"]
+    L.append("%-14s %s: %s" % ("speed profile", "applied" if cap["speed"]["applied"] else "not applied", ", ".join("%d %s" % (sum(1 for v in sp.values() if v == w), w)
+                                                                                                           for w in ("off", "on", "kept", "absent", "unknown") if w in sp.values())))
+    text = "\n".join(L)
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        print(text.encode("ascii", "replace").decode("ascii"))
+
+
+def bench_system(ctx, a):
+    if a.wait:
+        # until the session has been up for WAIT seconds (so that captures are taken at the same moment of a start)
+        _, at = bench_session(sec_cmd)
+        up = read("/proc/uptime").split()
+        left = (at + a.wait - float(up[0])) if at is not None and up else 0
+        if left > 0:
+            if not a.json:
+                print("waiting %d s: until the session has been up for %d s" % (left, a.wait), flush=True)
+            time.sleep(left)
+    cap = bench_capture(a.label or "")
+    if a.json:
+        print(json.dumps(cap, indent=1))
+    else:
+        bench_print(cap, a.top)
+    return 0
+
+
+BENCH_ROWS = (   # what `silik bench compare` shows of each capture: title, path in the capture, unit
+    ("start: firmware", ("boot", "firmware_s"), "s"), ("start: loader", ("boot", "loader_s"), "s"), ("start: kernel", ("boot", "kernel_s"), "s"),
+    ("start: initrd", ("boot", "initrd_s"), "s"), ("start: userspace", ("boot", "userspace_s"), "s"), ("start: total", ("boot", "total_s"), "s"),
+    ("login screen at", ("boot", "login_screen_s"), "s"), ("desktop at", ("boot", "desktop_s"), "s"),
+    ("memory total", ("memory", "total_mb"), "MB"), ("memory used", ("memory", "used_mb"), "MB"), ("memory available", ("memory", "available_mb"), "MB"),
+    ("swap used", ("memory", "swap_used_mb"), "MB"), ("crash kernel reserve", ("kernel", "crash_reserved_mb"), "MB"),
+    ("processes", ("processes", "count"), ""), ("processes, proportional", ("processes", "pss_sum_mb"), "MB"), ("processes, resident", ("processes", "rss_sum_mb"), "MB"),
+    ("units running", ("units", "running"), ""), ("services running", ("units", "running_services"), ""), ("unit files enabled", ("units", "enabled_files"), ""),
+    ("disk / used", ("disk", "/", "used_mb"), "MB"), ("disk /boot used", ("disk", "/boot", "used_mb"), "MB"),
+    ("packages", ("packages", "count"), ""), ("packages, installed size", ("packages", "size_mb"), "MB"),
+    ("seconds up at capture", ("uptime_s",), "s"),
+)
+
+
+def bench_get(cap, path):
+    v = cap
+    for k in path:
+        v = v.get(k) if isinstance(v, dict) else None
+    return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+
+def bench_table(caps):
+    """the rows of `silik bench compare`: [(title, unit, [value or None per capture])], rows no capture has left out"""
+    rows = []
+    for title, path, unit in BENCH_ROWS:
+        vals = [bench_get(c, path) for c in caps]
+        if any(v is not None for v in vals):
+            rows.append((title, unit, vals))
+    return rows
+
+
+def bench_compare(ctx, a):
+    caps = []
+    for f in a.files:
+        try:
+            with open(f) as fh:
+                c = json.load(fh)
+        except (OSError, ValueError) as e:
+            die("silik bench compare: %s: %s" % (f, e), 2)
+        if not isinstance(c, dict) or "boot" not in c or "memory" not in c:
+            die("silik bench compare: %s is not a capture of `silik bench system --json`" % f, 2)
+        c.setdefault("label", "")
+        c["label"] = c["label"] or os.path.splitext(os.path.basename(f))[0]
+        caps.append(c)
+    rows = bench_table(caps)
+    if a.json:
+        print(json.dumps({"captures": [c["label"] for c in caps], "rows": [{"what": t, "unit": u, "values": v} for t, u, v in rows]}, indent=1))
+        return 0
+    w = max([12] + [len(c["label"]) for c in caps])
+    fmt = lambda v: "-" if v is None else ("%.2f" % v if isinstance(v, float) else "%d" % v)
+    print("%-26s %-3s %s" % ("", "", " ".join("%*s" % (w, c["label"]) for c in caps)))
+    for t, u, vals in rows:
+        print("%-26s %-3s %s" % (t, u, " ".join("%*s" % (w, fmt(v)) for v in vals)))
+    print("%-26s %-3s %s" % ("speed profile", "", " ".join("%*s" % (w, "applied" if (c.get("speed") or {}).get("applied") else "not applied") for c in caps)))
+    first, last = caps[0], caps[-1]
+    if len(caps) > 1:
+        for x, y in ((first, last), (last, first)):
+            only = sorted(set((x.get("processes") or {}).get("names") or []) - set((y.get("processes") or {}).get("names") or []))
+            print("%-30s %s" % ("runs in %s, not in %s:" % (x["label"], y["label"]), " ".join(only) or "-"))
+    print("each column is one capture (one start of the system): the difference between two starts of the same system is the measure's noise")
+    return 0
+
+
 # ------------------------------------------------------------------ doctor
 # `silik doctor [AREA...]`: one read-only look at the whole workstation, area by area, with the judgement of `silik
 # secure status`: ok / warn / bad / unknown (unknown when the subject cannot be seen, never ok) and, on every row that
@@ -3755,6 +4543,7 @@ def doc_probe_system():
     return {"os": os_release(), "silikos": os.path.exists("/etc/silikos-release"), "base": read("/etc/redhat-release").strip(),
             "kernel": os.uname().release, "rpm": rpm, "show": show, "journal": journal, "failed": failed, "ufailed": ufailed,
             "restart": read(DOC_RESTART, None), "disks": disks, "meminfo": read("/proc/meminfo"), "now": time.time(),
+            "speed": speed_probe(doc_cmd),
             "container": sec_container()}
 
 
@@ -3933,6 +4722,7 @@ def doc_check_system(st):
                     ["sudo systemctl reset-failed   # once understood"])
         else:
             doc_row(rows, "system", "units", "services", "ok", "no failed systemd unit" + ("" if urc == 0 else " (the system's; yours not seen: no session bus)"))
+    doc_speed(st, rows)
     return rows
 
 
@@ -5858,6 +6648,26 @@ def parser(only=None):
         x = pw.add_parser("trim", help="the SSD told weekly which blocks are free (fstrim.timer): on | off")
         x.add_argument("action", nargs="?", choices=["on", "off"]); x.set_defaults(fn=power_trim)
 
+    sp = s.add_parser("speed", help="what a start and a session do not need, off: show | apply | undo (no command: each item and its state)")
+    sp.add_argument("--json", action="store_true"); sp.set_defaults(fn=speed_show)
+    sp = sp.add_subparsers(dest="cmd")
+    if only in (None, "speed"):
+        x = sp.add_parser("show", help="each item: off (the SilikOS profile), on (as the base has it), kept (on for a reason), absent"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=speed_show)
+        x = sp.add_parser("apply", help="turns off the items that are on (ITEM...: those, whatever keeps them); writes down what it changed")
+        x.add_argument("items", nargs="*", metavar="ITEM", help=" ".join(SPEED_IDS)); x.set_defaults(fn=speed_apply)
+        x = sp.add_parser("undo", help="puts back what apply changed (ITEM...: those only, and a later apply leaves them on)")
+        x.add_argument("items", nargs="*", metavar="ITEM", help=" ".join(SPEED_IDS)); x.set_defaults(fn=speed_undo)
+
+    bn = s.add_parser("bench", help="measurements of this system: system (its start, memory, processes); compare FILE...").add_subparsers(dest="cmd")
+    if only in (None, "bench"):
+        x = bn.add_parser("system", help="how this system started (systemd-analyze), when the login screen and the desktop were up, memory, the largest processes, units, disk, packages")
+        x.add_argument("--json", action="store_true"); x.add_argument("--label", help="a name for this capture (compare shows it)")
+        x.add_argument("--wait", type=int, metavar="S", help="capture once the session has been up for S seconds")
+        x.add_argument("--top", type=int, default=12, metavar="N", help="how many of the largest processes to print (default 12; --json has 25)")
+        x.set_defaults(fn=bench_system)
+        x = bn.add_parser("compare", help="captures of `silik bench system --json` side by side")
+        x.add_argument("files", nargs="+", metavar="FILE"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=bench_compare)
+
     h = s.add_parser("hw", help="hardware: probe, NVIDIA driver").add_subparsers(dest="cmd")
     if only in (None, "hw"):
         x = h.add_parser("probe"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=hw_probe)
@@ -5909,7 +6719,7 @@ def parser(only=None):
 WIN_SWITCHES = ("--prefix", "--no-net", "--no-sandbox")
 
 
-GROUPS = ("eda", "dev", "win", "power", "hw", "secure", "vendor", "manifest")   # the groups with commands of their own (parser(only=...))
+GROUPS = ("eda", "dev", "win", "power", "speed", "bench", "hw", "secure", "vendor", "manifest")   # the groups with commands of their own (parser(only=...))
 
 
 def main(argv=None):

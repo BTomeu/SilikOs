@@ -1,0 +1,25 @@
+# ======================================================================================================================
+# CI ONLY (tests/install/vm.ks.in). NEVER PART OF THE SHIPPED KICKSTART OR OF THE ISO.
+# The throw-away virtual machine of the comparison (tests/install/compare.sh): its only disk, a test user whose
+# session starts by itself. The same lines as the installation test's (ci.ks.in), without its checks: the comparison
+# installs two systems, SilikOS and the stock AlmaLinux 9 Workstation, and only measures them.
+# ======================================================================================================================
+text
+ignoredisk --only-use=vda
+zerombr
+clearpart --all --initlabel --drives=vda
+autopart --type=plain --nohome
+lang en_US.UTF-8
+keyboard us
+timezone UTC --utc
+rootpw --plaintext silikos-ci
+user --name=tester --password=silikos-ci --plaintext --groups=wheel
+firstboot --disable
+poweroff
+
+%post --log=/root/silikos-ci-vm-post.log
+sed -i 's/^\[daemon\]/[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin=tester/' /etc/gdm/custom.conf
+install -d -o tester -g tester /home/tester/.config
+echo yes > /home/tester/.config/gnome-initial-setup-done
+chown tester:tester /home/tester/.config/gnome-initial-setup-done
+%end

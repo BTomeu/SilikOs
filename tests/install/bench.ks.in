@@ -1,0 +1,24 @@
+# ======================================================================================================================
+# CI ONLY (tests/install/bench.ks.in). NEVER PART OF THE SHIPPED KICKSTART OR OF THE ISO.
+# The measurement starts of the test installation (tests/install/bench.sh): a service that does nothing until the
+# host writes a file "phase" on the test's own disk, then measures the start and the memory of the system
+# (`silik bench system`), reports on the second serial port and powers off (tests/install/bench-guest.sh). It is
+# started and forgotten (Type=simple), so that the start it measures does not wait for it.
+# ======================================================================================================================
+%post --log=/root/silikos-ci-bench-post.log
+install -m 0755 /dev/stdin /usr/local/sbin/silikos-ci-bench <<'BENCH'
+@BENCH@
+BENCH
+cat > /etc/systemd/system/silikos-ci-bench.service <<'UNIT'
+[Unit]
+Description=SilikOS CI: measure the start and the memory of the installed system
+After=graphical.target
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/silikos-ci-bench
+StandardOutput=journal
+[Install]
+WantedBy=graphical.target
+UNIT
+systemctl enable silikos-ci-bench.service
+%end
