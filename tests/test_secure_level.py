@@ -390,6 +390,20 @@ class Refusals(unittest.TestCase):
         self.assertFalse(any("reload sshd" in x for x in runs(steps)))
         self.assertEqual(states(system(sshd={"unit": "not-found", "active": None}))["sshd"], "n/a")
 
+    def test_a_refused_item_is_always_said_as_an_exception(self):
+        # also where the item's own state could not be seen (a user's dry run: sshd's folder is root's)
+        on = {"unit": "enabled", "active": True}
+        pr = system(sshd=on, ssh_keys=False, uid=1000, sshd_dir=False, audit=None)
+        steps, _, refused = silik.lvl_plan(pr, dry=True)
+        self.assertEqual([i for i, _ in refused], ["sshd"])
+        self.assertEqual(silik.lvl_after(pr, (), refused, True),
+                         "hardened, except: sshd (sshd is on and ada has no key in ~/.ssh/authorized_keys)")
+        self.assertEqual(silik.lvl_after(system(ssh_keys=True), ("iommu",), [], True), "hardened; left out by choice: iommu")
+        pr = system(modules={"loaded": [("nvidia", "POE")], "files": []}, secureboot="disabled", ssh_keys=True)
+        _, _, refused = silik.lvl_plan(pr)
+        self.assertEqual(silik.lvl_after(pr, (), refused),
+                         "hardened, except: Secure Boot is off; lockdown (kernel modules without a signature the kernel trusts are in use and would stop loading)")
+
     def test_a_drop_in_that_sshd_refuses_is_taken_away(self):
         ran = []
 
@@ -1009,14 +1023,37 @@ class Parsers(unittest.TestCase):
                 silik.SYSFS, silik.SEC_PROC = old, oldp
 
     def test_the_kernel_in_use(self):
-        old = silik.sec_cmd
-        silik.sec_cmd = lambda argv, timeout=20: (0, "5.14.0-687.5.1.el9_8.x86_64\n5.14.0-611.5.1.el9_7.x86_64\n5.14.0-687.12.1.el9_8.x86_64")
+        old = silik.SEC_MODULES
+        with tempfile.TemporaryDirectory() as d:
+            for v, image in (("5.14.0-687.5.1.el9_8.x86_64", True), ("5.14.0-611.5.1.el9_7.x86_64", True), ("5.14.0-687.12.1.el9_8.x86_64", True),
+                             ("5.14.0-700.1.1.el9_9.x86_64", False)):          # (what a removed kernel leaves: a folder without the image)
+                os.makedirs(os.path.join(d, v, "extra"))
+                if image:
+                    open(os.path.join(d, v, "vmlinuz"), "w").close()
+            silik.SEC_MODULES = d
+            try:
+                self.assertEqual(silik.sec_kernel()["installed"], ["5.14.0-611.5.1.el9_7.x86_64", "5.14.0-687.5.1.el9_8.x86_64",
+                                                                 "5.14.0-687.12.1.el9_8.x86_64"])       # 12 after 5, as rpm sorts
+                silik.SEC_MODULES = os.path.join(d, "none")
+                self.assertIsNone(silik.sec_kernel()["installed"])
+            finally:
+                silik.SEC_MODULES = old
+
+    def test_the_desktop_is_asked_of_usb_only_while_usbguard_runs(self):
+        asked, old, olda = [], silik.sec_cmd, silik.sec_active
+        out = "org.gnome.desktop.privacy usb-protection true\norg.gnome.desktop.privacy usb-protection-level 'lockscreen'\norg.gnome.desktop.privacy old-files-age uint32 30\n"
+        silik.sec_cmd = lambda argv, timeout=20: (asked.append(argv), (0, out))[1]
         try:
-            self.assertEqual(silik.sec_kernel()["installed"][-1], "5.14.0-687.12.1.el9_8.x86_64")       # 12 after 5, as rpm sorts
-            silik.sec_cmd = lambda argv, timeout=20: (1, "package kernel-core is not installed")
-            self.assertIsNone(silik.sec_kernel()["installed"])
+            silik.sec_active = lambda unit: False
+            us = silik.sec_usb()
+            self.assertEqual((us["protection"], us["level"], asked), (None, None, []))
+            silik.sec_active = lambda unit: True
+            us = silik.sec_usb()
+            if us["installed"] is not False:                 # (this machine may have no usbguard unit at all: then nothing is asked)
+                self.assertEqual((us["active"], us["protection"], us["level"]), (True, True, "lockscreen"))
+                self.assertEqual(len(asked), 1)
         finally:
-            silik.sec_cmd = old
+            silik.sec_cmd, silik.sec_active = old, olda
 
     def test_fwupd_is_asked_only_when_its_service_is_on(self):
         asked, old, oldf, oldw = [], silik.sec_cmd, silik.SEC_LVFS, silik.shutil.which

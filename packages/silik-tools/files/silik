@@ -2615,11 +2615,18 @@ def sec_modules(files=True):
     return {"loaded": loaded, "files": found}
 
 
+SEC_MODULES = "/lib/modules"
+
+
 def sec_kernel():
-    """{"running", "installed": the kernel-core packages as uname names them, oldest first (None: rpm does not say)}"""
-    rc, out = sec_cmd(["rpm", "-q", "kernel-core", "--qf", "%{VERSION}-%{RELEASE}.%{ARCH}\\n"])
-    inst = sorted((l.strip() for l in out.splitlines() if l.strip()), key=rpm_vercmp_key) if rc == 0 and out else None
-    return {"running": os.uname().release, "installed": inst}
+    """{"running", "installed": the kernels on the disk as uname names them, oldest first (None: none is seen)}. A
+    kernel package of EL 9 (kernel-core, kernel-rt-core...) puts its image in /lib/modules/VERSION/vmlinuz: read
+    there, without asking rpm (50 ms of every `silik doctor`)"""
+    try:
+        inst = sorted((n for n in os.listdir(SEC_MODULES) if os.path.isfile(os.path.join(SEC_MODULES, n, "vmlinuz"))), key=rpm_vercmp_key)
+    except OSError:
+        inst = []
+    return {"running": os.uname().release, "installed": inst or None}
 
 
 def sec_firmware(ask=True):
@@ -2790,14 +2797,19 @@ def sec_thunderbolt():
 
 
 def sec_usb(user=""):
-    """USBGuard and GNOME's use of it: {"installed", "active", "protection", "level"}"""
-    def gs(key):
-        get = ["gsettings", "get", "org.gnome.desktop.privacy", key]
+    """USBGuard and GNOME's use of it: {"installed", "active", "protection", "level"}. The desktop's two keys are
+    asked only while usbguard runs (they mean nothing without it), with one command"""
+    dirs = ("/etc/systemd/system", "/usr/lib/systemd/system", "/lib/systemd/system")
+    us = {"installed": any(os.path.exists(os.path.join(d, "usbguard.service")) for d in dirs) if any(os.path.isdir(d) for d in dirs) else None,
+          "active": None, "protection": None, "level": None}
+    if us["installed"] is not False:
+        us["active"] = sec_active("usbguard.service")
+    if us["active"]:
+        get = ["gsettings", "list-recursively", "org.gnome.desktop.privacy"]
         rc, out = sec_cmd(["runuser", "-l", user, "-c", " ".join(get)] if user else get)
-        return out.strip().strip("'") if rc == 0 and out else None
-    unit = sec_unit("usbguard.service")
-    return {"installed": None if unit is None else unit != "not-found", "active": sec_active("usbguard.service"),
-            "protection": {"true": True, "false": False}.get(gs("usb-protection")), "level": gs("usb-protection-level")}
+        keys = {f[1]: f[2].strip("'") for f in (l.split(None, 2) for l in out.splitlines()) if len(f) == 3} if rc == 0 else {}
+        us["protection"], us["level"] = {"true": True, "false": False}.get(keys.get("usb-protection")), keys.get("usb-protection-level")
+    return us
 
 
 def sec_more(disk=None, user="", firmware=True, parallel=False):
@@ -2806,7 +2818,8 @@ def sec_more(disk=None, user="", firmware=True, parallel=False):
     root = os.geteuid() == 0
     parts = (("modules", sec_modules), ("kernel", sec_kernel), ("firmware", lambda: sec_firmware(firmware) if firmware is not None else None),
              ("listen", sec_listen), ("unlock", lambda: sec_unlock(src) if src else None), ("swap", sec_swap), ("usb", lambda: sec_usb(user)),
-             ("kdump", lambda: sec_unit("kdump.service")),
+             # (is kdump started at boot: its link, not a question to systemd)
+             ("kdump", lambda: "enabled" if os.path.lexists("/etc/systemd/system/multi-user.target.wants/kdump.service") else "disabled"),
              ("root", lambda: ((sec_cmd(["passwd", "-S", "root"])[1].split() + ["", ""])[1] or None) if root else None))
     vals = par([f for _, f in parts]) if parallel else [f() for _, f in parts]
     for v in vals:
@@ -3112,14 +3125,14 @@ def sec_checks_more(st, m, row, hard=False):
 
     k = m["kernel"]
     if not k["installed"]:
-        row("kernel", "kernel in use", "unknown", "running %s; the installed kernels are not in a package database here%s" % (k["running"], here))
+        row("kernel", "kernel in use", "unknown", "running %s; no installed kernel is seen in /lib/modules%s" % (k["running"], here))
     elif k["running"] == k["installed"][-1]:
         row("kernel", "kernel in use", "ok", "%s, the newest installed" % k["running"])
     elif k["running"] in k["installed"]:
         row("kernel", "kernel in use", "warn", "running %s; %s is installed and protects only after a restart" % (k["running"], k["installed"][-1]),
             ["systemctl reboot   # (the system never restarts by itself)"])
     else:
-        row("kernel", "kernel in use", "unknown", "running %s, which is not a kernel package of this system (the newest: %s)%s" % (k["running"], k["installed"][-1], here))
+        row("kernel", "kernel in use", "unknown", "running %s, which is not a kernel installed on this system (the newest: %s)%s" % (k["running"], k["installed"][-1], here))
 
     fw = m["firmware"]
     lvfs = ["sudo fwupdmgr enable-remote lvfs   # one metadata request a day to cdn.fwupd.org", "fwupdmgr get-updates"]
@@ -3167,7 +3180,7 @@ def sec_checks_more(st, m, row, hard=False):
         if out:
             fwl = st["firewall"]
             row("listening", "listening", "warn", "%d beyond this machine: %s%s%s" % (
-                len(said), ", ".join(said[:10]), "; whose a socket without a name here is, root sees" if blind and st["uid"] else "",
+                len(said), ", ".join(said[:10]), "; the owner of a socket without a name here is root's to see" if blind and st["uid"] else "",
                 "; the firewall zone drops what comes for them" if fwl["active"] and fwl["target"] not in (None, "ACCEPT") else ""),
                 ["sudo systemctl disable --now UNIT   # the unit named; rpcbind.socket: NFSv3 only, avahi-daemon.service avahi-daemon.socket: finding printers"] + sudo)
         else:
@@ -4170,6 +4183,20 @@ def lvl_summary(level, differ, unmet, blind, choice, refused=()):
     return line
 
 
+def lvl_after(pr, without, refused, dry=False):
+    """the level in one line as it is once the plan's steps ran: what the plan set counts as set, and an item that
+    was refused is an exception whatever could be seen of it (under --dry-run: as it would be)"""
+    no = set(i for i, _ in refused)
+    done = set(i for i in LVL_IDS if i not in without) - no
+    rows = [dict(r, state="off") if r["id"] in no else
+            dict(r, state="on") if r["id"] in done and (r["state"] == "off" or (dry and r["state"] == "unknown")) else r for r in lvl_rows(pr)]
+    choice = {"level": "hardened", "without": [w for w in LVL_IDS if w in without]}
+    level, differ, unmet, blind = lvl_at(rows, lvl_required(pr), choice)
+    if not any(r["state"] in ("on", "pending") for r in rows):
+        level = "default"           # (nothing of it could be set here)
+    return lvl_summary(level, differ, unmet, blind, choice, refused)
+
+
 def lvl_sudo(ctx, a, argv):
     """a real run is root's (the note of what was changed is root's to read and to write): this command again, with sudo"""
     me = shutil.which("silik") or os.path.abspath(sys.argv[0])
@@ -4202,14 +4229,7 @@ def secure_level(ctx, a):
         if not steps:
             print("nothing to change: every item%s is set, left to the owner's value, or not on this system" % (" asked" if without else ""))
         # (the level as it is once the steps ran: what the plan set counts as set; under --dry-run, as it would be)
-        done = set(i for i in LVL_IDS if i not in without) - set(i for i, _ in refused)
-        rows = [dict(r, state="on") if r["id"] in done and r["state"] == "off" else r for r in lvl_rows(pr)]
-        req = lvl_required(pr)
-        level, differ, unmet, blind = lvl_at(rows, req, {"level": "hardened", "without": without})
-        if not any(r["state"] in ("on", "pending") for r in rows):
-            level = "default"       # (nothing of it could be set here)
-        print("level: " + lvl_summary(level, differ, unmet, [] if ctx.dry else blind, {"level": "hardened", "without": without}, refused)
-              + (" (after this dry run's commands)" if ctx.dry else ""))
+        print("level: " + lvl_after(pr, without, refused, ctx.dry) + (" (after this dry run's commands)" if ctx.dry else ""))
         print("`silik secure level` shows each item; `silik secure level default` puts back what this changed")
         return 1 if failed else 0
     if a.name == "default":
