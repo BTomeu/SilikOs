@@ -299,3 +299,56 @@ jobs:
             build/rollback-test/*.log
             build/rollback-test/*.txt
             build/rollback-test/*.ks
+
+  # The hardened level of `silik secure level` on an installed system (tests/install/hardened.sh, docs/HARDENED.md):
+  # the level is set, the machine restarts and each item is checked there (the kernel's command line, the lockdown, a
+  # module without a signature refused, the kernel settings, the desktop session, silik doctor), then `level default`,
+  # another restart, and everything as it was. The machine has no Secure Boot and no encrypted disk: the level must
+  # say "hardened, except". A job of its own, beside the installation test, which it does not touch.
+  # continue-on-error: this job is new and has never run (written 13/11/2026 where no KVM, no kernel of the base and
+  # no boot could run): it must not stop the ISO or a release until it has passed. Each step is an annotation.
+  hardened-test:
+    needs: packages
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    timeout-minutes: 170
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with: { persist-credentials: false }
+      - name: KVM for the runner's user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+      - name: Tools and disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          bash tools/ci_apt.sh rpm createrepo-c xorriso mtools cpio isomd5sum qemu-system-x86 qemu-utils
+          df -h /
+      # our packages as the packages job built them (in EL 9, with the base's rpmbuild)
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with: { name: silikos-packages, path: build/repo }
+      - name: The ISO (the system alone)
+        run: |
+          createrepo_c --quiet build/repo && ls build/repo
+          bash tools/build_iso.sh
+      - name: The hardened level is set, holds after a restart, and `level default` puts everything back
+        run: bash tests/install/hardened.sh build/SilikOS-*-netinstall.iso build/hardened-test
+      - name: The report
+        if: always()
+        run: |
+          {
+            echo '### SilikOS hardened level test (docs/HARDENED.md)'
+            echo '```'
+            cat build/hardened-test/report.txt 2>/dev/null || echo 'no report: see the consoles (artifact hardened-test)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        if: always()
+        with:
+          name: hardened-test
+          path: |
+            build/hardened-test/*.log
+            build/hardened-test/*.txt
+            build/hardened-test/*.ks

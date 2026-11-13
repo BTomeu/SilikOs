@@ -33,6 +33,8 @@
 #   silik session lock | logout | off             (the last two ask first)
 #   silik update
 #   silik secure status [--json] [--offline] | apply [--keep-ssh]
+#               | level [--json] | level hardened [--without ITEM]... [--keep-ssh] | level hardened --list | level default
+#               the level this system is at; the hardened level, item by item, and the way back (docs/HARDENED.md)
 #   silik doctor [--json] [--verbose] [AREA...]       is this workstation healthy, and what to do: system security
 #               graphics hardware power bench eda windows network (default: all); exit 0 all ok, 1 warn or unknown, 2 bad
 #   silik vendor list [--json] | check TOOL... | check --all [--json] | prepare TOOL... | lib LIBRARY...
@@ -2228,6 +2230,8 @@ def cmd_update(ctx, a):
 # drawn as in SilikStudio: shape and word. A check that cannot see its subject (a tool or a file is absent, as inside
 # a container) says unknown, never ok. Three layers: sec_probe() reads, sec_checks() judges what was read,
 # sec_plan() lists the commands that tighten it; the last two run nothing, so the tests feed them made-up systems.
+# sec_more() / sec_checks_more() are the second half of the audit (the boot chain, the firmware, what listens, the
+# kernel's switches). `silik secure level` (further down: lvl_*) reads and sets the hardened level, item by item.
 # (glob and xml.etree are imported by the functions that use them: xml.etree was 2.4 ms of every start)
 
 SEC_MARK = {"ok": "●", "warn": "◆", "bad": "▼", "unknown": "?"}
@@ -2562,8 +2566,264 @@ def par(fns, timeout=None):
     return res
 
 
-def sec_probe(pending=True, offline=False, parallel=False):
-    """what the audit reads; PARALLEL: its parts at once (silik doctor), else one after the other"""
+# ---- the boot chain, the firmware, what listens (the audit of 13/11/2026: "status tells the truth"). Read-only, and
+# most of it files of /sys and /proc; what only root may read (the LUKS header, the JIT's hardening, root's account,
+# who owns another user's socket) is None for anybody else, and its row then says unknown with the command to see it.
+SEC_PROC = os.environ.get("SILIK_PROC") or "/proc"
+SEC_MODULE_DIRS = ("extra", "updates", "weak-updates")     # where a kernel module that is not the base's is installed
+SEC_KEYS = ("kernel.yama.ptrace_scope", "kernel.unprivileged_bpf_disabled", "net.core.bpf_jit_harden", "kernel.kexec_load_disabled",
+            "kernel.sysrq", "fs.suid_dumpable", "kernel.kptr_restrict", "dev.tty.legacy_tiocsti")
+SEC_LISTEN_OWN = {("udp", "68"): "DHCP client", ("udp", "546"): "DHCPv6 client"}     # what a network client itself listens on
+SEC_LVFS = "/etc/fwupd/remotes.d/lvfs.conf"
+
+
+def sec_sys(*parts):
+    return os.path.join(SYSFS, *parts)       # (SYSFS: /sys, or the tests' made-up tree)
+
+
+def sec_int(path):
+    txt = read(path).strip()
+    return int(txt) if txt.lstrip("-").isdigit() else None
+
+
+def sec_lockdown():
+    """the kernel's lockdown: 'none' / 'integrity' / 'confidentiality'; None when securityfs does not show it"""
+    m = re.search(r"\[(\w+)\]", read(sec_sys("kernel/security/lockdown")))
+    return m.group(1) if m else None
+
+
+def sec_modules(files=True):
+    """the kernel modules that are not the base's own: {"loaded": [(name, taint letters)] of those that taint the
+    kernel (E: no signature the kernel trusts, O: not of the kernel's tree, P: proprietary), "files": [(path,
+    signer or '')] of those installed outside the kernel's own folders}; None when /sys/module is not there"""
+    import glob
+    base = sec_sys("module")
+    if not os.path.isdir(base):
+        return None
+    loaded = []
+    for p in sorted(glob.glob(os.path.join(base, "*", "taint"))):
+        t = read(p).strip()
+        if t:
+            loaded.append((os.path.basename(os.path.dirname(p)), t))
+    found = []
+    if files:
+        top = os.path.join("/lib/modules", os.uname().release)
+        paths = [p for d in SEC_MODULE_DIRS for p in sorted(glob.glob(os.path.join(top, d, "**", "*.ko*"), recursive=True))][:200]
+        for p in paths:
+            rc, out = sec_cmd(["modinfo", "-F", "signer", p])
+            found.append((p, out.splitlines()[0].strip() if rc == 0 and out else ""))
+    return {"loaded": loaded, "files": found}
+
+
+def sec_kernel():
+    """{"running", "installed": the kernel-core packages as uname names them, oldest first (None: rpm does not say)}"""
+    rc, out = sec_cmd(["rpm", "-q", "kernel-core", "--qf", "%{VERSION}-%{RELEASE}.%{ARCH}\\n"])
+    inst = sorted((l.strip() for l in out.splitlines() if l.strip()), key=rpm_vercmp_key) if rc == 0 and out else None
+    return {"running": os.uname().release, "installed": inst}
+
+
+def sec_firmware(ask=True):
+    """fwupd: {"tool", "lvfs": is the vendors' firmware service on (None: no such file), "updates": how many devices
+    have one waiting (None: not asked or no answer)}. Nothing is downloaded: fwupd answers from the metadata it has."""
+    fw = {"tool": bool(shutil.which("fwupdmgr")), "lvfs": None, "updates": None}
+    for l in read(SEC_LVFS).splitlines():
+        k, _, v = l.partition("=")
+        if k.strip() == "Enabled":
+            fw["lvfs"] = v.strip().lower() == "true"
+    if ask and fw["tool"] and fw["lvfs"]:
+        rc, out = sec_cmd(["fwupdmgr", "get-updates", "--json", "--no-metadata-check", "--no-remote-check"], timeout=30)
+        if rc == 2:             # (fwupdmgr: nothing to do)
+            fw["updates"] = 0
+        elif rc == 0:
+            try:
+                fw["updates"] = sum(1 for d in json.loads(out).get("Devices", []) if d.get("Releases"))
+            except (ValueError, AttributeError):
+                pass
+    return fw
+
+
+def sec_cpu():
+    """{flaw: what the kernel says of it} from /sys/devices/system/cpu/vulnerabilities; None when it is not there"""
+    d = sec_sys("devices/system/cpu/vulnerabilities")
+    try:
+        return {n: read(os.path.join(d, n)).strip() for n in sorted(os.listdir(d))}
+    except OSError:
+        return None
+
+
+def sec_ss_parse(out):
+    """`ss -Htulnp`: [{"proto", "addr", "port", "local": bound to this machine only, "who", "pid"}]"""
+    res = []
+    for l in out.splitlines():
+        f = l.split()
+        if len(f) < 5 or f[0] not in ("tcp", "udp"):
+            continue
+        addr, _, port = f[4].rpartition(":")
+        bare = addr.split("%")[0].strip("[]")
+        local = bare.startswith("127.") or bare in ("::1",) or bare.startswith("::ffff:127.") or addr.endswith("%lo")
+        m = re.search(r'users:\(\("([^"]*)",pid=(\d+)', l)
+        res.append({"proto": f[0], "addr": addr, "port": port, "local": local, "who": m.group(1) if m else "", "pid": int(m.group(2)) if m else None})
+    return res
+
+
+def sec_sockets_parse(out):
+    """`systemctl list-sockets --no-legend`: {listening address: the socket unit}"""
+    res = {}
+    for l in out.splitlines():
+        f = l.split()
+        if len(f) >= 2 and f[1].endswith(".socket"):
+            res[f[0]] = f[1]
+    return res
+
+
+def sec_listen():
+    """what listens for connections: sec_ss_parse's rows with "unit", the systemd unit each belongs to ('' when it
+    cannot be told: another user's process is root's to see); None when ss does not answer"""
+    rc, out = sec_cmd(["ss", "-Htulnp"])
+    if rc != 0:
+        return None
+    rows = sec_ss_parse(out)
+    socks = None
+    for r in rows:
+        r["unit"] = ""
+        if r["pid"] and r["pid"] != 1:
+            m = re.search(r"/([^/\n]+\.(?:service|scope|socket))\s*$", read(os.path.join(SEC_PROC, str(r["pid"]), "cgroup")), re.M)
+            r["unit"] = m.group(1) if m else ""
+        if not r["unit"] and not r["local"]:
+            if socks is None:
+                rc2, o2 = sec_cmd(["systemctl", "list-sockets", "--no-legend", "--no-pager"])
+                socks = sec_sockets_parse(o2) if rc2 == 0 else {}
+            r["unit"] = socks.get("%s:%s" % (r["addr"], r["port"]), "") or (socks.get("*:" + r["port"], "") if r["addr"] in ("*", "[::]", "0.0.0.0") else "")
+    return rows
+
+
+def sec_tpm():
+    """'2' / '1' (the TPM's major version), '' when the kernel shows none, None when /sys/class is not readable"""
+    d = sec_sys("class/tpm")
+    if not os.path.isdir(sec_sys("class")):
+        return None
+    try:
+        names = sorted(n for n in os.listdir(d) if n.startswith("tpm"))
+    except OSError:
+        return ""
+    if not names:
+        return ""
+    return read(os.path.join(d, names[0], "tpm_version_major")).strip() or "1"      # (the file came with TPM 2.0 support)
+
+
+def sec_luks_tokens(text):
+    """the JSON of `cryptsetup luksDump --dump-json-metadata`: {"keyslots": how many, "tokens": [{"type", "pin":
+    True / False / None, "pcrs"}]}; None when it is not that"""
+    try:
+        d = json.loads(text)
+        toks = [{"type": t.get("type", "?"), "pin": t.get("tpm2-pin") if t.get("type") == "systemd-tpm2" else None,
+                 "pcrs": t.get("tpm2-pcrs") or []} for _, t in sorted(d.get("tokens", {}).items())]
+        return {"keyslots": len(d.get("keyslots", {})), "tokens": toks}
+    except (ValueError, AttributeError, TypeError):
+        return None
+
+
+def sec_unlock(src):
+    """what opens the encrypted device under SRC (the source of /): {"device": the LUKS device, "keyslots",
+    "tokens"}; tokens None when the header was not read (it is root's)"""
+    rc, out = sec_cmd(["lsblk", "-s", "-n", "-l", "-o", "PATH,TYPE", src]) if src.startswith("/dev/") else (None, "")
+    rows = [l.split() for l in out.splitlines() if len(l.split()) == 2] if rc == 0 else []
+    dev = next((rows[i + 1][0] for i in range(len(rows) - 1) if rows[i][1] == "crypt"), "")
+    res = {"device": dev, "keyslots": None, "tokens": None}
+    if dev and os.geteuid() == 0:
+        rc, out = sec_cmd(["cryptsetup", "luksDump", "--dump-json-metadata", dev])
+        res.update((sec_luks_tokens(out) if rc == 0 else None) or {})
+    return res
+
+
+def sec_swap():
+    """[{"name", "kind": zram | disk, "encrypted": True / False / None}] of the swap in use; None when /proc/swaps
+    is not readable"""
+    txt = read(os.path.join(SEC_PROC, "swaps"), None)
+    if txt is None:
+        return None
+    res = []
+    for l in txt.splitlines()[1:]:
+        f = l.split()
+        if len(f) < 2:
+            continue
+        name, enc = f[0], None
+        if os.path.basename(name).startswith("zram"):
+            res.append({"name": name, "kind": "zram", "encrypted": None})
+            continue
+        dev = name
+        if f[1] == "file":
+            rc, src = sec_cmd(["findmnt", "-n", "-o", "SOURCE", "-T", name])
+            dev = src.split("[")[0].strip() if rc == 0 else ""
+        if dev.startswith("/dev/"):
+            rc, types = sec_cmd(["lsblk", "-s", "-n", "-l", "-o", "TYPE", dev])
+            if rc == 0 and types:
+                enc = "crypt" in types.split()
+        res.append({"name": name, "kind": "disk", "encrypted": enc})
+    return res
+
+
+def sec_iommu():
+    """{"units": the IOMMUs the kernel uses, "types": how their groups translate (DMA: strict, DMA-FQ: lazy,
+    identity: not at all)}; None when /sys/class/iommu is not there"""
+    import glob
+    try:
+        units = sorted(os.listdir(sec_sys("class/iommu")))
+    except OSError:
+        return None
+    types = sorted(set(read(p).strip() for p in sorted(glob.glob(sec_sys("kernel/iommu_groups/*/type")))[:256]) - {""})
+    return {"units": units, "types": types}
+
+
+def sec_thunderbolt():
+    """[{"domain", "security", "iommu": is the kernel's DMA protection on for it}]; None when /sys/bus is not there"""
+    import glob
+    if not os.path.isdir(sec_sys("bus")):
+        return None
+    res = []
+    for d in sorted(glob.glob(sec_sys("bus/thunderbolt/devices/domain*"))):
+        res.append({"domain": os.path.basename(d), "security": read(os.path.join(d, "security")).strip() or None,
+                    "iommu": {"1": True, "0": False}.get(read(os.path.join(d, "iommu_dma_protection")).strip())})
+    return res
+
+
+def sec_usb(user=""):
+    """USBGuard and GNOME's use of it: {"installed", "active", "protection", "level"}"""
+    def gs(key):
+        get = ["gsettings", "get", "org.gnome.desktop.privacy", key]
+        rc, out = sec_cmd(["runuser", "-l", user, "-c", " ".join(get)] if user else get)
+        return out.strip().strip("'") if rc == 0 and out else None
+    unit = sec_unit("usbguard.service")
+    return {"installed": None if unit is None else unit != "not-found", "active": sec_active("usbguard.service"),
+            "protection": {"true": True, "false": False}.get(gs("usb-protection")), "level": gs("usb-protection-level")}
+
+
+def sec_more(disk=None, user="", firmware=True, parallel=False):
+    """the second half of what the audit reads (the rows sec_checks_more judges)"""
+    src = ((disk or {}).get("/") or {}).get("source", "") if ((disk or {}).get("/") or {}).get("encrypted") else ""
+    root = os.geteuid() == 0
+    parts = (("modules", sec_modules), ("kernel", sec_kernel), ("firmware", lambda: sec_firmware(firmware) if firmware is not None else None),
+             ("listen", sec_listen), ("unlock", lambda: sec_unlock(src) if src else None), ("swap", sec_swap), ("usb", lambda: sec_usb(user)),
+             ("kdump", lambda: sec_unit("kdump.service")),
+             ("root", lambda: ((sec_cmd(["passwd", "-S", "root"])[1].split() + ["", ""])[1] or None) if root else None))
+    vals = par([f for _, f in parts]) if parallel else [f() for _, f in parts]
+    for v in vals:
+        if isinstance(v, BaseException):
+            raise v
+    m = dict(zip([k for k, _ in parts], vals))
+    sig = read(sec_sys("module/module/parameters/sig_enforce")).strip()
+    m.update({"lockdown": sec_lockdown(), "sig_enforce": {"Y": True, "N": False}.get(sig), "cpu": sec_cpu(), "tpm": sec_tpm(),
+              "iommu": sec_iommu(), "thunderbolt": sec_thunderbolt(), "tainted": sec_int(os.path.join(SEC_PROC, "sys/kernel/tainted")),
+              "keys": {k: sec_int(os.path.join(SEC_PROC, "sys", k.replace(".", "/"))) for k in SEC_KEYS},
+              "core_pattern": read(os.path.join(SEC_PROC, "sys/kernel/core_pattern")).strip() or None,
+              "level": lvl_choice()})
+    return m
+
+
+def sec_probe(pending=True, offline=False, parallel=False, more=True):
+    """what the audit reads; PARALLEL: its parts at once (silik doctor), else one after the other. MORE: also the
+    boot chain, the firmware and what listens (False for `apply`, which sets none of that; "doctor": without what
+    asks a daemon that may have to be started)"""
     cont = sec_container()
     bw = shutil.which("bwrap")
     su = os.environ.get("SUDO_USER", "") if os.geteuid() == 0 else ""
@@ -2579,13 +2839,16 @@ def sec_probe(pending=True, offline=False, parallel=False):
         if isinstance(v, BaseException):
             raise v
     got = dict(zip([k for k, _ in parts], vals))
-    return {
+    st = {
         "container": cont, "uid": os.geteuid(), "el": os.path.exists("/etc/redhat-release"),
         "selinux": got["selinux"], "firewall": got["firewall"], "sshd": got["sshd"], "auto": got["auto"],
         "pending": got["pending"], "disk": got["disk"], "secureboot": got["secureboot"], "lock": got["lock"], "lock_user": su,
         "autologin": got["autologin"], "sysctl": got["sysctl"], "sysctl_file": os.path.isfile(SEC_SYSCTL_FILE),
         "vsyscall": kernel_vsyscall() if x86() else "n/a", "bwrap": {"path": bw or "", "version": got["bwrap"], "userns": int(ns) if ns.isdigit() else None},
     }
+    if more:
+        st["more"] = sec_more(got["disk"], su, None if more == "doctor" else True, parallel)
+    return st
 
 
 def sec_checks(st):
@@ -2598,6 +2861,9 @@ def sec_checks(st):
 
     here = " (inside a container)" if st["container"] else ""
     apply_ = "silik secure apply"
+    more = st.get("more")
+    # the level the owner chose (`silik secure level hardened`): there Secure Boot and encryption are required
+    hard = bool(more and (more.get("level") or {}).get("level") == "hardened")
 
     se = st["selinux"]
     sed = "sudo sed -i 's/^SELINUX=.*/SELINUX=enforcing/' " + SEC_SELINUX_CONF
@@ -2711,18 +2977,21 @@ def sec_checks(st):
     elif r["encrypted"] and h["encrypted"]:
         row("disk", "disk encryption", "ok", "/ and /home are on LUKS (%s)" % (r["source"] if r["source"] == h["source"] else r["source"] + ", " + h["source"]))
     elif h["encrypted"]:
-        row("disk", "disk encryption", "warn", "/home is on LUKS (%s); / (%s) is not" % (h["source"], r["source"]), luks)
+        row("disk", "disk encryption", "bad" if hard else "warn", "/home is on LUKS (%s); / (%s) is not%s" % (
+            h["source"], r["source"], ": the hardened level requires it" if hard else ""), luks)
     else:
         row("disk", "disk encryption", "bad", "%s (%s) is not encrypted: whoever holds the machine reads the disk" % ("/home" if r["source"] != h["source"] else "/ with /home", h["source"]), luks)
 
     sb = st["secureboot"]
     mok = ["turned on in the firmware's setup; with the NVIDIA driver first: sudo mokutil --import /var/lib/dkms/mok.pub (docs/SECURITY.md)"]
+    need = "; the hardened level requires it" if hard else ""
     if sb == "enabled":
-        row("secureboot", "Secure Boot", "ok", "enabled")
+        # (what it covers is said: on bare metal the initramfs and the kernel's arguments are read from /boot unchecked)
+        row("secureboot", "Secure Boot", "ok", "enabled: the boot loader and the kernel are checked; the initramfs and the kernel's arguments are not")
     elif sb == "disabled":
-        row("secureboot", "Secure Boot", "warn", "disabled: the firmware starts any boot loader", mok)
+        row("secureboot", "Secure Boot", "bad" if hard else "warn", "disabled: the firmware starts any boot loader" + need, mok)
     elif sb == "bios":
-        row("secureboot", "Secure Boot", "warn", "not possible: this system was not started through UEFI", ["an installation started in UEFI mode"])
+        row("secureboot", "Secure Boot", "bad" if hard else "warn", "not possible: this system was not started through UEFI" + need, ["an installation started in UEFI mode"])
     else:
         row("secureboot", "Secure Boot", "unknown", "the firmware's variables are not visible" + here)
 
@@ -2793,7 +3062,272 @@ def sec_checks(st):
             ["grep -rs max_user_namespaces /etc/sysctl.conf /etc/sysctl.d /usr/lib/sysctl.d   # the file that turns them off"])
     else:
         row("sandbox", "sandbox", "ok", "bubblewrap %s, user namespaces on" % bw["version"])
+    if more is not None:
+        sec_checks_more(st, more, row, hard)
     return rows
+
+
+def sec_foreign(mods):
+    """(unsigned, signed): the names of the kernel modules that are not the base's, from sec_modules(). Unsigned:
+    loaded with the taint letter E, or a file without a signature. They stop loading once signatures are enforced"""
+    uns = [n for n, t in mods["loaded"] if "E" in t]
+    uns += [os.path.basename(p).split(".ko")[0] for p, signer in mods["files"] if not signer and os.path.basename(p).split(".ko")[0].replace("-", "_") not in
+            [u.replace("-", "_") for u in uns]]
+    sig = sorted(set([n for n, t in mods["loaded"] if "E" not in t and ("O" in t or "P" in t)] +
+                     [os.path.basename(p).split(".ko")[0] for p, signer in mods["files"] if signer]))
+    return uns, sig
+
+
+def sec_checks_more(st, m, row, hard=False):
+    """the rows of the boot chain, the firmware, what listens and the kernel's switches (sec_more())"""
+    here = " (inside a container)" if st["container"] else ""
+    sudo = ["sudo silik secure status"] if st["uid"] else []
+    level = "silik secure level hardened   # what it sets and costs: silik secure level hardened --list"
+    keys = m["keys"]
+
+    ld = m["lockdown"]
+    if ld is None:
+        row("lockdown", "kernel lockdown", "unknown", "/sys/kernel/security/lockdown is not there" + here)
+    elif ld == "none":
+        row("lockdown", "kernel lockdown", "warn", "none: root can change the running kernel (unsigned modules, /dev/mem, another kernel by kexec); "
+            "Secure Boot turns the lockdown on by itself", [level])
+    else:
+        row("lockdown", "kernel lockdown", "ok", ld + (": also no reading of kernel memory, so no kernel tracing" if ld == "confidentiality" else
+                                                         ": the running kernel is not changed, not even by root; no hibernation"))
+
+    mods, se = m["modules"], m["sig_enforce"]
+    uns, sig = sec_foreign(mods) if mods else ([], [])
+    foreign = ("; loaded or installed without a signature: %s" % " ".join(uns[:8]) if uns else "") + \
+              ("; not the base's, signed: %s" % " ".join(sig[:8]) if sig else "")
+    if se is None and ld in (None, "none"):
+        row("modsig", "module signatures", "unknown", "/sys/module/module/parameters/sig_enforce is not there" + here)
+    elif se or ld in ("integrity", "confidentiality"):
+        row("modsig", "module signatures", "ok", "enforced%s: a kernel module loads only with a signature the kernel trusts%s" % (
+            "" if se else " by the lockdown", foreign))
+    else:
+        row("modsig", "module signatures", "warn", "not enforced: root can load any kernel module%s%s" % (
+            foreign, "; the kernel is tainted (%d)" % m["tainted"] if m["tainted"] else ""), [level])
+
+    k = m["kernel"]
+    if not k["installed"]:
+        row("kernel", "kernel in use", "unknown", "running %s; the installed kernels are not in a package database here%s" % (k["running"], here))
+    elif k["running"] == k["installed"][-1]:
+        row("kernel", "kernel in use", "ok", "%s, the newest installed" % k["running"])
+    elif k["running"] in k["installed"]:
+        row("kernel", "kernel in use", "warn", "running %s; %s is installed and protects only after a restart" % (k["running"], k["installed"][-1]),
+            ["systemctl reboot   # (the system never restarts by itself)"])
+    else:
+        row("kernel", "kernel in use", "unknown", "running %s, which is not a kernel package of this system (the newest: %s)%s" % (k["running"], k["installed"][-1], here))
+
+    fw = m["firmware"]
+    lvfs = ["sudo fwupdmgr enable-remote lvfs   # one metadata request a day to cdn.fwupd.org", "fwupdmgr get-updates"]
+    if fw is None:
+        pass                        # (silik doctor does not start fwupd: silik secure status says)
+    elif not fw["tool"]:
+        row("firmware", "firmware updates", "unknown", "fwupd is not installed: nothing here says whether the firmware (UEFI, the dbx list, devices) is current",
+            ["sudo dnf -y install fwupd"])
+    elif not fw["lvfs"]:
+        row("firmware", "firmware updates", "unknown", "the vendors' firmware service (LVFS) is off, as the base ships it: nothing says whether a firmware "
+            "update or a new Secure Boot revocation list (dbx) waits. Processor microcode comes with the system's updates", lvfs)
+    elif fw["updates"] is None:
+        row("firmware", "firmware updates", "unknown", "fwupd gave no answer", ["fwupdmgr get-updates"])
+    elif fw["updates"]:
+        row("firmware", "firmware updates", "warn", "%d device%s with a firmware update waiting" % (fw["updates"], "" if fw["updates"] == 1 else "s"),
+            ["fwupdmgr get-updates", "fwupdmgr update"])
+    else:
+        row("firmware", "firmware updates", "ok", "none waits (fwupd, from the metadata it has)")
+
+    cpu = m["cpu"]
+    if not cpu:
+        row("cpu", "processor flaws", "unknown", "/sys/devices/system/cpu/vulnerabilities is not there" + here)
+    else:
+        vul = ["%s (%s)" % (n, v[:60]) for n, v in sorted(cpu.items()) if v.lower().startswith("vulnerable")]
+        if vul:
+            row("cpu", "processor flaws", "warn", "%d of %d not mitigated: %s" % (len(vul), len(cpu), "; ".join(vul)),
+                ["sudo dnf -y upgrade microcode_ctl kernel   # then a restart; a virtual machine: its host's"])
+        else:
+            row("cpu", "processor flaws", "ok", "%d known flaws: each not affected or mitigated" % len(cpu))
+
+    li = m["listen"]
+    if li is None:
+        row("listening", "listening", "unknown", "ss (iproute) does not answer" + here)
+    else:
+        out = [r for r in li if not r["local"]]
+        own = [r for r in out if (r["proto"], r["port"]) in SEC_LISTEN_OWN]
+        out = [r for r in out if r not in own]
+        said, blind = [], False
+        for r in out:
+            who = r["unit"] or r["who"]
+            blind = blind or not who
+            t = "%s %s:%s%s" % (r["proto"], r["addr"], r["port"], " (%s)" % who if who else "")
+            said += [t] if t not in said else []
+        tail = "; ".join(sorted(set(SEC_LISTEN_OWN[(r["proto"], r["port"])] for r in own)))
+        if out:
+            fwl = st["firewall"]
+            row("listening", "listening", "warn", "%d beyond this machine: %s%s%s" % (
+                len(said), ", ".join(said[:10]), "; whose the others are is root's to see" if blind and st["uid"] else "",
+                "; the firewall zone drops what comes for them" if fwl["active"] and fwl["target"] not in (None, "ACCEPT") else ""),
+                ["sudo systemctl disable --now UNIT   # the unit named; rpcbind.socket: NFSv3 only, avahi-daemon.service avahi-daemon.socket: finding printers"] + sudo)
+        else:
+            row("listening", "listening", "ok", "nothing listens beyond this machine (%d on the loopback only%s)" % (
+                sum(1 for r in li if r["local"]), "; " + tail if tail else ""))
+
+    tpm = m["tpm"]
+    if tpm is None:
+        row("tpm", "TPM", "unknown", "/sys/class is not readable" + here)
+    elif tpm == "2":
+        row("tpm", "TPM", "ok", "a TPM 2.0 is present")
+    elif tpm:
+        row("tpm", "TPM", "warn", "a TPM 1.2: it cannot hold the disk's key (systemd-cryptenroll needs 2.0)", ["the firmware's setup: some machines switch their TPM to 2.0 there"])
+    else:
+        row("tpm", "TPM", "warn", "none seen%s: the disk cannot be tied to this machine's boot chain; its passphrase is the whole protection" % here,
+            ["the firmware's setup: Security > TPM / PTT / fTPM, when the machine has one"])
+
+    un = m["unlock"]
+    if un is not None:
+        enrol = "sudo systemd-cryptenroll --tpm2-device=auto --tpm2-pcrs=7 --tpm2-with-pin=yes %s   # docs/HARDENED.md" % (un["device"] or "DEVICE")
+        if un["tokens"] is None:
+            row("unlock", "disk unlock", "unknown", "what opens %s (a passphrase, the TPM, a token) is in its LUKS header, root's to read" % (un["device"] or "the disk"),
+                sudo or ["sudo cryptsetup luksDump " + (un["device"] or "DEVICE")])
+        else:
+            tp = [t for t in un["tokens"] if t["type"] == "systemd-tpm2"]
+            other = sorted(set(t["type"] for t in un["tokens"] if t["type"] != "systemd-tpm2"))
+            slots = "%d key slot%s" % (un["keyslots"], "" if un["keyslots"] == 1 else "s")
+            if any(t["pin"] is not True for t in tp):
+                row("unlock", "disk unlock", "bad" if hard else "warn", "%s opens by its TPM without a PIN: whoever takes the machine starts it with the disk open (%s)" % (un["device"], slots),
+                    ["sudo systemd-cryptenroll --wipe-slot=tpm2 " + un["device"], enrol])
+            elif "clevis" in other:
+                row("unlock", "disk unlock", "warn", "%s has a clevis token: it may open without a person (%s)" % (un["device"], slots), ["sudo clevis luks list -d " + un["device"]])
+            elif tp:
+                row("unlock", "disk unlock", "ok", "%s: TPM 2.0 with a PIN, PCRs %s (%s%s)" % (
+                    un["device"], "+".join(str(x) for x in tp[0]["pcrs"]) or "none", slots, "; also: " + ", ".join(other) if other else ""))
+            else:
+                row("unlock", "disk unlock", "ok", "%s: a passphrase at each start (%s%s)" % (un["device"], slots, "; also: " + ", ".join(other) if other else ""))
+
+    sw = m["swap"]
+    if sw is None:
+        row("swap", "swap", "unknown", "/proc/swaps is not readable" + here)
+    else:
+        plain = [x["name"] for x in sw if x["kind"] == "disk" and x["encrypted"] is False]
+        blind = [x["name"] for x in sw if x["kind"] == "disk" and x["encrypted"] is None]
+        enc = [x["name"] for x in sw if x["kind"] == "disk" and x["encrypted"]]
+        zr = " and compressed memory (zram)" if any(x["kind"] == "zram" for x in sw) else ""
+        if plain:
+            rooted = (st["disk"]["/"] or {}).get("encrypted")
+            row("swap", "swap", "bad" if rooted else "warn", "%s is not encrypted: what programs hold in memory (keys, an open design) reaches the disk in clear%s" % (
+                ", ".join(plain), ", beside an encrypted /" if rooted else ""),
+                ["sudo swapoff %s   # and its line in /etc/fstab; silik power zram on: swap in memory instead" % plain[0]])
+        elif blind:
+            row("swap", "swap", "unknown", "%s: what it is on cannot be seen%s" % (", ".join(blind), here))
+        elif enc:
+            row("swap", "swap", "ok", "encrypted (%s)%s" % (", ".join(enc), zr))
+        else:
+            row("swap", "swap", "ok", "none on a disk" + (": compressed memory only (zram)" if zr else ""))
+
+    io = m["iommu"]
+    if io is None:
+        row("iommu", "IOMMU", "unknown", "/sys/class/iommu is not there" + here)
+    elif not io["units"]:
+        row("iommu", "IOMMU", "warn", "off: a device on a bus (Thunderbolt, PCIe, FireWire) reads and writes all memory", [level, "the firmware's setup: VT-d / AMD-Vi"])
+    elif "identity" in io["types"]:
+        row("iommu", "IOMMU", "warn", "on (%s), but some devices are not translated (identity)" % " ".join(io["units"][:3]), [level])
+    else:
+        row("iommu", "IOMMU", "ok", "on (%s)%s" % (" ".join(io["units"][:3]), {("DMA",): ", strict", ("DMA-FQ",): ", lazy: a freed mapping stays valid for a moment"}.get(tuple(io["types"]), "")))
+
+    tb = m["thunderbolt"]
+    if tb is None:
+        row("thunderbolt", "Thunderbolt", "unknown", "/sys/bus is not readable" + here)
+    elif not tb:
+        row("thunderbolt", "Thunderbolt", "ok", "no Thunderbolt or USB4 controller in use")
+    else:
+        val = ", ".join("%s: %s%s" % (d["domain"], d["security"] or "?", " + the kernel's DMA protection" if d["iommu"] else "") for d in tb)
+        if any(d["security"] is None for d in tb):
+            row("thunderbolt", "Thunderbolt", "unknown", val)
+        elif any(d["security"] == "none" and not d["iommu"] for d in tb):
+            row("thunderbolt", "Thunderbolt", "warn", val + ": a device that is plugged in gets the PCIe bus without a question",
+                ["the firmware's setup: Thunderbolt security level (user or secure)", level])
+        else:
+            row("thunderbolt", "Thunderbolt", "ok", val)
+
+    sd, pat = keys["fs.suid_dumpable"], m["core_pattern"]
+    where = "systemd-coredump keeps a program's memory image (coredumpctl), readable by its user" if pat and "systemd-coredump" in pat else \
+            "a crashing program's memory image goes to: %s" % pat if pat else ""
+    if sd is None or not pat:
+        row("coredump", "core dumps", "unknown", "fs.suid_dumpable or kernel.core_pattern is not readable" + here)
+    elif sd == 1:
+        row("coredump", "core dumps", "bad", "a program that changed user (sudo, su) leaves its memory image readable by the user who started it (fs.suid_dumpable = 1)",
+            ["sudo sysctl -w fs.suid_dumpable=0"])
+    elif sd == 2:
+        row("coredump", "core dumps", "warn", "a program that changed user leaves a memory image, for root (fs.suid_dumpable = 2; SilikOS: 0); " + where, ["silik secure apply"])
+    else:
+        row("coredump", "core dumps", "ok", "none of a program that changed user; " + where)
+
+    pt = keys["kernel.yama.ptrace_scope"]
+    if pt is None:
+        row("ptrace", "tracing (ptrace)", "unknown", "kernel.yama.ptrace_scope is not readable" + here)
+    elif pt == 0:
+        row("ptrace", "tracing (ptrace)", "warn", "0: every program of a user reads the memory of that user's other programs", ["silik secure apply"])
+    else:
+        row("ptrace", "tracing (ptrace)", "ok", {1: "1: a program traces only what it started (gdb PROG works; gdb -p PID needs sudo)",
+                                                 2: "2: only root traces", 3: "3: nobody traces: no debugger works"}.get(pt, str(pt)))
+
+    ub, jh = keys["kernel.unprivileged_bpf_disabled"], keys["net.core.bpf_jit_harden"]
+    jit = "; JIT hardening: %s" % ("root's to read" if jh is None else {0: "off", 1: "for users' programs", 2: "for every program"}.get(jh, str(jh)))
+    if ub is None:
+        row("bpf", "BPF for users", "unknown", "kernel.unprivileged_bpf_disabled is not readable" + here)
+    elif ub == 0:
+        row("bpf", "BPF for users", "warn", "on: any user loads programs into the kernel" + jit, ["sudo sysctl -w kernel.unprivileged_bpf_disabled=1"])
+    else:
+        row("bpf", "BPF for users", "ok", ("off until root turns it on" if ub == 2 else "off until the next start") + jit)
+
+    kx = keys["kernel.kexec_load_disabled"]
+    if kx is None:
+        row("kexec", "kexec", "unknown", "kernel.kexec_load_disabled is not readable" + here)
+    elif kx == 1:
+        row("kexec", "kexec", "ok", "off until the next start: root cannot start another kernel from this one")
+    elif ld in ("integrity", "confidentiality"):
+        row("kexec", "kexec", "ok", "only a signed kernel can be started from this one (the lockdown)")
+    else:
+        row("kexec", "kexec", "warn", "on: root can start any other kernel from this one, past the firmware's check%s" % (
+            " (kdump uses it: crash dumps are armed)" if m["kdump"] in ("enabled", "enabled-runtime") else ""), [level])
+
+    sq = keys["kernel.sysrq"]
+    if sq is None:
+        row("sysrq", "SysRq key", "unknown", "kernel.sysrq is not readable" + here)
+    elif sq in (0, 16):
+        row("sysrq", "SysRq key", "ok", "off" if sq == 0 else "16: only sync (the base's default)")
+    else:
+        row("sysrq", "SysRq key", "warn", "%d: %s from the keyboard, past the screen lock" % (sq, "every function (kill every program, restart, dump memory)" if sq == 1 else "more than sync"),
+            ["sudo sysctl -w kernel.sysrq=16"])
+
+    us = m["usb"]
+    usbfix = ["silik usb   # USB devices while the screen is locked"] if "usb" in plugins() else ["docs/SECURITY.md: USBGuard"]
+    who = " (user %s)" % st["lock_user"] if st["lock_user"] else ""
+    if us["active"] is None and us["installed"] is not False:
+        row("usb", "USB while locked", "unknown", "whether usbguard runs is not visible" + here)
+    elif not us["active"]:
+        row("usb", "USB while locked", "warn", "usbguard is %s: a device plugged into a locked machine (one that types like a keyboard) is taken" % (
+            "not installed" if us["installed"] is False else "not running"), usbfix)
+    elif st["uid"] == 0 and not st["lock_user"]:
+        row("usb", "USB while locked", "unknown", "usbguard runs; what the desktop tells it is a user's setting: run `silik secure status` as the desktop's user, or with sudo from their session")
+    elif us["protection"] is None or us["level"] is None:
+        row("usb", "USB while locked", "unknown", "usbguard runs; the desktop's settings are not readable (gsettings)")
+    elif not us["protection"]:
+        row("usb", "USB while locked", "warn", "usbguard runs, but the desktop does not use it (usb-protection is off)%s: its own rules decide" % who,
+            ["gsettings set org.gnome.desktop.privacy usb-protection true"])
+    else:
+        row("usb", "USB while locked", "ok", "a new device is refused %s (usbguard, the desktop's level: %s)%s" % (
+            "always, until allowed" if us["level"] == "always" else "while the screen is locked", us["level"], who))
+
+    ra = m["root"]
+    if ra is None:
+        row("root", "root account", "unknown", "its state is in /etc/shadow, root's to read", sudo or ["passwd -S root"])
+    elif ra == "NP":
+        row("root", "root account", "bad", "root has no password: anyone becomes root with `su`", ["sudo passwd -l root"])
+    elif ra in ("L", "LK"):
+        row("root", "root account", "ok", "locked: root is reached with sudo only")
+    else:
+        row("root", "root account", "ok", "has a password (%s)" % ra)
 
 
 def sec_plan(st, keep_ssh=False, dry=False):
@@ -2932,7 +3466,7 @@ def secure_apply(ctx, a):
         print("silik: " + msg, file=sys.stderr)
     done, failed, notes = [], [], []
     for again in (False, True):     # a second look: a firewall that was just started can now say its default zone
-        st = sec_probe(pending=False)
+        st = sec_probe(pending=False, more=False)
         fw = st["firewall"]
         if fw["installed"] and fw["active"] is True and fw["open"] is None:
             # what the default zone opens is root's to read: asked with a printed command (not in a dry run)
@@ -2955,6 +3489,760 @@ def secure_apply(ctx, a):
         print("nothing to change: what apply sets is already at the SilikOS defaults or stricter")
     print("`silik secure status` reads the result")
     return 1 if failed else 0
+
+
+# ------------------------------------------------------------------ secure level
+# `silik secure level`: which level this system is at; `silik secure level hardened` sets the hardened level (the
+# posture study of 13/11/2026, its rows H1..H11; docs/HARDENED.md has each item: what it sets, what stops working, how
+# to leave it out); `silik secure level default` puts back exactly what that changed. The default level is what every
+# installation has (silikos-security's files, `silik secure apply`). As `silik speed`: lvl_probe reads the system,
+# lvl_rows judges what was read and lvl_plan / lvl_unplan list the steps; those three run nothing, so the tests feed
+# them made-up systems. Every step is a printed command. What was changed is written down (LVL_STATE, root's, 0600):
+# the kernel arguments this command added (one the owner had before is never taken off), the values the kernel
+# settings had, the files made. The owner's choice, and the items left out, are in LVL_CHOICE, which anybody may read
+# (`silik secure status` judges Secure Boot and encryption by it). A real run is root's: it starts itself with sudo.
+# Never part of it, on purpose: LVL_REFUSED. Disk encryption and the TPM enrolment are checked here, never done.
+LVL_ROOT = os.environ.get("SILIK_LEVEL_ROOT") or ""       # (the tests' made-up systems live in a folder)
+LVL_CHOICE = "/etc/silikos/secure-level"
+LVL_STATE = "/var/lib/silikos/secure-level.json"
+LVL_SYSCTL = "/etc/sysctl.d/61-silikos-hardened.conf"       # (sorts after /usr/lib/sysctl.d/60-silikos-security.conf)
+LVL_DCONF = "/etc/dconf/db/local.d/60-silikos-hardened"
+LVL_LOCKS = "/etc/dconf/db/local.d/locks/60-silikos-hardened"
+LVL_GDM = "/etc/dconf/db/gdm.d/60-silikos-hardened"
+LVL_NM = "/etc/NetworkManager/conf.d/60-silikos-hardened.conf"
+# sshd takes the FIRST value it reads and its drop-ins in the order of their names: a file that sorts after another
+# one's `PermitRootLogin yes` changes nothing (run, openssh 9.9 on EL 9.8, with the name 40-silikos.conf)
+LVL_SSHD = "/etc/ssh/sshd_config.d/00-silikos-hardened.conf"
+LVL_AUDIT = "/etc/audit/rules.d"
+LVL_AUDIT_SRC = "/usr/share/audit/sample-rules"            # the base's own (package audit)
+LVL_AUDIT_RULES = ("11-loginuid.rules", "43-module-load.rules")
+LVL_FAILLOCK = "/etc/security/faillock.conf"
+LVL_FAILLOCK_SET = (("deny", 10), ("unlock_time", 600))    # [PROPOSAL values]
+LVL_MARK = ("# silikos-hardened: begin (silik secure level hardened; `silik secure level default` removes these lines)",
+            "# silikos-hardened: end")
+LVL_HEAD = "# SilikOS: written by `silik secure level hardened`, removed by `silik secure level default` (docs/HARDENED.md).\n"
+LVL_OWN = (LVL_SYSCTL, LVL_DCONF, LVL_LOCKS, LVL_GDM, LVL_NM, LVL_SSHD)      # files whose names are this command's
+LVL_LOCK_KEYS = ("/org/gnome/desktop/screensaver/lock-enabled", "/org/gnome/desktop/screensaver/lock-delay",
+                 "/org/gnome/desktop/session/idle-delay", "/org/gnome/desktop/privacy/usb-protection",
+                 "/org/gnome/desktop/privacy/usb-protection-level", "/org/gnome/desktop/media-handling/autorun-never")
+LVL_SSHD_SET = ("PermitRootLogin no", "PasswordAuthentication no", "MaxAuthTries 4")
+LVL_NM_SET = {"wifi-mac": ("wifi.cloned-mac-address=stable",), "dhcp-name": ("ipv4.dhcp-send-hostname=0", "ipv6.dhcp-send-hostname=0")}
+LVL_STRICTER = ("lockdown=confidentiality",)               # an owner's value that is stricter than the level's
+# id: what `--without ID` names. row: the posture study's. kind karg: kernel arguments (grubby); sysctl: one key of
+# LVL_SYSCTL. sets / cost: one line each for `--list` ([A]: not run or not seen; docs/HARDENED.md says which).
+LVL_ITEMS = (
+    {"id": "lockdown", "row": "H2", "kind": "karg", "args": ("lockdown=integrity", "module.sig_enforce=1"),
+     "sets": "the kernel locks itself down and loads only signed modules (lockdown=integrity module.sig_enforce=1)",
+     "cost": "kernel modules without a trusted signature stop loading (NVIDIA built on the machine before its MOK step, VirtualBox, a vendor's dongle "
+             "or probe driver); no hibernation; no /dev/mem tools (flashrom, user-space PCI drivers); no MSR writes; kexec of a signed kernel only"},
+    {"id": "memory", "row": "H2", "kind": "karg", "args": ("init_on_alloc=1", "page_alloc.shuffle=1"),
+     "sets": "memory is zeroed when it is handed out and free pages are shuffled (init_on_alloc=1 page_alloc.shuffle=1)",
+     "cost": "some speed of programs that allocate much (simulators): not measured"},
+    {"id": "iommu", "row": "H2", "kind": "karg", "args": ("intel_iommu=on", "iommu.strict=1", "efi=disable_early_pci_dma"), "x86": ("intel_iommu=on", "efi=disable_early_pci_dma"),
+     "sets": "a device reaches only the memory it was given, from the first moment of the start (intel_iommu=on iommu.strict=1 efi=disable_early_pci_dma)",
+     "cost": "some speed of disks and network cards: not measured; [A] a firmware that leaves a device writing memory at the start may not start: "
+             "take efi=disable_early_pci_dma off in the boot menu (e)"},
+    {"id": "debugfs", "row": "H2", "kind": "karg", "args": ("debugfs=off",),
+     "sets": "the kernel's debugging file system is not there (debugfs=off)",
+     "cost": "blktrace, powertop and drivers' debug files (/sys/kernel/debug); tracing through /sys/kernel/tracing stays"},
+    {"id": "kptr", "row": "H3", "kind": "sysctl", "key": "kernel.kptr_restrict", "value": 2, "how": "min",
+     "sets": "kernel addresses are hidden from root too (kernel.kptr_restrict = 2)",
+     "cost": "perf and crash tools show no kernel symbols, even as root"},
+    {"id": "bpf-jit", "row": "H3", "kind": "sysctl", "key": "net.core.bpf_jit_harden", "value": 2, "how": "min",
+     "sets": "BPF programs compiled into the kernel are hardened, root's too (net.core.bpf_jit_harden = 2)",
+     "cost": "bpftrace and bcc tools as root: slower, and no JIT addresses"},
+    {"id": "kexec", "row": "H3", "kind": "sysctl", "key": "kernel.kexec_load_disabled", "value": 1, "how": "min",
+     "sets": "no other kernel can be started from this one (kernel.kexec_load_disabled = 1; left out while kdump is on)",
+     "cost": "kdump cannot be armed again without a restart; the value itself goes back to 0 only with a restart"},
+    {"id": "tiocsti", "row": "H3", "kind": "sysctl", "key": "dev.tty.legacy_tiocsti", "value": 0, "how": "max",
+     "sets": "a program cannot type into the terminal it runs on (dev.tty.legacy_tiocsti = 0)",
+     "cost": "[A] csh's file name completion (set filec) and a few old terminal programs that push characters back"},
+    {"id": "sysrq", "row": "H3", "kind": "sysctl", "key": "kernel.sysrq", "value": 0, "how": "max",
+     "sets": "the SysRq key does nothing (kernel.sysrq = 0)",
+     "cost": "no Alt+SysRq to sync the disks of a machine that hangs"},
+    {"id": "locks", "row": "H5", "kind": "dconf",
+     "sets": "the screen lock, the USB protection and the autorun settings cannot be changed by a program of the user (dconf locks)",
+     "cost": "the user cannot change the idle time or turn the lock off in Settings"},
+    {"id": "faillock", "row": "H6", "kind": "pam",
+     "sets": "wrong passwords are counted: 10 lock the account for 600 s (authselect with-faillock; faillock.conf deny = 10, unlock_time = 600) [PROPOSAL values]",
+     "cost": "whoever is at the keyboard can lock the owner out for ten minutes (root is not locked: faillock --user NAME --reset)"},
+    {"id": "userlist", "row": "H7", "kind": "dconf",
+     "sets": "the login screen shows no list of users (GDM: disable-user-list)",
+     "cost": "the user name is typed at each login"},
+    {"id": "automount", "row": "H7", "kind": "dconf",
+     "sets": "a stick or disc that is plugged in is not mounted by itself (automount, automount-open: false; a default, the user may change it)",
+     "cost": "one click in Files to mount it"},
+    {"id": "wifi-mac", "row": "H8", "kind": "nm",
+     "sets": "each Wi-Fi network sees a hardware address of its own, the same each time (wifi.cloned-mac-address=stable)",
+     "cost": "a licence locked to the Wi-Fi address (a FlexLM host id) stops matching; a router that knows this machine by its address does not"},
+    {"id": "dhcp-name", "row": "H8", "kind": "nm",
+     "sets": "the host name is not sent to DHCP servers (ipv4.dhcp-send-hostname=0, ipv6.dhcp-send-hostname=0)",
+     "cost": "no name for this machine in a network's dynamic DNS"},
+    {"id": "thunderbolt", "row": "H9", "kind": "bolt",
+     "sets": "[A] new Thunderbolt devices are not authorised (boltctl config auth-mode disabled), unless the kernel's DMA protection is on",
+     "cost": "a dock's PCIe devices (its Ethernet, its storage, a graphics box) stay off until Settings > Privacy > Thunderbolt allows them"},
+    {"id": "audit", "row": "H10", "kind": "audit",
+     "sets": "the audit log notes every kernel module loaded or removed, and a login's identity cannot be changed (the base's rules 43-module-load, 11-loginuid)",
+     "cost": "[A] a login service inside a container cannot set its identity; one audit line per module; the identity rule stays until a restart"},
+    {"id": "sshd", "row": "H11", "kind": "sshd",
+     "sets": "sshd, where it is installed: no root login, no passwords, 4 tries (PermitRootLogin no, PasswordAuthentication no, MaxAuthTries 4)",
+     "cost": "a key in ~/.ssh/authorized_keys first: no login with a password"},
+)
+LVL_IDS = tuple(i["id"] for i in LVL_ITEMS)
+# what the hardened level requires and this command only checks (the owner's, in the firmware and at installation)
+LVL_REQUIRED = (
+    ("secureboot", "H1", "Secure Boot is on (the firmware's setup)"),
+    ("encryption", "H1", "/ is on an encrypted disk (LUKS: chosen at installation)"),
+    ("unlock", "H4", "a disk that its TPM opens asks for a PIN (systemd-cryptenroll --tpm2-device=auto --tpm2-pcrs=7 --tpm2-with-pin=yes DEVICE)"),
+)
+LVL_REFUSED = (
+    "a hardened memory allocator, another kernel or another glibc: the base stays binary identical to RHEL 9",
+    "application allowlisting by default (fapolicyd), FIPS mode, a whole STIG: compiled programs, vendor tools, old licence tools",
+    "no user namespaces, ptrace_scope 2 or 3, no module loading: podman rootless, bubblewrap, browsers; gdb; hot-plugged devices",
+    "noexec on /tmp, /dev/shm or /home, /tmp in memory: vendor installers, Java's native libraries, your own builds",
+    "lockdown=confidentiality, no SMT (mitigations=auto,nosmt): no kernel tracing (perf, ftrace, bpftrace); half the threads",
+    "TPM unlock without a PIN: a stolen laptop opens its own disk",
+    "own Secure Boot keys, a unified kernel image: they leave the base's signed boot path",
+    "usb-storage, bluetooth, can, squashfs, udf never loaded; IPv6 router advertisements off: the bench; IPv6",
+    "confined SELinux users, a Wayland session: their effect on EDA tools was not run; X11 is the owner's decision",
+    "file integrity checks every day (AIDE), IMA appraisal: stale after each nightly update; the base's packages carry no IMA signatures",
+    "init_on_free=1, vsyscall=none: options, not part of the level (simulation speed to be measured; EL6 userlands stop)",
+)
+
+
+def lvl_read(path):
+    return read(LVL_ROOT + path, None)
+
+
+def lvl_choice():
+    """the owner's choice: {"level": hardened | default, "without": [the items left out]}"""
+    words = (lvl_read(LVL_CHOICE) or "").split()
+    if not words or words[0] != "hardened":
+        return {"level": "default", "without": []}
+    return {"level": "hardened", "without": [w for w in words[1:] if w in LVL_IDS]}
+
+
+def lvl_state():
+    """what `level hardened` wrote down; (state, readable): readable False when the file is there and is root's"""
+    empty = {"kernel_args": [], "sysctl": {}, "files": [], "authselect": False, "faillock": False, "bolt": None}
+    try:
+        with open(LVL_ROOT + LVL_STATE) as f:
+            st = json.load(f)
+    except PermissionError:
+        return empty, False
+    except (OSError, ValueError):
+        return empty, True
+    if not isinstance(st, dict):
+        return empty, True
+    out = dict(empty)
+    out["kernel_args"] = [w for w in st.get("kernel_args", []) if isinstance(w, str) and KERNEL_ARG.match(w)] if isinstance(st.get("kernel_args"), list) else []
+    out["sysctl"] = {k: v for k, v in st.get("sysctl", {}).items() if isinstance(v, int)} if isinstance(st.get("sysctl"), dict) else {}
+    out["files"] = [p for p in st.get("files", []) if isinstance(p, str)] if isinstance(st.get("files"), list) else []
+    out["authselect"], out["faillock"] = st.get("authselect") is True, st.get("faillock") is True
+    out["bolt"] = st.get("bolt") if st.get("bolt") in ("enabled", "disabled") else None
+    return out, True
+
+
+def lvl_args(it, arch):
+    """the kernel arguments of the item on this architecture"""
+    return tuple(a for a in it["args"] if arch == "x86_64" or a not in it.get("x86", ()))
+
+
+def lvl_arg_in(words, a):
+    """is the kernel argument A on the command line WORDS (or the owner's stricter value of it)"""
+    return a in words or any(s in words for s in LVL_STRICTER if s.split("=")[0] == a.split("=")[0])
+
+
+def lvl_arg_other(words, a):
+    """the word on the command line that gives A's name another value ('' when none does)"""
+    if lvl_arg_in(words, a):
+        return ""
+    return next((w for w in words if w.split("=", 1)[0] == a.split("=", 1)[0]), "")
+
+
+def lvl_conf_keys(text):
+    """the settings a configuration file sets: {key: value} of its `key = value` lines that are not comments"""
+    res = {}
+    for l in (text or "").splitlines():
+        l = l.strip()
+        if l and not l.startswith(("#", ";", "[")) and "=" in l:
+            k, v = l.split("=", 1)
+            res[k.strip()] = v.strip()
+    return res
+
+
+def lvl_probe():
+    """what `silik secure level` reads (nothing is changed)"""
+    cont = sec_container()
+    entries = bls_entries()
+    user = os.environ.get("SUDO_USER", "") if os.geteuid() == 0 else ""
+    home = os.path.expanduser("~" + user) if valid_name(user) else os.path.expanduser("~")
+    disk = sec_disk()
+    src = disk["/"]["source"] if disk["/"]["encrypted"] else ""
+    tb = sec_thunderbolt()
+    bolt = None
+    if tb and shutil.which("boltctl"):
+        rc, out = sec_cmd(["boltctl", "config", "auth-mode"])
+        bolt = out.split()[-1] if rc == 0 and out.split() and out.split()[-1] in ("enabled", "disabled") else None
+    rc, raw = sec_cmd(["authselect", "current", "--raw"])
+    state, readable = lvl_state()
+
+    def listed(d):          # {file name: is it there} of a folder; None when the folder is not readable
+        try:
+            return set(os.listdir(LVL_ROOT + d))
+        except OSError:
+            return None
+    rules = listed(LVL_AUDIT)
+    return {
+        "uid": os.geteuid(), "arch": host_arch(), "remote": remote_session(), "online": speed_online(), "container": cont,
+        "cmdline": read(os.path.join(SEC_PROC, "cmdline")).split(),
+        "entries": [e["options"].split() for e in entries if "$kernelopts" not in e["options"]] if entries else None,
+        "keys": {it["key"]: sec_int(os.path.join(SEC_PROC, "sys", it["key"].replace(".", "/"))) for it in LVL_ITEMS if it["kind"] == "sysctl"},
+        "files": {p: lvl_read(p) for p in LVL_OWN + (LVL_FAILLOCK,)},
+        "sshd_dir": listed(os.path.dirname(LVL_SSHD)) is not None,
+        "audit": None if rules is None else [r for r in LVL_AUDIT_RULES if r in rules],
+        "audit_src": all(os.path.isfile(os.path.join(LVL_ROOT + LVL_AUDIT_SRC, r)) for r in LVL_AUDIT_RULES),
+        "auditd": sec_active("auditd.service"),
+        "authselect": raw.split() if rc == 0 and raw.split() else None,
+        "dconf": bool(shutil.which("dconf")), "gdm": os.path.isdir(LVL_ROOT + os.path.dirname(LVL_GDM)),
+        "nm": os.path.isdir(LVL_ROOT + os.path.dirname(LVL_NM)), "nm_active": sec_active("NetworkManager.service"),
+        "sshd": {"unit": sec_unit("sshd.service"), "active": sec_active("sshd.service")},
+        "ssh_keys": bool((read(os.path.join(home, ".ssh/authorized_keys")) or "").strip()), "user": user or os.environ.get("USER", ""),
+        "kdump": sec_unit("kdump.service"), "modules": sec_modules(), "thunderbolt": tb, "bolt": bolt, "boltctl": bool(shutil.which("boltctl")),
+        "secureboot": sec_secureboot(cont), "disk": disk, "unlock": sec_unlock(src) if src else None,
+        "state": state, "state_readable": readable, "choice": lvl_choice(),
+        "marks": [p for p in (LVL_CHOICE, LVL_STATE) if os.path.exists(LVL_ROOT + p)],
+    }
+
+
+def lvl_rows(pr):
+    """one row per item of the hardened level: state on (as the level has it) | pending (set, in effect after a
+    restart) | off | n/a (nothing of it on this system: why) | unknown (not visible: why); nothing is run"""
+    rows = []
+    for it in LVL_ITEMS:
+        r = {"id": it["id"], "row": it["row"], "sets": it["sets"], "cost": it["cost"]}
+        kind = it["kind"]
+        if kind == "karg":
+            args = lvl_args(it, pr["arch"])
+            run = all(lvl_arg_in(pr["cmdline"], a) for a in args)
+            nxt = all(all(lvl_arg_in(e, a) for a in args) for e in pr["entries"]) if pr["entries"] else None
+            other = [w for w in (lvl_arg_other(pr["cmdline"], a) for a in args) if w]
+            if run and nxt is not False:
+                r["state"], r["value"] = "on", "on the running kernel's command line" + (" and every boot entry's" if nxt else "")
+            elif nxt:
+                r["state"], r["value"] = "pending", "set in every boot entry: in effect after a restart"
+            else:
+                r["state"] = "off"
+                r["value"] = "on the running kernel's command line, but not in every boot entry: not kept at the next start" if run else \
+                    "the owner's %s is kept" % " ".join(other) if other else "not on the kernel's command line"
+        elif kind == "sysctl":
+            cur, mine = pr["keys"].get(it["key"]), it["key"] in lvl_conf_keys(pr["files"][LVL_SYSCTL])
+            if it["id"] == "kexec" and cur != 1 and pr["kdump"] in ("enabled", "enabled-runtime"):
+                r["state"], r["value"] = "n/a", "kdump is on (crash dumps) and needs kexec: kept; `silik speed apply kdump` turns kdump off"
+            elif cur is None:
+                r["state"], r["value"] = ("on" if mine else "off"), "%s: the value is root's to read; %s" % (it["key"], "set in %s" % LVL_SYSCTL if mine else "not set by the level")
+            elif sec_weaker(cur, it["value"], it["how"]):
+                r["state"], r["value"] = "off", "%s = %d" % (it["key"], cur)
+            else:
+                r["state"], r["value"] = "on", "%s = %d%s" % (it["key"], cur, "" if mine else " (not by this command's file)")
+        elif it["id"] == "locks":
+            have = set(l.strip() for l in (pr["files"][LVL_LOCKS] or "").splitlines())
+            on = all(k in have for k in LVL_LOCK_KEYS)
+            r["state"], r["value"] = ("on" if on else "off"), "%d keys locked in %s" % (len(LVL_LOCK_KEYS), LVL_LOCKS) if on else "not locked"
+        elif it["id"] == "userlist":
+            on = lvl_conf_keys(pr["files"][LVL_GDM]).get("disable-user-list") == "true"
+            r["state"], r["value"] = ("n/a", "GDM is not installed") if not pr["gdm"] else ("on", LVL_GDM) if on else ("off", "the login screen lists the users")
+        elif it["id"] == "automount":
+            k = lvl_conf_keys(pr["files"][LVL_DCONF])
+            on = k.get("automount") == "false" and k.get("automount-open") == "false"
+            r["state"], r["value"] = ("on", LVL_DCONF) if on else ("off", "the desktop's default")
+        elif kind == "nm":
+            k = lvl_conf_keys(pr["files"][LVL_NM])
+            on = all(k.get(s.split("=")[0]) == s.split("=")[1] for s in LVL_NM_SET[it["id"]])
+            r["state"], r["value"] = ("n/a", "NetworkManager is not installed") if not pr["nm"] else ("on", LVL_NM) if on else ("off", "NetworkManager's default")
+        elif kind == "pam":
+            k = lvl_conf_keys(pr["files"][LVL_FAILLOCK])
+            if pr["authselect"] is None:
+                r["state"], r["value"] = "n/a", "authselect manages no profile here: the PAM files are not changed"
+            elif "with-faillock" in pr["authselect"] and all(key in k for key, _ in LVL_FAILLOCK_SET):
+                r["state"], r["value"] = "on", "with-faillock; " + ", ".join("%s = %s" % (key, k[key]) for key, _ in LVL_FAILLOCK_SET)
+            else:
+                r["state"], r["value"] = "off", ("with-faillock is on, %s has the base's values" % LVL_FAILLOCK if "with-faillock" in pr["authselect"] else
+                                                 "wrong passwords are not counted")
+        elif kind == "bolt":
+            tb = pr["thunderbolt"]
+            if not tb:
+                r["state"], r["value"] = "n/a", "no Thunderbolt or USB4 controller in use"
+            elif all(d["iommu"] for d in tb):
+                r["state"], r["value"] = "n/a", "the kernel's DMA protection is on for it: bolt's own policy stays"
+            elif not pr["boltctl"]:
+                r["state"], r["value"] = "n/a", "bolt is not installed"
+            elif pr["bolt"] is None:
+                r["state"], r["value"] = "unknown", "bolt does not answer (boltctl config auth-mode)"
+            else:
+                r["state"], r["value"] = ("on" if pr["bolt"] == "disabled" else "off"), "auth-mode " + pr["bolt"]
+        elif kind == "audit":
+            if not pr["audit_src"]:
+                r["state"], r["value"] = "n/a", "the base's sample rules (%s, package audit) are not on this system" % LVL_AUDIT_SRC
+            elif pr["audit"] is None:
+                r["state"], r["value"] = "unknown", "%s is root's to read" % LVL_AUDIT
+            else:
+                on = len(pr["audit"]) == len(LVL_AUDIT_RULES)
+                r["state"], r["value"] = ("on" if on else "off"), "%s in %s" % (" ".join(pr["audit"]) or "neither rule file", LVL_AUDIT)
+        elif kind == "sshd":
+            text = pr["files"][LVL_SSHD]
+            if pr["sshd"]["unit"] == "not-found":
+                r["state"], r["value"] = "n/a", "sshd is not installed"
+            elif text is None and not pr["sshd_dir"]:
+                r["state"], r["value"] = "unknown", "%s is root's to read" % os.path.dirname(LVL_SSHD)
+            else:
+                have = set(l.strip() for l in (text or "").splitlines())
+                on = all(s in have for s in LVL_SSHD_SET)
+                r["state"], r["value"] = ("on", LVL_SSHD) if on else ("off", "sshd's own settings")
+        rows.append(r)
+    return rows
+
+
+def lvl_required(pr):
+    """the rows of what the level requires and does not set: state on | off | unknown | n/a"""
+    sb, enc, un = pr["secureboot"], pr["disk"]["/"]["encrypted"], pr["unlock"]
+    res = [{"id": "secureboot", "state": "on" if sb == "enabled" else "unknown" if sb is None else "off",
+            "value": {"enabled": "enabled", "disabled": "Secure Boot is off", "bios": "Secure Boot is not possible (not started through UEFI)"}.get(sb, "the firmware's variables are not visible")},
+           {"id": "encryption", "state": "on" if enc else "unknown" if enc is None else "off",
+            "value": "/ is on LUKS" if enc else "what / is on cannot be seen" if enc is None else "/ is not encrypted"}]
+    if un is None:
+        res.append({"id": "unlock", "state": "n/a", "value": "no encrypted disk to open"})
+    elif un["tokens"] is None:
+        res.append({"id": "unlock", "state": "unknown", "value": "what opens %s is in its LUKS header, root's to read" % (un["device"] or "the disk")})
+    else:
+        tp = [t for t in un["tokens"] if t["type"] == "systemd-tpm2"]
+        nopin = any(t["pin"] is not True for t in tp)
+        res.append({"id": "unlock", "state": "off" if nopin else "on",
+                    "value": "%s opens by its TPM without a PIN" % un["device"] if nopin else "%s: %s" % (un["device"], "TPM 2.0 with a PIN" if tp else "a passphrase")})
+    for r, (_, row_, text) in zip(res, LVL_REQUIRED):
+        r["row"], r["requires"] = row_, text
+    return res
+
+
+def lvl_at(rows, req, choice):
+    """(level, the item rows that differ from it, the requirements not met or not seen, the item rows not visible):
+    level is hardened | default | mixed"""
+    mine = [r for r in rows if r["id"] not in choice["without"]]
+    on = [r for r in mine if r["state"] in ("on", "pending")]
+    off = [r for r in mine if r["state"] == "off"]
+    blind = [r for r in mine if r["state"] == "unknown"]
+    if not on:
+        level, differ = "default", []
+    elif not off or choice["level"] == "hardened":      # the owner chose it: hardened, and what is off is said as an exception
+        level, differ = "hardened", off
+    else:                                               # nobody chose it here and some of it is set
+        level, differ = "mixed", on
+    return level, differ, [q for q in req if q["state"] in ("off", "unknown")] if level != "default" else [], blind
+
+
+def lvl_text(path, lines):
+    return LVL_HEAD + "\n".join(lines) + "\n"
+
+
+def lvl_plan(pr, without=(), keep_ssh=False, dry=False):
+    """(steps, notes, refused) of `silik secure level hardened` on the system PR. A step: ("run", argv) | ("write",
+    path, text, mode) | ("append", path, text) | ("check", argv, the file to take away when it fails, the lines the
+    service must then say) | ("state", what was changed) | ("choice", text). refused: [(item, why)], the items whose precondition does not hold: they are
+    said and left, the rest is done. Nothing is loosened: an owner's stricter or other value is kept and said."""
+    steps, notes, refused = [], [], []
+    ids = [i for i in LVL_IDS if i not in without]
+    rows = {r["id"]: r for r in lvl_rows(pr)}
+    state = json.loads(json.dumps(pr["state"]))
+    files = pr["files"]
+    for i in ids:
+        if rows[i]["state"] == "n/a":
+            notes.append("%s: %s" % (i, rows[i]["value"]))
+    for i in without:
+        if rows[i]["state"] in ("on", "pending"):
+            notes.append("%s: set by an earlier run and left as it is (`silik secure level default` puts everything back)" % i)
+
+    # ---- the kernel's command line: one grubby call for all of it
+    add = []
+    for it in LVL_ITEMS:
+        if it["kind"] != "karg" or it["id"] not in ids:
+            continue
+        if it["id"] == "lockdown" and rows["lockdown"]["state"] == "off":
+            if pr["modules"] is None:
+                refused.append(("lockdown", "the kernel modules in use cannot be seen here (/sys/module), so whether one of them would stop loading is not known"))
+                continue
+            uns, sig = sec_foreign(pr["modules"])
+            if uns:
+                refused.append(("lockdown", "kernel modules without a signature the kernel trusts are in use and would stop loading: %s. Sign them and enrol the key "
+                                            "(docs/HARDENED.md), or remove them; or leave this out: --without lockdown" % " ".join(uns[:8])))
+                continue
+            if sig:
+                notes.append("lockdown: kernel modules that are not the base's and are signed: %s. They go on loading only while the key that signed "
+                             "them is enrolled (mokutil --list-enrolled)" % " ".join(sig[:8]))
+            if any(w.startswith("resume=") for w in pr["cmdline"]):
+                notes.append("lockdown: hibernation stops working (resume= is on the command line); suspend to memory is not affected")
+        for a in lvl_args(it, pr["arch"]):
+            words = [w for e in pr["entries"] for w in e] if pr["entries"] else pr["cmdline"]
+            other = lvl_arg_other(words, a) or lvl_arg_other(pr["cmdline"], a)
+            if other:
+                notes.append("%s: %s is on the kernel's command line (the owner's): kept, %s is not set" % (it["id"], other, a))
+                continue
+            everywhere = all(lvl_arg_in(e, a) for e in pr["entries"]) if pr["entries"] else lvl_arg_in(pr["cmdline"], a)
+            if everywhere:
+                continue
+            add.append(a)
+            # (ours to take off again only when nobody had it before: not on the running kernel, not in any entry)
+            if not lvl_arg_in(words, a) and not lvl_arg_in(pr["cmdline"], a) and a not in state["kernel_args"]:
+                state["kernel_args"].append(a)
+    if add:
+        steps.append(("run", as_root(["grubby", "--update-kernel=ALL", "--args=" + " ".join(add)])))
+        notes.append("the kernel's arguments are in effect after a restart")
+
+    # ---- kernel settings: one file, loaded alone
+    have = lvl_conf_keys(files[LVL_SYSCTL])
+    want = []
+    for it in LVL_ITEMS:
+        if it["kind"] != "sysctl":
+            continue
+        cur = pr["keys"].get(it["key"])
+        if it["key"] in have or (it["id"] in ids and rows[it["id"]]["state"] == "off"):
+            want.append((it["key"], it["value"]))
+            if it["key"] not in have and cur is not None:
+                state["sysctl"].setdefault(it["key"], cur)         # what it was before, for `level default`
+    if want and dict((k, str(v)) for k, v in want) != have:
+        steps.append(("write", LVL_SYSCTL, lvl_text(LVL_SYSCTL, ["%s = %d" % kv for kv in want]), "0644"))
+        if LVL_SYSCTL not in state["files"]:
+            state["files"].append(LVL_SYSCTL)
+        if pr["online"]:          # (only the keys of this file: not `sysctl --system`, which sets every file's again)
+            steps.append(("run", as_root(["sysctl", "-p", LVL_SYSCTL])))
+        else:
+            notes.append("the kernel settings are read at the next start (no running system here)")
+
+    # ---- the desktop: locks, the login screen, automount
+    dconf = False
+    for i, path, lines in (("locks", LVL_LOCKS, list(LVL_LOCK_KEYS)),
+                           ("automount", LVL_DCONF, ["[org/gnome/desktop/media-handling]", "automount=false", "automount-open=false"]),
+                           ("userlist", LVL_GDM, ["[org/gnome/login-screen]", "disable-user-list=true"])):
+        if i in ids and rows[i]["state"] == "off":
+            steps.append(("write", path, lvl_text(path, lines), "0644"))
+            if path not in state["files"]:
+                state["files"].append(path)
+            dconf = True
+    if dconf:
+        if pr["dconf"]:
+            steps.append(("run", as_root(["dconf", "update"])))
+        else:
+            notes.append("dconf is not installed: the desktop's files are written and read once it is (dconf update)")
+
+    # ---- wrong passwords
+    if "faillock" in ids and rows["faillock"]["state"] == "off":
+        if "with-faillock" not in pr["authselect"]:
+            steps.append(("run", as_root(["authselect", "enable-feature", "with-faillock"])))
+            state["authselect"] = True
+        k = lvl_conf_keys(files[LVL_FAILLOCK])
+        new = ["%s = %d" % (key, v) for key, v in LVL_FAILLOCK_SET if key not in k]
+        for key, v in LVL_FAILLOCK_SET:
+            if key in k:
+                notes.append("faillock: %s has %s = %s (the owner's): kept" % (LVL_FAILLOCK, key, k[key]))
+        if new and LVL_MARK[0] not in (files[LVL_FAILLOCK] or ""):
+            glue = "" if (files[LVL_FAILLOCK] or "\n").endswith("\n") else "\n"       # (a last line without its end is not joined to ours)
+            steps.append(("append", LVL_FAILLOCK, glue + "\n".join([LVL_MARK[0]] + new + [LVL_MARK[1]]) + "\n"))
+            state["faillock"] = True
+
+    # ---- NetworkManager
+    k = lvl_conf_keys(files[LVL_NM])
+    nm = [i for i in ("wifi-mac", "dhcp-name") if all(k.get(s.split("=")[0]) == s.split("=")[1] for s in LVL_NM_SET[i])]
+    new = []
+    for i in ("wifi-mac", "dhcp-name"):
+        if i in ids and rows[i]["state"] == "off":
+            if i == "wifi-mac" and pr["remote"] and not keep_ssh:
+                refused.append((i, "this is an ssh session, and a new hardware address at the next reconnection would end it: run it at the machine, or with "
+                                   "--keep-ssh (written; NetworkManager is not asked to read it again)"))
+            else:
+                new.append(i)
+    if new:
+        steps.append(("write", LVL_NM, lvl_text(LVL_NM, ["[connection-silikos-hardened]"] + [s for i in ("wifi-mac", "dhcp-name") if i in nm + new for s in LVL_NM_SET[i]]), "0644"))
+        if LVL_NM not in state["files"]:
+            state["files"].append(LVL_NM)
+        if pr["nm_active"] and not pr["remote"]:
+            steps.append(("run", as_root(["nmcli", "general", "reload", "conf"])))
+            notes.append("NetworkManager: a connection takes the new settings the next time it comes up")
+        else:
+            notes.append("NetworkManager reads %s at its next start%s" % (LVL_NM, " (not asked now: this is an ssh session)" if pr["remote"] and pr["nm_active"] else ""))
+
+    # ---- Thunderbolt
+    if "thunderbolt" in ids and rows["thunderbolt"]["state"] == "off":
+        steps.append(("run", as_root(["boltctl", "config", "auth-mode", "disabled"])))
+        state["bolt"] = state["bolt"] or pr["bolt"]
+    elif "thunderbolt" in ids and rows["thunderbolt"]["state"] == "unknown":
+        refused.append(("thunderbolt", rows["thunderbolt"]["value"]))
+
+    # ---- audit rules: the base's own files, copied; one already there is the owner's
+    if "audit" in ids and rows["audit"]["state"] in ("off", "unknown"):
+        if rows["audit"]["state"] == "unknown" and not dry:
+            refused.append(("audit", rows["audit"]["value"]))
+        else:
+            if pr["audit"] is None:
+                notes.append("audit: %s is root's to read: a real run copies only the rule files that are not there" % LVL_AUDIT)
+            for rule in LVL_AUDIT_RULES:
+                if rule not in (pr["audit"] or ()):
+                    dst = os.path.join(LVL_AUDIT, rule)
+                    steps.append(("run", as_root(["install", "-m", "0640", os.path.join(LVL_AUDIT_SRC, rule), dst])))
+                    if dst not in state["files"]:
+                        state["files"].append(dst)
+            if pr["auditd"]:
+                steps.append(("run", as_root(["augenrules", "--load"])))
+            else:
+                notes.append("audit: auditd does not run here: the rules are loaded at its next start")
+
+    # ---- sshd: the file only; sshd reads it again unless this is its own connection
+    if "sshd" in ids and rows["sshd"]["state"] in ("off", "unknown"):
+        on = pr["sshd"]["active"] or pr["sshd"]["unit"] in ("enabled", "enabled-runtime")
+        if rows["sshd"]["state"] == "unknown" and not dry:
+            refused.append(("sshd", rows["sshd"]["value"]))
+        elif pr["remote"] and not keep_ssh:
+            refused.append(("sshd", "this is an ssh session: sshd's settings are not changed from inside it. Run it at the machine, or with --keep-ssh "
+                                    "(the file is written; sshd is not asked to read it again)"))
+        elif on and not pr["ssh_keys"]:
+            refused.append(("sshd", "sshd is on and %s has no key in ~/.ssh/authorized_keys: without passwords nobody could log in. Put a key there first "
+                                    "(ssh-copy-id), or leave this out: --without sshd" % (pr["user"] or "this user")))
+        else:
+            steps.append(("write", LVL_SSHD, lvl_text(LVL_SSHD, list(LVL_SSHD_SET)), "0600"))
+            # (-G, not -t: -t also wants host keys, and an sshd that never ran has none; run, openssh 9.9)
+            steps.append(("check", as_root(["sshd", "-G"]), LVL_SSHD, [l.lower() for l in LVL_SSHD_SET]))
+            if LVL_SSHD not in state["files"]:
+                state["files"].append(LVL_SSHD)
+            if pr["sshd"]["active"] and not pr["remote"]:
+                steps.append(("run", as_root(["systemctl", "reload", "sshd"])))
+            elif pr["sshd"]["active"]:
+                notes.append("sshd: not asked to read its settings again (this is its own connection): sudo systemctl reload sshd")
+            else:
+                notes.append("sshd is off: the file is read when it is started")
+
+    left = [w for w in LVL_IDS if w in without]
+    if pr["choice"] != {"level": "hardened", "without": left}:
+        steps.append(("choice", "hardened" + "".join(" " + w for w in left) + "\n"))
+    if state != pr["state"]:
+        state["applied"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+        steps.append(("state", state))
+    return steps, notes, refused
+
+
+def lvl_unplan(pr):
+    """(steps, notes) of `silik secure level default`: what `level hardened` wrote down is put back, and the files
+    with its names are removed; a kernel argument it did not add is said and kept"""
+    steps, notes = [], []
+    st, files = pr["state"], pr["files"]
+    words = set(w for e in pr["entries"] for w in e) if pr["entries"] else set(pr["cmdline"])
+    words |= set(pr["cmdline"])
+    rem = [a for a in st["kernel_args"] if a in words]
+    if rem:
+        steps.append(("run", as_root(["grubby", "--update-kernel=ALL", "--remove-args=" + " ".join(rem)])))
+        notes.append("the kernel's arguments are gone after a restart")
+    kept = [a for it in LVL_ITEMS if it["kind"] == "karg" for a in lvl_args(it, pr["arch"]) if a in words and a not in st["kernel_args"]]
+    if kept:
+        notes.append("on the kernel's command line and not added by this command%s: kept: %s (to take them off: sudo grubby --update-kernel=ALL --remove-args=\"%s\")"
+                     % ("" if pr["state_readable"] else " as far as can be seen without root", " ".join(kept), " ".join(kept)))
+    if st["bolt"] and pr["bolt"] == "disabled" and st["bolt"] != "disabled":
+        steps.append(("run", as_root(["boltctl", "config", "auth-mode", st["bolt"]])))
+    if st["faillock"] or LVL_MARK[0] in (files[LVL_FAILLOCK] or ""):
+        steps.append(("run", as_root(["sed", "-i", "/^# silikos-hardened: begin/,/^# silikos-hardened: end/d", LVL_FAILLOCK])))
+    if st["authselect"] and "with-faillock" in (pr["authselect"] or ()):
+        steps.append(("run", as_root(["authselect", "disable-feature", "with-faillock"])))
+    gone = [p for p in LVL_OWN if files[p] is not None or p in st["files"]]
+    gone += [p for p in st["files"] if p not in gone and os.path.dirname(p) == LVL_AUDIT and os.path.basename(p) in LVL_AUDIT_RULES]
+    if not pr["sshd_dir"] and LVL_SSHD not in gone and pr["sshd"]["unit"] != "not-found":
+        gone.append(LVL_SSHD)           # (a folder that is root's to read: rm -f of a file that may be there)
+    if gone:
+        steps.append(("run", as_root(["rm", "-f"] + gone)))
+    if any(p in gone for p in (LVL_DCONF, LVL_LOCKS, LVL_GDM)) and pr["dconf"]:
+        steps.append(("run", as_root(["dconf", "update"])))
+    back = ["%s=%d" % (k, v) for k, v in sorted(st["sysctl"].items()) if k != "kernel.kexec_load_disabled" and pr["keys"].get(k) != v]
+    if back and pr["online"]:
+        steps.append(("run", as_root(["sysctl", "-w"] + back)))
+    if "kernel.kexec_load_disabled" in st["sysctl"] and st["sysctl"]["kernel.kexec_load_disabled"] != 1:
+        notes.append("kernel.kexec_load_disabled stays 1 until the next start: the kernel does not take it back")
+    if any(os.path.dirname(p) == LVL_AUDIT for p in gone):
+        if pr["auditd"]:
+            steps.append(("run", as_root(["augenrules", "--load"])))
+        notes.append("audit: a login's identity stays unchangeable until the next start (the kernel does not take that back)")
+    if LVL_SSHD in gone and pr["sshd"]["active"]:
+        if pr["remote"]:
+            notes.append("sshd: not asked to read its settings again (this is its own connection): sudo systemctl reload sshd")
+        else:
+            steps.append(("run", as_root(["systemctl", "reload", "sshd"])))
+    if LVL_NM in gone and pr["nm_active"]:
+        if pr["remote"]:
+            notes.append("NetworkManager reads its settings again at its next start (not asked now: this is an ssh session)")
+        else:
+            steps.append(("run", as_root(["nmcli", "general", "reload", "conf"])))
+    if pr["marks"]:
+        steps.append(("run", as_root(["rm", "-f"] + pr["marks"])))
+    return steps, notes
+
+
+def lvl_write(ctx, argv, text, say=None):
+    """ARGV run as written, TEXT on its standard input; the text (or SAY, a line about it) printed after the command"""
+    ctx.echo(argv)
+    if not ctx.quiet:
+        print("".join("    | %s\n" % l for l in (text if say is None else say).splitlines()), end="", flush=True)
+    if ctx.dry:
+        return 0
+    ctx.note(argv)
+    try:
+        return subprocess.run(argv, input=text, universal_newlines=True, stdout=subprocess.DEVNULL).returncode
+    except OSError:
+        return 127
+
+
+def lvl_do(ctx, steps):
+    """runs the steps in order; the commands that failed. What was meant to change is written down even when one
+    failed (taking back what did not happen changes nothing)"""
+    failed = []
+    for s in steps:
+        if s[0] == "run":
+            rc, _ = ctx.run(s[1], check=False)
+            if rc != 0:
+                failed.append(" ".join(shlex.quote(x) for x in s[1]))
+        elif s[0] == "check":       # the service reads its configuration with the new file: (argv, the file, the lines it must then say)
+            rc, out = ctx.run(s[1], check=False, capture=True)
+            if rc != 0:             # a file that the service refuses is not left behind
+                failed.append(" ".join(shlex.quote(x) for x in s[1]))
+                ctx.run(as_root(["rm", "-f", s[2]]), check=False)
+            elif not ctx.dry:
+                have = set(" ".join(l.split()) for l in out.lower().splitlines())
+                lost = [l for l in s[3] if l not in have]
+                if lost:
+                    failed.append("%s is written, but another line of the service's configuration is read first: not in effect: %s" % (s[2], "; ".join(lost)))
+        elif s[0] == "write":
+            if lvl_write(ctx, as_root(["install", "-D", "-m", s[3], "/dev/stdin", s[1]]), s[2]) != 0:
+                failed.append("write " + s[1])
+        elif s[0] == "append":
+            if lvl_write(ctx, as_root(["tee", "-a", s[1]]), s[2]) != 0:
+                failed.append("append to " + s[1])
+        elif s[0] == "choice":
+            if lvl_write(ctx, as_root(["install", "-D", "-m", "0644", "/dev/stdin", LVL_CHOICE]), s[1]) != 0:
+                failed.append("write " + LVL_CHOICE)
+        elif s[0] == "state":
+            say = "what this command changed, for `silik secure level default`: %d kernel arguments, %d kernel settings, %d files" % (
+                len(s[1]["kernel_args"]), len(s[1]["sysctl"]), len(s[1]["files"]))
+            if lvl_write(ctx, as_root(["install", "-D", "-m", "0600", "/dev/stdin", LVL_STATE]), json.dumps(s[1], indent=1, sort_keys=True) + "\n", say) != 0:
+                failed.append("write " + LVL_STATE)
+    return failed
+
+
+def lvl_list():
+    lines = ["the hardened level: what each item sets, and what stops working with it (docs/HARDENED.md)"]
+    for it in LVL_ITEMS:
+        lines.append("%-12s %-4s %s" % (it["id"], it["row"], it["sets"]))
+        lines.append("%-17s costs: %s" % ("", it["cost"]))
+    lines.append("required, and only checked (the level then says \"hardened, except: ...\"):")
+    lines += ["%-12s %-4s %s" % r for r in LVL_REQUIRED]
+    lines.append("leave an item out: silik secure level hardened --without ID [--without ID ...]; go back: silik secure level default")
+    lines.append("[A]: not run or not seen where this was written; [PROPOSAL values]: the owner's to change")
+    lines.append("not part of the level, on purpose:")
+    lines += ["  - " + r for r in LVL_REFUSED]
+    return "\n".join(lines)
+
+
+def lvl_summary(level, differ, unmet, blind, choice, refused=()):
+    """the level in one line: hardened | hardened, except: ... | default | mixed: ..."""
+    why = dict(refused)
+    exc = [q["value"] for q in unmet if q["state"] == "off"]
+    exc += ["%s (%s)" % (r["id"], re.split(r"[:.] ", why[r["id"]])[0]) if r["id"] in why else r["id"] + " is off" for r in differ if level == "hardened"]
+    line = level + (", except: " + "; ".join(exc) if exc and level == "hardened" else "")
+    if level == "mixed":
+        line += ": set, of the hardened level: " + " ".join(r["id"] for r in differ) + ("; " + "; ".join(exc) if exc else "")
+    unseen = [q["value"] for q in unmet if q["state"] == "unknown"]
+    if unseen and level != "default":
+        line += "; required and not seen here: " + "; ".join(unseen)
+    if choice["without"] and level != "default":
+        line += "; left out by choice: " + " ".join(choice["without"])
+    if blind:
+        line += "; not visible without root: %s (sudo silik secure level)" % " ".join(r["id"] for r in blind)
+    return line
+
+
+def lvl_sudo(ctx, a, argv):
+    """a real run is root's (the note of what was changed is root's to read and to write): this command again, with sudo"""
+    me = shutil.which("silik") or os.path.abspath(sys.argv[0])
+    rc, _ = ctx.run(["sudo", me] + (["-q"] if ctx.quiet else []) + argv, check=False)
+    return rc
+
+
+def secure_level(ctx, a):
+    without = [w for x in a.without for w in x.replace(",", " ").split()]
+    bad = [w for w in without if w not in LVL_IDS]
+    if bad:
+        die("silik secure level: no item %s; the items are %s" % (" ".join(bad), " ".join(LVL_IDS)), 2)
+    if a.list:
+        print(lvl_list())
+        return 0
+    if (without or a.keep_ssh) and a.name != "hardened":
+        die("--without and --keep-ssh go with `silik secure level hardened`", 2)
+    if a.name and os.geteuid() != 0 and not ctx.dry:
+        return lvl_sudo(ctx, a, ["secure", "level", a.name] + [x for w in without for x in ("--without", w)] + (["--keep-ssh"] if a.keep_ssh else []))
+    pr = lvl_probe()
+    if a.name == "hardened":
+        steps, notes, refused = lvl_plan(pr, without, a.keep_ssh, ctx.dry)
+        failed = lvl_do(ctx, steps)
+        for n in notes:
+            print(n)
+        for i, why in refused:
+            print("not set: %s: %s" % (i, why))
+        for f in failed:
+            print("silik: failed: " + f, file=sys.stderr)
+        if not steps:
+            print("nothing to change: every item%s is set, left to the owner's value, or not on this system" % (" asked" if without else ""))
+        # (the level as it is once the steps ran: what the plan set counts as set; under --dry-run, as it would be)
+        done = set(i for i in LVL_IDS if i not in without) - set(i for i, _ in refused)
+        rows = [dict(r, state="on") if r["id"] in done and r["state"] == "off" else r for r in lvl_rows(pr)]
+        req = lvl_required(pr)
+        level, differ, unmet, blind = lvl_at(rows, req, {"level": "hardened", "without": without})
+        if not any(r["state"] in ("on", "pending") for r in rows):
+            level = "default"       # (nothing of it could be set here)
+        print("level: " + lvl_summary(level, differ, unmet, [] if ctx.dry else blind, {"level": "hardened", "without": without}, refused)
+              + (" (after this dry run's commands)" if ctx.dry else ""))
+        print("`silik secure level` shows each item; `silik secure level default` puts back what this changed")
+        return 1 if failed else 0
+    if a.name == "default":
+        if not pr["state_readable"] and ctx.dry:
+            print("silik: what `level hardened` wrote down (%s) is root's to read: a real run reads it; this dry run lists what can be seen" % LVL_STATE, file=sys.stderr)
+        steps, notes = lvl_unplan(pr)
+        failed = lvl_do(ctx, steps)
+        for n in notes:
+            print(n)
+        for f in failed:
+            print("silik: failed: " + f, file=sys.stderr)
+        if not steps:
+            print("nothing to put back: `silik secure level hardened` has changed nothing on this system")
+        else:
+            print("put back as it was before `silik secure level hardened`; the default level's own settings are `silik secure apply`'s")
+        return 1 if failed else 0
+    rows, req = lvl_rows(pr), lvl_required(pr)
+    level, differ, unmet, blind = lvl_at(rows, req, pr["choice"])
+    summary = lvl_summary(level, differ, unmet, blind, pr["choice"])
+    if a.json:
+        print(json.dumps({"level": level, "summary": summary, "choice": pr["choice"], "differ": [r["id"] for r in differ],
+                          "except": [q["id"] for q in unmet if q["state"] == "off"], "unseen": [q["id"] for q in unmet if q["state"] == "unknown"] + [r["id"] for r in blind],
+                          "items": rows, "required": req, "state_file": LVL_STATE, "choice_file": LVL_CHOICE}, indent=1))
+        return 0
+    lines = ["level: " + summary]
+    for r in rows:
+        out_ = r["id"] in pr["choice"]["without"]
+        lines.append("%s %-8s %-12s %-4s %s%s" % ("●" if r["state"] == "on" else "◆" if r["state"] == "pending" else "?" if r["state"] == "unknown" else " ",
+                                                 r["state"], r["id"], r["row"], r["value"], " (left out by choice)" if out_ else ""))
+    lines.append("required by the hardened level, checked only:")
+    for q in req:
+        lines.append("%s %-8s %-12s %-4s %s" % ("●" if q["state"] == "on" else "▼" if q["state"] == "off" else "?" if q["state"] == "unknown" else " ",
+                                               q["state"], q["id"], q["row"], q["value"]))
+    lines.append("`silik secure level hardened --list`: what each item sets and costs; `silik secure level hardened [--without ID]` sets them; "
+                 "`silik secure level default` goes back")
+    text = "\n".join(lines)
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        print(text.encode("ascii", "replace").decode("ascii"))
+    return 0
 
 
 # ------------------------------------------------------------------ dev: embedded development
@@ -6624,7 +7912,7 @@ def doc_check_system(st):
 
 # ---- security: the rows of `silik secure status`, the ones that are ok said in one line
 def doc_probe_security():
-    return sec_probe(pending=False, parallel=True)
+    return sec_probe(pending=False, parallel=True, more="doctor")
 
 
 def doc_check_security(st):
@@ -8649,14 +9937,16 @@ KERNEL_ARGS_FROM_A_MANIFEST = {
     "quiet": None, "rhgb": None, "nomodeset": None, "crashkernel": r"[A-Za-z0-9,:@-]+", "vsyscall": r"none|xonly|emulate",
     "mitigations": r"auto(,nosmt)?", "pti": r"on", "lockdown": r"integrity|confidentiality", "module.sig_enforce": r"1", "audit": r"1",
     "init_on_alloc": r"1", "init_on_free": r"1", "slab_nomerge": None, "page_alloc.shuffle": r"1", "randomize_kstack_offset": r"1|on",
-    "debugfs": r"off|no-mount", "intel_iommu": r"on", "amd_iommu": r"on",
+    "debugfs": r"off|no-mount", "intel_iommu": r"on", "amd_iommu": r"on", "iommu.strict": r"1", "efi": r"disable_early_pci_dma",
     "transparent_hugepage": r"always|madvise|never", "hugepages": r"\d+", "hugepagesz": r"\d+[KMG]", "default_hugepagesz": r"\d+[KMG]",
     "isolcpus": r"[\d,-]+", "nohz_full": r"[\d,-]+", "rcu_nocbs": r"[\d,-]+", "mem_sleep_default": r"s2idle|deep",
     "usbcore.autosuspend": r"-?\d+", "nvidia-drm.modeset": r"[01]", "rd.driver.blacklist": r"nouveau", "modprobe.blacklist": r"nouveau",
 }
 # arguments that protect: --prune never takes one of them off because a manifest does not have it
 KERNEL_ARGS_THAT_PROTECT = ("lockdown", "module.sig_enforce", "audit", "init_on_alloc", "init_on_free", "slab_nomerge", "page_alloc.shuffle",
-                            "randomize_kstack_offset", "pti", "mitigations", "debugfs", "intel_iommu", "amd_iommu")
+                            "randomize_kstack_offset", "pti", "mitigations", "debugfs", "intel_iommu", "amd_iommu", "iommu.strict", "efi")
+# (iommu.strict and efi=disable_early_pci_dma: the hardened level's own, so that the manifest of a hardened machine
+# is one another machine may take; `silik secure level hardened` sets them with their preconditions checked)
 
 
 def kernel_arg_from_a_manifest(w):
@@ -9431,6 +10721,13 @@ def parser(only=None):
         x = c.add_parser("apply", help="set the SilikOS defaults; never loosens what is stricter, never touches a disk")
         x.add_argument("--keep-ssh", action="store_true", help="leave sshd as it is and keep its port open in the firewall zone")
         x.set_defaults(fn=secure_apply)
+        x = c.add_parser("level", help="the level this system is at (default / hardened / mixed); `hardened` sets the hardened level, `default` puts back what that changed")
+        x.add_argument("name", nargs="?", choices=["hardened", "default"])
+        x.add_argument("--list", action="store_true", help="the items of the hardened level: what each sets, what stops working, what is refused on purpose")
+        x.add_argument("--without", action="append", default=[], metavar="ITEM", help="with hardened: leave this item out (see --list); may be given more than once")
+        x.add_argument("--keep-ssh", action="store_true", help="with hardened, in an ssh session: write sshd's and NetworkManager's files anyway (neither is asked to read them again)")
+        x.add_argument("--json", action="store_true")
+        x.set_defaults(fn=secure_level)
     for name, (_, text) in plugins().items():
         if name in s.choices:        # (a plugin never replaces a command of silik's own)
             continue

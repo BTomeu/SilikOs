@@ -26,6 +26,13 @@ _silik() {
   if [ "$g" = speed ] && [ "$COMP_CWORD" -ge 3 ] && { [ "${COMP_WORDS[2]}" = apply ] || [ "${COMP_WORDS[2]}" = undo ]; }; then
     COMPREPLY=($(compgen -W "kdump modem storage-arrays multipath rpcbind makecache locate indexer software" -- "$cur")); return
   fi
+  # secure level hardened: its switches, and after --without the items of the level (silik secure level --list)
+  if [ "$g" = secure ] && [ "${COMP_WORDS[2]}" = level ] && [ "$COMP_CWORD" -ge 4 ]; then
+    if [ "${COMP_WORDS[COMP_CWORD-1]}" = --without ]; then
+      COMPREPLY=($(compgen -W "lockdown memory iommu debugfs kptr bpf-jit kexec tiocsti sysrq locks faillock userlist automount wifi-mac dhcp-name thunderbolt audit sshd" -- "$cur"))
+    elif [ "${COMP_WORDS[3]}" = hardened ]; then COMPREPLY=($(compgen -W "--without --keep-ssh --list" -- "$cur")); fi
+    return
+  fi
   if [ "$g" = bench ] && [ "$COMP_CWORD" -ge 3 ]; then
     if [ "${COMP_WORDS[2]}" = compare ]; then COMPREPLY=($(compgen -W "--json" -- "$cur") $(compgen -f -- "$cur"))
     else COMPREPLY=($(compgen -W "--json --label --wait --top" -- "$cur")); fi
@@ -91,7 +98,7 @@ _silik() {
          bench) COMPREPLY=($(compgen -W "system compare" -- "$cur"));;
          identity) COMPREPLY=($(compgen -W "show silikos base" -- "$cur"));;
          session) COMPREPLY=($(compgen -W "lock logout off" -- "$cur"));;
-         secure) COMPREPLY=($(compgen -W "status apply" -- "$cur"));;
+         secure) COMPREPLY=($(compgen -W "status apply level" -- "$cur"));;
          vendor) COMPREPLY=($(compgen -W "list check prepare lib" -- "$cur"));;
          manifest) COMPREPLY=($(compgen -W "export diff apply" -- "$cur"));;
          snapshot) COMPREPLY=($(compgen -W "status list create delete setup --json" -- "$cur"));;
@@ -103,6 +110,9 @@ _silik() {
          "win run"|"win install"|"win stop"|"win rm") _silik_names "$cur" "--no-net --no-sandbox" < <(silik -q win list 2>/dev/null | grep -v '^no ');;
          "win open") COMPREPLY=($(compgen -W "--prefix --no-net --no-sandbox" -- "$cur") $(compgen -f -- "$cur"));;
          "win vm") COMPREPLY=($(compgen -W "create start stop app usb" -- "$cur"));;
+         "secure level") COMPREPLY=($(compgen -W "hardened default --list --json" -- "$cur"));;
+         "secure status") COMPREPLY=($(compgen -W "--json --offline" -- "$cur"));;
+         "secure apply") COMPREPLY=($(compgen -W "--keep-ssh" -- "$cur"));;
          "hw nvidia") COMPREPLY=($(compgen -W "install status --source" -- "$cur"));;
          "hw check") COMPREPLY=($(compgen -W "--from --arch --json --all" -- "$cur") $(compgen -f -- "$cur"));;
          "hw driver") COMPREPLY=($(compgen -W "list add" -- "$cur"));;
