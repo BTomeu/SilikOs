@@ -1,7 +1,9 @@
 #!/usr/bin/python3
 # SilikOS — `silik`: the one command behind every action of the desktop (the COMMAND bar echoes these lines).
 #   silik status
-#   silik update [--auto [all | security | off]]          update now; the automatic updates (daily: all by default)
+#   silik update [--auto [all | security | off]] [--no-snapshot]   update now (a snapshot of / first); the automatic updates
+#   silik snapshot [status | list | create [NAME] | delete NAME | setup] [--json]   snapshots of / (LVM thin, snapm)
+#   silik rollback [NAME] [--yes] | finish | --packages [ID]   go back to before the last update; never restarts
 #   silik eda   list | create NAME --el 6|7|8 | setup NAME | enter NAME | run NAME -- CMD... | import-vm DISK --name NAME
 #               | rm NAME | check | kernel-arg
 #   silik win   open [--prefix P --no-net --no-sandbox] FILE [ARGS] | apps | sync | stop [PREFIX]
@@ -1968,6 +1970,8 @@ def cmd_update(ctx, a):
             print("%s %-8s %s" % ("●" if k == now else " ", k, what))
         if os.path.exists("/run/silikos/restart"):
             print("silik: an update waits for a restart of the computer")
+        if os.path.exists(SNAP_HOLD):
+            print("silik: the automatic updates wait since a rollback: `silik update` updates now (a snapshot first) and they go on")
         return 0 if now else 1
     if a.auto:
         on = {"all": [SEC_FULL_TIMER], "security": [SEC_TIMER], "off": []}[a.auto]
@@ -1976,9 +1980,23 @@ def cmd_update(ctx, a):
             ctx.run(["sudo", "systemctl", "disable", "--now"] + off)
         if on:
             ctx.run(["sudo", "systemctl", "enable", "--now"] + on)
+            if os.path.exists(SNAP_HOLD):
+                ctx.run(["sudo", "rm", "-f", SNAP_HOLD])   # (turned on by hand: the wait after a rollback ends)
         return 0
+    if snap_booted()[0] == "snapshot":
+        snap_refuse("this system is started from a snapshot: nothing is updated here",
+                    ["systemctl reboot   # and the normal entry, then: silik update", "silik rollback   # makes this state the system"])
+    # a snapshot of / first, when there is something to update and / is on a thin volume (docs/ROLLBACK.md): the hook
+    # of the automatic updates. Without one the update goes on, and the hook says why
+    hook = os.path.isfile(SNAP_HOOK) and not a.no_snapshot
+    if hook:
+        ctx.run(["sudo", SNAP_HOOK], check=False)
     # (ten downloads at a time, as the automatic updates: measured faster here; the base's dnf.conf is not changed)
     ctx.run(["sudo", "dnf", "-y", "--setopt=max_parallel_downloads=10", "upgrade", "--refresh"])
+    if hook:
+        ctx.run(["sudo", SNAP_HOOK, "settle"], check=False)
+    if os.path.exists(SNAP_HOLD):
+        ctx.run(["sudo", "rm", "-f", SNAP_HOLD])           # (updated by hand after a rollback: the automatic updates go on)
     if not ctx.dry and shutil.which("needs-restarting"):
         # (dnf-utils: exit 1 when the kernel, glibc, systemd or another core part was updated under the running system)
         if subprocess.run(["needs-restarting", "-r"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 1:
@@ -3661,6 +3679,806 @@ def power_trim(ctx, a):
     return 0
 
 
+# ------------------------------------------------------------------ snapshot, rollback
+# "What happens when an update breaks this machine": `silik rollback`. docs/ROLLBACK.md is the design.
+# / on an LVM thin volume (the installer's Automatic partitioning on SilikOS), `snapm` and `boom-boot` of the base:
+# before every update a snapshot of / with two boot entries, "Snapshot ..." (starts the system as it was) and
+# "Revert ..." (the kernel of that day on the reverted /). `silik rollback` reverts and names the Revert entry for the
+# next start; it never restarts. `silik rollback finish` (by itself, on that start) puts /boot back in step with the
+# reverted package database. /home is another volume and is never touched.
+# What was read of the tools, and where (docs/ROLLBACK.md has the list): snapm 0.7.0 (its command line, the JSON of
+# `snapset list`, the kernel arguments of its boot entries), boom 1.6.8 (entry file names), grubby 8.40, grub2 2.06,
+# systemd 252's kernel-install, lvm2 2.03.33, dnf 4.14 of EL 9.8. Nothing here was run on LVM: this machine has none.
+# As elsewhere: snap_root(), snap_refusal(), snap_prune() and finish_plan() judge what was read and run nothing.
+SNAP_AUTO = "silikos-update"     # the snapshots made before an update: silikos-update.N (snapm's --autoindex)
+SNAP_MANUAL = "manual"           # `silik snapshot create` without a name: manual.N
+SNAP_CONF = "/etc/silikos/snapshot.conf"
+# PROPOSAL values (docs/ROLLBACK.md): the snapshots kept, the days they are kept, the pool's limits for a new one.
+# size_policy: snapm's own default asks the pool for twice what / holds (200%USED), which a pool half full never has;
+# a thin snapshot takes no space when made, and what guards the pool are the two limits and its autoextension
+SNAP_DEFAULTS = {"keep": 5, "days": 14, "pool_data_max": 70.0, "pool_meta_max": 50.0, "size_policy": "100%FREE"}
+SNAP_PROFILE = "silikos-thin"    # /etc/lvm/profile/silikos-thin.profile (silikos-security): the pool grows by itself
+SNAP_CMDLINE = "/proc/cmdline"
+SNAP_BOOT = "/boot"
+SNAP_MODULES = "/lib/modules"
+SNAP_FLAG = "/run/silikos/no-snapshot"       # the last update was made without a snapshot: why (the status bar reads it)
+SNAP_HOLD = "/etc/silikos/update.hold"       # automatic updates wait since a rollback (the update units' condition)
+SNAP_HOOK = "/usr/libexec/silikos/pre-update-snapshot"
+SNAP_ARG, SNAP_REVERT_ARG = "snapm.snapset", "snapm.revert"   # on the kernel line of the entries snapm makes
+SNAP_FIELDS = "name,uuid,timestamp,status,bootable,bootentry,revertentry"
+LVS_FIELDS = "vg_name,lv_name,lv_attr,pool_lv,lv_size,data_percent,metadata_percent,lv_profile"
+SNAP_PACKAGES = "silik rollback --packages   # undoes the packages of the last update (dnf history undo)"
+SNAP_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9+.-]*$")      # snapm's rule: letters, digits, + . - (no underscore)
+SNAP_POLICY_RE = re.compile(r"^([0-9]+(\.[0-9]+)?%(FREE|USED|SIZE)|[0-9]+([KMGTkmgt]i?)?[Bb]?)$")
+
+
+def snap_conf(path=None):
+    """/etc/silikos/snapshot.conf (`key = value` lines) over the defaults; a value that is not one is left out"""
+    conf = dict(SNAP_DEFAULTS)
+    for line in read(path or SNAP_CONF).splitlines():
+        k, _, v = line.split("#")[0].partition("=")
+        k, v = k.strip(), v.strip()
+        if k not in conf or not v:
+            continue
+        try:
+            if k == "size_policy":
+                if SNAP_POLICY_RE.match(v):
+                    conf[k] = v
+            elif k in ("keep", "days"):
+                conf[k] = max(1, int(v))
+            elif 0 < float(v) <= 100:
+                conf[k] = float(v)
+        except ValueError:
+            pass
+    return conf
+
+
+def snap_booted(text=None):
+    """how this system was started: ("snapshot", UUID) from a snapshot's entry, ("revert", UUID) from a Revert entry,
+    ("", "") normally"""
+    for w in (read(SNAP_CMDLINE) if text is None else text).split():
+        k, _, v = w.partition("=")
+        if k == SNAP_ARG:
+            return "snapshot", v
+        if k == SNAP_REVERT_ARG:
+            return "revert", v
+    return "", ""
+
+
+def snap_devno():
+    d = os.stat("/").st_dev
+    return "%d:%d" % (os.major(d), os.minor(d))
+
+
+def snap_root(devno=None):
+    """what / is on, from sysfs alone (no command, no root): {"dm": the device-mapper name, "lvm", "thin", "what":
+    in words}; None when it cannot be seen (a container's overlay has no block device). An LVM thin volume is a
+    device-mapper device with an LVM- uuid that sits on its pool's "-tpool" device [A: lvm2's layout, not seen on a
+    machine here]; a LUKS layer above it is looked through"""
+    try:
+        devno = devno or snap_devno()
+    except OSError:
+        return None
+    d = os.path.join(SYSFS, "dev/block", devno)
+    if not os.path.isdir(d):
+        return None
+    out = {"dm": "", "lvm": False, "thin": False, "what": "a disk partition"}
+    for _ in range(3):
+        uuid, name = read(os.path.join(d, "dm/uuid")).strip(), read(os.path.join(d, "dm/name")).strip()
+        try:
+            slaves = sorted(os.listdir(os.path.join(d, "slaves")))
+        except OSError:
+            slaves = []
+        if uuid.startswith("CRYPT-") and len(slaves) == 1:      # an encrypted volume: what it is made on
+            d = os.path.join(d, "slaves", slaves[0])
+            continue
+        if not uuid:
+            return out
+        out["dm"] = name
+        if not uuid.startswith("LVM-"):
+            out["what"] = "a device-mapper device that is not LVM (%s)" % name
+            return out
+        out["lvm"] = True
+        out["thin"] = any(read(os.path.join(d, "slaves", s, "dm/name")).strip().endswith("-tpool") for s in slaves)
+        out["what"] = "an LVM thin volume (%s)" % name if out["thin"] else "an LVM volume that is not thin (%s)" % name
+        return out
+    return out
+
+
+def snap_refuse(msg, alt=(), rc=1):
+    """no: the reason, then what to do instead"""
+    print("silik: " + msg, file=sys.stderr)
+    for a in alt:
+        print("       " + a, file=sys.stderr)
+    sys.exit(rc)
+
+
+def snap_unavailable(root, snapm):
+    """why this system has no snapshots: (reason, [what to do instead]); None when it has them"""
+    if root is None:
+        return ("snapshots are not available: what / is on cannot be seen%s" % (" (inside a container)" if sec_container() else ""), [SNAP_PACKAGES])
+    if not root["thin"]:
+        return ("snapshots are not available: / is on %s, not on an LVM thin volume" % root["what"],
+                [SNAP_PACKAGES, "a new installation with the installer's Automatic partitioning puts / on a thin volume"])
+    if not snapm:
+        return ("snapshots are not available: snapm is not installed", ["silik snapshot setup   # installs snapm and boom-boot (the base's packages)", SNAP_PACKAGES])
+    return None
+
+
+def snap_need(ctx):
+    """the root volume when this system has snapshots; says why and stops when it has not"""
+    root = snap_root()
+    no = snap_unavailable(root, bool(shutil.which("snapm")))
+    if no:
+        snap_refuse(*no)
+    return root
+
+
+def snap_read(ctx, argv):
+    """a read-only command that needs root, printed like the others: (exit code, stdout). Under --dry-run it runs
+    only when this is root already (a dry run asks for no password): (None, "") otherwise"""
+    argv = as_root(argv)
+    ctx.echo(argv)
+    if ctx.dry and argv[0] == "sudo":
+        return None, ""
+    env = dict(os.environ)
+    env["LC_ALL"] = "C"
+    try:
+        p = subprocess.run(argv, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL, universal_newlines=True, env=env)
+    except OSError:
+        return 127, ""
+    return p.returncode, p.stdout
+
+
+def lvs_rows(text):
+    """the rows of `lvs --reportformat json` ({"report": [{"lv": [...]}]}); None when the text is not that"""
+    try:
+        rows = json.loads(text)["report"][0]["lv"]
+    except (ValueError, KeyError, IndexError, TypeError):
+        return None
+    return rows if isinstance(rows, list) else None
+
+
+def lvs_num(v):
+    try:
+        return float(str(v).replace(",", "."))
+    except ValueError:
+        return None
+
+
+def snap_pool(ctx, root):
+    """the thin pool / is in, asked of lvs (root): {"vg", "lv", "pool", "size" (bytes), "data" and "meta" (percent
+    used), "profile"}; None when lvs does not say; {} when it was not asked (a dry run without root)"""
+    ask = ["lvs", "--reportformat", "json", "--units", "b", "--nosuffix", "-o", LVS_FIELDS]
+    rc, out = snap_read(ctx, ask + ["/dev/mapper/" + root["dm"]])
+    if rc is None:
+        return {}
+    rows = lvs_rows(out) if rc == 0 else None
+    if not rows or not rows[0].get("pool_lv"):
+        return None
+    vg, lv, pool = rows[0].get("vg_name", ""), rows[0].get("lv_name", ""), rows[0]["pool_lv"]
+    rc, out = snap_read(ctx, ask + ["%s/%s" % (vg, pool)])
+    rows = lvs_rows(out) if rc == 0 else None
+    if not rows:
+        return None
+    p = rows[0]
+    size = lvs_num(p.get("lv_size"))
+    return {"vg": vg, "lv": lv, "pool": pool, "size": int(size) if size else 0, "data": lvs_num(p.get("data_percent")),
+            "meta": lvs_num(p.get("metadata_percent")), "profile": p.get("lv_profile") or ""}
+
+
+def snap_sets_parse(text):
+    """the snapshot sets in `snapm snapset list --json -o SNAP_FIELDS` (snapm 0.7.0: {"Snapsets": [{"snapset_name":
+    ..., "snapset_timestamp": 1763013600, "snapset_status": "Active", "snapset_bootable": true, ...}]}), oldest
+    first; None when the text is not that"""
+    try:
+        rows = json.loads(text)["Snapsets"]
+        out = []
+        for r in rows:
+            ts = str(r.get("snapset_timestamp", ""))
+            out.append({"name": str(r["snapset_name"]), "uuid": str(r.get("snapset_uuid") or ""), "time": int(ts) if ts.isdigit() else 0,
+                        "status": str(r.get("snapset_status") or ""), "bootable": r.get("snapset_bootable") in (True, "yes"),
+                        "boot_entry": str(r.get("snapset_bootentry") or ""), "revert_entry": str(r.get("snapset_revertentry") or ""),
+                        "auto": snap_is_auto(str(r["snapset_name"]))})
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return None
+    return sorted(out, key=lambda s: (s["time"], s["name"]))
+
+
+def snap_is_auto(name):
+    b, _, i = name.rpartition(".")
+    return b == SNAP_AUTO and i.isdigit()
+
+
+def snap_sets(ctx):
+    """(asked, the snapshot sets): asked is False for a dry run without root; the sets are None when snapm fails"""
+    rc, out = snap_read(ctx, ["snapm", "snapset", "list", "--json", "-o", SNAP_FIELDS])
+    if rc is None:
+        return False, None
+    return True, snap_sets_parse(out) if rc == 0 else None
+
+
+def snap_prune(sets, keep, days, now):
+    """the names of the automatic snapshots to delete, oldest first: all but the KEEP newest, and those older than
+    DAYS days. The newest is always kept; one being reverted is left alone; a snapshot made by hand is never here"""
+    auto = sorted((s for s in sets if s["auto"] and s["status"] != "Reverting"), key=lambda s: (s["time"], s["name"]), reverse=True)
+    out = [s for i, s in enumerate(auto) if i >= keep or (i > 0 and now - s["time"] > days * 86400)]
+    return [s["name"] for s in reversed(out)]
+
+
+def boot_image_need(boot=None, kernel=None):
+    """the bytes a bootable snapshot of the running kernel adds to /boot: boom (1.6.8, cache.py) keeps a copy of the
+    kernel and of its initramfs named by its SHA-1 in /boot/boom/cache, and a second one beside the original
+    (vmlinuz-VERSION.boom0); nothing for an image it already has. None when the kernel's files are not readable"""
+    import hashlib
+    boot = boot or SNAP_BOOT
+    kernel = kernel or os.uname().release
+    need = 0
+    for f in ("vmlinuz-%s" % kernel, "initramfs-%s.img" % kernel):
+        p = os.path.join(boot, f)
+        try:
+            h = hashlib.sha1()
+            with open(p, "rb") as fh:
+                for chunk in iter(lambda: fh.read(1 << 20), b""):
+                    h.update(chunk)
+            if not os.path.exists(os.path.join(boot, "boom/cache", h.hexdigest() + ".img")):
+                need += 2 * os.path.getsize(p)
+        except OSError:
+            return None
+    return need + (1 << 20 if need else 0)      # (and room for the two entries and boom's index)
+
+
+def boot_free(boot=None):
+    try:
+        s = os.statvfs(boot or SNAP_BOOT)
+        return s.f_bavail * s.f_frsize
+    except OSError:
+        return None
+
+
+def snap_refusal(st, conf):
+    """why a new snapshot may not be made now: (reason, [what to do]); None when it may. ST: {"pool": snap_pool()'s,
+    "boot_free", "boot_need"}. What was not asked (a dry run) or cannot be read does not refuse: snapm checks again"""
+    p = st.get("pool")
+    if p:
+        over = [(k, p[k], conf[m]) for k, m in (("data", "pool_data_max"), ("meta", "pool_meta_max")) if p.get(k) is not None and p[k] >= conf[m]]
+        if over:
+            k, used, lim = over[0]
+            return ("no snapshot: the thin pool %s/%s has %.1f %% of its %s used (a new snapshot is made below %g %%)"
+                    % (p["vg"], p["pool"], used, "data" if k == "data" else "metadata", lim),
+                    ["silik snapshot list   # then: silik snapshot delete NAME", "sudo fstrim -av   # deleted files give their blocks back to the pool",
+                     "sudo lvextend -l +100%%FREE %s/%s   # when the volume group has free space" % (p["vg"], p["pool"])])
+    free, need = st.get("boot_free"), st.get("boot_need")
+    if free is not None and need and free < need:
+        return ("no snapshot: /boot has %s free; a snapshot that can be started needs %s there (two copies of this kernel and its initramfs)"
+                % (size(free), size(need)),
+                ["silik snapshot list   # then: silik snapshot delete NAME (frees their kernel copies)",
+                 "sudo dnf remove --oldinstallonly   # the kernels that are not the newest ones"])
+    return None
+
+
+def snap_guard(ctx, root, conf, prune=True):
+    """the reads and the judgement before a snapshot: the pool's use and the room in /boot. Over a limit: the old
+    automatic snapshots are deleted first (the policy of snapshot.conf, leaving room for one more), then it is judged
+    again. Returns (refusal or None, the pool)"""
+    pool = snap_pool(ctx, root)
+    st = {"pool": pool, "boot_free": boot_free(), "boot_need": boot_image_need()}
+    no = snap_refusal(st, conf)
+    if no and prune:
+        asked, sets = snap_sets(ctx)
+        old = snap_prune(sets or [], max(0, conf["keep"] - 1), conf["days"], time.time())
+        if old:
+            for n in old:
+                ctx.run(as_root(["snapm", "snapset", "delete", n]), check=False)
+            st = {"pool": snap_pool(ctx, root), "boot_free": boot_free(), "boot_need": boot_image_need()}
+            no = snap_refusal(st, conf)
+    return no, st["pool"]
+
+
+def snap_make(ctx, name, conf, autoindex):
+    """snapm makes the snapshot of / with its two boot entries; its name (with the index snapm gave it), or '' when
+    snapm failed (it says why itself)"""
+    argv = ["snapm", "snapset", "create", "--bootable", "--revert", "--size-policy", conf["size_policy"]] + (["--autoindex"] if autoindex else []) + ["--json", name, "/"]
+    rc, out = ctx.run(as_root(argv), check=False, capture=True)
+    if ctx.dry:
+        return name + (".N" if autoindex else "")
+    if rc != 0:
+        return ""
+    try:
+        return str(json.loads(out)["SnapsetName"])       # (snapm 0.7.0: SnapshotSet.to_dict)
+    except (ValueError, KeyError, TypeError):
+        return name
+
+
+def snap_note(ctx, why):
+    """the note the status bar reads: the update that follows has no snapshot, and why (gone after the next one that
+    has, or at the next start)"""
+    print("silik: " + why, file=sys.stderr)
+    if ctx.dry:
+        return
+    try:
+        os.makedirs(os.path.dirname(SNAP_FLAG), exist_ok=True)
+        with open(SNAP_FLAG, "w") as f:
+            f.write(why.splitlines()[0] + "\n")
+    except OSError:
+        pass                                              # (not root: said above, not noted)
+
+
+def snap_auto(ctx, a):
+    """what the update hook runs (as root) when there is something to update: a snapshot of /, then the old ones
+    pruned. It never fails the update: a system without snapshots is passed over; a snapshot that cannot be made is
+    said and noted for the status bar ("update: no snapshot")"""
+    root = snap_root()
+    if snap_unavailable(root, bool(shutil.which("snapm"))):
+        print("silik: no snapshot before this update (silik snapshot status says why); the way back is: silik rollback --packages")
+        return 0
+    if snap_booted()[0] == "snapshot":
+        snap_note(ctx, "no snapshot: this system is started from a snapshot")
+        return 0
+    conf = snap_conf()
+    no, _ = snap_guard(ctx, root, conf)
+    if no:
+        snap_note(ctx, no[0])
+        return 0
+    name = snap_make(ctx, SNAP_AUTO, conf, True)
+    if not name:
+        snap_note(ctx, "no snapshot: snapm could not make it (journalctl -u silikos-update -n 30)")
+        return 0
+    if not ctx.dry:
+        print("silik: snapshot %s of / made before the update; to go back: silik rollback" % name)
+        try:
+            os.unlink(SNAP_FLAG)
+        except OSError:
+            pass
+    asked, sets = snap_sets(ctx)
+    for n in snap_prune(sets or [], conf["keep"], conf["days"], time.time()):
+        ctx.run(as_root(["snapm", "snapset", "delete", n]), check=False)
+    return 0
+
+
+def snap_create(ctx, a):
+    name = a.name or SNAP_MANUAL
+    if not SNAP_NAME_RE.match(name) or len(name) > 60 or name == "finish" or (a.name and snap_is_auto(name)):
+        die("a snapshot's name: letters, digits, + . - (not `finish`, not %s.N: those are the updates' own)" % SNAP_AUTO, 2)
+    root = snap_need(ctx)
+    kind, uuid = snap_booted()
+    if kind == "snapshot":
+        snap_refuse("no snapshot of a snapshot: this system is started from one (%s=%s)" % (SNAP_ARG, uuid),
+                    ["restart and choose the normal entry, then: silik snapshot create", "silik rollback   # makes this state the system"])
+    conf = snap_conf()
+    no, _ = snap_guard(ctx, root, conf)
+    if no:
+        snap_refuse(*no)
+    made = snap_make(ctx, name, conf, not a.name)
+    if ctx.dry:
+        return 0
+    if not made:
+        die("snapm did not make the snapshot (its reason is above)")
+    print("silik: snapshot %s of / made, with its entries in the boot menu; to go back to it: silik rollback %s" % (made, made))
+    return 0
+
+
+def snap_delete(ctx, a):
+    snap_need(ctx)
+    confirm(ctx, a, "the snapshot %s" % a.name)
+    ctx.run(as_root(["snapm", "snapset", "delete", a.name]))
+    return 0
+
+
+def snap_when(t, now):
+    return "%s (%s ago)" % (time.strftime("%Y-%m-%d %H:%M", time.localtime(t)), ago(now - t)) if t else "?"
+
+
+def snap_list(ctx, a):
+    root = snap_root()
+    no = snap_unavailable(root, bool(shutil.which("snapm")))
+    if no:
+        if getattr(a, "json", False):
+            print(json.dumps({"available": False, "reason": no[0], "snapshots": []}, indent=1))
+            return 1
+        snap_refuse(*no)
+    quiet = Ctx(ctx.dry, True) if getattr(a, "json", False) else ctx
+    asked, sets = snap_sets(quiet)
+    if not asked:
+        return 0
+    if sets is None:
+        die("snapm did not list the snapshots (its reason is above)")
+    if getattr(a, "json", False):
+        print(json.dumps({"available": True, "snapshots": sets}, indent=1))
+        return 0
+    now = time.time()
+    if not sets:
+        print("no snapshot yet: one is made before each update; by hand: silik snapshot create [NAME]")
+    for s in reversed(sets):
+        print("%-22s %-30s %-9s %s" % (s["name"], snap_when(s["time"], now), s["status"].lower() or "?",
+                                       ("before an update" if s["auto"] else "made by hand") + ("" if s["revert_entry"] else "; no Revert entry")))
+    return 0
+
+
+def snap_copies(boot=None):
+    """the bytes of the kernel copies boom keeps in /boot for the snapshots' entries"""
+    import glob
+    boot = boot or SNAP_BOOT
+    n = 0
+    for p in glob.glob(os.path.join(boot, "boom/cache/*.img")) + glob.glob(os.path.join(boot, "*.boom[0-9]*")):
+        try:
+            n += os.path.getsize(p)
+        except OSError:
+            pass
+    return n
+
+
+def snap_status_rows(st, conf, now):
+    """the rows of `silik snapshot status` from what was read: [(id, state, name, value, [fix])]. ST: {"root",
+    "snapm", "booted": (kind, uuid), "pool", "vg_free", "sets", "boot_free", "boot_size", "boot_need", "copies",
+    "flag", "hold"}; a key that is None was not readable"""
+    rows = []
+    no = snap_unavailable(st["root"], st["snapm"])
+    if no:
+        rows.append(("available", "unknown" if st["root"] is None else "warn", "snapshots", no[0].replace("snapshots are ", ""), no[1]))
+    else:
+        rows.append(("available", "ok", "snapshots", "/ is on %s; snapm is installed" % st["root"]["what"], []))
+    kind, uuid = st["booted"]
+    if kind == "snapshot":
+        rows.append(("booted", "warn", "started from", "a snapshot (%s): nothing is updated; a snapshot of it cannot be made" % uuid,
+                     ["silik rollback   # makes this state the system", "systemctl reboot   # and the normal entry: back to the system as it is"]))
+    elif kind == "revert":
+        rows.append(("booted", "ok", "started from", "a Revert entry: this is the system as the snapshot had it", []))
+    if st.get("hold") is not None:
+        rows.append(("hold", "warn", "updates", "the automatic updates wait since the rollback%s" % (" of %s" % st["hold"].strip()[:16].replace("T", " ") if st["hold"].strip() else ""),
+                     ["silik update   # updates now, with a snapshot first; the automatic updates go on after it"]))
+    if st.get("flag") is not None:
+        rows.append(("last", "warn", "last update", "made without a snapshot: %s" % (st["flag"].strip() or "the reason was not noted"), [SNAP_PACKAGES]))
+    if no:
+        return rows
+    p = st.get("pool")
+    if not p:
+        rows.append(("pool", "unknown", "thin pool", "lvs did not say (as root: sudo silik snapshot status)" if p is None else "not asked", []))
+    else:
+        for k, m, what in (("data", "pool_data_max", "data"), ("meta", "pool_meta_max", "metadata")):
+            if p.get(k) is None:
+                rows.append(("pool-" + k, "unknown", "pool " + what, "lvs did not say", []))
+                continue
+            over = p[k] >= conf[m]
+            val = "%.1f %% used" % p[k] + (" of %s" % size(p["size"]) if k == "data" and p["size"] else "") + " in %s/%s; a new snapshot is made below %g %%" % (p["vg"], p["pool"], conf[m])
+            rows.append(("pool-" + k, "warn" if over else "ok", "pool " + what, val,
+                         ["silik snapshot list   # then: silik snapshot delete NAME", "sudo fstrim -av   # deleted files give their blocks back to the pool"]))
+        grows = p["profile"] == SNAP_PROFILE
+        free = st.get("vg_free")
+        val = ("at 70 %% used the pool grows by 20 %% (profile %s)" % SNAP_PROFILE if grows else
+               "the pool does not grow by itself (its profile is %s, not %s)" % (p["profile"] or "none", SNAP_PROFILE))
+        val += "; %s free in the volume group %s for it" % (size(free), p["vg"]) if free is not None else ""
+        rows.append(("grow", "ok" if grows and (free is None or free > 0) else "warn", "pool growth", val,
+                     ["silik snapshot setup   # applies the profile to the pool"] if not grows else ["the volume group has no free space: the pool cannot grow; delete snapshots as it fills"]))
+    sets = st.get("sets")
+    if sets is None:
+        rows.append(("sets", "unknown", "snapshots kept", "snapm did not list them (as root: sudo silik snapshot status)", []))
+    else:
+        auto = [s for s in sets if s["auto"]]
+        mine = [s for s in sets if not s["auto"]]
+        val = "%d made before updates (the last %d are kept, %d days)" % (len(auto), conf["keep"], conf["days"])
+        val += "; %d made by hand (kept until deleted)" % len(mine) if mine else ""
+        val += "; the newest: %s, %s" % (sets[-1]["name"], snap_when(sets[-1]["time"], now)) if sets else ""
+        bad = [s["name"] for s in sets if s["status"] in ("Invalid", "Reverting")]
+        rows.append(("sets", "warn" if bad else "ok", "snapshots kept", val + ("; %s: %s" % (", ".join(bad), "being reverted or invalid") if bad else ""),
+                     ["silik snapshot list", "systemctl reboot   # a revert ends at the next start (silik rollback says which entry)"]))
+    free, total, need = st.get("boot_free"), st.get("boot_size"), st.get("boot_need")
+    if free is None:
+        rows.append(("boot", "unknown", "/boot", "not readable", []))
+    else:
+        short = bool(need) and free < need
+        val = "%s free%s; the snapshots' kernel copies take %s" % (size(free), " of %s" % size(total) if total else "", size(st.get("copies") or 0))
+        val += "; the next snapshot needs %s" % size(need) if need else ""
+        rows.append(("boot", "warn" if short else "ok", "/boot", val,
+                     ["silik snapshot delete NAME   # frees its kernel copies", "sudo dnf remove --oldinstallonly"]))
+    return rows
+
+
+def snap_status(ctx, a):
+    js = getattr(a, "json", False)
+    quiet = Ctx(ctx.dry, True) if js else ctx
+    root = snap_root()
+    snapm = bool(shutil.which("snapm"))
+    st = {"root": root, "snapm": snapm, "booted": snap_booted(), "flag": read(SNAP_FLAG, None), "hold": read(SNAP_HOLD, None)}
+    conf = snap_conf()
+    if not snap_unavailable(root, snapm):
+        st["pool"] = snap_pool(quiet, root)
+        if st["pool"]:
+            rc, out = snap_read(quiet, ["vgs", "--reportformat", "json", "--units", "b", "--nosuffix", "-o", "vg_name,vg_free", st["pool"]["vg"]])
+            try:
+                st["vg_free"] = int(lvs_num(json.loads(out)["report"][0]["vg"][0]["vg_free"])) if rc == 0 else None
+            except (ValueError, KeyError, IndexError, TypeError):
+                st["vg_free"] = None
+        st["sets"] = snap_sets(quiet)[1]
+        st["boot_free"], st["boot_need"], st["copies"] = boot_free(), boot_image_need(), snap_copies()
+        try:
+            s = os.statvfs(SNAP_BOOT)
+            st["boot_size"] = s.f_blocks * s.f_frsize
+        except OSError:
+            st["boot_size"] = None
+    rows = snap_status_rows(st, conf, time.time())
+    count = {k: sum(1 for r in rows if r[1] == k) for k in ("ok", "warn", "bad", "unknown")}
+    rc = 2 if count["bad"] else 1 if count["warn"] or count["unknown"] else 0
+    if js:
+        print(json.dumps({"available": rows[0][1] == "ok", "checks": [{"id": i, "state": s, "name": n, "value": v, "fix": f if s != "ok" else []} for i, s, n, v, f in rows],
+                          "snapshots": st.get("sets") or [], "policy": conf, "summary": count}, indent=1))
+        return rc
+    lines = []
+    for i, s, n, v, f in rows:
+        lines.append("%s %-8s %-15s %s" % (SEC_MARK[s], s, n, v))
+        lines += ["%-26s %s: %s" % ("", "see" if s == "unknown" else "do", x) for x in (f if s != "ok" else [])]
+    text = "\n".join(lines)
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        print(text.encode("ascii", "replace").decode("ascii"))
+    return rc
+
+
+def snap_setup(ctx, a):
+    """what the kickstart does on a new installation, on a running system: the tools, the pool's profile (it grows
+    by itself), its monitoring, the weekly trim. Every command printed; nothing of a disk is created or erased"""
+    root = snap_root()
+    no = snap_unavailable(root, True)
+    if no:
+        snap_refuse(*no)
+    if not shutil.which("snapm") or not shutil.which("boom") or ctx.dry:
+        ctx.run(as_root(["dnf", "-y", "install", "snapm", "boom-boot"]))
+    pool = snap_pool(ctx, root)
+    if pool is None:
+        die("lvs did not say which pool / is in (its reason is above)")
+    name = "%s/%s" % (pool["vg"], pool["pool"]) if pool else "VG/POOL"
+    if not pool or pool["profile"] != SNAP_PROFILE:
+        ctx.run(as_root(["lvchange", "--metadataprofile", SNAP_PROFILE, name]))
+    ctx.run(as_root(["lvchange", "--monitor", "y", name]))            # (dmeventd watches the pool: it is what extends it)
+    if ctx.query(["systemctl", "is-enabled", "fstrim.timer"], any_rc=True).strip() != "enabled":
+        ctx.run(as_root(["systemctl", "enable", "--now", "fstrim.timer"]))
+    if not ctx.dry:
+        print("silik: a snapshot of / is made before each update from now on; `silik snapshot status` reads it back")
+    return 0
+
+
+# ---- rollback
+def bls_entries(boot=None):
+    """the boot menu's entries (/boot/loader/entries/*.conf, BLS): [{"id": the file's name without .conf, which is
+    the entry's id for grub2 and grubby, "title", "version", "linux", "options", "snapm": (kind, uuid) for an entry
+    snapm made, "boom": its boot id}]; None when the folder is not readable"""
+    d = os.path.join(boot or SNAP_BOOT, "loader/entries")
+    try:
+        names = sorted(n for n in os.listdir(d) if n.endswith(".conf"))
+    except OSError:
+        return None
+    out = []
+    for n in names:
+        e = {"id": n[:-5], "title": "", "version": "", "linux": "", "options": ""}
+        for line in read(os.path.join(d, n)).splitlines():
+            k, _, v = line.strip().partition(" ")
+            if k in e and k != "id" and not e[k]:
+                e[k] = v.strip()
+        e["snapm"] = snap_booted(e["options"])
+        m = re.match(r"^\w*-([0-9a-f]{7,})-.+$", e["id"])      # (boom 1.6.8: MACHINEID-BOOTID7-VERSION.conf)
+        e["boom"] = m.group(1) if m and e["snapm"][0] else ""
+        out.append(e)
+    return out
+
+
+def rpm_vercmp_key(v):
+    """a sort key that orders kernel versions as rpm does for the forms they take (5.14.0-611.5.1.el9_7.x86_64):
+    runs of digits as numbers, the rest as text"""
+    return [(1, int(p)) if p.isdigit() else (0, p) for p in re.findall(r"[0-9]+|[A-Za-z]+", v)]
+
+
+def finish_plan(entries, kernels, have_modules, live, booted):
+    """what `silik rollback finish` does, from what was read (it runs nothing). ENTRIES: bls_entries(); KERNELS: the
+    kernel-core versions of the package database (as uname -r has them); HAVE_MODULES: those of them whose
+    /lib/modules/V/vmlinuz is there; LIVE: {UUID: status} of the snapshot sets that exist, None when snapm did not
+    say; BOOTED: snap_booted(). Returns {"remove": versions in the boot menu the packages do not know, "add":
+    versions the packages know that have no entry, "default": the version to start by default, "entries": boot ids
+    of snapm's entries whose snapshot is gone, "reverted": this start is the one after a revert (from a Revert entry
+    whose snapshot is gone or being merged; one that is still there untouched was only chosen in the menu)}"""
+    own = [e for e in entries if not e["snapm"][0] and e["version"] and not e["version"].startswith("0-rescue")]
+    in_menu = []
+    for e in own:
+        v = e["version"].split("~")[0]                      # (VERSION~debug is the same kernel's debug entry)
+        if v not in in_menu:
+            in_menu.append(v)
+    remove = [v for v in in_menu if v not in kernels]
+    add = [v for v in kernels if v not in in_menu and v in have_modules]
+    usable = sorted((v for v in kernels if v in in_menu or v in add), key=rpm_vercmp_key)
+    gone = []
+    if live is not None:
+        gone = [e["boom"] for e in entries if e["snapm"][0] and e["boom"] and e["snapm"][1] not in live]
+    reverted = booted[0] == "revert" and (live is None or live.get(booted[1], "Reverting") == "Reverting")
+    return {"remove": remove, "add": add, "default": usable[-1] if usable else "", "entries": gone, "reverted": reverted}
+
+
+def rollback_finish(ctx, a):
+    """after the start from a Revert entry: / is as the snapshot had it, /boot is not (it is not in the snapshot).
+    The kernels the reverted package database does not know leave the boot menu (their modules went with the
+    revert: such an entry would not start), those it knows and /boot lost come back, the default is the newest of
+    them, the entries of the snapshot that is gone are removed, and the automatic updates wait for `silik update`"""
+    booted = snap_booted()
+    entries = bls_entries()
+    if entries is None:
+        die("the boot menu's entries (%s/loader/entries) are not readable: sudo silik rollback finish" % SNAP_BOOT)
+    rc, out = sec_cmd(["rpm", "-q", "--qf", "%{VERSION}-%{RELEASE}.%{ARCH}\n", "kernel-core"])
+    kernels = [l.strip() for l in out.splitlines() if l.strip() and " " not in l.strip()] if rc == 0 else []
+    if not kernels:
+        die("the package database names no kernel (rpm -q kernel-core): nothing is changed")
+    have = [v for v in kernels if os.path.exists(os.path.join(SNAP_MODULES, v, "vmlinuz"))]
+    live = None
+    if shutil.which("snapm") or ctx.dry:
+        asked, sets = snap_sets(ctx)
+        live = {s["uuid"]: s["status"] for s in sets} if sets is not None else None
+        if live and live.get(booted[1]) == "Reverting":
+            print("silik: the revert of / is still going on; its entries stay until it ends (silik rollback finish, later)")
+    plan = finish_plan(entries, kernels, have, live, booted)
+    for v in plan["remove"]:
+        print("silik: kernel %s is in the boot menu and not in the package database: its entry and files leave /boot" % v)
+        ctx.run(as_root(["kernel-install", "remove", v]), check=False)
+        ctx.run(as_root(["rm", "-f", os.path.join(SNAP_BOOT, "initramfs-%skdump.img" % v)]), check=False)
+    for v in plan["add"]:
+        print("silik: kernel %s is installed and has no boot entry: it gets one again" % v)
+        ctx.run(as_root(["kernel-install", "add", v, os.path.join(SNAP_MODULES, v, "vmlinuz")]), check=False)
+    if plan["default"]:
+        ctx.run(as_root(["grubby", "--set-default=" + os.path.join(SNAP_BOOT, "vmlinuz-" + plan["default"])]), check=False)
+    else:
+        print("silik: no installed kernel has a boot entry: sudo dnf reinstall kernel-core", file=sys.stderr)
+    for b in plan["entries"]:
+        ctx.run(as_root(["boom", "entry", "delete", "--boot-id", b]), check=False)
+    if plan["reverted"]:
+        argv = as_root(["tee", SNAP_HOLD])
+        ctx.echo(argv)
+        if not ctx.dry:
+            subprocess.run(argv, input=time.strftime("%Y-%m-%dT%H:%M:%S") + "\n", universal_newlines=True, stdout=subprocess.DEVNULL)
+        print("silik: the system is as the snapshot had it. The automatic updates wait: `silik update` updates now (a snapshot first) and they go on")
+    elif booted[0] == "revert":
+        print("silik: this Revert entry was chosen in the boot menu, but no revert was asked: / is the system as it was (silik rollback asks for one)")
+    if not ctx.dry and not (plan["remove"] or plan["add"] or plan["entries"]):
+        print("silik: the boot menu and the package database agree; the default kernel is %s" % (plan["default"] or "unknown"))
+    return 0 if plan["default"] else 1
+
+
+DNF_UPGRADE = ("upgrade", "u", "upgraded")
+
+
+def dnf_history_parse(text):
+    """the transactions of `dnf history list` (dnf 4.14: "  8 |  | 2026-11-13 07:26 | Upgrade | 10"), newest first:
+    [{"id", "command", "date", "actions": lower-case words, "altered"}]"""
+    out = []
+    for l in text.splitlines():
+        p = [x.strip() for x in l.split("|")]
+        if len(p) >= 5 and p[0].isdigit():
+            out.append({"id": int(p[0]), "command": p[1], "date": p[2], "actions": [x.strip().lower() for x in p[3].split(",")], "altered": p[4]})
+    return out
+
+
+def rollback_packages(ctx, a):
+    """the way back without snapshots: dnf undoes the last transaction that upgraded packages. Its limits are said"""
+    if a.name and not a.name.isdigit():
+        die("silik rollback --packages [ID]: ID is a transaction of `sudo dnf history list`", 2)
+    tid = a.name
+    if not tid:
+        rc, out = snap_read(ctx, ["dnf", "history", "list"])
+        if rc is None:
+            tid = "ID"
+        else:
+            ups = [t for t in dnf_history_parse(out) if any(x in DNF_UPGRADE for x in t["actions"])] if rc == 0 else []
+            if not ups:
+                snap_refuse("dnf's history has no transaction that upgraded packages: nothing to undo", ["sudo dnf history list"])
+            t = ups[0]
+            tid = str(t["id"])
+            print("silik: the last update is transaction %s of %s (%s; %s packages)" % (tid, t["date"], t["command"] or "the automatic update", t["altered"].split()[0]))
+    print("silik: what this does not do: it needs the old versions in the repositories (after a new minor release of the base they are gone); "
+          "it does not put back configuration files or what package scripts did; a kernel is only removed; after glibc or systemd: restart")
+    ctx.run(as_root(["dnf", "history", "info", tid]), check=False)
+    ctx.run(as_root(["dnf"] + (["-y"] if a.yes else []) + ["history", "undo", tid]))
+    return 0
+
+
+def cmd_rollback(ctx, a):
+    if a.packages:
+        return rollback_packages(ctx, a)
+    if a.name == "finish":
+        return rollback_finish(ctx, a)
+    snap_need(ctx)
+    kind, uuid = snap_booted()
+    asked, sets = snap_sets(ctx)
+    if asked and sets is None:
+        die("snapm did not list the snapshots (its reason is above)")
+    if not asked:
+        sets = [{"name": a.name or SNAP_AUTO + ".N", "uuid": "UUID", "time": 0, "status": "Active", "revert_entry": "x", "auto": True}]
+    target = None
+    if kind == "snapshot":
+        target = next((s for s in sets if s["uuid"] == uuid), None) if asked else sets[0]
+        if target is None:
+            snap_refuse("this system is started from a snapshot that snapm does not list (%s)" % uuid, ["silik snapshot list", "systemctl reboot   # and the normal entry"])
+        if a.name and a.name != target["name"]:
+            snap_refuse("this system is started from the snapshot %s: from here only it can become the system" % target["name"],
+                        ["silik rollback   # makes %s the system" % target["name"], "systemctl reboot   # and the normal entry; then: silik rollback %s" % a.name])
+    elif a.name:
+        target = next((s for s in sets if s["name"] == a.name), None)
+        if target is None:
+            snap_refuse("no snapshot is named %s" % a.name, ["silik snapshot list"])
+    else:
+        auto = [s for s in sets if s["auto"]]
+        if not auto:
+            snap_refuse("no snapshot made before an update to go back to", ["silik snapshot list   # one made by hand: silik rollback NAME", SNAP_PACKAGES])
+        target = auto[-1]
+    if not target["revert_entry"]:
+        snap_refuse("the snapshot %s has no Revert entry in the boot menu (it was not made by silik)" % target["name"],
+                    ["sudo snapm snapset revert %s   # by hand: start the kernel of the snapshot's day afterwards" % target["name"]])
+    if target["status"] == "Invalid":
+        snap_refuse("the snapshot %s is invalid (the pool ran out of room for it): it cannot be reverted" % target["name"], ["silik snapshot list", SNAP_PACKAGES])
+    when = snap_when(target["time"], time.time())
+    if target["status"] != "Reverting":
+        if not ctx.dry and not a.yes:
+            if not sys.stdin.isatty():
+                die("going back discards what was written to / since %s: add --yes" % when, 2)
+            print("silik: / goes back to the snapshot %s of %s. What was written to / since then is discarded: packages, /etc, /var, /opt. /home is kept as it is now." % (target["name"], when))
+            try:
+                ok = input("silik: go back? [y/N] ").strip().lower() in ("y", "yes", "s", "si", "sí")
+            except EOFError:
+                ok = False
+            if not ok:
+                die("nothing changed", 1)
+        ctx.run(as_root(["snapm", "snapset", "revert", target["name"]]))
+    else:
+        print("silik: the revert of %s has started already" % target["name"])
+    entries = bls_entries() or []
+    entry = next((e for e in entries if e["snapm"] == ("revert", target["uuid"])), None)
+    if entry or ctx.dry:
+        ctx.run(as_root(["grub2-reboot", entry["id"] if entry else "MACHINEID-BOOTID-VERSION"]), check=False)
+        if ctx.dry:
+            return 0
+        print("silik: restart to finish: systemctl reboot   (the entry \"%s\" starts, once; nothing is restarted by silik)" % (entry["title"] if entry else "Revert ..."))
+    else:
+        print("silik: restart to finish, and choose the entry \"Revert %s ...\" in the boot menu (its entry was not found in %s/loader/entries)" % (target["name"], SNAP_BOOT))
+    print("silik: on that start / is as it was on %s, and `silik rollback finish` puts the boot menu in step by itself" % when)
+    return 0
+
+
+def snap_doc_probe():
+    """what the doctor's row reads: files alone, no command"""
+    return {"root": snap_root(), "snapm": bool(shutil.which("snapm")), "booted": snap_booted(),
+            "flag": read(SNAP_FLAG, None), "hold": read(SNAP_HOLD, None)}
+
+
+def doc_probe_rollback(probe):
+    """the system area's probe, with what the row "rollback" reads beside it (kept apart from doc_probe_system)"""
+    def both():
+        st = probe()
+        st["rollback"] = snap_doc_probe()
+        return st
+    return both
+
+
+def doc_rollback(st, rows):
+    """the row "rollback" of `silik doctor system`: is there a way back from an update that breaks the machine.
+    ST["rollback"] is what snap_doc_probe() read (doc_probe_rollback puts it there; the tests give made-up ones);
+    a system that was not asked gets no row"""
+    r = st.get("rollback")
+    if r is None:
+        return
+    kind, uuid = r["booted"]
+    no = snap_unavailable(r["root"], r["snapm"])
+    if kind == "snapshot":
+        doc_row(rows, "system", "rollback", "rollback", "warn", "started from a snapshot: nothing is updated here",
+                ["silik rollback   # makes this state the system", "systemctl reboot   # and the normal entry: the system as it is"])
+    elif r["hold"] is not None:
+        doc_row(rows, "system", "rollback", "rollback", "warn", "the automatic updates wait since the rollback%s" % (" of %s" % r["hold"].strip()[:16].replace("T", " ") if r["hold"].strip() else ""),
+                ["silik update   # updates now, with a snapshot first; the automatic updates go on after it"])
+    elif r["root"] is None:
+        doc_row(rows, "system", "rollback", "rollback", "unknown", "what / is on cannot be seen%s" % (" (inside a container)" if st.get("container") else ""))
+    elif no:
+        doc_row(rows, "system", "rollback", "rollback", "warn", no[0].replace("snapshots are not available", "no snapshot before updates"), no[1][:2])
+    elif r["flag"] is not None:
+        doc_row(rows, "system", "rollback", "rollback", "warn", "the last update was made without a snapshot: %s" % (r["flag"].strip() or "the reason was not noted"),
+                ["silik snapshot status", SNAP_PACKAGES])
+    else:
+        doc_row(rows, "system", "rollback", "rollback", "ok", "a snapshot of / is made before each update (LVM thin, snapm); silik rollback goes back")
+
+
 # ------------------------------------------------------------------ doctor
 # `silik doctor [AREA...]`: one read-only look at the whole workstation, area by area, with the judgement of `silik
 # secure status`: ok / warn / bad / unknown (unknown when the subject cannot be seen, never ok) and, on every row that
@@ -3875,6 +4693,7 @@ def doc_check_system(st):
         doc_row(rows, "system", "restart", "restart", "unknown", "no restart note; the installed kernels are not known (no kernel-core package)" + here)
 
     doc_updates(st, rows)
+    doc_rollback(st, rows)
 
     seen = {}
     for mp in ("/", "/home", "/var"):
@@ -4474,6 +5293,7 @@ DOCTOR = {"system": (doc_probe_system, doc_check_system), "security": (doc_probe
           "graphics": (doc_probe_graphics, doc_check_graphics), "bench": (doc_probe_bench, doc_check_bench),
           "eda": (doc_probe_eda, doc_check_eda), "windows": (doc_probe_windows, doc_check_windows),
           "network": (doc_probe_network, doc_check_network)}
+DOCTOR["system"] = (doc_probe_rollback(doc_probe_system), doc_check_system)     # (the row "rollback": docs/ROLLBACK.md)
 
 
 def doctor_rows(areas):
@@ -4539,7 +5359,13 @@ def parser(only=None):
     x = s.add_parser("status", help="what this system is: base, kernel, SilikOS packages, the desktop"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=cmd_status)
     x = s.add_parser("update", help="update every package (the base's and SilikOS's), then say whether to restart; --auto: the automatic updates")
     x.add_argument("--auto", nargs="?", const="", choices=["", "all", "security", "off"], help="all | security | off (no value: which is on)")
+    x.add_argument("--no-snapshot", action="store_true", help="do not make the snapshot of / first")
     x.set_defaults(fn=cmd_update)
+    x = s.add_parser("rollback", help="go back to the system as it was before the last update (a snapshot of /); never restarts by itself")
+    x.add_argument("name", nargs="?", metavar="NAME | finish", help="a snapshot of `silik snapshot list` (default: the last one made before an update); finish: after the restart, by itself")
+    x.add_argument("--packages", action="store_true", help="without snapshots: dnf undoes the packages of the last update")
+    x.add_argument("--yes", action="store_true", help="do not ask")
+    x.set_defaults(fn=cmd_rollback)
     x = s.add_parser("identity", help="the names the system shows: silikos | base | show")
     x.add_argument("which", nargs="?", default="show", choices=["show", "silikos", "base"]); x.set_defaults(fn=cmd_identity)
     x = s.add_parser("look", help="the desktop's look: silik | bar | island, its accent and its glass (no argument: which are in use)")
@@ -4646,6 +5472,17 @@ def parser(only=None):
         x = h.add_parser("probe"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=hw_probe)
         x = h.add_parser("nvidia"); x.add_argument("action", choices=["install", "status"]); x.set_defaults(fn=hw_nvidia)
 
+    sn = s.add_parser("snapshot", help="snapshots of / (LVM thin, snapm): list | create [NAME] | delete NAME | status | setup (no command: status)")
+    sn.add_argument("--json", action="store_true"); sn.set_defaults(fn=snap_status)
+    sn = sn.add_subparsers(dest="cmd", metavar="{status,list,create,delete,setup}")
+    if only in (None, "snapshot"):
+        x = sn.add_parser("status", help="is there a way back: the root volume, the pool's use and growth, the snapshots kept, /boot"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=snap_status)
+        x = sn.add_parser("list", help="the snapshots, newest first"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=snap_list)
+        x = sn.add_parser("create", help="a snapshot of / now, with its entries in the boot menu (no NAME: manual.N)"); x.add_argument("name", nargs="?"); x.set_defaults(fn=snap_create)
+        x = sn.add_parser("delete", help="delete a snapshot and its boot entries"); x.add_argument("name"); x.add_argument("--yes", action="store_true"); x.set_defaults(fn=snap_delete)
+        x = sn.add_parser("setup", help="on a running system: snapm and boom-boot, the thin pool grows by itself, weekly trim"); x.set_defaults(fn=snap_setup)
+        x = sn.add_parser("auto"); x.set_defaults(fn=snap_auto)     # (the update hook's own, not listed: a snapshot, then the old ones pruned)
+
     c = s.add_parser("secure", help="security: an audit of this system, and the SilikOS defaults").add_subparsers(dest="cmd")
     if only in (None, "secure"):
         x = c.add_parser("status", help="read-only audit: ok / warn / bad / unknown, and the command that fixes each")
@@ -4661,7 +5498,7 @@ def parser(only=None):
 WIN_SWITCHES = ("--prefix", "--no-net", "--no-sandbox")
 
 
-GROUPS = ("eda", "dev", "win", "power", "hw", "secure")   # the groups with commands of their own (parser(only=...))
+GROUPS = ("eda", "dev", "win", "power", "hw", "secure", "snapshot")   # the groups with commands of their own (parser(only=...))
 
 
 def main(argv=None):

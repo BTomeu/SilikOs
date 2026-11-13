@@ -1,0 +1,14 @@
+# SilikOS: the start after `silik rollback` (from the boot entry "Revert ...", which has snapm.revert= on its kernel
+# line): / is as the snapshot had it, /boot is not in the snapshot. `silik rollback finish` takes out of the boot
+# menu the kernels the reverted package database does not know, sets the default kernel, removes the entries of the
+# snapshot that is gone, and makes the automatic updates wait for `silik update` (docs/ROLLBACK.md).
+# Started by multi-user.target (a link in this package, no enabling); it does nothing on any other start.
+[Unit]
+Description=SilikOS: the boot menu in step with / after a rollback
+ConditionKernelCommandLine=snapm.revert
+After=local-fs.target
+Before=silikos-update.service silikos-security-update.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/silik rollback finish

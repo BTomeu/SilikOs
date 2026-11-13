@@ -194,3 +194,59 @@ jobs:
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "SilikOS $GITHUB_REF_NAME" \
             --notes "The ISO installs the system from the base's own package sources (network). What has and has not been run: docs/STATUS.md; the installation test of this tag: branch ci-results. Source packages (*.src.rpm): SilikOS's own here; those of the tools the ISO carries in the releases eda-tools, dev-tools and wine-* (older builds in sources-archive); those of the base's packages in the ISO's installer at vault.almalinux.org (tools/fetch_base_sources.sh lists and fetches them)." \
             dist/SilikOS-*-netinstall.iso dist/*.rpm
+
+  # The way back from an update (docs/ROLLBACK.md, its test plan's steps 1-6, 8 and 10), in virtual machines with the
+  # ISO: an unattended installation whose kickstart names no partitioning scheme (the installer's default on this
+  # ISO must be LVM thin), `silik snapshot create`, the prune, a real downgrade and the real update service (its
+  # snapshot first), a start from the snapshot's boot entry, `silik rollback` there, the start from the Revert entry
+  # with `silik rollback finish` (the default kernel has its modules), the normal start after it; then a second,
+  # small installation on plain partitions, where `silik snapshot` says "not available" and `silik rollback
+  # --packages` goes back. The ISO is built here from the packages job's packages (the system alone, without the
+  # other workflows' releases), beside the installation test, which it does not touch.
+  # continue-on-error: this job is new and has never run (written 13/11/2026 where nothing of LVM, KVM or a boot
+  # could run): it must not stop the ISO or a release until it has passed. Each step of the plan is an annotation.
+  rollback-test:
+    needs: packages
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    timeout-minutes: 170
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - name: KVM for the runner's user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+      - name: Tools and disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          bash tools/ci_apt.sh rpm createrepo-c xorriso mtools cpio isomd5sum qemu-system-x86 qemu-utils
+          df -h /
+      # our packages as the packages job built them (in EL 9, with the base's rpmbuild)
+      - uses: actions/download-artifact@v4
+        with: { name: silikos-packages, path: build/repo }
+      - name: The ISO (the system alone)
+        run: |
+          createrepo_c --quiet build/repo && ls build/repo
+          bash tools/build_iso.sh
+      - name: Thin layout, snapshot, update, the snapshot's start, rollback, finish; then a disk without LVM thin
+        run: bash tests/install/rollback.sh build/SilikOS-*-netinstall.iso build/rollback-test
+      - name: The report
+        if: always()
+        run: |
+          {
+            echo '### SilikOS rollback test (docs/ROLLBACK.md)'
+            echo '```'
+            cat build/rollback-test/report.txt 2>/dev/null || echo 'no report: see the consoles (artifact rollback-test)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rollback-test
+          path: |
+            build/rollback-test/*.log
+            build/rollback-test/*.txt
+            build/rollback-test/*.ks

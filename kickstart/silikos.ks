@@ -45,6 +45,10 @@ silik-dev
 silik-win
 silikos-security
 silikos-power
+# the way back from an update (docs/ROLLBACK.md): the base's snapshot manager and its boot entries (AppStream). With
+# / on an LVM thin volume (the installer's Automatic partitioning on SilikOS) a snapshot is made before each update
+snapm
+boom-boot
 %end
 
 %post --log=/root/silikos-post.log
@@ -60,4 +64,12 @@ dconf update || :
 # the firewall's default zone is the SilikOS one (package silikos-security): incoming dropped, outgoing free.
 # The offline command also leaves a copy of the zone in /etc, which would hide the package's file on updates.
 firewall-offline-cmd --set-default-zone=silikos && rm -f /etc/firewalld/zones/silikos.xml || :
+# when / is on an LVM thin volume (what the installer's Automatic partitioning makes on SilikOS; any other choice in
+# its Installation Destination screen is left as it is): the thin pool grows by itself, from the free space the
+# installer leaves in the volume group (profile silikos-thin of silikos-security: at 70 % used, by 20 %). Only the
+# profile's name is written to the pool; nothing is created, resized or erased. On a running system:
+# `silik snapshot setup`; `silik snapshot status` reads it back
+root_lv=$(findmnt -n -o SOURCE /)
+pool=$(lvs --noheadings -o vg_name,pool_lv "$root_lv" | awk 'NF == 2 { print $1 "/" $2 }')
+if [ -n "$pool" ]; then lvchange --metadataprofile silikos-thin "$pool" || :; fi
 %end

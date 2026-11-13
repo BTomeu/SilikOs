@@ -94,6 +94,16 @@ TEXT = {
            "dev_ccache": "la caché del compilador (ccache): su estado y aciertos"},
 }
 
+# the way back from an update (silik snapshot, silik rollback: docs/ROLLBACK.md); in a block of its own
+for _lang, _words in (
+        ("en", {"snapshot": "snapshots of the system: is there a way back from an update", "snapshot_create": "snapshot: one of the system now",
+                "rollback": "rollback: the system as it was before the last update (asks first; then a restart)"}),
+        ("ca", {"snapshot": "instantànies del sistema: es pot tornar enrere d'una actualització?", "snapshot_create": "instantània: una del sistema ara",
+                "rollback": "torna enrere: el sistema com era abans de la darrera actualització (pregunta abans; després cal reiniciar)"}),
+        ("es", {"snapshot": "instantáneas del sistema: ¿se puede volver atrás de una actualización?", "snapshot_create": "instantánea: una del sistema ahora",
+                "rollback": "vuelve atrás: el sistema como era antes de la última actualización (pregunta antes; después hay que reiniciar)"})):
+    TEXT[_lang].update(_words)
+
 
 def lang_of(env=None):
     env = os.environ if env is None else env
@@ -219,6 +229,9 @@ def system_items(t, boxes=(), prefixes=(), programs=()):
         Item("sys/status", t["status"], [SILIK, "status"], True),
         Item("sys/doctor", t["doctor"], [SILIK, "doctor"], True),
         Item("sys/update", t["update"], [SILIK, "update"], True),
+        Item("sys/snapshot", t["snapshot"], [SILIK, "snapshot", "status"], True),
+        Item("sys/snapshot-create", t["snapshot_create"], [SILIK, "snapshot", "create"], True),
+        Item("sys/rollback", t["rollback"], [SILIK, "rollback"], True),
         Item("sys/secure", t["secure"], [SILIK, "secure", "status"], True),
         Item("sys/secure-apply", t["secure_apply"], [SILIK, "secure", "apply"], True),
         Item("sys/hardware", t["hw"], [SILIK, "hw", "probe"], True),

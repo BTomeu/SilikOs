@@ -1,0 +1,39 @@
+# ======================================================================================================================
+# CI ONLY (tests/install/rollback-plain.ks.in). NEVER PART OF THE SHIPPED KICKSTART OR OF THE ISO.
+# The second installation of the rollback test: a disk WITHOUT LVM thin (plain partitions, as a person may choose in
+# the installer), where `silik snapshot` must say "not available" and the way back is `silik rollback --packages`.
+# tests/install/rollback.sh gives it a small package set (the base's core, silik-tools, silikos-security): this
+# installation is about what / is on, not about the desktop.
+# ======================================================================================================================
+text
+ignoredisk --only-use=vda
+zerombr
+clearpart --all --initlabel --drives=vda
+autopart --type=plain --nohome
+lang en_US.UTF-8
+keyboard us
+timezone UTC --utc
+rootpw --plaintext silikos-ci
+firstboot --disable
+poweroff
+
+%post --log=/root/silikos-ci-post.log
+touch /etc/silikos-ci-plain
+install -m 0755 /dev/stdin /usr/local/sbin/silikos-ci-rollback <<'CHECK'
+@CHECK@
+CHECK
+cat > /etc/systemd/system/silikos-ci-rollback.service <<'UNIT'
+[Unit]
+Description=SilikOS CI: the rollback test on a disk without LVM thin, reported on the serial port
+After=multi-user.target network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/silikos-ci-rollback
+StandardOutput=journal
+TimeoutStartSec=30min
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl enable silikos-ci-rollback.service
+%end

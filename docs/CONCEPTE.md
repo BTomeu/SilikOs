@@ -85,6 +85,7 @@ ensenya la línia que executa**: res es fa d'amagat.
 ```
 silik status                     què és aquest sistema
 silik update                     actualitza-ho tot (també ho fa sol cada dia)
+silik rollback                   torna el sistema a com era abans de la darrera actualització (docs/ROLLBACK.md)
 silik look island --accent cobalt l'aspecte i el color
 silik eda try                    les eines de xips fan feines de veritat i diuen si funcionen
 silik dev can up can0 500k       engega un lector CAN a 500 kbit/s
