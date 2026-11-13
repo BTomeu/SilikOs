@@ -67,9 +67,12 @@ else
   echo 'GRUB_DISTRIBUTOR="SilikOS"' >> /etc/default/grub
 fi
 dconf update || :
-# an account with no password does not log in (the audit of 13/11/2026: the base's login profile accepts one, its
-# `nullok`; the base's own switch for it, where the profile has it)
-authselect enable-feature without-nullok || :
+# an account with no password does not log in (the audit of 13/11/2026: the base's login files accept one, their
+# `nullok`). The base's own tool and its own switch: where a profile is selected the switch is added to it; a new
+# installation has none selected (seen in the installation test: "No existing configuration detected"), so the
+# base's default profile is selected with the switch
+if authselect current | grep -q 'Profile ID'; then authselect enable-feature without-nullok || :
+else authselect select sssd without-nullok --force || :; fi
 # the firewall's default zone is the SilikOS one (package silikos-security): incoming dropped, outgoing free.
 # The offline command also leaves a copy of the zone in /etc, which would hide the package's file on updates.
 firewall-offline-cmd --set-default-zone=silikos && rm -f /etc/firewalld/zones/silikos.xml || :

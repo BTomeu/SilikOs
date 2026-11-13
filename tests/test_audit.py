@@ -159,7 +159,9 @@ class Defaults(unittest.TestCase):
 
     def test_no_login_without_a_password(self):
         ks = self.read("kickstart/silikos.ks")
-        self.assertIn("\nauthselect enable-feature without-nullok || :\n", ks)
+        self.assertIn("authselect enable-feature without-nullok || :", ks)
+        # a new installation has no profile selected: the switch alone did nothing there (CI run 43518301410)
+        self.assertIn("authselect select sssd without-nullok --force || :", ks)
 
 
 if __name__ == "__main__":
