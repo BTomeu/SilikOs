@@ -441,13 +441,21 @@ STATE = (
         (("installation", "instal·lació", "instalación"), (
             "The ISO installs unattended in a virtual machine, the installed system boots and checks itself. "
             "GitHub Actions, workflow CI; the last complete run when this page was written: 13/11/2026, commit "
-            "4c4163f, 120 checks ok, none failed; it started in 9.3 s with about 985 MB in use.",
+            "4c4163f, 120 checks ok, none failed; it started in 9.3 s with about 985 MB in use. Beside the stock "
+            "AlmaLinux 9 Workstation in one virtual machine (workflow Compare) it used 151 to 166 MB less memory and "
+            "reached the desktop 0.65 to 0.85 s later (its session is X11, the base's Wayland): not faster to start.",
             "La ISO s'instal·la sola en una màquina virtual, el sistema instal·lat arrenca i es revisa ell mateix. "
             "GitHub Actions, workflow CI; l'última execució completa quan es va escriure aquesta pàgina: 13/11/2026, "
-            "commit 4c4163f, 120 comprovacions correctes, cap de fallada; va arrencar en 9,3 s amb uns 985 MB en ús.",
+            "commit 4c4163f, 120 comprovacions correctes, cap de fallada; va arrencar en 9,3 s amb uns 985 MB en ús. Al "
+            "costat de l'AlmaLinux 9 Workstation de sèrie en una mateixa màquina virtual (workflow Compare) va fer "
+            "servir de 151 a 166 MB menys de memòria i va arribar a l'escriptori de 0,65 a 0,85 s més tard (la seva "
+            "sessió és X11, la de la base Wayland): no arrenca més ràpid.",
             "La ISO se instala sola en una máquina virtual, el sistema instalado arranca y se revisa a sí mismo. "
             "GitHub Actions, workflow CI; la última ejecución completa cuando se escribió esta página: 13/11/2026, "
-            "commit 4c4163f, 120 comprobaciones correctas, ninguna fallida; arrancó en 9,3 s con unos 985 MB en uso.")),
+            "commit 4c4163f, 120 comprobaciones correctas, ninguna fallida; arrancó en 9,3 s con unos 985 MB en uso. Al "
+            "lado del AlmaLinux 9 Workstation de serie en una misma máquina virtual (workflow Compare) usó de 151 a "
+            "166 MB menos de memoria y llegó al escritorio de 0,65 a 0,85 s más tarde (su sesión es X11, la de la "
+            "base Wayland): no arranca más rápido.")),
         (("desktop", "escriptori", "escritorio"), (
             "The three looks, Start, the COMMAND bar, the login and lock screens: on that installed system, on its "
             "screen.",
