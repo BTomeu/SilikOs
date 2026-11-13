@@ -1,0 +1,72 @@
+# SilikOS without a network: the offline ISO (tools/build_offline_iso.sh: the installer + a mirror of every package
+# the installation takes, made by `silik mirror create`) is built, then installed, unattended, in a virtual machine
+# (KVM) that has no network device at all (tests/install/offline.sh: the CI's own run.sh, QEMU started with
+# `-nic none`); the installed system boots and checks itself as in the CI. Started by hand only: it downloads
+# 2.7 GB of packages and builds a 4 GB ISO. docs/OFFLINE.md.
+name: Offline ISO
+on:
+  workflow_dispatch:
+concurrency:
+  group: offline-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 200
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - name: KVM for the runner's user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+      - name: Tools and disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          bash tools/ci_apt.sh rpm createrepo-c xorriso mtools cpio isomd5sum qemu-system-x86 qemu-utils imagemagick gnupg
+          df -h /
+      - name: Unit tests
+        run: python3 -m unittest discover -s tests
+      # in EL 9, with the base's own rpmbuild, dnf, rpmkeys and createrepo_c: our packages, then the mirror of the
+      # whole SilikOS set (every package's signature checked on the way in)
+      - name: Packages and the mirror
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src almalinux:9 bash -c '
+            set -e
+            dnf -y -q install rpm-build createrepo_c dnf-plugins-core epel-release gnupg2 > /dev/null
+            bash tools/build_rpms.sh
+            python3 packages/silik-tools/files/silik mirror create build/mirror --silikos build/repo --yes | grep -v "^([0-9]*/[0-9]*): "
+            python3 packages/silik-tools/files/silik mirror verify build/mirror'
+          sudo chown -R "$(id -u):$(id -g)" build
+          du -sh --exclude=.root build/mirror
+      - name: The offline ISO
+        run: |
+          bash tools/build_offline_iso.sh build/mirror
+          ls -la build/SilikOS-*-offline.iso
+          df -h /
+      - name: Install it in a virtual machine without a network device, boot the installed system, check it
+        run: bash tests/install/offline.sh build/SilikOS-*-offline.iso build/offline-install-test
+      - name: The report
+        if: always()
+        run: |
+          {
+            echo '### SilikOS installed from the offline ISO, no network device'
+            echo '```'
+            cat build/offline-install-test/report.txt 2>/dev/null || echo 'no report: see the installer console (artifact offline-install-test)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: offline-install-test
+          path: |
+            build/offline-install-test/*.log
+            build/offline-install-test/*.txt
+            build/offline-install-test/*.png
+            build/offline-install-test/*.ppm
+            build/offline-install-test/ci.ks
+            build/SilikOS-*-offline.iso.sha256

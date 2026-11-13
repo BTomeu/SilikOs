@@ -1,0 +1,14 @@
+[
+ {"address": "mirror/status", "argv": ["mirror", "status"],
+  "en": "Offline mirror: is this machine taking its packages from one, and what it holds",
+  "ca": "Mirall sense xarxa: si aquesta màquina en pren els paquets, i què conté",
+  "es": "Espejo sin red: si esta máquina toma de él los paquetes, y qué contiene", "terminal": true},
+ {"address": "mirror/off", "argv": ["mirror", "use", "off"],
+  "en": "Offline mirror off: the package sources as they were before",
+  "ca": "Treu el mirall sense xarxa: les fonts de paquets com eren abans",
+  "es": "Quita el espejo sin red: las fuentes de paquetes como estaban antes", "terminal": true},
+ {"address": "mirror/help", "argv": ["mirror", "--help"],
+  "en": "Offline mirror: its commands (create, update, verify, serve, use, pack, unpack)",
+  "ca": "Mirall sense xarxa: les seves ordres (create, update, verify, serve, use, pack, unpack)",
+  "es": "Espejo sin red: sus órdenes (create, update, verify, serve, use, pack, unpack)", "terminal": true}
+]

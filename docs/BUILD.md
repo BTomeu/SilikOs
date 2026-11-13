@@ -7,6 +7,7 @@
 | Dependency names | `bash tools/check_deps.sh` | an EL9 system with its repositories and EPEL |
 | Installer ISO | `bash tools/build_iso.sh [AlmaLinux-9-…-boot.iso]` (the base ISO is checked first: its sha256 against AlmaLinux's signed `CHECKSUM`) | `xorriso`, `mtools`, `cpio`, `curl`, `gpg`, `implantisomd5` (isomd5sum), repo.almalinux.org |
 | Installer ISO for ARM | `SILIK_ARCH=aarch64 bash tools/build_iso.sh` (AlmaLinux's aarch64 boot ISO: UEFI only) | the same |
+| Installer ISO that needs no network | `bash tools/build_offline_iso.sh [MIRROR_DIR [boot.iso]]`: the network installer + a mirror made by `silik mirror create MIRROR_DIR --silikos build/repo` (on EL 9, as root) as `/mirror`, verified before the ISO is written and again by the kickstart before it installs (`docs/OFFLINE.md`) | what the installer ISO needs, and `python3`, `rpm` (rpmkeys), `gpg`; the mirror's 2.7 GB twice |
 | The base's sources | `bash tools/fetch_base_sources.sh [--list] [--limit N]`: the source packages of the boot ISO's installer image, from vault.almalinux.org, each checked by AlmaLinux's signature | `xorriso`, `unsquashfs`, `rpm`, `gpg`; several GB |
 | Brand rasters (committed) | `bash tools/gen_brand.sh` | `rsvg-convert`, the Cascadia Mono font |
 
