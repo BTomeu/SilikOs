@@ -6495,21 +6495,38 @@ class HwTable:
     """which module claims which device: the patterns of a modules.alias, by bus and vendor"""
 
     def __init__(self):
-        self.by = {}
-        self.n = 0
+        self.raw = {}       # (bus, vendor) -> the rows as read
+        self.by = {}        # (bus, vendor) -> the same, their patterns taken apart: made when a device of that vendor asks
         self.kernel = ""
 
     def add(self, alias, module, src):
-        bus, f = hw_fields(alias)
-        if bus:
-            self.by.setdefault((bus, f[0]), []).append((f, module.replace("-", "_"), src))
-            self.n += 1
+        # (a table is 18 000 rows and a machine has a few dozen devices: a row's pattern is taken apart only when a
+        # device of its vendor is looked up. Taking all of them apart was most of the time of `silik hw check`)
+        bus = alias[:4]
+        if bus == "pci:":
+            key = ("pci", "*" if alias[5:6] == "*" else alias[5:13])
+        elif bus == "usb:":
+            key = ("usb", "*" if alias[5:6] == "*" else alias[5:9])
+        else:
+            return
+        self.raw.setdefault(key, []).append((alias, module, src))
+        self.by.pop(key, None)          # (a row added after its vendor was looked up)
+
+    def rows(self, key):
+        r = self.by.get(key)
+        if r is None:
+            r = self.by[key] = []
+            for alias, module, src in self.raw.get(key, ()):
+                bus, f = hw_fields(alias)
+                if bus:
+                    r.append((f, module.replace("-", "_"), src))
+        return r
 
     def claim(self, bus, dev, srcs):
         """the modules (of the sources SRCS) whose pattern DEV satisfies. DEV: the fields of the pattern, None for one
         that is not known. (sure, maybe): maybe = a pattern for this very ID that asks for a field DEV does not have"""
         sure, maybe = [], []
-        for f, mod, src in self.by.get((bus, dev[0]), []) + self.by.get((bus, "*"), []):
+        for f, mod, src in self.rows((bus, dev[0])) + self.rows((bus, "*")):
             if src not in srcs:
                 continue
             unknown = False
@@ -8284,10 +8301,85 @@ def load_plugin(name):
     return mod
 
 
+# A command's parser is made only when that command is the one typed. argparse makes every sub-parser when it is added
+# (59 of them, 10-12 ms of each start of silik on EL 9: docs/STATUS.md, 13/11/2026); here what is asked of a
+# sub-parser (add_argument, set_defaults, add_subparsers...) is written down and done when argparse takes it out of
+# the map to parse with it, or when something reads the map (the help of a group, `silik ask`, the tests).
+class _Later:
+    """a parser, or anything a parser's methods return, not made yet"""
+    def __init__(self, make=None):
+        self.__dict__["_make"], self.__dict__["_calls"], self.__dict__["_real"] = make, [], None
+
+    def __getattr__(self, name):
+        if self._real is not None:
+            return getattr(self._real, name)
+
+        def call(*a, **k):
+            child = _Later()
+            self._calls.append((name, a, k, child))
+            return child
+        return call
+
+    def _build(self):
+        if self._real is None:
+            self.__dict__["_real"] = self._make()
+            self._replay()
+        return self._real
+
+    def _replay(self):
+        calls, self.__dict__["_calls"] = self._calls, []
+        for name, a, k, child in calls:
+            child.__dict__["_real"] = getattr(self._real, name)(*a, **k)
+            if child._real is not None:
+                child._replay()
+
+
+class _LaterMap(dict):
+    """name -> parser: the parser is made when it is taken out"""
+    def __getitem__(self, k):
+        v = dict.__getitem__(self, k)
+        return v._build() if isinstance(v, _Later) else v
+
+    def get(self, k, default=None):
+        return self[k] if k in self else default
+
+    def values(self):
+        return [self[k] for k in self]
+
+    def items(self):
+        return [(k, self[k]) for k in self]
+
+
+class _LaterParsers(argparse._SubParsersAction):
+    def __init__(self, *a, **k):
+        super().__init__(*a, **k)
+        self._name_parser_map = self.choices = _LaterMap()
+
+    def add_parser(self, name, **kwargs):
+        # (as argparse's own, Python 3.9, without making the parser)
+        if kwargs.get("prog") is None:
+            kwargs["prog"] = "%s %s" % (self._prog_prefix, name)
+        aliases = kwargs.pop("aliases", ())
+        if "help" in kwargs:
+            self._choices_actions.append(self._ChoicesPseudoAction(name, aliases, kwargs.pop("help")))
+        cls = self._parser_class
+
+        def make():
+            q = cls(**kwargs)
+            q.register("action", "parsers", _LaterParsers)
+            return q
+        later = _Later(make)
+        dict.__setitem__(self._name_parser_map, name, later)
+        for alias in aliases:
+            dict.__setitem__(self._name_parser_map, alias, later)
+        return later
+
+
 def parser(only=None):
     """the command line. ONLY: the group typed (main reads it): the other groups get their name and help, which
     `silik --help` shows, but not their commands (building every command was 4-5 ms of each start: docs/STATUS.md)"""
     p = argparse.ArgumentParser(prog="silik", description="SilikOS system command")
+    p.register("action", "parsers", _LaterParsers)
     p.add_argument("--dry-run", action="store_true", help="print the commands, run nothing")
     p.add_argument("-q", "--quiet", action="store_true", help="do not print the `$ ...` lines")
     p.add_argument("--version", action="version", version="silik " + VERSION)
@@ -8492,7 +8584,8 @@ def parser(only=None):
             continue
         g = s.add_parser(name, help=text)
         if only == name:
-            load_plugin(name).register(g, sys.modules.get(__name__) or sys.modules["__main__"])   # (this module, however it was loaded)
+            # (a plugin gets the parser itself: it is the command typed, and a plugin may read what it made)
+            load_plugin(name).register(g._build(), sys.modules.get(__name__) or sys.modules["__main__"])   # (this module, however it was loaded)
     return p
 
 
