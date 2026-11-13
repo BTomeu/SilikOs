@@ -51,11 +51,11 @@ system keeps long file names; `silik mirror verify` on the other side is what ma
 | Command | What it does |
 |---|---|
 | `silik mirror create DIR --silikos FOLDER [--arch x86_64\|aarch64] [--keep N] [--add NAME]... [--sign KEYID] [--yes]` | A new mirror of the SilikOS set: what `kickstart/silikos.ks` installs, plus what the installer adds by itself (boot loader for BIOS and UEFI, kernel, the three languages, LVM / encryption / RAID tools: `INSTALLER` in the plugin), resolved by `dnf install --downloadonly` in an empty root, as the installer resolves it. Run as root (dnf resolves an installation as root only) |
-| `... create DIR --only-installed` | Instead of the SilikOS set: the packages installed on this machine. What no source offers any more is listed |
+| `... create DIR --only-installed` | Instead of the SilikOS set: the packages installed on this machine, by name (the newest version the sources offer: what its updates need). What no source offers is listed |
 | `... create DIR --ks FILE [--bare]` | Another kickstart's sources and packages (`--bare`: without the installer's additions) |
 | `silik mirror update DIR [--silikos FOLDER] [--add NAME] [--keep N] [--yes]` | The set resolved again; only what the mirror lacks is downloaded. The last N versions of each package stay (default 3), so `dnf downgrade` and `silik` rollbacks still find the one before |
 | `silik mirror verify DIR [--json] [--key FILE]` | Every file's sha256 against the manifest, every package of the base against the base's key **of this machine** (`/etc/pki/rpm-gpg`), files the manifest does not list. Exit 0 only when everything holds; what cannot be checked (a key that is not here) is `?`, not ok |
-| `silik mirror serve DIR --bind ADDRESS [--port 8080]` | Python's standard HTTP server, GET and HEAD only, no listings, dnf's working folder hidden. **No TLS, no authentication**: anyone who reaches the address reads the mirror (it holds nothing secret: public packages). What protects the content is each package's signature, checked by the machine that installs it |
+| `silik mirror serve DIR --bind ADDRESS [--port 8080]` | Python's standard HTTP server, GET and HEAD only, no listings, dnf's working folder hidden. **No TLS, no authentication**: anyone who reaches the address reads the mirror (it holds nothing secret: public packages). What protects the content is each package's signature, checked by the machine that installs it. It does not open the firewall: on a SilikOS host, `sudo firewall-cmd --add-port=8080/tcp` (the command says so) |
 | `sudo silik mirror use URL\|DIR [--key FILE]` | Writes `/etc/yum.repos.d/silikos-mirror.repo` (one section per repository of the mirror, `gpgcheck=1` against this machine's keys) and disables every other enabled repository with `dnf config-manager --set-disabled` (printed). Nothing is deleted; the files as they were are kept in `/etc/silikos/mirror/backup` |
 | `sudo silik mirror use off` | `dnf config-manager --set-enabled` for what was disabled, the mirror's file removed, and each repository file compared with its copy of before: byte for byte the same, or put back from the copy (a file somebody edited meanwhile is left alone, and said) |
 | `silik mirror status [URL\|DIR] [--json]` | Is a mirror in use; its generation, date, packages; whether what it serves is what its manifest says |
@@ -63,7 +63,7 @@ system keeps long file names; `silik mirror verify` on the other side is what ma
 
 Every command prints the commands it runs; `--dry-run` runs none of them.
 
-A machine that is not SilikOS (a plain EL 9) first needs dnf's `config-manager`:
+A machine without dnf's `config-manager` (the package `python3-dnf-plugins-core`; the `almalinux:9` image has it) is told so before anything is changed, with the command that takes it from the mirror:
 `dnf --disablerepo='*' --repofrompath=boot,http://10.0.0.5:8080/BaseOS --setopt=boot.gpgcheck=1 --setopt=boot.gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-AlmaLinux-9 install dnf-plugins-core`.
 
 ## Sizes (measured 13/11/2026, x86_64, AlmaLinux 9.8 + EPEL 9)
@@ -74,6 +74,7 @@ A machine that is not SilikOS (a plain EL 9) first needs dnf's `config-manager`:
 | Verifying it (sha256 + signatures) | | | 11.4 to 13.1 s |
 | An update with nothing new upstream | 0 downloaded | | 8 to 9 s |
 | `dnf install silik-tools silik-dev` from it, on a plain almalinux:9 | 201 | 431 MB | 25 to 28 s over HTTP, 22 to 23 s from a folder |
+| `create --only-installed` in the tools container (its 256 packages, by name: the newest versions) | 256 | 92.8 MB | 33 s; the container then upgraded 9 packages from it |
 | The network installer ISO (for comparison) | | 1.5 GB | |
 | The offline ISO, reduced set (`@core` + the installer's additions) | 400 | 2.5 GB (2 612 461 568 bytes) | built in 32 s |
 | The offline ISO, whole set | 1572 | 4.0 GB (4 224 057 344 bytes) | built in 53 s (the network installer and the mirror's verification included); its media check passes and the mirror read back from it verifies; **not installed** |
@@ -197,5 +198,6 @@ In an emulated machine (QEMU without KVM, **no network device**: `-nic none`), t
   source [A]: a disk layout or a language that asks for a package the mirror lacks would stop the installation at
   its dependency check, before anything is written. `--add NAME` is the remedy.
 - aarch64: `--arch aarch64` passes `--forcearch` to dnf and the ARM sources; not run.
-- `--only-installed` on a real SilikOS workstation (run with stand-ins only).
+- `--only-installed` on a real SilikOS workstation (run in a container: above).
+- The firewall line `serve` prints on a machine whose firewalld runs (no firewall is started in a test container).
 - A weekly delta's real size, and `metadata_expire=1h` on machines that stay on for weeks.

@@ -404,8 +404,9 @@ def sync(ctx, d, m, a, first):
                 if not os.path.exists(os.path.join(c, "packages", f)):
                     os.link(os.path.join(pk, f), os.path.join(c, "packages", f))
     if m["set"]["kind"] == "installed":
-        specs = [x for x in ctx.query(["rpm", "-qa", "--qf", "%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\\n"]).split()
-                 if not x.startswith("gpg-pubkey-")]
+        # (by name and architecture: the newest version the sources offer, which is what an update needs)
+        specs = sorted(set(x for x in ctx.query(["rpm", "-qa", "--qf", "%{NAME}.%{ARCH}\\n"]).split()
+                           if not x.startswith("gpg-pubkey.")))
         if not specs and not ctx.dry:
             die("rpm lists no installed packages")
         m["set"]["asked"] = len(specs)
@@ -679,6 +680,11 @@ def serve(ctx, a):
     say("No TLS and no authentication: whoever reaches this address reads the mirror, and what protects its content "
         "is each package's signature, checked by the machines that install from it (and the manifest: silik mirror "
         "status URL). Ctrl+C stops it.")
+    # (SilikOS's firewall zone drops incoming connections, and this command does not change a firewall)
+    zone = ctx.query(["firewall-cmd", "--get-default-zone"]).strip()
+    if zone:
+        say("This machine's firewall (zone %s) decides who reaches port %d; this command does not open it: "
+            "sudo firewall-cmd --add-port=%d/tcp (until the next restart; with --permanent, to stay)." % (zone, a.port, a.port))
     if ctx.dry:
         return 0
     import functools
@@ -730,6 +736,8 @@ def remote(target):
         url = "file://" + os.path.abspath(target)
     else:
         die("%s: a URL (http://HOST:PORT) or a folder" % target)
+    if re.search(r"[\s\x00-\x1f]", url):          # (it is written into a repository file: one line, no more)
+        die("a mirror's address has no spaces: %r" % url)
     try:
         m = json.loads(fetch(url + "/" + MANIFEST).decode())
     except Exception as e:                    # (urllib's errors, a manifest that is not JSON)
@@ -836,6 +844,10 @@ def use(ctx, a):
             die("--key: this mirror's metadata is not signed (silik mirror create --sign KEYID)")
         if not os.path.isfile(a.key) or not fingerprints(ctx, a.key):
             die("%s is not a key gpg can read" % a.key)
+    if not ctx.query(["dnf", "config-manager", "--help"]):
+        die("dnf has no config-manager here (the package dnf-plugins-core): from the mirror itself,\n  sudo dnf "
+            "--disablerepo='*' --repofrompath=boot,%s/BaseOS --setopt=boot.gpgcheck=1 --setopt=boot.gpgkey=file://%s "
+            "install dnf-plugins-core" % (url, os.path.join(KEY_DIR, KEYS["almalinux"][0])))
     st = state() or {"disabled": [], "files": {}}
     first = not st["files"]
     ids = enabled_repos(ctx)

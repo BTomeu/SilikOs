@@ -66,6 +66,11 @@ if me == "dnf":
                     if on:
                         print("%-23s %s" % (rid, rid))
         sys.exit(0)
+    if "config-manager" in argv and "--help" in argv:
+        if os.environ.get("STANDIN_NO_CONFIG_MANAGER"):
+            sys.exit("No such command: config-manager.")
+        print("usage: dnf config-manager")
+        sys.exit(0)
     if "config-manager" in argv:
         on = "--set-enabled" in argv
         ids = argv[argv.index("--set-enabled" if on else "--set-disabled") + 1:]
@@ -162,8 +167,9 @@ if me == "rpm":
     if "-qa" in argv:
         fmt = argv[argv.index("--qf") + 1]
         for line in os.environ.get("STANDIN_INSTALLED", "").split():
-            name, rest = line.rsplit("-", 2)[0], line
-            print(name if fmt == "%{NAME}\\n" else rest)
+            name = line.rsplit("-", 2)[0]
+            arch = line.rsplit(".", 1)[1] if "." in line.rsplit("-", 1)[1] else "(none)"      # (as rpm says of gpg-pubkey)
+            print(name if fmt == "%{NAME}\\n" else name + "." + arch)
         sys.exit(0)
     path = argv[-1]
     m = re.match(r"^(.+)-([^-]+)-([^-]+)\.([^.]+)\.rpm$", os.path.basename(path))

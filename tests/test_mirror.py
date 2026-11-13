@@ -248,9 +248,10 @@ class Create(Base):
         self.env["STANDIN_INSTALLED"] = "bash-5.1-1.el9.x86_64 tzdata-2026a-1.el9.noarch vendor-tool-1-1.x86_64 gpg-pubkey-b86b3716-61e69f29"
         out = self.ok("mirror", "create", self.m, "--only-installed", "--yes")
         dnf = [c for c in self.calls("dnf") if "install" in c][0]
-        self.assertIn("bash-5.1-1.el9.x86_64", dnf)
+        self.assertIn("bash.x86_64", dnf)                    # (by name: the newest version, what an update needs)
+        self.assertIn("tzdata.noarch", dnf)
         self.assertIn("--setopt=strict=0", dnf)
-        self.assertNotIn("gpg-pubkey-b86b3716-61e69f29", dnf)
+        self.assertEqual([x for x in dnf if x.startswith("gpg-pubkey")], [])
         self.assertNotIn("kernel", dnf)
         self.assertIn("vendor-tool", out)                    # (said: installed here, offered by no source)
         self.assertEqual(self.manifest()["set"]["missing"], ["vendor-tool"])
@@ -486,6 +487,15 @@ class Use(Base):
         self.create()
         rc, _, err = self.silik("mirror", "use", self.j("nowhere"))
         self.assertEqual(rc, 1)
+        rc, _, err = self.silik("mirror", "use", "http://127.0.0.1:1/a b")
+        self.assertEqual(rc, 1)
+        # a machine without dnf's config-manager is told how to take it from the mirror, before anything is changed
+        self.env["STANDIN_NO_CONFIG_MANAGER"] = "1"
+        rc, _, err = self.silik("mirror", "use", self.m)
+        self.assertEqual(rc, 1)
+        self.assertIn("--repofrompath=boot,file://%s/BaseOS" % self.m, err)
+        self.assertEqual(os.listdir(self.j("state")), [])
+        self.env.pop("STANDIN_NO_CONFIG_MANAGER")
         self.env["SILIK_ARCH"] = "aarch64"
         rc, _, err = self.silik("mirror", "use", self.m)
         self.assertIn("is for x86_64, this machine is aarch64", err)
