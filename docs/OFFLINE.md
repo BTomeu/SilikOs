@@ -15,8 +15,9 @@ SilikOS ja s'hi pot instal·lar i actualitzar:
   d'una ISO reduïda en una màquina emulada sense targeta de xarxa; i **la ISO completa instal·lada en una màquina
   virtual sense targeta de xarxa** (workflow `Offline ISO`, run 43446493706, 13/11/2026): s'instal·la i arrenca fins a
   l'escriptori, 81 comprovacions bé i 4 de fallades, totes quatre perquè aquella ISO no portava els paquets dels
-  releases (OpenOCD, dfu-util, les eines EDA obertes, Wine). El workflow ara els posa al mirall; aquesta segona
-  execució encara no ha acabat. **No provat**: cap maquinari real.
+  releases (OpenOCD, dfu-util, les eines EDA obertes, Wine). La segona (run 43454607683), amb els 26 paquets dels
+  releases al mirall (3,1 G; la ISO, 4,6 G): 107 comprovacions bé i 1 de fallada, que era un error de `silik` (no
+  trobava DEVSIM tot i ser-hi), ja arreglat. **No provat**: cap maquinari real.
 - **Els paquets propis de SilikOS encara no van signats**: dins del mirall només els protegeix el sha256 del manifest.
 
 ---
@@ -205,11 +206,6 @@ no network; it does not show the SilikOS desktop installed from the whole ISO.
 
 ## Not verified
 
-- **The offline ISO with the releases' packages.** `.github/workflows/offline.yml` (started by hand) builds the mirror
-  and the ISO on `ubuntu-24.04` and installs it with the CI's own `tests/install/run.sh` in a machine without a
-  network device (`tests/install/offline.sh`). Its first run (43446493706) installed and started the system, 81
-  checks ok and 4 failed: the ISO had none of the releases' packages (OpenOCD, dfu-util, the open EDA tools, Wine).
-  The workflow now adds them to the mirror's set; not yet run to its end.
 - Real hardware, a real USB stick, a real lab. The installer's screens with this ISO (graphical mode: the emulated
   test was in text mode).
 - The list of what the installer adds by itself (`INSTALLER`) beyond the boot loader, which was read in anaconda's

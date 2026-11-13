@@ -47,7 +47,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.7.0"
+VERSION = "0.7.1"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -466,10 +466,15 @@ SPICEINIT_NOTE = "* silik eda tune: the threads ngspice evaluates transistor mod
 
 
 def devsim_module():
-    """the folder of DEVSIM's Python module, or None. Looked for, not imported: importing it loads its libraries"""
-    import importlib.util
+    """the folder of DEVSIM's Python module, or None. Looked for, not imported: importing it loads its libraries.
+    /usr/bin/silik runs without the site module (python3 -S: 2-3 ms of every start), so its own path has no
+    site-packages, where the module is: those folders are asked of site. (13/11/2026: the first system installed
+    after -S said "devsim is not on the system" with DEVSIM installed; the offline ISO's run caught it)"""
+    import importlib.machinery
+    import site
     try:
-        spec = importlib.util.find_spec("devsim")
+        paths = list(sys.path) + [d for d in site.getsitepackages() if d not in sys.path]
+        spec = importlib.machinery.PathFinder.find_spec("devsim", paths)
     except (ImportError, ValueError):
         return None
     return os.path.dirname(spec.origin) if spec and spec.origin else None

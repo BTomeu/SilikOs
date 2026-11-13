@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import stat
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -104,6 +105,29 @@ class Tools(Case):
         self.assertRegex(o, r"(?m)^● ngspice +found")
         self.assertIn("ngspice threads: 2 (its default)", o)
         self.assertNotRegex(o, r"missing: .*ngspice")
+
+    def test_devsim_is_found_by_silik_as_it_is_installed(self):
+        """/usr/bin/silik is `python3 -IS`: no site module, so no site-packages on its path, and that is where DEVSIM
+        is. The first system installed with -S said "devsim is not on the system" (offline ISO, run 43454607683)"""
+        site = os.path.join(self.tmp, "site-packages")
+        os.makedirs(os.path.join(site, "devsim"))
+        with open(os.path.join(site, "devsim", "__init__.py"), "w") as f:
+            f.write("raise RuntimeError('silik must not import DEVSIM to find it')\n")
+        code = ("import importlib.machinery, importlib.util, sys\n"
+                "assert sys.flags.no_site and not any('site-packages' in p for p in sys.path), sys.path\n"
+                "l = importlib.machinery.SourceFileLoader('silik_main', sys.argv[1])\n"
+                "m = importlib.util.module_from_spec(importlib.util.spec_from_loader('silik_main', l)); l.exec_module(m)\n"
+                "import site\n"
+                "real = site.getsitepackages()\n"
+                "assert all(p not in sys.path for p in real), (real, sys.path)\n"
+                "site.getsitepackages = lambda: real + [sys.argv[2]]\n"
+                "print(m.devsim_module())\n")
+        p = subprocess.run([sys.executable, "-IS", "-c", code, os.path.join(ROOT, "packages/silik-tools/files/silik"), site],
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        self.assertEqual(p.stderr, "")
+        self.assertIn(p.stdout.strip(), (os.path.join(site, "devsim"), self.dm0() or "-"))      # (or this machine's own DEVSIM)
+        launch = open(os.path.join(ROOT, "packages/silik-tools/files/silik-launch")).read()
+        self.assertTrue(launch.startswith("#!/usr/bin/python3 -IS\n"))                         # (what this test is about)
 
     def test_devsim_is_a_module_of_python_not_a_program(self):
         """found by its folder among the system Python's modules (looked for, never imported)"""
