@@ -36,7 +36,7 @@ class Generated(unittest.TestCase):
             return sorted(os.path.basename(p) for p in gen.outputs() if os.path.dirname(p) == os.path.join(FILES, d))
         self.assertEqual(sorted(os.listdir(os.path.join(FILES, "accents"))), made("accents"))
         self.assertEqual(sorted(os.listdir(os.path.join(FILES, "qt"))), made("qt"))
-        self.assertEqual(sorted(f for f in os.listdir(os.path.join(FILES, "shell-ext")) if f.startswith("accent-") or f == "glass.css"),
+        self.assertEqual(sorted(f for f in os.listdir(os.path.join(FILES, "shell-ext")) if f.startswith("accent-") or f.startswith("glass")),
                          made("shell-ext"))
 
     def test_ink_first_and_no_file_for_it(self):
@@ -158,18 +158,19 @@ class Themes(unittest.TestCase):
         self.d = tempfile.mkdtemp()
         share = os.path.join(self.d, "share")
         shutil.copytree(os.path.join(FILES, "accents"), os.path.join(share, "accents"))
-        for f in ("gtk-theme.sed", "shell-theme.sed", "shell-extra.css", "silik-gtk3.css"):
+        for f in ("gtk-theme.sed", "shell-theme.sed", "shell-paper.map", "shell-extra.css", "silik-gtk3.css"):
             shutil.copy(os.path.join(FILES, f), share)
         ext = os.path.join(self.d, "extract")
         with open(ext, "w") as f:
             f.write("#!/bin/sh\nprintf 'a { color: #2e3436; background: #3584e4; }\\nb { color: #15539e; border-color: #1b6acb; }\\n"
                     "c { background-color: #629fea; box-shadow: 0 0 0 1px rgba(53, 132, 228, 0.5); }\\n"
-                    "d { color: rgba(27, 106, 203, 0.6); }\\n'\n")
+                    "d { color: rgba(27, 106, 203, 0.6); }\\n#panel .p { color: #eeeeec; background: #1b6acb; }\\n"
+                    ".popup-menu { color: #eeeeec; background-color: #353535; }\\n'\n")
         os.chmod(ext, 0o755)
         res = os.path.join(self.d, "shell.gresource")
         open(res, "w").close()
         self.env = dict(os.environ, SILIKOS_THEMES=os.path.join(self.d, "themes"), SILIKOS_SHARE=share,
-                        SILIKOS_EXTRACT=ext, SILIKOS_SHELL_RES=res)
+                        SILIKOS_EXTRACT=ext, SILIKOS_SHELL_RES=res, SILIKOS_PAPER=os.path.join(FILES, "shell-paper"))
 
     def tearDown(self):
         shutil.rmtree(self.d)
@@ -204,17 +205,30 @@ class Themes(unittest.TestCase):
         o = self.make("shell-theme")
         themes = os.path.join(self.d, "themes")
         ink = text(os.path.join(themes, "SilikOS", "gnome-shell", "gnome-shell.css"))
-        self.assertIn("background: #b9b8b3", ink)                 # the ink look's grey for the shell's blue
+        # the ink look: on paper the shell's blue is ink and its text ink; on the title bar the blue is a grey, the text paper
+        self.assertIn("a { color: #2e3436; background: #1a1b1e; }", ink)
+        self.assertIn(".popup-menu { color: #1a1b1e; background-color: #f7f6f3; }", ink)
+        self.assertIn("#panel .p { color: #ecebe7; background: #6b6d72; }", ink)
+        self.assertNotRegex(ink.lower(), r"#3584e4|#15539e|#1b6acb|#629fea|27, 106, 203|#eeeeec|#353535")
+        # shell-extra.css comes after the shell's own rules, through the same maps: what it writes as the shell's blue
+        # with white on it (what is chosen) is ink with paper on it here, and each accent's own colour below
+        self.assertIn("/* ---- SilikOS additions ---- */", ink)
+        self.assertIn(".switcher-list .item-box:selected { background-color: #1a1b1e; color: #f7f6f3; }", ink)
+        self.assertIn(".switcher-list .item-box:selected { background-color: #1b6acb; color: #fff; }", text(os.path.join(FILES, "shell-extra.css")))
+        self.assertIn('#panel { background-color: #17181b;', ink)
         for name, sh, ch in gen.variants():
             css = text(os.path.join(themes, "SilikOS-" + name, "gnome-shell", "gnome-shell.css"))
             self.assertIn("SilikOS-" + name, o)
-            self.assertTrue(css.endswith(text(os.path.join(FILES, "shell-extra.css"))))
+            self.assertIn("/* ---- SilikOS additions ---- */", css)
             if sh["on"] != gen.PAPER:
                 self.assertEqual(css, ink, name)                  # (the shell's white text: its own parts stay the ink's)
                 continue
             self.assertNotRegex(css.lower(), r"#3584e4|#15539e|#1b6acb|#629fea|27, 106, 203")
             self.assertIn("a { color: #2e3436; background: %s; }" % sh["accent"], css)
             self.assertIn("rgba(%s, 0.55)" % ", ".join(str(x) for x in gen.rgb(sh["accent"])), css)
+            self.assertIn("#panel .p { color: #ecebe7; background: %s; }" % sh["hover"], css)
+            self.assertIn(".switcher-list .item-box:selected { background-color: %s; color: #f7f6f3; }" % sh["hover"], css)
+            self.assertIn(".popup-menu { color: #1a1b1e; background-color: #f7f6f3; }", css)      # the paper is the same
 
     def test_no_accents_makes_the_ink_alone(self):
         shutil.rmtree(os.path.join(self.env["SILIKOS_SHARE"], "accents"))

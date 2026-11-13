@@ -1,0 +1,127 @@
+#!/usr/bin/python3
+"""shell-paper: the shell's own stylesheet, its floating surfaces turned to paper and ink.
+
+    shell-paper PAPER.map DARK.sed < gnome-shell.css > out.css
+
+GNOME Shell's stylesheet is one dark theme: light text on dark surfaces everywhere. SilikOS keeps two of its surfaces
+dark, the title bar (#panel, the ink slab of the Silik look) and the lock and login screens (light text over the
+dimmed wallpaper: the shell dims it itself, no stylesheet changes that), and makes every other one paper with ink
+text: menus, the calendar and its messages, notifications, the OSD, the switchers, dialogs, entries, buttons, the
+on-screen keyboard, the windows view. Each selector of a rule is looked at on its own: one that names a dark surface
+(DARK below) takes the colours of DARK.sed (shell-theme.sed: the ink family, as before); any other takes those of
+PAPER.map (shell-paper.map: the paper family). A rule whose selectors fall on both sides is written twice. On paper the shell's text and icon shadows go (a dark shadow under dark text
+smears it: seen in the rig); they stay on the dark surfaces. Only colours, url()s and those shadows are changed, never
+a selector, a size or the order of the rules, so the stylesheet stays the installed shell's own, whatever its
+version; a colour the maps do not know is left as it is.
+
+PAPER.map: lines "SOURCE -> TARGET" ('#' at the start of a line: a comment). DARK.sed: sed's "s/SOURCE/TARGET/g" lines
+(any delimiter; the flag I is honoured), read as plain text, not as patterns. A SOURCE is a colour as the stylesheet
+writes it (#eeeeec, #fff, white, "rgba(32, 32, 32, 0.96)") or the beginning of one ("rgba(238, 238, 236," maps every
+opacity of that colour), or a url("...") in full. A hex colour or a word only matches whole (#fff is not the start of
+#ffffff, white not a part of another word). Python 3.9 standard library.
+"""
+import re
+import sys
+
+# the surfaces that stay dark: a selector that names one takes DARK.sed
+DARK = re.compile(r"#panel\b|\.panel-(?!status-menu)|\.login-dialog|\.unlock-dialog|#unlockDialog|\.user-widget|\.user-icon|"
+                  r"\.screen-shield|#lockDialogGroup|\.lightbox|\.flashspot|LookingGlass|\.lg-")
+
+
+def read_map(path):
+    """[(source, target, ignore case)] of a PAPER.map"""
+    out = []
+    with open(path, encoding="utf-8") as f:
+        for n, line in enumerate(f, 1):
+            line = line.rstrip("\n")
+            if not line.strip() or line.startswith("# ") or line == "#":      # (a colour is "#" and a digit at once)
+                continue
+            src, sep, dst = line.partition(" -> ")
+            if not sep or not src.strip():
+                raise SystemExit("shell-paper: %s:%d: not SOURCE -> TARGET: %s" % (path, n, line))
+            out.append((src.strip(), dst.strip(), True))
+    return out
+
+
+def read_sed(path):
+    """[(source, target, ignore case)] of the s commands of a sed script"""
+    out = []
+    with open(path, encoding="utf-8") as f:
+        for n, line in enumerate(f, 1):
+            line = line.rstrip("\n")
+            if not line.strip() or line.startswith("#"):
+                continue
+            parts = line[2:].split(line[1]) if line.startswith("s") and len(line) > 2 else []
+            if len(parts) != 3 or not parts[0]:
+                raise SystemExit("shell-paper: %s:%d: not an s command: %s" % (path, n, line))
+            out.append((parts[0], parts[1], "I" in parts[2]))
+    return out
+
+
+def compiled(pairs):
+    """one pattern for all the sources (the longest first: a whole rgba() before its beginning) and their targets"""
+    table, alts = {}, []
+    for src, dst, anycase in sorted(pairs, key=lambda p: -len(p[0])):
+        key = src.lower() if anycase else src
+        if key in table:
+            continue
+        table[key] = dst
+        pat = re.escape(src)
+        if re.match(r"^#[0-9a-fA-F]+$", src):
+            pat += r"(?![0-9a-fA-F])"
+        elif re.match(r"^[A-Za-z]+$", src):
+            pat = r"(?<![\w-])" + pat + r"(?![\w-])"
+        alts.append("(?i:%s)" % pat if anycase else pat)
+    rx = re.compile("|".join(alts)) if alts else None
+
+    def apply(text):
+        if rx is None:
+            return text
+        return rx.sub(lambda m: table.get(m.group(0), table.get(m.group(0).lower(), m.group(0))), text)
+    return apply
+
+
+def values(body, apply, shadows=True):
+    """the declarations of a rule with the map applied to their values (never to a property's name); SHADOWS False:
+    its text and icon shadows are none"""
+    out = []
+    for d in body.split(";"):
+        prop, sep, val = d.partition(":")
+        if sep and not shadows and prop.strip() in ("text-shadow", "icon-shadow"):
+            val = " none" + val[len(val.rstrip()):]
+        out.append(prop + sep + apply(val) if sep else d)
+    return ";".join(out)
+
+
+def convert(css, paper, dark):
+    out, at = [], 0
+    for m in re.finditer(r"([^{}]+)\{([^{}]*)\}", css):
+        out.append(css[at:m.start()])
+        at = m.end()
+        head, body = m.group(1), m.group(2)
+        # (what stands before the selectors: the white space and the comments between two rules)
+        lead = re.match(r"^(?:\s|/\*.*?\*/)*", head, flags=re.S).group(0)
+        sels = [s for s in head[len(lead):].split(",")]
+        d = [s for s in sels if DARK.search(s)]
+        p = [s for s in sels if not DARK.search(s)]
+        rules = []
+        if p:
+            rules.append(",".join(p).rstrip() + " {" + values(body, paper, shadows=False) + "}")
+        if d:
+            rules.append(",".join(d).strip() + " {" + values(body, dark) + "}")
+        out.append(lead + "\n".join(rules))
+    out.append(css[at:])
+    return "".join(out)
+
+
+def main(argv):
+    if len(argv) != 3:
+        sys.stderr.write(__doc__)
+        return 2
+    css = sys.stdin.read()
+    sys.stdout.write(convert(css, compiled(read_map(argv[1])), compiled(read_sed(argv[2]))))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

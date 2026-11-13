@@ -1,8 +1,10 @@
-# Glass (the key "glass", `silik look --glass on|off`, look/glass in the COMMAND bar): the island or the bar, Start
-# and the COMMAND bar as paper at 0.86 over the blurred wallpaper. What can be checked without a shell: the key, the
-# generated glass.css and its contrast, that the COMMAND bar and the extension hold the generator's values and one
-# radius, `silik look --glass` against a stand-in gsettings, the entries in three languages. What it looks like and
-# what it costs were seen and measured in a GNOME Shell session (docs/STATUS.md).
+# Glass (the keys "glass" and "glass-mode", `silik look --glass off|on|clear|crystal|crystal-thin`, look/glass... in
+# the COMMAND bar): the island or the bar, Start and the COMMAND bar as translucent paper over the blurred wallpaper,
+# in the crystal modes over the windows behind too. What can be checked without a shell: the keys (the old switch
+# keeps its meaning), each mode's generated stylesheet and its contrast, that the COMMAND bar and the extension hold
+# the generator's values and one radius, `silik look --glass` against a stand-in gsettings, the entries in three
+# languages. What the modes look like and what they cost were seen and measured in a GNOME Shell session
+# (docs/STATUS.md).
 #   python3 -m unittest tests.test_glass -v
 import contextlib
 import io
@@ -34,14 +36,34 @@ def rules(css):
     return [(" ".join(s.split()), b) for s, b in re.findall(r"([^{}]+)\{([^{}]*)\}", css)]
 
 
+MODES = [m[0] for m in gen.GLASS_MODES]
+
+
 class Key(unittest.TestCase):
-    def test_a_boolean_on_by_default(self):
+    def setUp(self):
         root = ET.parse(os.path.join(FILES, "com.silikvolt.silikos.shell.gschema.xml")).getroot()
-        key = [k for k in root.find("schema").findall("key") if k.get("name") == "glass"]
-        self.assertEqual(len(key), 1)
-        self.assertEqual(key[0].get("type"), "b")
-        self.assertEqual(key[0].find("default").text.strip(), "true")    # (the measured cost: docs/STATUS.md)
-        self.assertIn("silik look --glass on|off", key[0].find("description").text)
+        self.keys = {k.get("name"): k for k in root.find("schema").findall("key")}
+
+    def test_the_switch_stays_a_boolean_on_by_default(self):
+        """a setting made with silikos-desktop 0.15.0 (glass false) is read as it was: the key keeps its name and type
+        (GSettings drops a stored value whose type is not the key's: a choice under the same name would have turned
+        an "off" back on at the update)"""
+        key = self.keys["glass"]
+        self.assertEqual(key.get("type"), "b")
+        self.assertEqual(key.find("default").text.strip(), "true")    # (the measured cost: docs/STATUS.md)
+        self.assertIn("silik look --glass off|on|clear|crystal|crystal-thin", key.find("description").text)
+
+    def test_the_mode_is_a_choice_and_on_is_the_default(self):
+        key = self.keys["glass-mode"]
+        self.assertEqual(key.get("type"), "s")
+        self.assertEqual([c.get("value") for c in key.find("choices")], MODES)
+        self.assertEqual(key.find("default").text.strip(), "'on'")      # the default stays what it was
+        self.assertEqual(MODES, ["on", "clear", "crystal", "crystal-thin"])
+        self.assertEqual([k for k, _ in silik.GLASS], ["off"] + MODES)
+        for mode, alpha, sigma, windows in gen.GLASS_MODES:              # the words say the generator's numbers
+            self.assertIn("%.2f" % alpha, dict(silik.GLASS)[mode])
+            self.assertIn("%s: paper at %.2f" % (mode, alpha), key.find("description").text)
+            self.assertEqual(windows, "windows" in dict(silik.GLASS)[mode], mode)
 
 
 class Generated(unittest.TestCase):
@@ -53,6 +75,53 @@ class Generated(unittest.TestCase):
         self.assertTrue(0.82 <= gen.GLASS_ALPHA <= 0.9)
         self.assertEqual(self.g["paper"], "rgba(247, 246, 243, %s)" % gen.GLASS_ALPHA)
 
+    def test_a_stylesheet_for_each_mode(self):
+        self.assertEqual(gen.glass_file("on"), "glass.css")
+        for mode, alpha, _, _ in gen.GLASS_MODES:
+            path = os.path.join(EXT, gen.glass_file(mode))
+            self.assertTrue(os.path.isfile(path), path)
+            css = text(path)
+            self.assertEqual(css, gen.glass_css(mode))
+            g = gen.glass(mode)
+            self.assertGreaterEqual(g["alpha"], alpha)                    # (never more transparent than asked)
+            for sel in (".silik-flow.silik-flow", ".silik-start.silik-start"):
+                self.assertIn("%s { background-color: %s; }" % (sel, g["paper"]), css)
+            self.assertEqual(len(rules(css)), len(rules(self.css)), mode)     # the same rules, other colours
+
+    def test_every_text_colour_of_every_mode_reads(self):
+        """4.5:1 against the mode's worst case: black behind the paper (the tint on it) for the light panes, white
+        behind for the dark COMMAND bar; in the crystal modes both are real (a black or a white window behind)"""
+        for mode, alpha, _, windows in gen.GLASS_MODES:
+            g = gen.glass(mode)
+            self.assertEqual(g["worst"], gen.mix(gen.over(gen.PAPER, g["alpha"], "#000000"), gen.INK, gen.GLASS_TINT))
+            self.assertEqual(g["dworst"], gen.mix(gen.over(gen.DARK_PAPER, g["dalpha"], "#ffffff"), gen.DARK_INK, gen.GLASS_TINT))
+            for c in (gen.INK, g["muted"]):
+                self.assertGreaterEqual(gen.contrast(c, g["worst"]), 4.5, (mode, c))
+                # (white behind makes the paper lighter: dark text reads better there)
+                self.assertGreater(gen.contrast(c, gen.over(gen.PAPER, g["alpha"], "#ffffff")), gen.contrast(c, g["worst"]))
+            for c in (gen.DARK_INK, g["dmuted"]):
+                self.assertGreaterEqual(gen.contrast(c, g["dworst"]), 4.5, (mode, c))
+                self.assertGreater(gen.contrast(c, gen.over(gen.DARK_PAPER, g["dalpha"], "#000000")), gen.contrast(c, g["dworst"]))
+            # every colour the mode's stylesheet writes as text is one of those two
+            for sel, body in rules(text(os.path.join(EXT, gen.glass_file(mode)))):
+                for c in re.findall(r"(?<![\w-])color:\s*(#[0-9a-f]{6})", body):
+                    self.assertEqual(c, g["muted"], (mode, sel))
+
+    def test_contrast_wins_over_transparency(self):
+        """a mode whose ink would not read is made more opaque (the dark bar of the thinnest mode); a muted grey
+        that cannot read becomes the ink itself"""
+        thin = gen.glass("crystal-thin")
+        self.assertEqual(thin["alpha"], 0.55)
+        self.assertGreater(thin["dalpha"], 0.55)
+        self.assertLess(gen.contrast(gen.DARK_INK, gen.mix(gen.over(gen.DARK_PAPER, round(thin["dalpha"] - 0.01, 2), "#ffffff"),
+                                                            gen.DARK_INK, gen.GLASS_TINT)), 4.5)     # (and no more than needed)
+        self.assertEqual(thin["muted"], gen.INK)
+        for mode in ("on", "clear", "crystal"):
+            g = gen.glass(mode)
+            self.assertEqual((g["alpha"], g["dalpha"]), (dict((m[0], m[1]) for m in gen.GLASS_MODES)[mode],) * 2)
+            self.assertNotEqual(g["muted"], gen.INK)                      # (a grey of its own: the hierarchy stays)
+        self.assertEqual(gen.opaque_enough(gen.PAPER, gen.INK, 0.2, "#000000")[0], 0.55)   # the least the light paper can be
+
     def test_muted_text_reads_on_any_background(self):
         """the darkest the glass can be: black behind the paper, the tint on it; the dark bar's: white behind"""
         self.assertEqual(self.g["worst"], gen.mix(gen.over(gen.PAPER, gen.GLASS_ALPHA, "#000000"), gen.INK, gen.GLASS_TINT))
@@ -60,39 +129,39 @@ class Generated(unittest.TestCase):
         self.assertGreaterEqual(gen.contrast(gen.INK, self.g["worst"]), 4.5)
         self.assertGreaterEqual(gen.contrast(self.g["dmuted"], self.g["dworst"]), 4.5)
         self.assertGreaterEqual(gen.contrast("#ecebe7", self.g["dworst"]), 4.5)
-        # (and on the light side: white behind makes the paper lighter, dark text reads better there)
-        light = gen.over(gen.PAPER, gen.GLASS_ALPHA, "#ffffff")
-        self.assertGreater(gen.contrast(self.g["muted"], light), gen.contrast(self.g["muted"], self.g["worst"]))
 
     def test_rules_are_one_class_more_specific_than_the_stylesheets(self):
         base = set()
         for sel, _ in rules(text(os.path.join(EXT, "stylesheet.css"))):
             base |= {x.strip() for x in sel.split(",")}
-        found = rules(self.css)
-        self.assertGreater(len(found), 10)
-        for sel, body in found:
-            for x in sel.split(","):
-                x = x.strip()
-                head, _, last = x.rpartition(" ")
-                m = re.match(r"^([\w-]*)(\.[\w-]+)\2", last)
-                self.assertIsNotNone(m, x)
-                self.assertIn(((head + " ") if head else "") + m.group(1) + last[len(m.group(1)) + len(m.group(2)):], base, x)
-                self.assertFalse(re.search(r"silik-on|:hover|:active|:checked|:focus", x), x)   # (plates stay solid)
-            colours = set(re.findall(r"#[0-9a-f]{6}|rgba\([^)]*\)|transparent", body))
-            self.assertTrue(colours <= {self.g["paper"], self.g["tint"], "transparent", self.g["muted"]}, (sel, colours))
+        for mode in MODES:
+            g = gen.glass(mode)
+            found = rules(text(os.path.join(EXT, gen.glass_file(mode))))
+            self.assertGreater(len(found), 10)
+            for sel, body in found:
+                for x in sel.split(","):
+                    x = x.strip()
+                    head, _, last = x.rpartition(" ")
+                    m = re.match(r"^([\w-]*)(\.[\w-]+)\2", last)
+                    self.assertIsNotNone(m, x)
+                    self.assertIn(((head + " ") if head else "") + m.group(1) + last[len(m.group(1)) + len(m.group(2)):], base, x)
+                    self.assertFalse(re.search(r"silik-on|:hover|:active|:checked|:focus", x), x)   # (plates stay solid)
+                colours = set(re.findall(r"#[0-9a-f]{6}|rgba\([^)]*\)|transparent", body))
+                self.assertTrue(colours <= {g["paper"], g["tint"], "transparent", g["muted"]}, (mode, sel, colours))
 
     def test_no_grey_text_is_left_on_glass(self):
-        """every rule of a glass piece that writes the stylesheet's muted greys as text is in glass.css"""
-        bumped = set()
-        for sel, _ in rules(self.css):
-            bumped |= {x.strip() for x in sel.split(",")}
-        for sel, body in rules(text(os.path.join(EXT, "stylesheet.css"))):
-            if not re.search(r"(^|;)\s*color:\s*(#6b6d72|#8a8b8f)\s*(;|$)", body):
-                continue
-            for x in (x.strip() for x in sel.split(",")):
-                glass = any(re.search(r"\.%s(?![\w-])|\.%s-" % (c, c), x) for c in gen.GLASS_SCOPE)
-                if glass and not re.search(r"silik-on|:active|:checked|:hover|:focus", x):
-                    self.assertIn(gen.bump(x), bumped, x)
+        """every rule of a glass piece that writes the stylesheet's muted greys as text is in each mode's stylesheet"""
+        for mode in MODES:
+            bumped = set()
+            for sel, _ in rules(text(os.path.join(EXT, gen.glass_file(mode)))):
+                bumped |= {x.strip() for x in sel.split(",")}
+            for sel, body in rules(text(os.path.join(EXT, "stylesheet.css"))):
+                if not re.search(r"(^|;)\s*color:\s*(#6b6d72|#8a8b8f)\s*(;|$)", body):
+                    continue
+                for x in (x.strip() for x in sel.split(",")):
+                    glass = any(re.search(r"\.%s(?![\w-])|\.%s-" % (c, c), x) for c in gen.GLASS_SCOPE)
+                    if glass and not re.search(r"silik-on|:active|:checked|:hover|:focus", x):
+                        self.assertIn(gen.bump(x), bumped, (mode, x))
 
     def test_the_panes_and_their_bands(self):
         css = self.css
@@ -106,29 +175,34 @@ class Generated(unittest.TestCase):
 
 class CommandBar(unittest.TestCase):
     def test_the_generators_values(self):
-        g = gen.glass()
-        self.assertEqual(bar.GLASS["light"], {"bg": g["paper"], "bg2": g["tint"], "muted": g["muted"]})
-        self.assertEqual(bar.GLASS["dark"], {"bg": g["dpaper"], "bg2": g["dtint"], "muted": g["dmuted"]})
+        self.assertEqual(list(bar.GLASS), MODES)
+        for mode in MODES:
+            g = gen.glass(mode)
+            self.assertEqual(bar.GLASS[mode]["light"], {"bg": g["paper"], "bg2": g["tint"], "muted": g["muted"]})
+            self.assertEqual(bar.GLASS[mode]["dark"], {"bg": g["dpaper"], "bg2": g["dtint"], "muted": g["dmuted"]})
+        self.assertEqual(bar.THEMES["dark"]["ink"], gen.DARK_INK)
         self.assertEqual(bar.THEMES["light"]["muted"], gen.GREYS[0])
         self.assertEqual(bar.THEMES["dark"]["muted"], gen.DARK_MUTED)
         self.assertEqual(bar.THEMES["dark"]["paper"], gen.DARK_PAPER)
 
     def test_glass_only_with_a_compositor(self):
         for theme in ("light", "dark"):
-            on = bar.css_values(theme, True, True)
-            self.assertEqual(on["bg"], bar.GLASS[theme]["bg"])
-            self.assertEqual(on["muted"], bar.GLASS[theme]["muted"])
-            self.assertEqual(on["paper"], bar.THEMES[theme]["paper"])      # (text on the ink row stays solid paper)
-            off = bar.css_values(theme, True, False)
+            for mode in MODES:
+                on = bar.css_values(theme, True, mode)
+                self.assertEqual(on["bg"], bar.GLASS[mode][theme]["bg"])
+                self.assertEqual(on["muted"], bar.GLASS[mode][theme]["muted"])
+                self.assertEqual(on["paper"], bar.THEMES[theme]["paper"])      # (text on the ink row stays solid paper)
+                (bar.CSS % on).encode()                                          # every value the stylesheet asks for
+                flat = bar.css_values(theme, False, mode)                       # (no compositor: drawn over black)
+                self.assertEqual(flat["bg"], bar.THEMES[theme]["paper"])
+                self.assertEqual(flat["radius"], "0")
+            off = bar.css_values(theme, True, None)
             self.assertEqual(off["bg"], bar.THEMES[theme]["paper"])
-            flat = bar.css_values(theme, False, True)                       # (no compositor: drawn over black)
-            self.assertEqual(flat["bg"], bar.THEMES[theme]["paper"])
-            self.assertEqual(flat["radius"], "0")
-            (bar.CSS % on).encode()                                          # every value the stylesheet asks for
+            self.assertEqual(off["muted"], bar.THEMES[theme]["muted"])
 
     def test_one_radius(self):
         """the floating panes: 6 px; inside the 1 px frame, 5; a row is a key, 4. The shell cuts its glass to it"""
-        v = bar.css_values("light", True, True)
+        v = bar.css_values("light", True, "on")
         self.assertEqual((v["radius"], v["inner"], v["rowr"]), ("6px", "5px", "4px"))
         ext = text(os.path.join(EXT, "extension.js"))
         self.assertIn("const CMD_R = %d;" % bar.RADIUS, ext)
@@ -143,7 +217,11 @@ class CommandBar(unittest.TestCase):
     def test_it_reads_the_key_and_never_fails_on_it(self):
         src = text(os.path.join(ROOT, "packages", "silik-command", "files", "silik-command"))
         self.assertIn('schema.has_key("glass")', src)
-        self.assertIn("css_values(theme, Gdk.Screen.get_default().is_composited(), glass_on())", src)
+        self.assertIn('settings.get_string("glass-mode") if schema.has_key("glass-mode") else "on"', src)   # (a desktop before the modes)
+        self.assertIn("css_values(theme, Gdk.Screen.get_default().is_composited(), glass_mode())", src)
+        mode = src.split("def glass_mode():")[1].split("\ndef ")[0]
+        self.assertIn('if not settings.get_boolean("glass"):\n            return None', mode)      # the switch first
+        self.assertIn("except Exception:", mode)
 
 
 @contextlib.contextmanager
@@ -181,38 +259,83 @@ def call(*argv):
     return rc, out.getvalue(), err.getvalue()
 
 
-HERE = {"look": "'island'", "accent": "'ink'", "glass": "true"}
+HERE = {"look": "'island'", "accent": "'ink'", "glass": "true", "glass-mode": "'on'"}
+OLD = {"look": "'island'", "accent": "'ink'", "glass": "true"}        # silikos-desktop 0.15.0: the switch, no modes
+SET = "$ gsettings set com.silikvolt.silikos.shell "
 
 
 class Look(unittest.TestCase):
-    def test_dry_run_prints_the_command(self):
-        for v, b in (("on", "true"), ("off", "false")):
-            rc, o, _ = call("--dry-run", "look", "--glass", v)
+    def test_dry_run_prints_the_commands(self):
+        rc, o, _ = call("--dry-run", "look", "--glass", "off")
+        self.assertEqual((rc, o.strip()), (0, SET + "glass false"))      # off: the switch alone, the mode stays
+        for mode in MODES:
+            rc, o, _ = call("--dry-run", "look", "--glass", mode)
             self.assertEqual(rc, 0)
-            self.assertEqual(o.strip(), "$ gsettings set com.silikvolt.silikos.shell glass " + b)
+            self.assertEqual(o.splitlines(), [SET + "glass-mode " + mode, SET + "glass true"])
 
-    def test_only_on_or_off(self):
+    def test_only_a_mode(self):
         rc, _, _ = call("--dry-run", "look", "--glass", "maybe")
         self.assertNotEqual(rc, 0)
 
-    def test_it_sets_the_key(self):
+    def test_it_sets_the_keys(self):
         with gsettings(dict(HERE)) as log:
-            rc, o, e = call("look", "--glass", "off")
-            self.assertEqual(rc, 0, e)
-            self.assertIn("set com.silikvolt.silikos.shell glass false", text(log).splitlines())
-            rc, o, _ = call("look", "--json")
-            self.assertEqual(json.loads(o)["glass"], False)
+            for mode in ["off"] + MODES:
+                rc, o, e = call("look", "--glass", mode)
+                self.assertEqual(rc, 0, e)
+                rc, o, _ = call("look", "--json")
+                self.assertEqual(json.loads(o)["glass"], mode)
+                self.assertEqual(json.loads(o)["glass_modes"], ["off"] + MODES)
+            sets = [x for x in text(log).splitlines() if x.startswith("set ")]
+            self.assertEqual(sets[0], "set com.silikvolt.silikos.shell glass false")
+            self.assertEqual(sets[-2:], ["set com.silikvolt.silikos.shell glass-mode crystal-thin", "set com.silikvolt.silikos.shell glass true"])
+
+    def test_off_keeps_the_mode_for_the_next_on(self):
+        """the switch of an older `silik look --glass on` (or of the settings) brings back the mode last chosen"""
+        with gsettings(dict(HERE, **{"glass-mode": "'crystal'"})) as log:
+            self.assertEqual(json.loads(call("look", "--json")[1])["glass"], "crystal")
+            self.assertEqual(call("look", "--glass", "off")[0], 0)
+            self.assertEqual(json.loads(call("look", "--json")[1])["glass"], "off")
+            self.assertFalse([x for x in text(log).splitlines() if x.startswith("set ") and "glass-mode" in x])
+
+    def test_a_setting_from_before_the_modes_keeps_its_meaning(self):
+        """glass false set with silikos-desktop 0.15.0 is still off after the update (the key and its type are the
+        same; the mode has its default), and true is the mode "on": the default stays what it was"""
+        with gsettings(dict(HERE, glass="false")):
+            self.assertEqual(json.loads(call("look", "--json")[1])["glass"], "off")
+        with gsettings(dict(HERE)):
+            self.assertEqual(json.loads(call("look", "--json")[1])["glass"], "on")
+
+    def test_a_desktop_from_before_the_modes(self):
+        """silik-tools newer than silikos-desktop: on and off work as they did, a mode is refused in words"""
+        with gsettings(dict(OLD)) as log:
+            j = json.loads(call("look", "--json")[1])
+            self.assertEqual((j["glass"], j["glass_modes"]), ("on", ["off", "on"]))
+            rc, o, _ = call("look")
+            self.assertEqual([r.split()[1] if r.startswith("●") else r.split()[0] for r in o.splitlines() if "glass:" in r], ["off", "on"])
+            rc, _, e = call("look", "--glass", "crystal")
+            self.assertEqual(rc, 1)
+            self.assertIn("no glass crystal on this system", e)
+            self.assertFalse([x for x in text(log).splitlines() if x.startswith("set ")])
+            self.assertEqual(call("look", "--glass", "off")[0], 0)
+            self.assertEqual(call("look", "--glass", "on")[0], 0)
+            self.assertEqual([x for x in text(log).splitlines() if x.startswith("set ")],
+                             ["set com.silikvolt.silikos.shell glass false", "set com.silikvolt.silikos.shell glass true"])
 
     def test_show_marks_it(self):
-        with gsettings(dict(HERE)):
+        with gsettings(dict(HERE, **{"glass-mode": "'clear'"})):
             rc, o, _ = call("look")
             self.assertEqual(rc, 0)
-            self.assertTrue([r for r in o.splitlines() if r.startswith("● on") and "glass:" in r])
-            self.assertEqual(json.loads(call("look", "--json")[1])["glass"], True)
+            rows = [r for r in o.splitlines() if "glass:" in r]
+            self.assertEqual([r.split()[1] if r.startswith("●") else r.split()[0] for r in rows], ["off"] + MODES)
+            self.assertEqual([r for r in rows if r.startswith("●")], [r for r in rows if r.startswith("● clear")])
+            self.assertEqual(len([r for r in rows if r.startswith("●")]), 1)
 
     def test_a_set_that_does_not_take_is_an_error(self):
         with gsettings(dict(HERE), sticky=True):
             rc, _, e = call("look", "--glass", "off")
+            self.assertEqual(rc, 1)
+            self.assertIn("the glass is still on", e)
+            rc, _, e = call("look", "--glass", "crystal")
             self.assertEqual(rc, 1)
             self.assertIn("the glass is still on", e)
 
@@ -222,7 +345,9 @@ class Look(unittest.TestCase):
             self.assertEqual(rc, 1)
             self.assertIn("no glass on this system", e)
             self.assertFalse([x for x in text(log).splitlines() if x.startswith("set ")])
-            self.assertIsNone(json.loads(call("look", "--json")[1])["glass"])
+            j = json.loads(call("look", "--json")[1])
+            self.assertIsNone(j["glass"])
+            self.assertEqual(j["glass_modes"], [])
 
 
 class Entries(unittest.TestCase):
@@ -230,10 +355,17 @@ class Entries(unittest.TestCase):
         for lang in ("en", "ca", "es"):
             items = {i.address: i for i in bar.system_items(bar.TEXT[lang])}
             self.assertEqual(items["look/glass"].argv[1:], ["look", "--glass", "on"])
-            self.assertEqual(items["look/glass-off"].argv[1:], ["look", "--glass", "off"])
             self.assertEqual(items["look/glass"].twin, "silik look --glass on")
-        for k in ("glass_on", "glass_off"):
+            for mode in ["off"] + MODES[1:]:
+                it = items["look/glass-" + mode]
+                self.assertEqual(it.argv[1:], ["look", "--glass", mode])
+                self.assertEqual(it.title, bar.TEXT[lang]["glass_" + mode.replace("-", "_")])
+        for k in ["glass_off"] + ["glass_" + m.replace("-", "_") for m in MODES]:
             self.assertEqual(len({bar.TEXT[l][k] for l in ("en", "ca", "es")}), 3, k)
+
+    def test_completion(self):
+        comp = text(os.path.join(ROOT, "packages", "silik-tools", "files", "silik.bash-completion"))
+        self.assertIn('= --glass ]; then COMPREPLY=($(compgen -W "off on clear crystal crystal-thin" -- "$cur"))', comp)
 
 
 class Extension(unittest.TestCase):
@@ -241,13 +373,50 @@ class Extension(unittest.TestCase):
         self.ext = text(os.path.join(EXT, "extension.js"))
         self.flow = text(os.path.join(EXT, "flow.js"))
 
-    def test_it_follows_the_key(self):
+    def test_it_follows_the_keys(self):
         self.assertIn("has_key('glass')", self.ext)
         self.assertIn("'changed::glass'", self.ext)
-        self.assertIn("get_child('glass.css')", self.ext)
+        self.assertIn("has_key('glass-mode')", self.ext)
+        self.assertIn("'changed::glass-mode'", self.ext)
+        mode = self.ext.split("    _glassMode() {")[1].split("\n    }\n")[0]
+        self.assertIn("if (!this._glassSig || !this._settings.get_boolean('glass')) return null;", mode)     # the switch first
+        self.assertIn("this._glassModeSig ? this._settings.get_string('glass-mode') : 'on'", mode)           # (a schema before the modes)
+        self.assertIn("get_child(mode === 'on' ? 'glass.css' : 'glass-' + mode + '.css')", self.ext)
+        glass = self.ext.split("    _glass(off) {")[1].split("\n    }\n")[0]
+        self.assertIn("theme.unload_stylesheet(this._glassFile)", glass)       # a mode's stylesheet goes when another comes
         self.assertIn("this._glass(true);", self.ext.split("    disable() {")[1].split("\n    }\n")[0])
         down = self.ext.split("    _down() {")[1].split("\n    }\n")[0]
         self.assertIn("this._startMica.destroy()", down)
+
+    def test_the_modes_are_the_generators(self):
+        table = self.flow.split("var GLASS_MODES = {")[1].split("};")[0]
+        found = re.findall(r"'([\w-]+)': \{ sigma: (\d+), windows: (true|false) \}", table)
+        self.assertEqual(found, [(m, str(s), "true" if w else "false") for m, _, s, w in gen.GLASS_MODES])
+        self.assertIn("mode.sigma * s", self.flow)
+        self.assertIn("this._m = 3 * mode.sigma * s;", self.flow)              # the margin follows the mode's blur
+
+    def test_the_windows_behind_a_pane(self):
+        """the crystal modes: pictures of the windows (clones: nothing copied) under the same blur, kept in step by
+        the windows' signals, only while the pane is on the screen; never the BACKGROUND blur"""
+        mica = self.flow.split("var Mica = class Mica {")[1]
+        self.assertIn("new Clutter.Clone({ source: a })", mica)
+        for sig in ("'restacked'", "'map'", "'destroy'", "'minimize'", "'unminimize'", "'switch-workspace'", "'active-workspace-changed'",
+                    "'position-changed'", "'size-changed'", "'notify::visible'", "'showing'", "'hidden'"):
+            self.assertIn(sig, mica, sig)
+        self.assertIn("this._watch(pane.visible);", mica)                      # a hidden pane: no pictures, no signals
+        off = mica.split("    _watch(on) {")[1].split("\n    }\n")[0].split("} else {")[1]
+        self.assertIn("o.disconnect(id)", off)
+        self.assertIn("c.destroy()", off)
+        self.assertIn("this._watch(false);", mica.split("    destroy() {")[1])
+        self.assertIn("if (!this._windows ||", mica.split("    _watch(on) {")[1].split("\n")[1])     # the wallpaper modes: nothing
+        wins = mica.split("    _winsNow() {")[1].split("\n    }\n")[0]
+        self.assertIn("if (a === own) break;", wins)                           # the COMMAND bar: only what is under it
+        self.assertIn("Main.overview.visible || !a.visible || a.meta_window.minimized", wins)
+        self.assertIn("a.meta_window.get_buffer_rect()", wins)
+        self.assertNotIn("later_add", mica)                                    # brought in line at the signal (see flow.js)
+        # the piece that is always on the screen takes only the windows under itself
+        self.assertIn("const PIECE_REACH = 0;", self.flow)
+        self.assertIn("mode, PIECE_REACH);", self.flow)
 
     def test_the_wallpaper_blurred_once(self):
         """ACTOR mode, kept until something changes; the BACKGROUND mode (stale pixels around a partial redraw in
@@ -268,7 +437,7 @@ class Extension(unittest.TestCase):
     def test_the_mask_follows_clutters_box(self):
         self.assertIn("const PAD = 2, GROW = 3;", self.flow)
         self.assertIn("_clutter_actor_box_enlarge_for_effects", self.flow)
-        self.assertIn("this._m = 3 * GLASS_SIGMA * s;", self.flow)
+        self.assertIn("this._m = 3 * mode.sigma * s;", self.flow)
 
 
 if __name__ == "__main__":

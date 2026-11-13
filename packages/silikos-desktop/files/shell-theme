@@ -1,8 +1,10 @@
 #!/bin/bash
 # SilikOS — the GNOME Shell themes (silikos-desktop): made on this system from the installed shell's own stylesheet,
-# so that they always match the shell's version: the accent blue becomes ink greys, the surfaces the ink family, the
-# face Cascadia Mono; then /usr/share/silikos/shell-extra.css (panel, slider, focus) is appended. "SilikOS" is one ink
-# on paper (also the lock and login screens': 60-silikos-shell.conf); for each accent of /usr/share/silikos/accents
+# so that they always match the shell's version. shell-paper turns its colours: the floating surfaces (menus, the
+# calendar, notifications, the OSD, dialogs, switchers, the windows view) to paper and ink (shell-paper.map), the title
+# bar and the lock and login screens to the ink family (shell-theme.sed); then /usr/share/silikos/shell-extra.css (the
+# face Cascadia Mono, the panel, the frames and corners of the panes) is appended. "SilikOS" is one ink on paper (also
+# the lock and login screens': 60-silikos-shell.conf); for each accent of /usr/share/silikos/accents
 # (tools/gen_accents.py) "SilikOS-<accent>" is the same with the accent's sed applied first: the blues take the
 # accent. Run by the package's scriptlets and again whenever gnome-shell is updated. Nothing of the shell's theme is
 # shipped.
@@ -11,6 +13,7 @@ res=${SILIKOS_SHELL_RES:-/usr/share/gnome-shell/gnome-shell-theme.gresource}
 themes=${SILIKOS_THEMES:-/usr/share/themes}
 data=${SILIKOS_SHARE:-/usr/share/silikos}
 extract=${SILIKOS_EXTRACT:-/usr/libexec/silikos/resource-extract}
+paper=${SILIKOS_PAPER:-/usr/libexec/silikos/shell-paper}
 [ -r "$res" ] || { echo "shell-theme: no $res (gnome-shell not installed yet)"; exit 0; }
 src=$(mktemp) || exit 1
 trap 'rm -f "$src"' EXIT
@@ -25,7 +28,9 @@ make() {
   [ -n "${2:-}" ] && pre=(-f "$2")
   mkdir -p "$out" || { rc=1; return; }
   tmp=$(mktemp "$out/gnome-shell.css.XXXXXX") || { rc=1; return; }
-  if sed "${pre[@]}" -f "$data/shell-theme.sed" "$src" > "$tmp" && [ -s "$tmp" ] && cat "$data/shell-extra.css" >> "$tmp"; then
+  # (shell-extra.css goes through the same maps: there, the shell's own blue #1b6acb says "the accent, or ink")
+  if cat "$src" "$data/shell-extra.css" | sed "${pre[@]}" -e '' | "$paper" "$data/shell-paper.map" "$data/shell-theme.sed" > "$tmp" \
+     && [ -s "$tmp" ] && grep -q 'SilikOS additions' "$tmp"; then
     chmod 0644 "$tmp" && mv -f "$tmp" "$out/gnome-shell.css" && echo "shell-theme: $out/gnome-shell.css" && return
   fi
   rm -f "$tmp"; rc=1

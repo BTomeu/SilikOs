@@ -60,6 +60,12 @@ const TEXT = {
                   graphics: 'Gráficos', net: 'Internet', media: 'Sonido y vídeo', tools: 'Herramientas', system: 'Sistema', other: 'Otras' } },
 };
 
+/* Programs Start does not list: a settings program of a part SilikOS sets itself. qt5ct ("Qt5 Settings") is how Qt 5
+   programs take the accent; `silik look --accent` writes its file and `silik look --qt` brings it in line, so its own
+   window would only offer to undo that. The list is ours, not a change to the program's desktop entry: it holds
+   through the program's updates. (silik-command: HIDDEN_APPS, the same; the tests hold them equal.) */
+const HIDDEN_APPS = ['qt5ct.desktop'];
+
 /* Start's categories: the freedesktop main categories an application declares; the first that matches wins */
 const CATS = [
     ['eda', ['Engineering', 'Electronics', 'Science']],
@@ -278,12 +284,12 @@ function isCommand(w) {
    window is; it goes with the window */
 const CMD_R = 6;
 
-function commandGlass(w, on) {
+function commandGlass(w, mode) {
     const a = w.get_compositor_private();
     if (!a) return;
-    if (!on) { if (a._silikGlass) a._silikGlass(); return; }
-    if (a._silikGlass) return;
-    const mica = new Flow.Mica(a, w.get_monitor(), true, CMD_R);
+    if (a._silikGlass) a._silikGlass();                      /* (another mode: its glass is made again) */
+    if (!mode) return;
+    const mica = new Flow.Mica(a, w.get_monitor(), true, CMD_R, mode);
     const place = () => { const r = w.get_buffer_rect(); mica.place(r.x, r.y, r.width, r.height); };
     const sigs = [w.connect('position-changed', place), w.connect('size-changed', place)];
     const gone = a.connect('destroy', () => { if (a._silikGlass) a._silikGlass(); });
@@ -310,8 +316,11 @@ class SilikShell {
         if (this._settings) this._lookSig = this._settings.connect('changed::look', () => this._switch());
         if (this._settings && this._settings.settings_schema.has_key('accent'))
             this._accentSig = this._settings.connect('changed::accent', () => { this._accent(); this._qt(); });
-        if (this._settings && this._settings.settings_schema.has_key('glass'))
+        if (this._settings && this._settings.settings_schema.has_key('glass')) {
             this._glassSig = this._settings.connect('changed::glass', () => this._glass());
+            if (this._settings.settings_schema.has_key('glass-mode'))
+                this._glassModeSig = this._settings.connect('changed::glass-mode', () => this._glass());
+        }
         this._accent();
         this._qt();
         this._up();
@@ -327,7 +336,8 @@ class SilikShell {
             this._settings.disconnect(this._lookSig);
             if (this._accentSig) this._settings.disconnect(this._accentSig);
             if (this._glassSig) this._settings.disconnect(this._glassSig);
-            this._accentSig = this._glassSig = 0;
+            if (this._glassModeSig) this._settings.disconnect(this._glassModeSig);
+            this._accentSig = this._glassSig = this._glassModeSig = 0;
             this._settings = null;
         }
     }
@@ -348,37 +358,45 @@ class SilikShell {
         try { theme.load_stylesheet(f); this._accentFile = f; } catch (e) { logError(e, 'silik-shell: accent ' + id); }
     }
 
-    /* glass (key "glass"; `silik look --glass on|off`): glass.css (tools/gen_accents.py: the panes' paper at 0.86, the
-       muted text that reads on it) and the glass under the island or the bar, Start and the COMMAND bar's window
-       (flow.js: Mica, the wallpaper under the pane, blurred once). The Silik look's title bar, rail and status bar stay
-       solid: they are the window's frame, not a pane on it. */
-    _glassOn() {
-        return !!this._glassSig && this._settings.get_boolean('glass');
+    /* glass (`silik look --glass off|on|clear|crystal|crystal-thin`): the key "glass" is the switch, the key
+       "glass-mode" says which glass while it is on (a "glass" set before there were modes keeps its meaning). A mode is
+       its stylesheet (tools/gen_accents.py: glass.css for "on", glass-MODE.css: the panes' paper at the mode's opacity,
+       the muted text that reads on it) and the glass under the island or the bar, Start and the COMMAND bar's window
+       (flow.js: Mica: the wallpaper under the pane, in the crystal modes the windows behind it too, blurred). The
+       Silik look's title bar, rail and status bar stay solid: they are the window's frame, not a pane on it. */
+    _glassMode() {
+        if (!this._glassSig || !this._settings.get_boolean('glass')) return null;
+        const mode = this._glassModeSig ? this._settings.get_string('glass-mode') : 'on';
+        return Flow.GLASS_MODES[mode] ? mode : 'on';
     }
 
     _glass(off) {
         const theme = St.ThemeContext.get_for_stage(global.stage).get_theme();
-        const on = !off && this._glassOn(), f = Me.dir.get_child('glass.css');
-        if (this._glassFile && !on) {
+        const mode = off ? null : this._glassMode();
+        if (mode === (this._glassIs || null)) return;
+        if (this._glassFile) {
             try { theme.unload_stylesheet(this._glassFile); } catch (e) { /* it was not loaded */ }
             this._glassFile = null;
         }
-        if (on && !this._glassFile)
-            try { theme.load_stylesheet(f); this._glassFile = f; } catch (e) { logError(e, 'silik-shell: glass'); }
-        this._micas(on);
+        this._glassIs = mode;
+        if (mode) {
+            const f = Me.dir.get_child(mode === 'on' ? 'glass.css' : 'glass-' + mode + '.css');
+            try { theme.load_stylesheet(f); this._glassFile = f; } catch (e) { logError(e, 'silik-shell: glass ' + mode); }
+        }
+        this._micas();
     }
 
-    _micas(on) {
-        if (this._flow) this._flow.glass(on);
-        if (on && !this._startMica && this._startBox) {
+    /* the panes' glass, made for the mode in use (again when the mode or the look changes) or taken away */
+    _micas() {
+        const mode = this._glassIs ? Flow.GLASS_MODES[this._glassIs] : null;
+        if (this._flow) this._flow.glass(mode);
+        if (this._startMica) { this._startMica.destroy(); this._startMica = null; }
+        if (mode && this._startBox) {
             this._startMica = new Flow.Mica(this._startBox, Main.layoutManager.primaryIndex, false,
-                                            this._flow && this._flow.kind === 'island' ? Flow.ISL_R : 0);
+                                            this._flow && this._flow.kind === 'island' ? Flow.ISL_R : 0, mode);
             this._layout();
-        } else if (!on && this._startMica) {
-            this._startMica.destroy();
-            this._startMica = null;
         }
-        for (const a of global.get_window_actors()) if (isCommand(a.meta_window)) commandGlass(a.meta_window, on);
+        for (const a of global.get_window_actors()) if (isCommand(a.meta_window)) commandGlass(a.meta_window, mode);
     }
 
     /* what of the look is on the screen: the Silik look's title bar is the shell's own panel */
@@ -444,10 +462,10 @@ class SilikShell {
         on(Main.overview, 'showing', () => this._closeStart());
         /* the COMMAND bar's window: translucent paper of its own (silik-command reads the key), its glass here */
         on(global.display, 'window-created', (d, w) => {
-            if (!this._glassOn() || !isCommand(w)) return;
-            if (w.get_compositor_private()) commandGlass(w, true);
+            if (!this._glassIs || !isCommand(w)) return;
+            if (w.get_compositor_private()) commandGlass(w, Flow.GLASS_MODES[this._glassIs]);
             else Meta.later_add(Meta.LaterType.BEFORE_REDRAW, () => {
-                if (this._glassOn()) commandGlass(w, true);
+                if (this._glassIs) commandGlass(w, Flow.GLASS_MODES[this._glassIs]);
                 return GLib.SOURCE_REMOVE;
             });
         });
@@ -478,7 +496,7 @@ class SilikShell {
         this._syncWs();
         this._syncMsg();
         this._warmStart();
-        if (this._glassFile) this._micas(true);              /* (a new look's panes; the stylesheet stays loaded) */
+        if (this._glassIs) this._micas();                    /* (a new look's panes; the stylesheet stays loaded) */
     }
 
     _down() {
@@ -905,7 +923,8 @@ class SilikShell {
     _appList() {
         if (this._startApps) return this._startApps;
         const sys = Shell.AppSystem.get_default();
-        const apps = sys.get_installed().filter(i => i.should_show()).map(i => sys.lookup_app(i.get_id())).filter(a => a)
+        const apps = sys.get_installed().filter(i => i.should_show() && !HIDDEN_APPS.includes(i.get_id()))
+            .map(i => sys.lookup_app(i.get_id())).filter(a => a)
             .map(a => ({ app: a, name: a.get_name() || '', desc: a.get_description() || '', cat: category(a) }));
         apps.sort((a, b) => a.name.localeCompare(b.name));
         return this._startApps = apps;
