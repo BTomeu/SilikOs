@@ -1,0 +1,42 @@
+#!/bin/sh
+# SilikOS: a snapshot of / before an update, so that `silik rollback` can go back (docs/ROLLBACK.md).
+#   pre-update-snapshot [all | security]   before the update (ExecStartPre of the update services; `silik update`)
+#   pre-update-snapshot settle             after it
+# Only when there is something to update: dnf is asked first (exit 100: yes; 0: nothing). Then `silik snapshot auto`
+# makes the snapshot (snapm, LVM thin) and prunes the old ones (/etc/silikos/snapshot.conf). It never stops the
+# update: security goes first. When the update that follows has no snapshot, /run/silikos/no-snapshot says why and
+# the desktop's status bar shows "update: no snapshot"; `settle` takes the note away when no package changed after
+# all. A system whose / is not on a thin volume is passed over: `silik snapshot status` says so.
+run=${SILIKOS_RUN:-/run/silikos}       # (another folder: the tests')
+flag=$run/no-snapshot
+mark=$run/update-before
+packages() { rpm -qa 2> /dev/null | sort | sha256sum | cut -d' ' -f1; }
+
+if [ "${1:-all}" = settle ]; then
+  if [ -f "$flag" ] && [ -f "$mark" ] && [ "$(packages)" = "$(cat "$mark")" ]; then rm -f "$flag"; fi
+  rm -f "$mark"
+  exit 0
+fi
+
+mkdir -p "$run" || exit 0
+rm -f "$mark"
+only=
+[ "${1:-all}" = security ] && only=--security
+dnf -q check-update $only > /dev/null 2>&1
+rc=$?
+if [ "$rc" = 0 ]; then
+  echo "pre-update-snapshot: nothing to update, no snapshot is made"
+  exit 0
+fi
+packages > "$mark"
+if [ "$rc" != 100 ]; then
+  # dnf could not say (no network yet?): the update may still find something. No snapshot of a guess; noted until settled
+  echo "pre-update-snapshot: dnf check-update exited $rc: no snapshot is made"
+  echo "no snapshot: dnf could not say whether there are updates (exit $rc)" > "$flag"
+  exit 0
+fi
+# (a silik without `snapshot`, an older silik-tools: nothing is made and nothing is noted)
+if command -v silik > /dev/null 2>&1 && silik snapshot --help > /dev/null 2>&1; then
+  silik snapshot auto
+fi
+exit 0

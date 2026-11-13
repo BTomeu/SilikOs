@@ -36,6 +36,16 @@ const PPD_DAEMON = '/usr/libexec/power-profiles-daemon';   /* that one instead o
 const POWER_AUTO_LINK = '/etc/systemd/system/multi-user.target.wants/silikos-power-auto.service';
 const POWER_WORD = { 'throughput-performance': 'performance', 'balanced': 'balanced', 'balanced-battery': 'balanced', 'powersave': 'saver' };
 
+/* the update field's other words (docs/ROLLBACK.md): the last update was made without a snapshot of / (the note of
+   silikos-security's update hook in /run/silikos), the automatic updates wait since a rollback (/etc/silikos) */
+const UPDATE_NOSNAP = '/run/silikos/no-snapshot';
+const UPDATE_HOLD = '/etc/silikos/update.hold';
+const UPDATE_TEXT = {
+    en: { nosnap: 'no snapshot', hold: 'waiting since the rollback' },
+    ca: { nosnap: 'sense instantània', hold: 'en espera des de la tornada enrere' },
+    es: { nosnap: 'sin instantánea', hold: 'en espera desde la vuelta atrás' },
+};
+
 const TEXT = {
     en: { ready: 'ready', upd: 'update', restart: 'restart to finish', ws: 'workspace', base: 'base', kernel: 'kernel', host: 'host', open: 'open', windows: 'Windows',
           power: 'power', pw: { performance: 'performance', balanced: 'balanced', saver: 'saver', auto: 'auto' },
@@ -495,6 +505,7 @@ class SilikShell {
         this._catKeys = null;
         if (this._mon) { this._mon.cancel(); this._mon = null; }
         if (this._updMon) { this._updMon.cancel(); this._updMon = null; }
+        if (this._holdMon) { this._holdMon.cancel(); this._holdMon = null; }
         this._upd = null;
         for (const m of this._pwMons || []) m.cancel();
         this._pwMons = null;
@@ -1205,9 +1216,20 @@ class SilikShell {
        status bar's field while it waits */
     _watchRestart() {
         const dir = Gio.File.new_for_path('/run/silikos');
+        const ut = UPDATE_TEXT[lang()] || UPDATE_TEXT.en;
         const sync = () => {
             const wait = dir.get_child('restart').query_exists(null);
-            if (this._upd) this._upd.visible = wait;
+            /* the same field, the same look: "update restart to finish", "update no snapshot" (an update was made
+               without a snapshot of /: `silik snapshot status` says why), "update waiting since the rollback" */
+            const said = [];
+            if (wait) said.push(this._t.restart);
+            if (GLib.file_test(UPDATE_HOLD, GLib.FileTest.EXISTS)) said.push(ut.hold);
+            if (GLib.file_test(UPDATE_NOSNAP, GLib.FileTest.EXISTS)) said.push(ut.nosnap);
+            if (this._upd) {
+                const val = this._upd.get_last_child();
+                if (val) val.text = said.join(', ');
+                this._upd.visible = said.length > 0;
+            }
             if (wait && !restartSaid) {
                 restartSaid = true;
                 try { Main.notify(this._t.upd, this._t.restart); } catch (e) { /* no notification: the field says it */ }
@@ -1217,6 +1239,10 @@ class SilikShell {
             this._updMon = dir.monitor_directory(Gio.FileMonitorFlags.NONE, null);
             this._updMon.connect('changed', sync);
         } catch (e) { this._updMon = null; }
+        try {       /* (the wait after a rollback begins and ends in /etc/silikos) */
+            this._holdMon = Gio.File.new_for_path(GLib.path_get_dirname(UPDATE_HOLD)).monitor_directory(Gio.FileMonitorFlags.NONE, null);
+            this._holdMon.connect('changed', sync);
+        } catch (e) { this._holdMon = null; }
         sync();
     }
 

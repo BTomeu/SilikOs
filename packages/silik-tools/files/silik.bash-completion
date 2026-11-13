@@ -45,7 +45,7 @@ _silik() {
     COMPREPLY=($(compgen -W "$(sed -n 's/^# words: //p' "$pd/$g.py" | head -1)" -- "$cur")); return
   fi
   case $COMP_CWORD in
-    1) COMPREPLY=($(compgen -W "status update identity look session eda dev win power speed bench hw secure doctor vendor manifest $pl --dry-run --version" -- "$cur"));;
+    1) COMPREPLY=($(compgen -W "status update identity look session eda dev win power speed bench hw secure doctor vendor manifest snapshot rollback $pl --dry-run --version" -- "$cur"));;
     2) case $g in
          eda) COMPREPLY=($(compgen -W "list create setup enter run import-vm rm check kernel-arg tools try bench tune" -- "$cur"));;
          win) COMPREPLY=($(compgen -W "list open create run install stop rm sync apps vm" -- "$cur"));;
@@ -59,6 +59,9 @@ _silik() {
          secure) COMPREPLY=($(compgen -W "status apply" -- "$cur"));;
          vendor) COMPREPLY=($(compgen -W "list check prepare lib" -- "$cur"));;
          manifest) COMPREPLY=($(compgen -W "export diff apply" -- "$cur"));;
+         snapshot) COMPREPLY=($(compgen -W "status list create delete setup --json" -- "$cur"));;
+         rollback) COMPREPLY=($(compgen -W "finish --packages --yes" -- "$cur"));;
+         update) COMPREPLY=($(compgen -W "--auto --no-snapshot" -- "$cur"));;
        esac;;
     3) case "$g ${COMP_WORDS[2]}" in
          "eda setup"|"eda enter"|"eda run"|"eda rm") COMPREPLY=($(compgen -W "$(silik -q eda list 2>/dev/null | awk '$1 != "no" {print $1}')" -- "$cur"));;
@@ -73,6 +76,9 @@ _silik() {
          "dev can") COMPREPLY=($(compgen -W "list up down --fd --listen" -- "$cur"));;
          "dev ccache"|"power zram"|"power trim") COMPREPLY=($(compgen -W "on off" -- "$cur"));;
          "power auto") COMPREPLY=($(compgen -W "--ac --battery" -- "$cur"));;
+         "snapshot status"|"snapshot list") COMPREPLY=($(compgen -W "--json" -- "$cur"));;
+         "snapshot delete") COMPREPLY=($(compgen -W "--yes" -- "$cur"));;
+         "update --auto") COMPREPLY=($(compgen -W "all security off" -- "$cur"));;
        esac;;
   esac
 }

@@ -3,7 +3,11 @@
 [Unit]
 Description=SilikOS automatic security updates (dnf-automatic, security advisories only)
 ConditionPathExists=!/run/ostree-booted
-After=network-online.target
+# never when the system was started from a snapshot's boot entry (snapm puts snapm.snapset= on its kernel line): that
+# / is not the system; nor while the automatic updates wait after a rollback (`silik update` ends the wait)
+ConditionKernelCommandLine=!snapm.snapset
+ConditionPathExists=!/etc/silikos/update.hold
+After=network-online.target silikos-rollback-finish.service
 
 [Service]
 Type=oneshot
@@ -11,6 +15,10 @@ Nice=19
 IOSchedulingClass=2
 IOSchedulingPriority=7
 Environment="ABRT_IGNORE_PYTHON=1"
+# a snapshot of / first, when there is something to update and / is on an LVM thin volume (`silik rollback` goes back
+# to it). It never stops the update: without a snapshot the status bar says "update: no snapshot" (docs/ROLLBACK.md)
+ExecStartPre=-/usr/libexec/silikos/pre-update-snapshot security
 ExecStart=/usr/bin/dnf-automatic /etc/silikos/security-update.conf --timer
 # (security advisories often update the kernel or glibc: the desktop says when a restart waits)
 ExecStartPost=-/usr/libexec/silikos/restart-needed
+ExecStartPost=-/usr/libexec/silikos/pre-update-snapshot settle

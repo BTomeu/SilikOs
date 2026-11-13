@@ -105,6 +105,13 @@ for example `/etc/sysctl.d/90-local.conf` with `kernel.yama.ptrace_scope = 0`.
 - **The vsyscall page.** The kickstart starts the kernel with `vsyscall=xonly` so that EL6 userlands (glibc 2.12) run.
   The trade-off: one page of kernel entry points stays at a fixed address in every process, execute-only. `none` is
   stricter and stops EL6 boxes; `emulate` (`silik eda kernel-arg`) also makes the page readable and is flagged.
+- **The way back from an update.** The system updates itself; when an update breaks it, `silik rollback` goes back
+  (`docs/ROLLBACK.md`). With / on an LVM thin volume (the installer's Automatic partitioning on SilikOS) a snapshot of
+  / is made before each update with the base's `snapm`, and kept for 14 days (5 at most) [PROPOSAL values]; without
+  one the update still runs, security first, and the status bar says `update no snapshot`. After a rollback the
+  automatic updates wait until `silik update` is run by hand: until then the machine does not get the advisories
+  either, and `silik doctor` and the status bar say so. **Nothing of this has run on a real disk yet** (written
+  13/11/2026 on a machine without LVM; the CI job `rollback-test` is its first run).
 - **Automatic updates.** `silik update --auto off` turns them off (`security`: the advisories only); `status` warns.
   [A] AlmaLinux 9 gives no updates to an old minor release: when 9.x+1 is out, the security updates are its packages.
 - **Remote access.** `--keep-ssh`; use keys, not passwords.
