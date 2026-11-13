@@ -1075,7 +1075,9 @@ class PackageNew(unittest.TestCase):
         spec = text("packages/silikos-power/silikos-power.spec")
         self.assertRegex(spec, r"(?m)^Version:\s+0\.2\.\d+$")
         need = re.search(r"(?m)^Requires:\s+silik-tools >= (\S+)$", spec).group(1)
-        self.assertEqual(need, silik.VERSION)                    # the silik that has `power charge` and `power profiles`
+        # the silik that has `power charge` and `power profiles` (0.9.0), or a later one
+        self.assertGreaterEqual(tuple(int(x) for x in need.split(".")), (0, 9, 0))
+        self.assertLessEqual(tuple(int(x) for x in need.split(".")), tuple(int(x) for x in silik.VERSION.split(".")))
         self.assertRegex(text("packages/silik-tools/silik-tools.spec"), r"(?m)^Version:\s+%s$" % re.escape(silik.VERSION))
         for f in ("%{_prefix}/lib/systemd/system/silikos-power-charge.service", "%{_prefix}/lib/tuned/silikos-saver/tuned.conf",
                   "%{_prefix}/lib/tuned/silikos-saver/script.sh"):
