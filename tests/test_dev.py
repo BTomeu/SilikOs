@@ -221,7 +221,7 @@ class InstallRuns(unittest.TestCase):
         z = self.zip_of("CCS_20.3.0.00014_linux.zip", {"AAA/x.sh": "#!/bin/sh\necho WRONG >> %s\n" % log,
                                                        "README_first.sh": "#!/bin/sh\necho WRONG >> %s\n" % log,
                                                        "CCS_20.3.0/ccs_setup_20.3.0.00014.run": setup})
-        rc, o, e = call("dev", "install", z)
+        rc, o, e = call("dev", "install", "--yes", z)
         self.assertEqual(rc, 0, e)
         with open(log) as f:
             self.assertEqual(f.read().split(), ["setup"])
@@ -251,10 +251,67 @@ class InstallRuns(unittest.TestCase):
         run = os.path.join(self.d, "ccs_setup_20.3.0.00014.run")
         with open(run, "w") as f:
             f.write("#!/bin/sh\nexit 3\n")
-        rc, o, e = call("dev", "install", run)
+        rc, o, e = call("dev", "install", "--yes", run)
         self.assertEqual(rc, 3)
         self.assertNotIn("●", o)
         self.assertIn("the installer exited 3", e)
+
+    # -- the question before the installer runs (the audit's finding B5)
+    def installer(self, body="#!/bin/sh\necho ran >> %s\n"):
+        log = os.path.join(self.d, "ran.log")
+        run = os.path.join(self.d, "ccs_setup_20.3.0.00014.run")
+        with open(run, "w") as f:
+            f.write(body % log)
+        return run, log
+
+    def test_without_a_yes_and_without_a_terminal_nothing_runs(self):
+        run, log = self.installer()
+        rc, o, e = call("dev", "install", run)
+        self.assertEqual(rc, 2)
+        self.assertFalse(os.path.exists(log), "the installer ran without a yes")
+        self.assertIn("an installer is not run without a yes: add --yes", e)
+        self.assertNotIn("$ " + run, o)
+
+    def test_the_owner_is_shown_what_runs_before_it_runs(self):
+        import hashlib
+        run, log = self.installer()
+        with open(run, "rb") as f:
+            digest = hashlib.sha256(f.read()).hexdigest()
+        rc, o, e = call("dev", "install", "--yes", run)
+        self.assertTrue(os.path.exists(log))
+        self.assertIn("about to run the installer of Code Composer Studio", e)
+        for part in ("runs       " + run, "as         you (", "file       " + run, "SHA-256    " + digest, "no mark of where it came from",
+                     "signature  none this system can check: compare the SHA-256 with the one on TI's download page"):
+            self.assertIn(part, e)
+
+    def test_the_owner_says_no(self):
+        """at a terminal: anything but yes runs nothing, and the unpacked archive does not stay"""
+        z = self.zip_of("CCS_20.3.0.00014_linux.zip", {"CCS_20.3.0/ccs_setup_20.3.0.00014.run": "#!/bin/sh\necho ran >> %s\n" % os.path.join(self.d, "ran.log")})
+        tty, ask = silik.sys.stdin, silik.input if hasattr(silik, "input") else None
+        try:
+            for answer, runs in (("n", False), ("", False), ("y", True)):
+                silik.sys.stdin = type("Tty", (), {"isatty": lambda self: True})()
+                silik.input = lambda prompt, answer=answer: answer
+                rc, o, e = call("dev", "install", z)
+                self.assertEqual(os.path.exists(os.path.join(self.d, "ran.log")), runs, answer)
+                if not runs:
+                    self.assertEqual(rc, 1)
+                    self.assertIn("nothing run", e)
+                # the archive's installer is named, with its own SHA-256, before the question
+                self.assertIn("inside     ccs_setup_20.3.0.00014.run", e)
+                self.assertFalse([x for x in os.listdir(os.path.join(self.home, ".cache", "silikos")) if x.startswith("dev-install-")])
+        finally:
+            silik.sys.stdin = tty
+            if ask is None:
+                del silik.input
+            else:
+                silik.input = ask
+
+    def test_st_is_said_to_run_as_root(self):
+        rows = dict(silik.dev_install_facts("STM32CubeIDE", "/dl/en.st-stm32cubeide_1.19.0_amd64.rpm_bundle.sh.zip", "/w/st-stm32cubeide_1.19.0_amd64.rpm_bundle.sh", True))
+        self.assertEqual(rows["runs"], "sudo sh /w/st-stm32cubeide_1.19.0_amd64.rpm_bundle.sh")
+        self.assertIn("root", rows["as"])
+        self.assertEqual(rows["inside"], "st-stm32cubeide_1.19.0_amd64.rpm_bundle.sh")
 
     def test_newest_by_version_not_by_text(self):
         for v in ("ccs910", "ccs1280", "ccs1100"):

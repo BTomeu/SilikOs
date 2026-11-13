@@ -10,6 +10,9 @@ Requires:       bubblewrap
 Requires:       util-linux
 Requires:       coreutils
 Requires:       shared-mime-info
+# an isolated program's own display (`silik win open --isolated`, the default answer for a file not run before):
+# a nested X server, a window of the session. EL 9 AppStream, 1 MB
+Requires:       xorg-x11-server-Xephyr
 # the SELinux rule that lets Wine run in the sandbox (silikos_wine.cil)
 Requires(post): policycoreutils
 Requires(post): selinux-policy-targeted
@@ -32,7 +35,12 @@ Recommends:     virt-manager
 Recommends:     (edk2-ovmf if glibc(x86-64))
 Recommends:     (edk2-aarch64 if glibc(aarch-64))
 Recommends:     swtpm
+# (pasta, of passt, is also the network of an isolated sandbox: without it such a program has none)
 Recommends:     passt
+# the question before a file that was not run here before, as a window (silik-win-ask: GTK 3; the COMMAND bar
+# requires the same two)
+Recommends:     python3-gobject
+Recommends:     gtk3
 Recommends:     freerdp
 
 %description
@@ -51,6 +59,8 @@ install -Dm0644 %{_sourcedir}/silik-win.xml %{buildroot}%{_datadir}/mime/package
 # system defaults, in the layer for add-ons (XDG_CONFIG_DIRS): no base or EPEL package owns this file
 install -Dm0644 %{_sourcedir}/mimeapps.list %{buildroot}%{_sysconfdir}/xdg/mimeapps.list
 install -Dm0644 %{_sourcedir}/silikos_wine.cil %{buildroot}%{_datadir}/silikos/selinux/silikos_wine.cil
+# the question `silik win open` asks before a file that was not run here before, as a window
+install -Dm0755 %{_sourcedir}/silik-win-ask %{buildroot}%{_libexecdir}/silik-win-ask
 
 %post
 # Wine in the sandbox under SELinux: the rule, then the labels of the SilikOS build of Wine when it is there
@@ -72,3 +82,4 @@ if [ "$1" = 0 ] && [ -x /usr/sbin/semodule ]; then /usr/sbin/semodule -r silikos
 %{_datadir}/mime/packages/silik-win.xml
 %config(noreplace) %{_sysconfdir}/xdg/mimeapps.list
 %{_datadir}/silikos/selinux/silikos_wine.cil
+%{_libexecdir}/silik-win-ask
