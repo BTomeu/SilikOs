@@ -1,0 +1,43 @@
+# Bench OS: how the user space and the toolchains of SilikOS's base (AlmaLinux 9, and SilikOS's own builds on it)
+# compare with Ubuntu 24.04, Debian stable, Fedora, openSUSE Tumbleweed and AlmaLinux 10 on engineering workloads
+# (tools/bench_os/README.md, docs/RENDIMENT.md): each system's official container image on the runner's kernel, so
+# NOT a comparison of kernels, boot time or desktop responsiveness. By hand only: it takes hours and builds nothing.
+# The table is the run's summary; the lines it is made from are the artifact.
+name: Bench OS
+on:
+  workflow_dispatch:
+# read-only (the job installs each distribution's packages and runs the tools on generated inputs)
+permissions:
+  contents: read
+jobs:
+  bench:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - name: Every workload in every system's container
+        shell: bash
+        run: |
+          docker version --format '{{.Server.Version}}'
+          bash tools/bench_os/run_all.sh > /dev/null
+      - name: The table
+        if: always()
+        shell: bash
+        run: |
+          if [ -s build/bench-os/results.md ]; then
+            cat build/bench-os/results.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No table: the run stopped before any measurement." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-os-${{ matrix.runner }}
+          path: |
+            build/bench-os/results.jsonl
+            build/bench-os/results.md
