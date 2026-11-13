@@ -145,6 +145,16 @@ class Files(unittest.TestCase):
         lines = "[ 7.1] vm gdm-x-session[12]: X.Org X Server 1.20\n[ 8.2] vm gnome-shell[13]: Enabling extension x\n[ 1.0] vm kernel: nothing\n"
         p = subprocess.run(["grep", "-c", "-E", pat], input=lines, stdout=subprocess.PIPE, universal_newlines=True)
         self.assertEqual(p.stdout.strip(), "2")
+        # the X server's own log, which gdm-x-session carries into the journal, is left out: in the first run with
+        # this block it filled the 90 lines before the shell's lines came
+        drop = re.search(r"grep -v -E '([^']+)' \\\n", guest).group(1)
+        xorg = ("[ 8.01] vm /usr/libexec/gdm-x-session[1010]: (II) LoadModule: \"glamoregl\"\n"
+                "[ 8.01] vm /usr/libexec/gdm-x-session[1010]: \tcompiled for 1.20.11, module version = 1.0.1\n"
+                "[ 8.01] vm /usr/libexec/gdm-x-session[1010]: X.Org X Server 1.20.11\n"
+                "[ 9.25] vm systemd[1010]: Started GNOME Shell on X11.\n"
+                "[ 9.47] vm gnome-session[1451]: gnome-session-binary[1451]: GnomeDesktop-WARNING: Could not create transient scope\n")
+        p = subprocess.run(["grep", "-v", "-E", drop], input=xorg, stdout=subprocess.PIPE, universal_newlines=True)
+        self.assertEqual([l.split(": ", 1)[1] for l in p.stdout.splitlines()], ["X.Org X Server 1.20.11", "Started GNOME Shell on X11."])
         check = read("tests/install/check.sh")
         early = check.index('[ -z "$phase" ] || exit 0')
         self.assertLess(early, check.index("has name.pretty"))                      # before the first check

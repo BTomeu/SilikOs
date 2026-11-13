@@ -238,13 +238,22 @@ a la mateixa màquina virtual (4 CPU, 4096 MB, KVM) del mateix runner, dues arre
   menys. És el perfil de `silik speed`.
 - **Arrencada: SilikOS arriba a l'escriptori 0,65 a 0,85 s més tard** (11,26-11,41 contra 10,56-10,61 s), i l'espai
   d'usuari li costa 0,3 a 0,7 s més. No és més ràpid que la base en arrencar: és més lent.
-- On és la diferència: `plymouth-quit-wait.service` (acaba quan la primera pantalla gràfica és a punt) triga 4,70 s a
-  SilikOS i 3,92 s a l'AlmaLinux, començant al mateix moment (2,87 i 2,77 s). Les dues màquines de prova entren a la
-  sessió soles (`AutomaticLogin`): **no hi ha pantalla d'inici**, aquesta primera pantalla ja és la sessió de
-  l'usuari. La de SilikOS és X11 (`WaylandEnable=false`, per les eines EDA, que són programes X11: hi corren `Xorg` i
-  `gdm-x-session`); la de l'AlmaLinux és Wayland (`gdm-wayland-session`). O sigui: en aquesta màquina virtual la
-  sessió X11 triga uns 0,8 s més a ser-hi que la Wayland. Quina part és arrencar Xorg no s'ha mirat [A]. És el preu
-  d'una decisió presa (X11 per a l'EDA), no una cosa a arreglar sense canviar-la.
+- On és la diferència (segona execució, 43461175134, commit acc8cd1, que ja apunta com arrenca la sessió; dona el
+  mateix quadre: memòria 991 / 976 contra 1145 / 1153 MB, escriptori a 11,45 / 11,35 contra 10,03 / 10,6 s). Les
+  dues màquines entren a la sessió soles (`AutomaticLogin`): **no hi ha pantalla d'inici**. La sessió de SilikOS és
+  X11 (`WaylandEnable=false`, per les eines EDA, que són programes X11); la de l'AlmaLinux és Wayland.
+
+  | Des que arrenca el gestor de l'usuari | SilikOS 1 | SilikOS 2 | AlmaLinux 1 | AlmaLinux 2 |
+  |---|---|---|---|---|
+  | `graphical-session.target` (l'escriptori) | 3,65 s | 3,72 s | 3,15 s | 3,13 s |
+  | la unitat de GNOME Shell (`org.gnome.Shell@x11` / `@wayland`) | 1,74 s | 1,74 s | 1,81 s | 1,78 s |
+  | `org.gnome.SettingsDaemon.XSettings` (només a X11) | 0,67 s | 0,66 s | no hi és | no hi és |
+
+  **La shell de SilikOS, amb la nostra extensió i el nostre tema, no triga més que la de sèrie** (1,74 contra
+  1,78-1,81 s). El mig segon de més és de la sessió X11 fora de la shell: el servidor Xorg, que s'ha d'engegar abans,
+  i el que X11 demana a més. És el preu d'una decisió presa (X11 per a l'EDA), no una cosa nostra a arreglar. A la
+  segona parella de captures la sessió s'obre al mateix moment als dos sistemes (7,55 i 7,52 s): la part del sistema
+  abans de la sessió és igual.
 - `systemd-binfmt.service` (0,59 s) és a la cadena crítica de SilikOS i no a la de la base: el `ksh` de la base (el
   demana silik-eda-compat, pels scripts dels fabricants) porta `/etc/binfmt.d/kshcomp.conf`, i amb un sol fitxer la
   unitat ja s'engega. `sysinit.target` hi arriba 0,13 s més tard. Es deixa com està.

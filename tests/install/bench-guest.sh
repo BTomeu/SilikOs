@@ -74,6 +74,7 @@ case $phase in
       echo; echo; echo "\$ journalctl -b -o short-monotonic | grep (gdm, the display server, the session, the shell)"
       journalctl -b -o short-monotonic --no-pager 2> /dev/null \
         | grep -E 'gdm[-a-z]*\[|Xorg|X\.Org|Xwayland|gnome-session[-a-z]*\[|GNOME Shell started|Started GNOME Shell|org\.gnome\.Shell@|gnome-shell\[[0-9]+\]: (Enabling|Loading|Extension|JS (ERROR|WARNING))|New session [0-9c]+ of user|Reached target (GNOME|Graphical|Session|Basic|Main User|Current graphical)|Startup finished|plymouth-quit' \
+        | grep -v -E 'GnomeDesktop-WARNING|gdm-(x|wayland)-session\[[0-9]+\]: (\(|[[:space:]]|X Protocol|Build |Current |Kernel command|Markers:)' \
         | cut -c1-220 | head -90
     } | block session
     finish "$(awk '/^MemTotal|^MemAvailable/ {printf "%s %d MB ", $1, $2 / 1024}' /proc/meminfo)" ;;
