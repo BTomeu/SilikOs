@@ -30,7 +30,7 @@ CIRCLE = re.compile(r'<circle cx="(-?[\d.]+)" cy="(-?[\d.]+)" r="([\d.]+)"')
 
 def svgs():
     out = []
-    for base in ("packages", "brand", "installer", "docs"):
+    for base in ("packages", "brand", "installer", "docs", "site"):
         for d, _, fs in os.walk(os.path.join(ROOT, base)):
             out += [os.path.join(d, f) for f in fs if f.endswith(".svg")]
     return sorted(out)

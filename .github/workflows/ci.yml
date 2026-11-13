@@ -16,9 +16,12 @@ on:
     workflows: ['Wine', 'EDA tools', 'Dev tools']
     types: [completed]
     branches: [main]
+# a push replaces the run in progress (newer code); a run started because Wine / EDA tools / Dev tools ended waits for
+# the one in progress instead of cancelling it (13/11/2026: the first installation test of the public repository was
+# cancelled 25 minutes in when Dev tools ended; with EDA tools running for hours it would be cancelled again and again)
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name != 'workflow_run' }}
 # read-only by default; the job results writes the branch ci-results, a tag's release job the release
 permissions:
   contents: read

@@ -64,14 +64,10 @@ def tile(k):
             + mark(TILE, TILE_PAPER, k))
 
 
-def put(rel, s):
-    p = os.path.join(ROOT, rel)
-    with open(p, "w") as f:
-        f.write(s)
-    print(rel)
-
-
-def main():
+def outputs():
+    """every file this makes: (path in the repository, its text); tests/test_site.py compares the site's with these"""
+    out = []
+    put = lambda rel, s: out.append((rel, s))
     b = "packages/silikos-branding/files/"
     put(b + "silikos-mark.svg", svg(120, 80, mark(LOGO, INK), "the SilikVolt mark, LOGO cut, ink"))
     put(b + "silikos-mark-light.svg", svg(120, 80, mark(LOGO, PAPER), "the SilikVolt mark, LOGO cut, for ink grounds"))
@@ -93,6 +89,21 @@ def main():
     put("brand/installer-sidebar-bg.svg", svg(290, 608, '<rect width="290" height="608" fill="#17181b"/>\n  '
                                               '<line x1="0" y1="560" x2="290" y2="560" stroke="#2c2e32" stroke-width="1.2"/>',
                                               "the installer's sidebar: plain ink"))
+    # the site (site/, GitHub Pages): its title bar carries the mark as the desktop's does, the SMALL cut at its own
+    # size, light on the ink bar and ink on the paper bar of the dark scheme; the browser's tab takes the TILE cut
+    put("site/img/mark.svg", svg(28, 16, mark(SMALL, INK), "the site's title bar when it is paper: the SilikVolt mark, SMALL cut, ink"))
+    put("site/img/mark-light.svg", svg(28, 16, mark(SMALL, PAPER), "the site's title bar: the SilikVolt mark, SMALL cut, for ink grounds"))
+    put("site/favicon.svg", svg(32, 32, tile(1), "the site's icon: the SilikVolt mark, TILE cut"))
+    return out
+
+
+def main():
+    for rel, s in outputs():
+        p = os.path.join(ROOT, rel)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "w") as f:
+            f.write(s)
+        print(rel)
 
 
 if __name__ == "__main__":
