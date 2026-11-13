@@ -1,0 +1,84 @@
+# AlmaLinux release 10.2 (Lavender Lion); gnome-shell-49.4-9.el10_2.alma.1.x86_64 gtk3-3.24.43-5.el10.x86_64 python3-3.12.15-1.el10_2.x86_64 
+## 1. the transaction
+dnf install: exit 0; 18 packages installed
+resource-extract: g-resource-error-quark: The resource at “/org/gnome/shell/theme/gnome-shell.css” does not exist (0)
+resource-extract: g-resource-error-quark: The resource at “/org/gnome/shell/theme/gnome-shell.css” does not exist (0)
+## 2. the themes the install scripts made from the installed stylesheets
+NOT MADE: /usr/share/themes/SilikOS/gnome-shell/gnome-shell.css
+made: /usr/share/themes/SilikOS/gtk-3.0/gtk.css (2279 lines)
+NOT MADE: /usr/share/themes/SilikOS-steel/gnome-shell/gnome-shell.css
+-- shell-theme run again by hand:
+resource-extract: g-resource-error-quark: The resource at “/org/gnome/shell/theme/gnome-shell.css” does not exist (0)
+shell-theme: the shell's stylesheet could not be read: no theme made
+exit 0
+-- gtk-theme run again by hand:
+gtk-theme: /usr/share/themes/SilikOS-spark/gtk-3.0/gtk.css from the installed GTK 3
+gtk-theme: /usr/share/themes/SilikOS-steel-vivid/gtk-3.0/gtk.css from the installed GTK 3
+gtk-theme: /usr/share/themes/SilikOS-steel/gtk-3.0/gtk.css from the installed GTK 3
+gtk-theme: /usr/share/themes/SilikOS-volt-vivid/gtk-3.0/gtk.css from the installed GTK 3
+gtk-theme: /usr/share/themes/SilikOS-volt/gtk-3.0/gtk.css from the installed GTK 3
+exit 0
+## 3. the login screen (the EL 9 package turns Wayland off: EL 10 has no Xorg server to fall back to)
+5:WaylandEnable=false
+package xorg-x11-server-Xorg is not installed package gnome-session-xsession is not installed 
+/usr/share/wayland-sessions: gnome-wayland.desktop gnome.desktop  /usr/share/xsessions: 
+## 4. the identity
+NAME="SilikOS"
+VERSION="10.2"
+ID="almalinux"
+ID_LIKE="rhel centos fedora"
+VERSION_ID="10.2"
+PLATFORM_ID="platform:el10"
+PRETTY_NAME="SilikOS 10.2"
+CPE_NAME="cpe:/o:almalinux:almalinux:10.2"
+AlmaLinux release 10.2 (Lavender Lion)
+## 5. silik
+silik 0.6.14
+system         SilikOS 10.2
+base           AlmaLinux release 10.2 (Lavender Lion)
+arch           x86_64
+kernel         6.18.44-fc-v445
+vsyscall       xonly
+session        -
+gpu            -
+-- silik doctor (the rows that are not ok):
+system
+◆ warn     base               AlmaLinux release 10.2 (Lavender Lion): SilikOS is made for EL 9
+◆ warn     SilikOS packages   6 of 10: silikos-branding 0.4.0, silikos-desktop 0.15.0, silikos-security 0.2.2, silik-tools 0.6.14, silik-command 0.4.7, silikos-power 0.1.0; missing: silik-eda-compat silik-eda-open silik-dev silik-win
+                              fix: sudo dnf -y install silik-eda-compat silik-eda-open silik-dev silik-win
+? unknown  restart            no restart note; the installed kernels are not known (no kernel-core package) (inside a container)
+? unknown  automatic updates  systemd does not answer (inside a container)
+? unknown  services           systemd does not answer (inside a container)
+
+security
+? unknown  SELinux            not visible: no /sys/fs/selinux (inside a container)
+? unknown  firewall           firewalld started at boot; whether it runs is not visible (inside a container)
+◆ warn     incoming           zone public (target default): ssh, dhcpv6-client, cockpit
+                              fix: silik secure apply
+? unknown  disk encryption    / is on overlay: not a block device seen from here (inside a container)
+? unknown  Secure Boot        the firmware's variables are not visible (inside a container)
+? unknown  screen lock        a user's setting: run `silik secure status` as the desktop's user, or with sudo from their session
+◆ warn     kernel settings    15 of 22 weaker than the SilikOS values: net.ipv4.conf.default.accept_redirects=1 (SilikOS: 0), net.ipv4.conf.*.accept_redirects=1 on 5 interfaces (SilikOS: 0), net.ipv4.conf.default.send_redirects=1 (SilikOS: 0), net.ipv4.conf.*.send_redirects=1 on 6 interfaces (SilikOS: 0), kernel.kptr_restrict=0 (SilikOS: 1), fs.protected_symlinks=0 (SilikOS: 1)
+                              fix: silik secure apply
+
+graphics
+? unknown  graphics card      no display device seen (inside a container)
+? unknown  session            no graphical session seen from here (ssh, a text console or a container)
+
+bench
+? unknown  USB devices        /sys/bus/usb is not readable (inside a container)
+
+eda
+◆ warn     EDA boxes          podman is not installed: no EL6 / EL7 / EL8 boxes
+                              fix: sudo dnf -y install podman
+◆ warn     open tools         0 of 13; missing: devsim gtkwave iverilog kicad klayout magic netgen ngspice nvc qucs-s verilator xschem yosys
+-- the extension the package installs, and the shell's version it says it is for:
+  "shell-version": ["40"],
+-- dconf defaults:
+00-silikos 10-silikos-security locks 
+gtk-theme='SilikOS'
+font-name='Cascadia Mono 10'
+monospace-font-name='Cascadia Mono 11'
+name='SilikOS'
+enabled-extensions=['user-theme@gnome-shell-extensions.gcampax.github.com', 'silik-shell@silikvolt.com']
+name='SilikOS COMMAND'

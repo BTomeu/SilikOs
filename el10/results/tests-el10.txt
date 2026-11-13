@@ -1,0 +1,29 @@
+Python 3.12.15
+AlmaLinux release 10.2 (Lavender Lion)
+  return {n: open(os.path.join(SRC, n), encoding="utf-8").read() for n in ("extension.js", "flow.js")}
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/src/el10/port_shell.py:230: ResourceWarning: unclosed file <_io.TextIOWrapper name='/src/packages/silikos-desktop/files/shell-ext/flow.js' mode='r' encoding='utf-8'>
+  return {n: open(os.path.join(SRC, n), encoding="utf-8").read() for n in ("extension.js", "flow.js")}
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+======================================================================
+FAIL: test_on_this_machine_it_runs_and_never_changes_anything (test_doctor.Command.test_on_this_machine_it_runs_and_never_changes_anything)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/src/tests/test_doctor.py", line 695, in test_on_this_machine_it_runs_and_never_changes_anything
+    every_row_says_what_to_do(self, rows)
+  File "/src/tests/test_doctor.py", line 50, in every_row_says_what_to_do
+    test.assertTrue(r["fix"], r)
+AssertionError: [] is not true : {'area': 'system', 'id': 'base', 'name': 'base', 'state': 'warn', 'value': 'AlmaLinux release 10.2 (Lavender Lion): SilikOS is made for EL 9', 'fix': []}
+
+======================================================================
+FAIL: test_a_group_without_its_command_and_a_wrong_command (test_speed.GroupParser.test_a_group_without_its_command_and_a_wrong_command)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/src/tests/test_speed.py", line 163, in test_a_group_without_its_command_and_a_wrong_command
+    self.assertIn("'eda'", err)
+AssertionError: "'eda'" not found in "usage: silik [-h] [--dry-run] [-q] [--version]\n             {status,update,identity,look,doctor,session,eda,dev,win,power,hw,secure}\n             ...\nsilik: error: argument group: invalid choice: 'nope' (choose from status, update, identity, look, doctor, session, eda, dev, win, power, hw, secure)\n"
+
+----------------------------------------------------------------------
+Ran 461 tests in 10.994s
+
+FAILED (failures=2, skipped=1)

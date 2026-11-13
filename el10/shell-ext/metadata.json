@@ -1,0 +1,8 @@
+{
+  "uuid": "silik-shell@silikvolt.com",
+  "name": "SilikOS shell",
+  "description": "The SilikOS desktop in three looks (silik look): silik (the title bar is the command line, a text rail of keys, a status bar), bar and island (one piece at the bottom, the applications as icons). The port for GNOME Shell 49 (EL 10), made by el10/port_shell.py: docs/EL10.md says what of it has been run.",
+  "shell-version": ["49"],
+  "settings-schema": "com.silikvolt.silikos.shell",
+  "url": "https://github.com/BTomeu/silikos"
+}
