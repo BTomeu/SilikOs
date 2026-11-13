@@ -33,6 +33,9 @@ TEXT = {
            "look_silik": "look: Silik (the command line on top, a rail, a status bar)", "look_bar": "look: bar (one bar at the bottom)",
            "look_island": "look: island (one floating piece at the bottom)",
            "glass_on": "look: glass (the floating panes over the blurred wallpaper)", "glass_off": "look: solid paper (no glass)",
+           "glass_clear": "look: clear glass (thinner paper over the blurred wallpaper)",
+           "glass_crystal": "look: crystal (the windows behind the panes show through, blurred)",
+           "glass_crystal_thin": "look: thin crystal (thinner paper, the windows behind blurred more)",
            "accent_ink": "accent: none, one ink on paper (the original)",
            "accent_steel": "accent: steel (what is selected, focused, on)",
            "accent_steel_vivid": "accent: steel (what is selected, focused, on, with the title bars)",
@@ -64,6 +67,9 @@ TEXT = {
            "look_silik": "aspecte: Silik (la línia d'ordres a dalt, un rail, una barra d'estat)", "look_bar": "aspecte: barra (una barra a baix)",
            "look_island": "aspecte: illa (una peça flotant a baix)",
            "glass_on": "aspecte: vidre (les peces flotants sobre el fons de pantalla desenfocat)", "glass_off": "aspecte: paper opac (sense vidre)",
+           "glass_clear": "aspecte: vidre clar (paper més fi sobre el fons de pantalla desenfocat)",
+           "glass_crystal": "aspecte: cristall (les finestres del darrere es veuen a través de les peces, desenfocades)",
+           "glass_crystal_thin": "aspecte: cristall fi (paper més fi, les finestres del darrere més desenfocades)",
            "accent_ink": "accent: cap, una tinta sobre paper (l'original)",
            "accent_steel": "accent: acer (el que és triat, enfocat, encès)",
            "accent_steel_vivid": "accent: acer (el que és triat, enfocat, encès, amb les barres de títol)",
@@ -95,6 +101,9 @@ TEXT = {
            "look_silik": "aspecto: Silik (la línea de órdenes arriba, un rail, una barra de estado)", "look_bar": "aspecto: barra (una barra abajo)",
            "look_island": "aspecto: isla (una pieza flotante abajo)",
            "glass_on": "aspecto: vidrio (las piezas flotantes sobre el fondo de pantalla desenfocado)", "glass_off": "aspecto: papel opaco (sin vidrio)",
+           "glass_clear": "aspecto: vidrio claro (papel más fino sobre el fondo de pantalla desenfocado)",
+           "glass_crystal": "aspecto: cristal (las ventanas de detrás se ven a través de las piezas, desenfocadas)",
+           "glass_crystal_thin": "aspecto: cristal fino (papel más fino, las ventanas de detrás más desenfocadas)",
            "accent_ink": "acento: ninguno, una tinta sobre papel (el original)",
            "accent_steel": "acento: acero (lo seleccionado, enfocado, encendido)",
            "accent_steel_vivid": "acento: acero (lo seleccionado, enfocado, encendido, con las barras de título)",
@@ -190,6 +199,11 @@ def desktop_dirs(env=None):
     return dirs
 
 
+# programs the bar does not list (the shell extension's HIDDEN_APPS, the same): qt5ct is how Qt 5 programs take the
+# accent, which `silik look --accent` and `silik look --qt` set
+HIDDEN_APPS = ("qt5ct.desktop",)
+
+
 def exec_argv(line):
     """the Exec= line of a desktop entry without its field codes (%f %U ...)"""
     try:
@@ -207,7 +221,7 @@ def app_items(dirs, lang="en"):
         except OSError:
             continue
         for fn in names:
-            if not fn.endswith(".desktop") or fn in seen:
+            if not fn.endswith(".desktop") or fn in seen or fn in HIDDEN_APPS:
                 continue
             seen.add(fn)
             cp = configparser.RawConfigParser(strict=False)
@@ -322,6 +336,9 @@ def system_items(t, boxes=(), prefixes=(), programs=(), vendors=()):
         Item("look/island", t["look_island"], [SILIK, "look", "island"]),
         Item("look/glass", t["glass_on"], [SILIK, "look", "--glass", "on"]),
         Item("look/glass-off", t["glass_off"], [SILIK, "look", "--glass", "off"]),
+        Item("look/glass-clear", t["glass_clear"], [SILIK, "look", "--glass", "clear"]),
+        Item("look/glass-crystal", t["glass_crystal"], [SILIK, "look", "--glass", "crystal"]),
+        Item("look/glass-crystal-thin", t["glass_crystal_thin"], [SILIK, "look", "--glass", "crystal-thin"]),
         Item("look/ink", t["accent_ink"], [SILIK, "look", "--accent", "ink"]),
         Item("look/steel", t["accent_steel"], [SILIK, "look", "--accent", "steel"]),
         Item("look/steel-vivid", t["accent_steel_vivid"], [SILIK, "look", "--accent", "steel-vivid"]),
@@ -539,35 +556,50 @@ THEMES = {
     "light": {"paper": "#f7f6f3", "paper2": "#eeede9", "ink": "#1a1b1e", "muted": "#6b6d72", "rule": "#dcdad5", "frame": "#1a1b1e", "selmu": "#b9b8b3"},
     "dark": {"paper": "#17181b", "paper2": "#1f2024", "ink": "#ecebe7", "muted": "#9a9b9f", "rule": "#33353a", "frame": "#ecebe7", "selmu": "#5c5e63"},
 }
-# Glass (the key "glass" of com.silikvolt.silikos.shell, `silik look --glass on|off`): the window's paper at 0.86, the
-# foot a breath of ink, the muted text the grey that reads at 4.5:1 with black (dark: white) behind the paper; the
-# shell puts the blurred wallpaper under the window (extension.js). From tools/gen_accents.py's glass(): the tests
-# hold them equal.
+# Glass (the keys "glass" and "glass-mode" of com.silikvolt.silikos.shell, `silik look --glass off|on|clear|crystal|
+# crystal-thin`): the window's paper at the mode's opacity, the foot a breath of ink, the muted text the grey that
+# reads at 4.5:1 with black (dark: white) behind the paper; the shell puts the blurred wallpaper, in the crystal modes
+# the windows behind too, under the window (extension.js). From tools/gen_accents.py's glass(MODE): the tests hold
+# them equal. (The dark paper of the thinnest mode is more opaque than the light one: a white window behind it is a
+# real case, and its text must read.)
 GLASS = {
-    "light": {"bg": "rgba(247, 246, 243, 0.86)", "bg2": "rgba(26, 27, 30, 0.04)", "muted": "#54565a"},
-    "dark": {"bg": "rgba(23, 24, 27, 0.86)", "bg2": "rgba(236, 235, 231, 0.04)", "muted": "#a1a1a5"},
+    "on": {"light": {"bg": "rgba(247, 246, 243, 0.86)", "bg2": "rgba(26, 27, 30, 0.04)", "muted": "#54565a"},
+           "dark": {"bg": "rgba(23, 24, 27, 0.86)", "bg2": "rgba(236, 235, 231, 0.04)", "muted": "#aaabad"}},
+    "clear": {"light": {"bg": "rgba(247, 246, 243, 0.7)", "bg2": "rgba(26, 27, 30, 0.04)", "muted": "#3a3c40"},
+              "dark": {"bg": "rgba(23, 24, 27, 0.7)", "bg2": "rgba(236, 235, 231, 0.04)", "muted": "#e1e0dd"}},
+    "crystal": {"light": {"bg": "rgba(247, 246, 243, 0.72)", "bg2": "rgba(26, 27, 30, 0.04)", "muted": "#3e3f43"},
+                "dark": {"bg": "rgba(23, 24, 27, 0.72)", "bg2": "rgba(236, 235, 231, 0.04)", "muted": "#dad9d7"}},
+    "crystal-thin": {"light": {"bg": "rgba(247, 246, 243, 0.55)", "bg2": "rgba(26, 27, 30, 0.04)", "muted": "#1a1b1e"},
+                     "dark": {"bg": "rgba(23, 24, 27, 0.67)", "bg2": "rgba(236, 235, 231, 0.04)", "muted": "#eae9e6"}},
 }
 RADIUS = 6
 
 
-def glass_on():
-    """the key "glass" of the desktop's settings (False when the schema or the key is not on this system)"""
+def glass_mode():
+    """the glass in use: None (off, or no schema, no key, no settings service: solid paper) or a key of GLASS. The key
+    "glass" is the switch, "glass-mode" which glass (a desktop from before the modes has only the switch: "on")"""
     try:
         from gi.repository import Gio
         src = Gio.SettingsSchemaSource.get_default()
         schema = src.lookup("com.silikvolt.silikos.shell", True) if src else None
-        return bool(schema and schema.has_key("glass") and Gio.Settings.new("com.silikvolt.silikos.shell").get_boolean("glass"))
+        if not schema or not schema.has_key("glass"):
+            return None
+        settings = Gio.Settings.new("com.silikvolt.silikos.shell")
+        if not settings.get_boolean("glass"):
+            return None
+        mode = settings.get_string("glass-mode") if schema.has_key("glass-mode") else "on"
+        return mode if mode in GLASS else "on"
     except Exception:       # (no GLib bindings, no settings service: solid paper)
-        return False
+        return None
 
 
 def css_values(theme, composited, glass):
-    """the stylesheet's values: rounded corners need a compositing window manager (GNOME has one), square without it;
-    glass too (a translucent window without one is drawn over black)"""
+    """the stylesheet's values. GLASS: None or a key of GLASS. Rounded corners need a compositing window manager
+    (GNOME has one), square without it; glass too (a translucent window without one is drawn over black)"""
     v = dict(THEMES[theme], bg=THEMES[theme]["paper"], bg2=THEMES[theme]["paper2"])
     v.update(radius="%dpx" % RADIUS if composited else "0", inner="%dpx" % (RADIUS - 1) if composited else "0", rowr="4px")
     if glass and composited:
-        v.update(GLASS[theme])
+        v.update(GLASS[glass][theme])
     return v
 
 
@@ -575,13 +607,19 @@ def run_window(query, theme, lang, started=None):
     import gi
     gi.require_version("Gtk", "3.0")
     gi.require_version("Gdk", "3.0")
-    from gi.repository import Gdk, Gtk, Pango
+    from gi.repository import Gdk, GLib, Gtk, Pango
 
     t = TEXT[lang]
     items = all_items(lang, started)
     css = Gtk.CssProvider()
-    vals = css_values(theme, Gdk.Screen.get_default().is_composited(), glass_on())
-    css.load_from_data((CSS % vals).encode())
+    vals = css_values(theme, Gdk.Screen.get_default().is_composited(), glass_mode())
+    try:
+        css.load_from_data((CSS % vals).encode())
+    except GLib.Error:
+        # (seen in the rig, 13/11/2026, about once in thirty openings on a busy machine: GTK refused this stylesheet with
+        # "Invalid number for color value" at its first number, and the bar did not open. The sheet is valid and the
+        # next reading takes it; why the first did not is not known [A])
+        css.load_from_data((CSS % vals).encode())
     Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
     win = Gtk.Window(title="SilikOS COMMAND")

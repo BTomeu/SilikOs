@@ -65,12 +65,28 @@ les icones de les carpetes i els fitxers portin color segons el que contenen: co
 original sempre hi és.
 
 Les peces que floten (l'illa o la barra, l'Inici i el COMMAND bar) són de **vidre**: paper una mica translúcid
-(86 %) sobre el fons de pantalla desenfocat, amb el seu marc fi de tinta i una ombra suau. Es veu el fons, no les
-finestres de darrere: així el que hi ha sota el text és sempre el mateix i es llegeix bé sigui quin sigui el fons (el
-text gris s'ha enfosquit una mica perquè ho compleixi fins i tot sobre negre), i no gasta res mentre res no canvia: el
-desenfocament es fa un cop i es guarda. Es treu amb `silik look --glass off` (o `look/glass-off` al COMMAND bar) i
-torna amb `--glass on`. Mesurat al banc, sense targeta gràfica: obrir l'Inici triga uns 3 ms més a pintar-se, i el
-COMMAND bar té un fotograma més lent quan apareix.
+sobre el que tenen darrere, desenfocat, amb el seu marc fi de tinta i una ombra suau. Quin vidre, es tria:
+
+| `silik look --glass …` | al COMMAND bar | què és |
+|---|---|---|
+| `off` | `look/glass-off` | paper opac, sense vidre |
+| `on` (el d'ara) | `look/glass` | paper al 86 % sobre el fons de pantalla desenfocat |
+| `clear` | `look/glass-clear` | paper al 70 % sobre el fons de pantalla desenfocat |
+| `crystal` | `look/glass-crystal` | paper al 72 %: també es veuen, desenfocades, les finestres del darrere |
+| `crystal-thin` | `look/glass-crystal-thin` | paper al 55 %, més desenfocat |
+
+Amb `on` i `clear` es veu el fons, no les finestres: el que hi ha sota el text és sempre el mateix i no gasta res
+mentre res no canvia (el desenfocament es fa un cop i es guarda). Amb els dos de cristall es veuen les finestres del
+darrere de l'Inici i del COMMAND bar, i segueixen el que fan (si una es mou, es tanca o hi passa text, el vidre ho
+mostra): això costa un desenfocament a cada fotograma en què canvia una finestra de sota, només mentre la peça és
+oberta. L'illa i la barra, que sempre hi són, només mostren les finestres que tenen just a sota. En tots els modes el
+text es llegeix (4,5:1 com a mínim) fins i tot amb negre al darrere: com més fi és el paper, més fosc es fa el text
+gris, i al més fi és tinta. Les mesures de cada mode són a `docs/STATUS.md`.
+
+Els menús del sistema, el calendari, les notificacions, l'indicador de volum, els diàlegs i el canvi de finestra
+(Alt+Tab) són del mateix **paper i tinta**: marc fi de tinta, cantonades de 6 px (4 a les tecles), Cascadia Mono, el
+que és triat en vídeo invers (o amb l'accent). Són paper opac, no vidre. La barra de títol de l'aspecte Silik i les
+pantalles de bloqueig i d'entrada es queden fosques, amb les tecles i el camp de la contrasenya com a tot arreu.
 
 ### El COMMAND bar
 

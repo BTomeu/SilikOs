@@ -1,0 +1,20 @@
+/* SilikOS glass, the mode "crystal" (tools/gen_accents.py; do not edit): paper at 0.72 over a blur of the windows behind and the wallpaper (sigma 16;
+ * flow.js), one class more specific than stylesheet.css; loaded by the extension while the glass is this mode. Text
+ * reads at 4.5:1 or more with black behind the paper: ink 7.5:1, muted text #3e3f43 4.6:1, on #acaba9 */
+.silik-flow.silik-flow { background-color: rgba(247, 246, 243, 0.72); }
+.silik-start.silik-start { background-color: rgba(247, 246, 243, 0.72); }
+.silik-start-head.silik-start-head { background-color: transparent; }
+.silik-start-cats.silik-start-cats { background-color: rgba(26, 27, 30, 0.04); }
+.silik-start-foot.silik-start-foot { background-color: rgba(26, 27, 30, 0.04); }
+.silik-start-flow .silik-start-foot.silik-start-foot { background-color: transparent; }
+.silik-start-entry StLabel.hint-text.hint-text { color: #3e3f43; }
+.silik-start-desc.silik-start-desc { color: #3e3f43; }
+.silik-start-none.silik-start-none { color: #3e3f43; }
+.silik-start-foot.silik-start-foot { color: #3e3f43; }
+.silik-fcmd-last.silik-fcmd-last { color: #3e3f43; }
+.silik-fcmd-hint.silik-fcmd-hint { color: #3e3f43; }
+.silik-clock-d.silik-clock-d { color: #3e3f43; }
+.silik-home-h.silik-home-h { color: #3e3f43; }
+.silik-home-all.silik-home-all { color: #3e3f43; }
+.silik-pin-n.silik-pin-n { color: #3e3f43; }
+.silik-rec-dir.silik-rec-dir { color: #3e3f43; }

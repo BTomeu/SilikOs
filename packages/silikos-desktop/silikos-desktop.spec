@@ -60,10 +60,16 @@ install -Dm0644 %{_sourcedir}/silik-gtk3.css %{buildroot}%{_datadir}/silikos/sil
 printf '[Desktop Entry]\nType=X-GNOME-Metatheme\nName=SilikOS\nComment=One ink on paper\nEncoding=UTF-8\n\n[X-GNOME-Metatheme]\nGtkTheme=SilikOS\n' > %{buildroot}%{_datadir}/themes/SilikOS/index.theme
 # the shell theme is made on the system from the installed shell's stylesheet (shell-theme)
 install -Dm0755 %{_sourcedir}/shell-theme %{buildroot}%{_libexecdir}/silikos/shell-theme
+# (shell-paper: the stylesheet's colours turned, the floating surfaces to paper and ink by shell-paper.map, the title
+# bar and the lock and login screens to the ink family by shell-theme.sed)
+install -Dm0755 %{_sourcedir}/shell-paper %{buildroot}%{_libexecdir}/silikos/shell-paper
+install -Dm0644 %{_sourcedir}/shell-paper.map %{buildroot}%{_datadir}/silikos/shell-paper.map
 install -Dm0644 %{_sourcedir}/shell-theme.sed %{buildroot}%{_datadir}/silikos/shell-theme.sed
 install -Dm0644 %{_sourcedir}/shell-extra.css %{buildroot}%{_datadir}/silikos/shell-extra.css
-install -Dm0644 %{_sourcedir}/shell-toggle-on.svg %{buildroot}%{_datadir}/themes/SilikOS/gnome-shell/toggle-on.svg
-install -Dm0644 %{_sourcedir}/shell-checkbox.svg %{buildroot}%{_datadir}/themes/SilikOS/gnome-shell/checkbox.svg
+# the switch and the check box of the shell, drawn for paper (our own drawings)
+for i in toggle-on toggle-off checkbox checkbox-off; do
+  install -Dm0644 %{_sourcedir}/shell-$i.svg %{buildroot}%{_datadir}/themes/SilikOS/gnome-shell/$i.svg
+done
 # the accents (tools/gen_accents.py): their table and the sed scripts gtk-theme and shell-theme apply first; a theme
 # directory for each, SilikOS-ACCENT, made on the system like SilikOS
 install -Dm0644 %{_sourcedir}/accents/accents %{buildroot}%{_datadir}/silikos/accents/accents
@@ -71,15 +77,14 @@ for f in %{_sourcedir}/accents/*.sed; do install -Dm0644 "$f" %{buildroot}%{_dat
 for f in %{_sourcedir}/accents/*.gtk.sed; do
   t=%{buildroot}%{_datadir}/themes/SilikOS-$(basename "$f" .gtk.sed)
   install -d "$t/gtk-3.0"
-  install -Dm0644 %{_sourcedir}/shell-toggle-on.svg "$t/gnome-shell/toggle-on.svg"
-  install -Dm0644 %{_sourcedir}/shell-checkbox.svg "$t/gnome-shell/checkbox.svg"
+  for i in toggle-on toggle-off checkbox checkbox-off; do install -Dm0644 %{_sourcedir}/shell-$i.svg "$t/gnome-shell/$i.svg"; done
   printf '[Desktop Entry]\nType=X-GNOME-Metatheme\nName=%s\nComment=SilikOS with an accent\nEncoding=UTF-8\n\n[X-GNOME-Metatheme]\nGtkTheme=%s\n' "${t##*/}" "${t##*/}" > "$t/index.theme"
 done
 # the desktop: a shell extension. The Silik look (title bar = command line, text rail, status bar) and the Flow looks
 # (flow.js: bar, island); the key that chooses one is a settings schema of the system (glib2's file trigger compiles it)
 # (accent-ACCENT.css: the extension's rules that take an accent, loaded while the key "accent" names it)
-# (glass.css: the panes on glass, loaded while the key "glass" is on)
-for f in metadata.json extension.js flow.js stylesheet.css glass.css $(cd %{_sourcedir}/shell-ext && ls accent-*.css); do
+# (glass.css, glass-MODE.css: the panes on glass, one loaded while the key "glass" is on: the one of "glass-mode")
+for f in metadata.json extension.js flow.js stylesheet.css $(cd %{_sourcedir}/shell-ext && ls glass.css glass-*.css accent-*.css); do
   install -Dm0644 %{_sourcedir}/shell-ext/$f %{buildroot}%{_datadir}/gnome-shell/extensions/silik-shell@silikvolt.com/$f
 done
 install -Dm0644 %{_sourcedir}/com.silikvolt.silikos.shell.gschema.xml %{buildroot}%{_datadir}/glib-2.0/schemas/com.silikvolt.silikos.shell.gschema.xml
@@ -165,6 +170,7 @@ dconf update >/dev/null 2>&1 || :
 %ghost %{_datadir}/themes/SilikOS-spark/gnome-shell/gnome-shell.css
 %ghost %{_datadir}/themes/SilikOS-spark/gtk-3.0/gtk.css
 %{_libexecdir}/silikos/shell-theme
+%{_libexecdir}/silikos/shell-paper
 %{_libexecdir}/silikos/gtk-theme
 %{_libexecdir}/silikos/resource-extract
 %{_prefix}/lib/systemd/system/silikos-themes.service

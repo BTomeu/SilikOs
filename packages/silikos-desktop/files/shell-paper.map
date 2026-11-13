@@ -1,0 +1,97 @@
+# SilikOS: the installed GNOME Shell stylesheet's colours -> paper and ink, for every surface but the title bar and the
+# lock and login screens (packages/silikos-desktop/files/shell-paper applies this; shell-theme.sed is their map).
+# SOURCE -> TARGET; a source that ends with a comma maps every opacity of that colour. The sources are the shell's own
+# dark theme (GNOME Shell 40): a colour that is not listed is left as it is.
+# The paper family (silik-gtk3.css): paper #f7f6f3, paper2 #eeede9, field #fcfbf9, hover #e6e5e0, hairline #dcdad5,
+# control border #8a8b8f, mid #b9b8b3, muted text #6b6d72, ink2 #2c2e32, ink #1a1b1e.
+#
+# text: the shell's light text -> ink; its greys -> ink2 (body text) and the muted grey (meta: 4.5:1 on paper and on
+# the field); its text at 0.7 and 0.5 (hints, what is out of use) the muted grey too, the other opacities of that
+# colour (lines, plates) ink at the same opacity; "white" is its brightest text on a dark surface, "#fff" its text on
+# a chosen plate
+#eeeeec -> #1a1b1e
+#fafaf9 -> #1a1b1e
+white -> #1a1b1e
+rgba(238, 238, 236, 0.7) -> #6b6d72
+rgba(238, 238, 236, 0.5) -> #6b6d72
+rgba(238, 238, 236, -> rgba(26, 27, 30,
+#e2e2df -> #2c2e32
+#dbdbd6 -> #2c2e32
+#d6d6d1 -> #2c2e32
+#cacac4 -> #2c2e32
+#c5c5be -> #6b6d72
+#bebeb6 -> #6b6d72
+#a6a69b -> #6b6d72
+#878787 -> #6b6d72
+#919190 -> #8a8b8f
+#8e8e80 -> #8a8b8f
+#fff -> #f7f6f3
+#ffffff -> #f7f6f3
+# what is selected, focused, on: the shell's accent blue and its tints -> ink (inverse video); the accents' own maps
+# (accents/NAME.shell.sed, applied before this) give these sources their colours instead
+#1b6acb -> #1a1b1e
+#1c6fd4 -> #1a1b1e
+#1d72d8 -> #2c2e32
+#1f76e1 -> #2c2e32
+#2c7fe3 -> #2c2e32
+#1961b9 -> #1a1b1e
+#1b68c6 -> #1a1b1e
+#185fb4 -> #1a1b1e
+#134c90 -> #1a1b1e
+#092444 -> #1a1b1e
+#629fea -> #1a1b1e
+#8fbbf0 -> #2c2e32
+#3584e4 -> #1a1b1e
+#15539e -> #2c2e32
+#1963bd -> #1a1b1e
+#155099 -> #1a1b1e
+rgba(27, 106, 203, -> rgba(26, 27, 30,
+rgba(188, 214, 246, -> rgba(26, 27, 30,
+rgba(143, 187, 240, -> rgba(26, 27, 30,
+# surfaces: a pane (menu, dialog) is paper; a card or a key on it the field; under the pointer the hover grey; pressed
+# or chosen a darker one; out of use paper2
+#353535 -> #f7f6f3
+#3c3c3c -> #fcfbf9
+#2d2c2e -> #fcfbf9
+#424242 -> #e6e5e0
+#4e4e4e -> #e6e5e0
+#2d2d2d -> #dcdad5
+#1e1e1e -> #dcdad5
+#282828 -> #dcdad5
+#303030 -> #eeede9
+#3a3a3a -> #eeede9
+#3b3b3b -> #eeede9
+#323132 -> #eeede9
+rgba(32, 32, 32, 0.96) -> #f7f6f3
+rgba(32, 32, 32, -> rgba(247, 246, 243,
+rgba(45, 45, 45, -> rgba(252, 251, 249,
+rgba(50, 50, 50, -> rgba(230, 229, 224,
+rgba(30, 30, 30, -> rgba(220, 218, 213,
+rgba(71, 71, 71, -> rgba(230, 229, 224,
+rgba(20, 20, 20, -> rgba(220, 218, 213,
+rgba(7, 7, 7, -> rgba(26, 27, 30,
+rgba(255, 255, 255, -> rgba(26, 27, 30,
+# frames: a pane's is one line of ink; a card's a hairline; a pressed key's and a scroll bar the control grey
+#202020 -> #1a1b1e
+#2b2b2b -> #dcdad5
+#262626 -> #dcdad5
+#252526 -> #dcdad5
+#191919 -> #8a8b8f
+rgba(27, 27, 27, -> rgba(138, 139, 143,
+rgba(9, 9, 9, -> rgba(138, 139, 143,
+rgba(55, 55, 55, -> rgba(26, 27, 30,
+#a4a4a3 -> #8a8b8f
+#c9c9c7 -> #1a1b1e
+# warn and bad keep their meaning in colour, in the tones that read on paper (SilikStudio's)
+#f57900 -> #7a5c00
+#b2161d -> #b3261e
+#bc171e -> #b3261e
+# the switch and the check box: ours (shell-toggle-*.svg, shell-checkbox*.svg), drawn for paper
+url("resource:///org/gnome/shell/theme/toggle-on-dark.svg") -> url("toggle-on.svg")
+url("resource:///org/gnome/shell/theme/toggle-on.svg") -> url("toggle-on.svg")
+url("resource:///org/gnome/shell/theme/toggle-off-dark.svg") -> url("toggle-off.svg")
+url("resource:///org/gnome/shell/theme/toggle-off.svg") -> url("toggle-off.svg")
+url("resource:///org/gnome/shell/theme/checkbox.svg") -> url("checkbox.svg")
+url("resource:///org/gnome/shell/theme/checkbox-focused.svg") -> url("checkbox.svg")
+url("resource:///org/gnome/shell/theme/checkbox-off.svg") -> url("checkbox-off.svg")
+url("resource:///org/gnome/shell/theme/checkbox-off-focused.svg") -> url("checkbox-off.svg")

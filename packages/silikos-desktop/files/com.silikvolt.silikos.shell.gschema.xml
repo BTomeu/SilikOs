@@ -33,7 +33,18 @@
     <key name="glass" type="b">
       <default>true</default>
       <summary>Glass: the floating panes over a blur of what is behind them</summary>
-      <description>true: the island (or the bar), Start and the COMMAND bar are paper at 0.86 over a blur of what is behind them, with their muted text darker so that it reads at 4.5:1 on any background. false: solid paper. The Silik look's title bar, rail and status bar are solid either way. `silik look --glass on|off` sets this key.</description>
+      <description>true: the island (or the bar), Start and the COMMAND bar are translucent paper over a blur of what is behind them (which glass: the key glass-mode), with their muted text darker so that it reads at 4.5:1 on any background. false: solid paper. The Silik look's title bar, rail and status bar are solid either way. `silik look --glass off|on|clear|crystal|crystal-thin` sets this key and glass-mode.</description>
+    </key>
+    <key name="glass-mode" type="s">
+      <choices>
+        <choice value="on"/>
+        <choice value="clear"/>
+        <choice value="crystal"/>
+        <choice value="crystal-thin"/>
+      </choices>
+      <default>'on'</default>
+      <summary>Which glass, while the key glass is true</summary>
+      <description>on: paper at 0.86 over the blurred wallpaper. clear: paper at 0.70 over the blurred wallpaper. crystal: paper at 0.72 over the blurred windows behind the pane and the wallpaper. crystal-thin: paper at 0.55, a stronger blur. Every text colour of a mode reads at 4.5:1 with black behind the paper (tools/gen_accents.py). The key glass stays the switch (a setting made before there were modes keeps its meaning): `silik look --glass off` sets it to false and leaves this key as it is.</description>
     </key>
   </schema>
 </schemalist>

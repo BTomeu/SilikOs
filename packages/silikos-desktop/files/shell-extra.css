@@ -1,24 +1,63 @@
 
 /* ---- SilikOS additions ---- */
-stage { font-family: "Cascadia Mono", "DejaVu Sans Mono", monospace; font-size: 10pt; }
+/* (This file is appended to the installed stylesheet before the colours are turned, and goes through the same maps
+   (shell-theme: an accent's sed, then shell-paper). So what is chosen or on is written here as the shell writes it,
+   its own blue with its own white on it: the ink look makes that ink with paper on it, an accent its own colour. Every other colour
+   here is SilikOS's own and is no source of those maps.) */
+/* The shell's own surfaces are the same paper and ink as the panes of the desktop (shell-paper turned the colours of
+   the installed stylesheet; this gives them the pane's frame, corners and face): paper #f7f6f3, one line of ink
+   around a pane, 6 px corners on a pane and 4 px on a key or a card, Cascadia Mono. They are solid paper, not glass:
+   a menu or a banner would need its own blur at each showing (the glass of the desktop's panes is kept from one frame
+   to the next because they stay where they are), and a stylesheet cannot put one under them. The title bar and the
+   lock and login screens keep the ink family. */
+/* (the families as bare words: GNOME Shell 40 does not read a second family in quotes, warned "Couldn't parse family in
+   font property" at every change of a stylesheet and left the face to the desktop's font setting; seen in the rig) */
+stage { font-family: Cascadia Mono, DejaVu Sans Mono, monospace; font-size: 10pt;
+  warning-color: #7a5c00; error-color: #b3261e; success-color: #1b7337; }
 /* the top bar: the ink slab, regular weight */
-#panel { background-color: #17181b; font-weight: normal; }
+#panel { background-color: #17181b; font-weight: normal; warning-color: #dcb53a; error-color: #f66d67; success-color: #61cb7c; }
 #panel .panel-button { color: #ecebe7; font-weight: normal; }
 #panel .panel-button:hover, #panel .panel-button:active, #panel .panel-button:overview, #panel .panel-button:focus {
   box-shadow: inset 0 0 0 100px rgba(236, 235, 231, 0.14); }
-/* levels and focus in paper, not in an accent */
-.slider { -barlevel-active-background-color: #ecebe7; -barlevel-active-border-color: #ecebe7; -slider-handle-border-color: #ecebe7; }
-.level-bar { -barlevel-active-background-color: #ecebe7; }
-.workspace-thumbnail-indicator { border-color: #ecebe7; }
-.cycler-highlight, .tile-preview, .select-area-rubberband { border-color: #ecebe7; }
-.tile-preview { background-color: rgba(236, 235, 231, 0.18); }
-/* floating layers: a hairline frame, no glow, smaller corners */
-.candidate-popup-content, .modal-dialog, .switcher-list, .osd-window, .notification-banner {
-  border: 1px solid #55575c; border-radius: 4px; box-shadow: none; }
-/* menus hang from the title bar as panes: no pointer, small corners */
+/* a slider: a grey line, its level in ink (or the accent), a paper knob in an ink ring */
+.slider { -barlevel-background-color: #b9b8b3; -barlevel-border-color: #b9b8b3; -slider-handle-border-color: #1a1b1e; color: #fcfbf9; }
+.slider:hover { color: #e6e5e0; }
+.slider:active { color: #1a1b1e; }
+.workspace-thumbnail-indicator { border-color: #1a1b1e; }
+.workspace-animation { background-color: #e9e8e3; }
+/* where a window will go when it is let go: a breath of ink in an ink line (it lies over any window or wallpaper) */
+.tile-preview { background-color: rgba(26, 27, 30, 0.12); border: 1px solid #1a1b1e; border-radius: 0; }
+/* floating panes: the frame and corners of the island and of Start, their shadow */
+.candidate-popup-content, .modal-dialog, .switcher-list, .workspace-switcher-container, .resize-popup, .osd-window, .notification-banner {
+  border: 1px solid #1a1b1e; border-radius: 6px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18); }
+/* the switchers (Alt+Tab, the workspaces): the chosen one is inverse video, a key's corners */
+.switcher-list .item-box { border-radius: 4px; }
+.switcher-list .item-box:selected { background-color: #1b6acb; color: #fff; }
+.switcher-list .item-box:outlined { border-color: #1a1b1e; background-color: transparent; }
+.ws-switcher-box, .ws-switcher-active-up, .ws-switcher-active-down, .ws-switcher-active-left, .ws-switcher-active-right { border-radius: 4px; }
+.ws-switcher-box { border: 1px solid #8a8b8f; }
+/* menus hang from their key as panes: no pointer, the pane's frame and corners */
 .popup-menu-boxpointer, .candidate-popup-boxpointer {
-  -arrow-border-radius: 4px; -arrow-border-width: 1px; -arrow-border-color: #55575c; -arrow-rise: 0; -arrow-base: 0; }
+  -arrow-border-radius: 6px; -arrow-border-width: 1px; -arrow-border-color: #1a1b1e; -arrow-rise: 0; -arrow-base: 0;
+  -arrow-box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18); }
+.popup-menu-content { padding: 6px 0; }
 .popup-menu-item { border-radius: 0; }
+/* the row under the pointer or the keyboard: the hover grey of the desktop's keys; pressed, it is inverse video (the
+   shell's own rule: ink, or the accent) */
+.popup-menu-item.selected { background-color: #e6e5e0; color: #1a1b1e; }
+.popup-sub-menu { background-color: #eeede9; border-top: 1px solid #dcdad5; border-bottom: 1px solid #dcdad5; }
+.popup-separator-menu-item .popup-separator-menu-item-separator { margin: 6px 16px; }
+.popup-sub-menu .popup-separator-menu-item .popup-separator-menu-item-separator { background-color: #dcdad5; }
+/* keys: a paper key in a control border, 4 px corners; the dialogs' row of keys is ruled, not rounded */
+.button, .notification-banner .notification-button, .hotplug-notification-item { border-color: #8a8b8f; border-radius: 4px; box-shadow: none; text-shadow: none; }
+.modal-dialog .modal-dialog-linked-button { border-color: #8a8b8f; box-shadow: none; text-shadow: none; }
+.modal-dialog .modal-dialog-linked-button:first-child:ltr, .modal-dialog .modal-dialog-linked-button:last-child:rtl { border-radius: 0 0 0 5px; }
+.modal-dialog .modal-dialog-linked-button:last-child:ltr, .modal-dialog .modal-dialog-linked-button:first-child:rtl { border-radius: 0 0 5px 0; }
+.modal-dialog .modal-dialog-linked-button:first-child:last-child { border-radius: 0 0 5px 5px; }
+.button:focus, .modal-dialog .modal-dialog-linked-button:focus, .notification-banner .notification-button:focus { box-shadow: inset 0 0 0 1px #1a1b1e; }
+/* a message: its close key in ink on the card */
+.message .message-close-button { color: #6b6d72; }
+.message .message-close-button:hover { color: #1a1b1e; }
 /* a title-bar key is a rectangle; the open one is inverse video */
 #panel .panel-button { border-radius: 0; }
 #panel .panel-button:active, #panel .panel-button:checked {
@@ -27,16 +66,46 @@ stage { font-family: "Cascadia Mono", "DejaVu Sans Mono", monospace; font-size: 
 #panel .panel-button.clock-display:active, #panel .panel-button.clock-display:checked { box-shadow: none; }
 #panel .panel-button.clock-display:active .clock, #panel .panel-button.clock-display:checked .clock {
   box-shadow: inset 0 0 0 100px #ecebe7; color: #1a1b1e; }
-/* the calendar: square cells, today in inverse video */
-.calendar, .events-button, .world-clocks-button, .weather-button, .message, .datemenu-today-button { border-radius: 4px; }
+/* the calendar: cards of 4 px corners, square cells; today is inverse video (ink, or the accent), the chosen day grey */
+.calendar, .events-button, .world-clocks-button, .weather-button, .message, .datemenu-today-button { border-radius: 4px; box-shadow: none; }
 .calendar .calendar-day-base { border-radius: 0; }
-.calendar .calendar-today, .calendar .calendar-today:hover, .calendar .calendar-today:focus,
-.calendar .calendar-today:active, .calendar .calendar-today:selected,
-.calendar .calendar-today:active:hover, .calendar .calendar-today:selected:hover {
-  background-color: #ecebe7; color: #1a1b1e; }
-StEntry { border-radius: 4px; }
-StEntry:focus { box-shadow: inset 0 0 0 1px #ecebe7; border-color: #ecebe7; }
-.shell-link, .shell-link:hover { color: #ecebe7; text-decoration: underline; }
+StEntry { border-radius: 4px; border-color: #8a8b8f; }
+.shell-link, .shell-link:hover { color: #1a1b1e; text-decoration: underline; }
+.url-highlighter { link-color: #1a1b1e; }
+.login-dialog .shell-link, .unlock-dialog .shell-link { color: #ecebe7; }
+/* the lock and login screens stay dark (light text over the dimmed wallpaper or the ink sheet), and what is typed in
+   or pressed there is the same key as everywhere: the entry a paper field with ink text (the shell's own parts of an
+   entry, its hint and its icons, are written for paper), a key a paper line with paper text, the main one inverse
+   video (a paper plate, ink text), 4 px corners */
+.login-dialog StEntry, .unlock-dialog StEntry { background-color: #fcfbf9; color: #1a1b1e; border-color: #1a1b1e; caret-color: #1a1b1e;
+  selection-background-color: #1a1b1e; selected-color: #f7f6f3; }
+.login-dialog .modal-dialog-button, .unlock-dialog .modal-dialog-button { background-color: transparent; border-color: #ecebe7; color: #ecebe7;
+  border-radius: 4px; box-shadow: none; }
+.login-dialog .modal-dialog-button:hover, .login-dialog .modal-dialog-button:focus,
+.unlock-dialog .modal-dialog-button:hover, .unlock-dialog .modal-dialog-button:focus { background-color: rgba(236, 235, 231, 0.16); border-color: #ecebe7; }
+.login-dialog .modal-dialog-button:active, .unlock-dialog .modal-dialog-button:active { background-color: rgba(236, 235, 231, 0.3); border-color: #ecebe7; }
+.login-dialog .modal-dialog-button:insensitive, .unlock-dialog .modal-dialog-button:insensitive { background-color: transparent; border-color: #6b6d72; color: #9a9b9f; }
+.login-dialog .modal-dialog-button:default, .unlock-dialog .modal-dialog-button:default,
+.login-dialog .modal-dialog-button:default:hover, .login-dialog .modal-dialog-button:default:focus,
+.unlock-dialog .modal-dialog-button:default:hover, .unlock-dialog .modal-dialog-button:default:focus,
+.login-dialog .modal-dialog-button:default:active, .unlock-dialog .modal-dialog-button:default:active {
+  background-color: #ecebe7; border-color: #ecebe7; color: #1a1b1e; box-shadow: none; text-shadow: none; icon-shadow: none; }
+.login-dialog .modal-dialog-button:default:hover, .login-dialog .modal-dialog-button:default:focus,
+.unlock-dialog .modal-dialog-button:default:hover, .unlock-dialog .modal-dialog-button:default:focus { background-color: #fcfbf9; border-color: #fcfbf9; }
+.login-dialog .modal-dialog-button:default:insensitive, .unlock-dialog .modal-dialog-button:default:insensitive {
+  background-color: #6b6d72; border-color: #6b6d72; color: #1a1b1e; }
+.login-dialog .cancel-button, .login-dialog .switch-user-button, .login-dialog .login-dialog-session-list-button,
+.unlock-dialog .cancel-button, .unlock-dialog .switch-user-button, .unlock-dialog .login-dialog-session-list-button {
+  background-color: transparent; border-color: #ecebe7; color: #ecebe7; border-radius: 4px; }
+.login-dialog .cancel-button:hover, .login-dialog .switch-user-button:hover, .login-dialog .login-dialog-session-list-button:hover,
+.unlock-dialog .cancel-button:hover, .unlock-dialog .switch-user-button:hover, .unlock-dialog .login-dialog-session-list-button:hover,
+.login-dialog .cancel-button:focus, .login-dialog .switch-user-button:focus, .login-dialog .login-dialog-session-list-button:focus,
+.unlock-dialog .cancel-button:focus, .unlock-dialog .switch-user-button:focus, .unlock-dialog .login-dialog-session-list-button:focus {
+  background-color: rgba(236, 235, 231, 0.16); }
+/* who is asked for a password in a dialog (a paper pane): their name and picture in ink */
+.modal-dialog .user-widget-label { color: #1a1b1e; }
+.modal-dialog .user-icon { color: #1a1b1e; }
+.modal-dialog .user-icon StIcon { background-color: rgba(26, 27, 30, 0.06); }
 /* the base's logo beside "Activities" (a file path fixed in the shell): not shown */
 #panel .panel-button .panel-logo-icon { icon-size: 0; padding: 0; margin: 0; width: 0; }
 #panel #panelActivities.panel-button { -natural-hpadding: 12px; }

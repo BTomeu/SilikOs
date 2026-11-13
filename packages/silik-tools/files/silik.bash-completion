@@ -1,10 +1,10 @@
 # bash completion for silik
 _silik() {
   local cur=${COMP_WORDS[COMP_CWORD]} g=${COMP_WORDS[1]}
-  # look: a look, --accent and its accents, --glass on|off, at any place after the word look
+  # look: a look, --accent and its accents, --glass and its modes, at any place after the word look
   if [ "$g" = look ] && [ "$COMP_CWORD" -ge 2 ]; then
     if [ "${COMP_WORDS[COMP_CWORD-1]}" = --accent ]; then COMPREPLY=($(compgen -W "ink steel steel-vivid cobalt cobalt-vivid silicon silicon-vivid volt volt-vivid spark" -- "$cur"))
-    elif [ "${COMP_WORDS[COMP_CWORD-1]}" = --glass ]; then COMPREPLY=($(compgen -W "on off" -- "$cur"))
+    elif [ "${COMP_WORDS[COMP_CWORD-1]}" = --glass ]; then COMPREPLY=($(compgen -W "off on clear crystal crystal-thin" -- "$cur"))
     else COMPREPLY=($(compgen -W "silik bar island --accent --glass --json" -- "$cur")); fi
     return
   fi

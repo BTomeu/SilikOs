@@ -29,12 +29,12 @@ class Schema(unittest.TestCase):
         self.path = os.path.join(DESK, "files", SCHEMA + ".gschema.xml")
         self.root = ET.parse(self.path).getroot()
 
-    def test_three_keys_the_three_looks_the_accents_and_the_glass(self):
+    def test_the_keys_the_three_looks_the_accents_and_the_glass(self):
         schemas = self.root.findall("schema")
         self.assertEqual([s.get("id") for s in schemas], [SCHEMA])
         self.assertEqual(schemas[0].get("path"), "/com/silikvolt/silikos/shell/")
         keys = schemas[0].findall("key")
-        self.assertEqual([(k.get("name"), k.get("type")) for k in keys], [("look", "s"), ("accent", "s"), ("glass", "b")])
+        self.assertEqual([(k.get("name"), k.get("type")) for k in keys], [("look", "s"), ("accent", "s"), ("glass", "b"), ("glass-mode", "s")])
         self.assertEqual([c.get("value") for c in keys[0].find("choices")], LOOKS)
         accents = [c.get("value") for c in keys[1].find("choices")]
         self.assertEqual(accents[0], "ink")                                   # (the list itself: tests/test_accents.py)
@@ -60,9 +60,9 @@ class Extension(unittest.TestCase):
         line = re.search(r"for f in ([^;]+); do\n\s+install .*shell-ext/\$f", spec)
         self.assertIsNotNone(line)
         words = line.group(1).split()
-        # (the accents' files by their pattern: $(cd %{_sourcedir}/shell-ext && ls accent-*.css))
-        self.assertEqual(" ".join(words[-5:]), "$(cd %{_sourcedir}/shell-ext && ls accent-*.css)")
-        named = words[:-5] + sorted(f for f in os.listdir(EXT) if re.match(r"^accent-[a-z-]+\.css$", f))
+        # (the glass modes' and the accents' files by their patterns)
+        self.assertEqual(" ".join(words[-7:]), "$(cd %{_sourcedir}/shell-ext && ls glass.css glass-*.css accent-*.css)")
+        named = words[:-7] + sorted(f for f in os.listdir(EXT) if re.match(r"^(accent-[a-z-]+|glass(-[a-z-]+)?)\.css$", f))
         self.assertEqual(sorted(named), sorted(os.listdir(EXT)))
 
     def test_it_reads_the_key_and_follows_it(self):
@@ -126,10 +126,17 @@ class Extension(unittest.TestCase):
                 self.assertNotIn(other, js)
 
     def test_nothing_runs_at_rest(self):
-        """no repeating timer, no repaint loop: one time limit for an application that never shows a window"""
-        self.assertEqual(self.flow.count("timeout_add"), 1)
+        """no repeating timer, no repaint loop: one time limit for an application that never shows a window; and in
+        the crystal glass modes one wait, asked for when a window behind a pane that is on the screen draws (its
+        picture is taken again then), which ends by itself"""
+        self.assertEqual(self.flow.count("timeout_add"), 2)
         limit = self.flow.split("timeout_add(")[1].split("}));")[0]
         self.assertIn("return GLib.SOURCE_REMOVE;", limit)
+        still = self.flow.split("    _stillSoon() {")[1].split("\n    }\n")[0]
+        self.assertEqual(still.count("timeout_add"), 1)
+        self.assertIn("if (this._stillId) return;", still)
+        self.assertIn("return GLib.SOURCE_REMOVE;", still)
+        self.assertEqual(self.flow.count("this._stillSoon()"), 2)       # a window drew; a window had no contents yet (a few times)
         self.assertNotIn("SOURCE_CONTINUE", self.flow + self.ext)
         # the extension's one time limit: Start's rows made before the first opening, once, a slice per idle moment
         # until they are all made (each slice asks for the next one only while rows are missing)

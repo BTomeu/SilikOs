@@ -1,6 +1,6 @@
-/* SilikOS glass (tools/gen_accents.py; do not edit): paper at 0.86 over a blur of what is behind (extension.js),
- * one class more specific than stylesheet.css; loaded by the extension while the key "glass" is on. Text reads at
- * 4.5:1 or more with black behind the paper: muted text #54565a (4.6:1 on #cdcdca) */
+/* SilikOS glass, the mode "on" (tools/gen_accents.py; do not edit): paper at 0.86 over a blur of the wallpaper (sigma 16;
+ * flow.js), one class more specific than stylesheet.css; loaded by the extension while the glass is this mode. Text
+ * reads at 4.5:1 or more with black behind the paper: ink 10.8:1, muted text #54565a 4.6:1, on #cdcdca */
 .silik-flow.silik-flow { background-color: rgba(247, 246, 243, 0.86); }
 .silik-start.silik-start { background-color: rgba(247, 246, 243, 0.86); }
 .silik-start-head.silik-start-head { background-color: transparent; }
