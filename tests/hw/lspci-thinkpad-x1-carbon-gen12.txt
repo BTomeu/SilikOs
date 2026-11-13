@@ -1,0 +1,102 @@
+# A public hardware probe: `lspci -vvnn` of a Lenovo ThinkPad X1 Carbon Gen 12 (21KC, Intel Core Ultra) under Ubuntu 24.04, kernel 6.11, as collected by the Linux Hardware Database project.
+# Source: https://github.com/linuxhw/LsPCI (CC BY 4.0), commit 716d5be960ffcac591ebb3309361bdce17cf6079, file:
+#   Notebook/Lenovo/ThinkPad/ThinkPad X1 Carbon Gen 12 21KCCTO1WW/EE20F248308A/UBUNTU-24.04/6.11.0-1010-OEM/X86_64/47B5606CC6
+# Kept here: the device lines and their Subsystem / Kernel driver in use / Kernel modules lines (what `lspci -nnk`
+# prints); the other lines of each device were dropped. The drivers named are those of the system the probe was
+# taken on, not of SilikOS.
+00:00.0 Host bridge [0600]: Intel Corporation Device [8086:7d01] (rev 04)
+	Subsystem: Lenovo Device [17aa:231e]
+	Kernel driver in use: igen6_edac
+	Kernel modules: igen6_edac
+00:02.0 VGA compatible controller [0300]: Intel Corporation Meteor Lake-P [Intel Arc Graphics] [8086:7d55] (rev 08) (prog-if 00 [VGA controller])
+	Subsystem: Lenovo Meteor Lake-P [Intel Arc Graphics] [17aa:231e]
+	Kernel driver in use: i915
+	Kernel modules: i915, xe
+00:04.0 Signal processing controller [1180]: Intel Corporation Device [8086:7d03] (rev 04)
+	Subsystem: Lenovo Device [17aa:231e]
+	Kernel driver in use: proc_thermal_pci
+	Kernel modules: processor_thermal_device_pci
+00:05.0 Multimedia controller [0480]: Intel Corporation Device [8086:7d19] (rev 04)
+	Subsystem: Lenovo Device [17aa:231e]
+	Kernel driver in use: intel-ipu6
+	Kernel modules: intel_ipu6, intel_ipu6_psys, intel_ipu6_isys
+00:06.0 PCI bridge [0604]: Intel Corporation Device [8086:7e4d] (rev 20) (prog-if 00 [Normal decode])
+	Subsystem: Lenovo Device [17aa:231e]
+	Kernel driver in use: pcieport
+00:06.1 PCI bridge [0604]: Intel Corporation Device [8086:7eca] (rev 10) (prog-if 00 [Normal decode])
+	Subsystem: Lenovo Device [17aa:231e]
+	Kernel driver in use: pcieport
+00:07.0 PCI bridge [0604]: Intel Corporation Meteor Lake-P Thunderbolt 4 PCI Express Root Port #0 [8086:7ec4] (rev 02) (prog-if 00 [Normal decode])
+	Subsystem: Lenovo Meteor Lake-P Thunderbolt 4 PCI Express Root Port [17aa:231e]
+	Kernel driver in use: pcieport
+00:07.2 PCI bridge [0604]: Intel Corporation Meteor Lake-P Thunderbolt 4 PCI Express Root Port #2 [8086:7ec6] (rev 02) (prog-if 00 [Normal decode])
+	Subsystem: Lenovo Meteor Lake-P Thunderbolt 4 PCI Express Root Port [17aa:231e]
+	Kernel driver in use: pcieport
+00:08.0 System peripheral [0880]: Intel Corporation Device [8086:7e4c] (rev 20)
+	Subsystem: Lenovo Device [17aa:231e]
+00:0a.0 Signal processing controller [1180]: Intel Corporation Device [8086:7d0d] (rev 01)
+	Subsystem: Lenovo Device [17aa:231e]
+	Kernel driver in use: intel_vsec
+	Kernel modules: intel_vsec
+00:0b.0 Processing accelerators [1200]: Intel Corporation Meteor Lake NPU [8086:7d1d] (rev 04)
+	Subsystem: Lenovo Device [17aa:231e]
+	Kernel driver in use: intel_vpu
+	Kernel modules: intel_vpu
+00:0d.0 USB controller [0c03]: Intel Corporation Meteor Lake-P Thunderbolt 4 USB Controller [8086:7ec0] (rev 02) (prog-if 30 [XHCI])
+	Subsystem: Lenovo Meteor Lake-P Thunderbolt 4 USB Controller [17aa:231e]
+	Kernel driver in use: xhci_hcd
+	Kernel modules: xhci_pci
+00:0d.2 USB controller [0c03]: Intel Corporation Meteor Lake-P Thunderbolt 4 NHI #0 [8086:7ec2] (rev 02) (prog-if 40 [USB4 Host Interface])
+	Subsystem: Lenovo Meteor Lake-P Thunderbolt 4 NHI [17aa:231e]
+	Kernel driver in use: thunderbolt
+	Kernel modules: thunderbolt
+00:0d.3 USB controller [0c03]: Intel Corporation Meteor Lake-P Thunderbolt 4 NHI #1 [8086:7ec3] (rev 02) (prog-if 40 [USB4 Host Interface])
+	Subsystem: Lenovo Meteor Lake-P Thunderbolt 4 NHI [17aa:231e]
+	Kernel driver in use: thunderbolt
+	Kernel modules: thunderbolt
+00:12.0 Serial controller [0700]: Intel Corporation Device [8086:7e45] (rev 20) (prog-if 00 [8250])
+	Subsystem: Lenovo Device [17aa:231e]
+	Kernel driver in use: intel_ish_ipc
+	Kernel modules: intel_ish_ipc
+00:14.0 USB controller [0c03]: Intel Corporation Meteor Lake-P USB 3.2 Gen 2x1 xHCI Host Controller [8086:7e7d] (rev 20) (prog-if 30 [XHCI])
+	Subsystem: Lenovo Meteor Lake-P USB 3.2 Gen 2x1 xHCI Host Controller [17aa:231e]
+	Kernel driver in use: xhci_hcd
+	Kernel modules: xhci_pci
+00:14.2 RAM memory [0500]: Intel Corporation Device [8086:7e7f] (rev 20)
+	Subsystem: Lenovo Device [17aa:231e]
+00:15.0 Serial bus controller [0c80]: Intel Corporation Meteor Lake-P Serial IO I2C Controller #0 [8086:7e78] (rev 20)
+	Subsystem: Lenovo Meteor Lake-P Serial IO I2C Controller [17aa:231e]
+	Kernel driver in use: intel-lpss
+	Kernel modules: intel_lpss_pci
+00:16.0 Communication controller [0780]: Intel Corporation Device [8086:7e70] (rev 20)
+	Subsystem: Lenovo Device [17aa:231e]
+	Kernel driver in use: mei_me
+	Kernel modules: mei_me
+00:1c.0 PCI bridge [0604]: Intel Corporation Device [8086:7e38] (rev 20) (prog-if 00 [Normal decode])
+	Subsystem: Lenovo Device [17aa:231e]
+	Kernel driver in use: pcieport
+00:1c.7 PCI bridge [0604]: Intel Corporation Device [8086:7e3f] (rev 20) (prog-if 00 [Normal decode])
+	Subsystem: Lenovo Device [17aa:231e]
+	Kernel driver in use: pcieport
+00:1f.0 ISA bridge [0601]: Intel Corporation Device [8086:7e02] (rev 20)
+	Subsystem: Lenovo Device [17aa:231e]
+00:1f.3 Audio device [0403]: Intel Corporation Meteor Lake-P HD Audio Controller [8086:7e28] (rev 20) (prog-if 80)
+	Subsystem: Lenovo Meteor Lake-P HD Audio Controller [17aa:231e]
+	Kernel driver in use: sof-audio-pci-intel-mtl
+	Kernel modules: snd_hda_intel, snd_sof_pci_intel_mtl
+00:1f.4 SMBus [0c05]: Intel Corporation Meteor Lake-P SMBus Controller [8086:7e22] (rev 20)
+	Subsystem: Lenovo Meteor Lake-P SMBus Controller [17aa:231e]
+	Kernel driver in use: i801_smbus
+	Kernel modules: i2c_i801
+00:1f.5 Serial bus controller [0c80]: Intel Corporation Meteor Lake-P SPI Controller [8086:7e23] (rev 20)
+	Subsystem: Lenovo Meteor Lake-P SPI Controller [17aa:231e]
+	Kernel driver in use: intel-spi
+	Kernel modules: spi_intel_pci
+04:00.0 Non-Volatile memory controller [0108]: KIOXIA Corporation NVMe SSD Controller XG8 [1e0f:0010] (rev 01) (prog-if 02 [NVM Express])
+	Subsystem: KIOXIA Corporation NVMe SSD Controller XG8 [1e0f:0001]
+	Kernel driver in use: nvme
+	Kernel modules: nvme
+09:00.0 Network controller [0280]: Intel Corporation Wi-Fi 7(802.11be) AX1775*/AX1790*/BE20*/BE401/BE1750* 2x2 [8086:272b] (rev 1a)
+	Subsystem: Intel Corporation BE200 320MHz [Gale Peak] [8086:00f0]
+	Kernel driver in use: iwlwifi
+	Kernel modules: iwlwifi

@@ -39,6 +39,12 @@ say power.tuned info "$(tuned-adm active 2>&1)"
 is security.ptrace_scope "$(sysctl -n kernel.yama.ptrace_scope 2>&1)" 1
 is security.dmesg_restrict "$(sysctl -n kernel.dmesg_restrict 2>&1)" 1
 has kernel.vsyscall "$(cat /proc/cmdline)" "vsyscall=xonly"
+# the kernel's vcan, slcan and ems_usb come with kernel-modules-extra (the kickstart asks for it); vcan loads
+is kernel.modules-extra "$(rpm -q "kernel-modules-extra-$(uname -r)" > /dev/null 2>&1 && echo installed || echo missing)" installed
+has kernel.vcan "$(modinfo -n vcan 2>&1)" "vcan.ko"
+is kernel.vcan-loads "$(modprobe vcan 2>&1 && ip link add silikci type vcan 2>&1 && ip -br link show silikci | awk '{print $1}'; ip link del silikci 2> /dev/null)" silikci
+s=$(silik hw check 2>&1); rc=$?
+say hw.check "$([ $rc -le 1 ] && echo ok || echo FAIL)" "exit $rc: $(echo "$s" | tail -2 | head -1)"
 s=$(silik secure status 2>&1); rc=$?
 say secure.status "$([ $rc = 0 ] && echo ok || echo info)" "exit $rc: $(echo "$s" | tail -1)"
 echo "$s" | grep -E '^(▼|◆|\?)' | while read -r line; do say secure.row info "$line"; done

@@ -1,0 +1,168 @@
+# A public hardware probe: `lsusb -v` of a Lenovo ThinkPad X1 Carbon Gen 9 (20XW) under Debian 11, kernel 5.10, as
+# collected by the Linux Hardware Database project.
+# Source: https://github.com/linuxhw/LsUSB (CC BY 4.0), commit 3b1ee387e93df2a09ebc82df7a3cd0b2298a5265, file:
+#   Notebook/Lenovo/ThinkPad/ThinkPad X1 Carbon Gen 9 20XWS2B300/8C3E2080F419/DEBIAN-11/5.10.0-20-AMD64/X86_64/1E2531FDF1
+# Kept here: each device's first line and the class, subclass, protocol, bcdDevice and interface number lines.
+Bus 003 Device 002: ID 06cb:00fc Synaptics, Inc. 
+  bDeviceClass          255 Vendor Specific Class
+  bDeviceSubClass        16 
+  bDeviceProtocol       255 
+  bcdDevice            0.00
+      bInterfaceNumber        0
+      bInterfaceClass       255 Vendor Specific Class
+      bInterfaceSubClass      0 
+      bInterfaceProtocol      0 
+Bus 002 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub
+  bDeviceClass            9 Hub
+  bDeviceSubClass         0 Unused
+  bDeviceProtocol         3 
+  bcdDevice            5.10
+      bInterfaceNumber        0
+      bInterfaceClass         9 Hub
+      bInterfaceSubClass      0 Unused
+      bInterfaceProtocol      0 Full speed (or root) hub
+Bus 003 Device 004: ID 8087:0026 Intel Corp. AX201 Bluetooth
+  bDeviceClass          224 Wireless
+  bDeviceSubClass         1 Radio Frequency
+  bDeviceProtocol         1 Bluetooth
+  bcdDevice            0.02
+      bInterfaceNumber        0
+      bInterfaceClass       224 Wireless
+      bInterfaceSubClass      1 Radio Frequency
+      bInterfaceProtocol      1 Bluetooth
+      bInterfaceNumber        1
+      bInterfaceClass       224 Wireless
+      bInterfaceSubClass      1 Radio Frequency
+      bInterfaceProtocol      1 Bluetooth
+      bInterfaceNumber        1
+      bInterfaceClass       224 Wireless
+      bInterfaceSubClass      1 Radio Frequency
+      bInterfaceProtocol      1 Bluetooth
+      bInterfaceNumber        1
+      bInterfaceClass       224 Wireless
+      bInterfaceSubClass      1 Radio Frequency
+      bInterfaceProtocol      1 Bluetooth
+      bInterfaceNumber        1
+      bInterfaceClass       224 Wireless
+      bInterfaceSubClass      1 Radio Frequency
+      bInterfaceProtocol      1 Bluetooth
+      bInterfaceNumber        1
+      bInterfaceClass       224 Wireless
+      bInterfaceSubClass      1 Radio Frequency
+      bInterfaceProtocol      1 Bluetooth
+      bInterfaceNumber        1
+      bInterfaceClass       224 Wireless
+      bInterfaceSubClass      1 Radio Frequency
+      bInterfaceProtocol      1 Bluetooth
+      bInterfaceNumber        1
+      bInterfaceClass       224 Wireless
+      bInterfaceSubClass      1 Radio Frequency
+      bInterfaceProtocol      1 Bluetooth
+Bus 004 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub
+  bDeviceClass            9 Hub
+  bDeviceSubClass         0 Unused
+  bDeviceProtocol         3 
+  bcdDevice            5.10
+      bInterfaceNumber        0
+      bInterfaceClass         9 Hub
+      bInterfaceSubClass      0 Unused
+      bInterfaceProtocol      0 Full speed (or root) hub
+Bus 003 Device 003: ID 13d3:5411 IMC Networks 
+  bDeviceClass          239 Miscellaneous Device
+  bDeviceSubClass         2 ?
+  bDeviceProtocol         1 Interface Association
+  bcdDevice           60.04
+      bInterfaceNumber        0
+      bInterfaceClass        14 Video
+      bInterfaceSubClass      1 Video Control
+      bInterfaceProtocol      0 
+      bInterfaceNumber        1
+      bInterfaceClass        14 Video
+      bInterfaceSubClass      2 Video Streaming
+      bInterfaceProtocol      0 
+      bInterfaceNumber        1
+      bInterfaceClass        14 Video
+      bInterfaceSubClass      2 Video Streaming
+      bInterfaceProtocol      0 
+      bInterfaceNumber        1
+      bInterfaceClass        14 Video
+      bInterfaceSubClass      2 Video Streaming
+      bInterfaceProtocol      0 
+      bInterfaceNumber        1
+      bInterfaceClass        14 Video
+      bInterfaceSubClass      2 Video Streaming
+      bInterfaceProtocol      0 
+      bInterfaceNumber        1
+      bInterfaceClass        14 Video
+      bInterfaceSubClass      2 Video Streaming
+      bInterfaceProtocol      0 
+      bInterfaceNumber        1
+      bInterfaceClass        14 Video
+      bInterfaceSubClass      2 Video Streaming
+      bInterfaceProtocol      0 
+      bInterfaceNumber        1
+      bInterfaceClass        14 Video
+      bInterfaceSubClass      2 Video Streaming
+      bInterfaceProtocol      0 
+      bInterfaceNumber        1
+      bInterfaceClass        14 Video
+      bInterfaceSubClass      2 Video Streaming
+      bInterfaceProtocol      0 
+      bInterfaceNumber        2
+      bInterfaceClass        14 Video
+      bInterfaceSubClass      1 Video Control
+      bInterfaceProtocol      1 
+      bInterfaceNumber        3
+      bInterfaceClass        14 Video
+      bInterfaceSubClass      2 Video Streaming
+      bInterfaceProtocol      1 
+      bInterfaceNumber        3
+      bInterfaceClass        14 Video
+      bInterfaceSubClass      2 Video Streaming
+      bInterfaceProtocol      1 
+      bInterfaceNumber        3
+      bInterfaceClass        14 Video
+      bInterfaceSubClass      2 Video Streaming
+      bInterfaceProtocol      1 
+      bInterfaceNumber        3
+      bInterfaceClass        14 Video
+      bInterfaceSubClass      2 Video Streaming
+      bInterfaceProtocol      1 
+      bInterfaceNumber        3
+      bInterfaceClass        14 Video
+      bInterfaceSubClass      2 Video Streaming
+      bInterfaceProtocol      1 
+      bInterfaceNumber        3
+      bInterfaceClass        14 Video
+      bInterfaceSubClass      2 Video Streaming
+      bInterfaceProtocol      1 
+      bInterfaceNumber        3
+      bInterfaceClass        14 Video
+      bInterfaceSubClass      2 Video Streaming
+      bInterfaceProtocol      1 
+      bInterfaceNumber        3
+      bInterfaceClass        14 Video
+      bInterfaceSubClass      2 Video Streaming
+      bInterfaceProtocol      1 
+      bInterfaceNumber        4
+      bInterfaceClass       254 Application Specific Interface
+      bInterfaceSubClass      1 Device Firmware Update
+      bInterfaceProtocol      1 
+Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+  bDeviceClass            9 Hub
+  bDeviceSubClass         0 Unused
+  bDeviceProtocol         1 Single TT
+  bcdDevice            5.10
+      bInterfaceNumber        0
+      bInterfaceClass         9 Hub
+      bInterfaceSubClass      0 Unused
+      bInterfaceProtocol      0 Full speed (or root) hub
+Bus 003 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+  bDeviceClass            9 Hub
+  bDeviceSubClass         0 Unused
+  bDeviceProtocol         1 Single TT
+  bcdDevice            5.10
+      bInterfaceNumber        0
+      bInterfaceClass         9 Hub
+      bInterfaceSubClass      0 Unused
+      bInterfaceProtocol      0 Full speed (or root) hub

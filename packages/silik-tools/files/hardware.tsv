@@ -5,6 +5,7 @@
 # driver: the kernel module that binds it, or the program that opens it through libusb
 # use: what to run; IFACE / TTY / PART / VID:PID are filled in by silik doctor
 # el9: yes = the ID is in the module's aliases of EL 9.8's kernel (kernel-modules{,-core,-extra} 5.14.0-687.66.2.el9_8, read 2026-11-12); class = the module binds by USB class (cdc_acm); - not a kernel driver
+#   (tests/test_hw.py holds this field to packages/silik-tools/files/kernel-aliases.tsv, the kernel's alias table)
 # verified: yes when a real device was plugged into SilikOS and used; no = [A]: only read from the source
 # date: when the row was last checked against its source
 # source: where the ID was read (a kernel driver's table, an upstream project's udev rules or firmware)
@@ -76,6 +77,12 @@ id	kind	name	driver	use	el9	verified	date	source
 0bfd:011a	can	Kvaser USBcan Pro 5xCAN	kvaser_usb	silik dev can up IFACE 500k	no	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
 0bfd:011b	can	Kvaser Mini PCIe 1xCAN	kvaser_usb	silik dev can up IFACE 500k	no	no	2026-11-12	linux v6.12 drivers/net/can/usb/kvaser_usb/kvaser_usb_core.c
 0483:1234	can	8devices USB2CAN	usb_8dev	silik dev can up IFACE 500k	yes	no	2026-11-12	linux v6.12 drivers/net/can/usb/usb_8dev.c
+12d6:0444	can	EMS CPC-USB/ARM7	ems_usb	silik dev can up IFACE 500k	yes	no	2026-11-13	linux v7.2 drivers/net/can/usb/ems_usb.c (the module is in kernel-modules-extra)
+0ab4:0010	can	esd CAN-USB/2	esd_usb	silik dev can up IFACE 500k	no	no	2026-11-13	linux v7.2 drivers/net/can/usb/esd_usb.c
+0ab4:0011	can	esd CAN-USB/Micro	esd_usb	silik dev can up IFACE 500k	no	no	2026-11-13	linux v7.2 drivers/net/can/usb/esd_usb.c
+0ab4:0014	can	esd CAN-USB/3-FD	esd_usb	silik dev can up IFACE 500k	no	no	2026-11-13	linux v7.2 drivers/net/can/usb/esd_usb.c
+04d8:0a30	can	Microchip CAN BUS Analyzer	mcba_usb	silik dev can up IFACE 500k	no	no	2026-11-13	linux v7.2 drivers/net/can/usb/mcba_usb.c
+2c42:1709	can	Fintek F81604 USB to 2x CAN	f81604	silik dev can up IFACE 500k	no	no	2026-11-13	linux v7.2 drivers/net/can/usb/f81604.c
 ad50:60c4	can-slcan	CANable (slcan firmware)	cdc_acm	sudo slcand -o -c -s6 TTY can0 && silik dev can up can0 500k (or flash candleLight: then gs_usb)	class	no	2026-11-12	canable-fw master src/usbd_desc.c (USBD_VID, USBD_PID_FS)
 1248:*	vm	Vector Informatik interface (VN1600 family...)	none (Windows driver only)	silik win vm usb attach VID:PID	-	no	2026-11-12	silik-dev 70-silikos-usb-vm.rules [A: vendor 1248 is not in usb.ids (systemd v256 hwdb); no primary source read]
 0403:6001	serial	FTDI FT232R / FT245 (8U232AM)	ftdi_sio	tio TTY	yes	no	2026-11-12	linux v6.12 drivers/usb/serial/ftdi_sio_ids.h (also JTAG through OpenOCD)
