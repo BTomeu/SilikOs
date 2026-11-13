@@ -215,7 +215,7 @@ case $stage in
     elif ls /boot/loader/entries/*-"$k".conf > /dev/null 2>&1 || [ -e "/boot/vmlinuz-$k" ]; then say finish.unknown-kernel FAIL "kernel $k is not installed any more and is still in /boot: $(ls /boot | grep -F "$k" | tr '\n' ' ')"
     else say finish.unknown-kernel ok "kernel $k, which the reverted packages do not know, left the boot menu and /boot"; fi
   fi
-  dk=$(grubby --default-kernel 2>&1); kv=${dk#/boot/vmlinuz-}
+  dk=$(grubby --default-kernel 2>&1); kv=${dk##*/vmlinuz-}
   if rpm -q "kernel-core-$kv" > /dev/null 2>&1 && [ -d "/lib/modules/$kv/kernel" ]; then say finish.default-kernel ok "the default kernel $kv is installed and has its modules"
   else say finish.default-kernel FAIL "the default is '$dk': installed: $(rpm -q "kernel-core-$kv" 2>&1); /lib/modules/$kv/kernel: $([ -d "/lib/modules/$kv/kernel" ] && echo there || echo missing)"; fi
   miss=0; for f in /boot/loader/entries/*.conf; do l=$(awk '$1 == "linux" { print $2; exit }' "$f"); [ -e "/boot$l" ] || miss=$((miss + 1)); done

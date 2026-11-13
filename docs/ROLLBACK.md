@@ -102,7 +102,10 @@ Llegit o executat a EL 9.8 (contenidor, 13/11/2026):
 - **dnf 4.14**: `check-update` surt amb 100 / 0 / 1; `--security` hi funciona; la transacció de `dnf-automatic`
   surt a `dnf history list` amb la línia d'ordres buida i "Upgrade"; `dnf history undo` real (fet).
 - **grubby 8.40, grub2 2.06, kernel-install de systemd 252, 20-grub.install, 50-dracut.install**: llegits (què
-  escriuen i què esborren; instal·lar qualsevol kernel el posa per defecte).
+  escriuen i què esborren; instal·lar qualsevol kernel el posa per defecte) i **executats**: `silik rollback
+  finish` en un contenidor amb un `/boot` fet a mà (un kernel que la base de paquets no coneix, sense mòduls, i
+  per defecte): `kernel-install remove` en treu l'entrada i els fitxers, `grubby --set-default` deixa per defecte
+  el kernel conegut; `grub2-reboot ID` escriu `next_entry=ID` a `grubenv`.
 - **anaconda 34.25.7.14**: `default_scheme = LVM_THINP` a `[Storage]` (a `anaconda.conf`, `rhvh.conf`,
   `ovirt.conf`); `autopart` sense `--type` pren aquest valor (`automatic_module.py`); el seu codi de configuració,
   executat amb el nostre fitxer de producte, dona LVM_THINP per a SilikOS.
@@ -111,13 +114,13 @@ Suposat, no vist enlloc on es pogués executar — **[A]**:
 - [A] Un volum thin es reconeix a sysfs com un dispositiu amb uuid `LVM-` que té per sota el `-tpool` del pool
   (`/sys/dev/block/M:m/slaves/*/dm/name`). És el que fa servir `silik` per no demanar root; si no és així, dirà
   "no disponible" en un disc que sí que ho és.
-- [A] L'identificador d'una entrada per a `grub2-reboot` és el nom del fitxer sense `.conf` (és el que `grubby`
-  desa a `saved_entry`). Si no ho és, la propera arrencada no serà "Revert" i `silik` ja diu quina triar a mà.
+- [A] grub2 entén com a identificador d'una entrada el nom del fitxer sense `.conf`: és el que `grubby` desa a
+  `saved_entry` (vist) i el que `silik` dona a `grub2-reboot`; que grub2 l'arrenqui només es veu arrencant. Si no,
+  la propera arrencada no serà "Revert" i `silik` ja diu quina triar a mà.
 - [A] Les files de `lvs --reportformat json` (valors com a text, `lv_profile` buit si no n'hi ha): només se n'ha
   vist el marc, sense cap volum.
 - [A] Al `%post` del kickstart (chroot de l'instal·lador), `findmnt /` i `lvs` veuen el volum arrel. Si no, el
   perfil no s'aplica: `silik snapshot status` ho avisa i `silik snapshot setup` ho arregla.
-- [A] `kernel-install remove` funciona sense `/lib/modules/VERSIÓ` (els scripts llegits no el necessiten).
 - [A] El merge d'una snapshot thin de `/` acaba en activar el volum a l'arrencada "Revert", abans que corri
   `finish`. Si encara no ha acabat, `finish` deixa les entrades i cal tornar-lo a executar (el test ho detecta).
 - [A] `snapm snapset revert` demanat des de la mateixa snapshot arrencada (muntada com a `/`): el merge queda
