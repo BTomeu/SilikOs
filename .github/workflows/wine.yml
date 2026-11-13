@@ -45,8 +45,17 @@ jobs:
             build/extra
             build/srpm
           key: silik-wine-${{ inputs.version }}-${{ hashFiles('wine/silik-wine.spec', 'wine/sources', 'tools/build_wine.sh') }}
+      # (the audit's S8) any job that runs for main could have saved a cache entry under this key: the kept build is
+      # used only when its files are, byte for byte, files a release of this repository holds (an earlier run built,
+      # tried and kept them); otherwise it is built again (tools/cache_check.py)
+      - name: The kept build is a release's own, or it is built again
+        id: kept
+        if: steps.cache.outputs.cache-hit == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/cache_check.py build/extra build/srpm
       - name: Build silik-wine
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.kept.outputs.ok != 'true'
         env:
           V: ${{ inputs.version }}
         # (the version typed by hand reaches the shell as data, and only as a release number)
@@ -92,8 +101,17 @@ jobs:
             build/addons
             build/addons-srpm
           key: silik-wine-addons-${{ needs.build.outputs.version }}-${{ hashFiles('wine/silik-wine-addons.spec', 'wine/sources', 'tools/build_wine_addons.sh') }}
+      # (the audit's S8) any job that runs for main could have saved a cache entry under this key: the kept build is
+      # used only when its files are, byte for byte, files a release of this repository holds (an earlier run built,
+      # tried and kept them); otherwise it is built again (tools/cache_check.py)
+      - name: The kept build is a release's own, or it is built again
+        id: kept
+        if: steps.cache.outputs.cache-hit == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/cache_check.py build/addons build/addons-srpm
       - name: Build silik-wine-mono and silik-wine-gecko
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.kept.outputs.ok != 'true'
         shell: bash
         run: |
           if ! bash tools/build_wine_addons.sh dist/silik-wine-*.rpm > build.log 2>&1; then
@@ -176,6 +194,8 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write        # (the release wine-<version>)
+      id-token: write        # (the run's identity, for the attestation of what is kept)
+      attestations: write    # (the attestation, kept by GitHub)
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4          # (tools/release_keep.sh)
         with: { persist-credentials: false }
@@ -206,3 +226,8 @@ jobs:
           ls src/silik-wine-[0-9]*.src.rpm src/silik-wine-addons-*.src.rpm > /dev/null || { echo "::error title=keep::no source packages"; exit 1; }
           bash tools/release_keep.sh "$tag" dist/silik-wine-*.rpm src/*.src.rpm
           gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --notes "Wine $V (upstream's source, unmodified, LGPL) built on EL 9 for SilikOS (wine/silik-wine.spec), with Wine Mono and Wine Gecko (upstream's binary archives, unmodified; their own licences) as packages of their own (wine/silik-wine-addons.spec). Not a product of or supported by WineHQ."
+      # (docs/SIGNING.md) where the kept packages were made: this workflow, at this commit, attested with the run's
+      # identity. The package repository (repo.yml) takes a tool's package from a release only with this
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4
+        with:
+          subject-path: dist/*.rpm

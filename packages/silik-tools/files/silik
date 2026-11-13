@@ -2100,16 +2100,47 @@ CHANNELS = (("stable", "silikos", "what a release of SilikOS published"),
             ("next", "silikos-next", "every build of main that passed the tests"),
             ("off", "", "none: SilikOS's own packages stay at the version they were installed with"))
 REPO_CHECKS = ("gpgcheck", "repo_gpgcheck")       # the package's signature, the metadata's
+# Old metadata served again (docs/SIGNING.md): the dnf plugin silikos-repo of the package silikos-repos remembers in
+# REPO_SEEN the highest revision of each channel's metadata this system has seen and takes nothing from older ones,
+# inside every dnf (this command's and the daily update's). Here its notes are read and said; nothing is judged twice.
+REPO_SEEN = "/var/lib/silikos/repo-revision"
+REPO_PLUGIN = "/usr/lib/python3.9/site-packages/dnf-plugins/silikos_repo.py"
+
+
+def repo_seen():
+    """the plugin's notes: {repository id: {"revision": the highest seen, "seen": when, "said": its last refusal or
+    warning, absent after a good run}}; {} when there is no file or it is not that"""
+    try:
+        data = json.loads(read(REPO_SEEN, "") or "{}")
+    except ValueError:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return dict((k, v) for k, v in data.items() if isinstance(v, dict) and isinstance(v.get("revision", 0), int))
+
+
+def repo_said(st, since=0):
+    """[(channel, verdict, text)] of what the plugin refused or warned about for the channels that are on, noted at
+    or after SINCE"""
+    out = []
+    ids = dict((name, rid) for name, rid, _ in CHANNELS)
+    for name in st["on"]:
+        said = ((st.get("seen") or {}).get(ids[name]) or {}).get("said")
+        if isinstance(said, dict) and said.get("verdict") in ("refuse", "warn") and said.get("when", 0) >= since:
+            out.append((name, said["verdict"], str(said.get("text", ""))[:400]))
+    return out
 
 
 def channel_read():
     """the SilikOS repository as this system has it: {"file": is there a repository file, "key": ok | missing |
     placeholder (a file that is not a key), "on": [the channels that are on], "unchecked": [those of them with a
-    signature check off], "new": a newer file of the package waits (.rpmnew)}"""
+    signature check off], "new": a newer file of the package waits (.rpmnew), "plugin": the replay check is
+    installed, "seen": its notes (repo_seen)}"""
     text = read(REPO_FILE, None)
     key = read(REPO_KEY, None)
     st = {"file": text is not None, "key": "missing" if key is None else "ok" if "-----BEGIN PGP PUBLIC KEY BLOCK-----" in key else "placeholder",
-          "on": [], "unchecked": [], "new": os.path.exists(REPO_FILE + ".rpmnew")}
+          "on": [], "unchecked": [], "new": os.path.exists(REPO_FILE + ".rpmnew"),
+          "plugin": os.path.exists(REPO_PLUGIN), "seen": repo_seen()}
     sect, opts = "", {}
     for l in (text or "").splitlines():
         l = l.strip()
@@ -2146,6 +2177,18 @@ def update_channel(ctx, want):
             print("silik: no %s: the package silikos-repos is not installed" % REPO_FILE)
         for name in st["unchecked"]:
             print("silik: the channel %s is on with a signature check off: silik update channel %s turns both on again" % (name, name))
+        ids = dict((name, rid) for name, rid, _ in CHANNELS)
+        for name in st["on"]:
+            row = st["seen"].get(ids[name]) or {}
+            if row.get("revision"):
+                print("  %-8s %s: the newest metadata seen are of %s (revision %d); older ones are refused"
+                      % ("revision", name, time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(row["revision"])), row["revision"]))
+            else:
+                print("  %-8s %s: none seen yet (the first `silik update` notes it in %s)" % ("revision", name, REPO_SEEN))
+        if st["on"] and not st["plugin"]:
+            print("silik: the check for old metadata served again is not installed (the dnf plugin of the package silikos-repos): sudo dnf -y upgrade silikos-repos")
+        for name, verdict, text in repo_said(st):
+            print("silik: %s: %s" % ("REFUSED" if verdict == "refuse" else "warning", text))
         return 0
     if not st["file"]:
         die("no %s: sudo dnf install silikos-repos" % REPO_FILE)
@@ -2206,6 +2249,7 @@ def cmd_update(ctx, a):
     if hook:
         ctx.run(["sudo", SNAP_HOOK], check=False)
     # (ten downloads at a time, as the automatic updates: measured faster here; the base's dnf.conf is not changed)
+    t0 = int(time.time())
     ctx.run(["sudo", "dnf", "-y", "--setopt=max_parallel_downloads=10", "upgrade", "--refresh"])
     if hook:
         ctx.run(["sudo", SNAP_HOOK, "settle"], check=False)
@@ -2217,9 +2261,23 @@ def cmd_update(ctx, a):
             print("silik: restart the computer to run what was updated (the kernel or a core library)")
         if os.path.isfile("/usr/libexec/silikos/restart-needed"):
             ctx.run(["sudo", "/usr/libexec/silikos/restart-needed"], check=False)     # (the status bar's note)
-    if not channel_read()["on"]:
+    st = channel_read()
+    if not st["on"]:
         print("silik: SilikOS's own packages were not updated: no repository enabled (silik update channel)")
-    return 0
+        return 0
+    # what the dnf above was given as SilikOS's repository, as its plugin silikos-repo judged it (docs/SIGNING.md)
+    rc = 0
+    if not ctx.dry:
+        if not st["plugin"]:
+            print("silik: old metadata served again would not be noticed: the dnf plugin of the package silikos-repos is not installed")
+        for name, verdict, text in repo_said(st, t0 - 5):
+            if verdict == "refuse":
+                print("silik: REFUSED: %s. Nothing of SilikOS's own was updated; the base's updates went on. Run `silik update` "
+                      "again on another network; if it stays: docs/SIGNING.md" % text)
+                rc = 1
+            else:
+                print("silik: warning: %s" % text)
+    return rc
 
 
 # ------------------------------------------------------------------ secure
@@ -6506,6 +6564,15 @@ def doc_channel(st, rows):
     elif ch["on"] and ch["key"] != "ok":
         doc_row(rows, "system", "channel", name, "bad", "channel %s is on and this system has no SilikOS signing key (%s): dnf refuses its packages" % (" and ".join(ch["on"]), REPO_KEY),
                 ["silik update channel off"])
+    elif ch["on"] and [x for x in repo_said(ch) if x[1] == "refuse"]:
+        # (the dnf plugin silikos-repo took nothing from it the last time it was asked: docs/SIGNING.md)
+        doc_row(rows, "system", "channel", name, "bad", "REFUSED the last time it was asked: %s" % [x for x in repo_said(ch) if x[1] == "refuse"][0][2],
+                ["silik update   # asks again; on another network if it stays"])
+    elif ch["on"] and not ch.get("plugin", True):
+        doc_row(rows, "system", "channel", name, "warn", "channel %s; old metadata served again would not be noticed (the dnf plugin of silikos-repos is not installed)"
+                % " and ".join(ch["on"]), ["sudo dnf -y upgrade silikos-repos"])
+    elif ch["on"] and repo_said(ch):
+        doc_row(rows, "system", "channel", name, "warn", repo_said(ch)[0][2], ["silik update   # asks again"])
     elif ch["on"]:
         new = "; a newer %s of the package waits" % os.path.basename(REPO_FILE) if ch["new"] else ""
         doc_row(rows, "system", "channel", name, "warn" if new else "ok", "channel %s; packages and metadata are signature-checked%s" % (" and ".join(ch["on"]), new),

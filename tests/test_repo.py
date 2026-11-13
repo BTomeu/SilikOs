@@ -6,6 +6,7 @@
 #   python3 -m unittest tests.test_repo -v
 import contextlib
 import io
+import json
 import os
 import re
 import shutil
@@ -106,6 +107,8 @@ elif me == "createrepo_c":
     os.makedirs(os.path.join(out, "repodata"), exist_ok=True)
     with open(os.path.join(out, "repodata", "repomd.xml"), "w") as f:
         f.write("base=%s\n%s\n" % (val("--baseurl") or "", "\n".join(names)))
+    with open(os.path.join(out, "repodata", "TAGS"), "w") as f:
+        f.write("revision=%s\n%s\n" % (val("--revision"), "\n".join(a[i + 1] for i, x in enumerate(a) if x == "--content")))
 elif me == "repomanage":
     groups = {}
     for n in os.listdir(a[-1]):
@@ -389,8 +392,8 @@ def on(repo, rid):
 class System:
     """a made-up /etc: the repository file, the key"""
 
-    def __init__(self, repo=REPO, key="ok", rpmnew=False):
-        self.repo, self.key, self.rpmnew = repo, key, rpmnew
+    def __init__(self, repo=REPO, key="ok", rpmnew=False, plugin=True, seen=None):
+        self.repo, self.key, self.rpmnew, self.plugin, self.seen = repo, key, rpmnew, plugin, seen
 
     def __enter__(self):
         self.d = tempfile.TemporaryDirectory()
@@ -403,7 +406,13 @@ class System:
             pubkey(k, KEY_A)
         elif self.key == "placeholder":
             write(k, text(PKG + "/files/RPM-GPG-KEY-SilikOS") if not text(PKG + "/files/RPM-GPG-KEY-SilikOS").startswith(BEGIN) else "SILIKOS-KEY-PLACEHOLDER\n")
-        self.patches = [mock.patch.object(silik, "REPO_FILE", f), mock.patch.object(silik, "REPO_KEY", k)]
+        plug, seen = os.path.join(self.d.name, "silikos_repo.py"), os.path.join(self.d.name, "repo-revision")
+        if self.plugin:
+            write(plug, "# the dnf plugin\n")
+        if self.seen is not None:
+            write(seen, self.seen if isinstance(self.seen, str) else json.dumps(self.seen))
+        self.patches = [mock.patch.object(silik, "REPO_FILE", f), mock.patch.object(silik, "REPO_KEY", k),
+                        mock.patch.object(silik, "REPO_PLUGIN", plug), mock.patch.object(silik, "REPO_SEEN", seen)]
         for p in self.patches:
             p.start()
         self.file, self.keyfile = f, k
@@ -428,11 +437,17 @@ def run(*argv, dry=True):
 class Channel(unittest.TestCase):
     def test_what_is_read(self):
         with System(key="missing"):
-            self.assertEqual(silik.channel_read(), {"file": True, "key": "missing", "on": [], "unchecked": [], "new": False})
+            self.assertEqual(silik.channel_read(), {"file": True, "key": "missing", "on": [], "unchecked": [], "new": False,
+                                                    "plugin": True, "seen": {}})
         with System(key="placeholder", repo=None):
-            self.assertEqual(silik.channel_read(), {"file": False, "key": "placeholder", "on": [], "unchecked": [], "new": False})
+            self.assertEqual(silik.channel_read(), {"file": False, "key": "placeholder", "on": [], "unchecked": [], "new": False,
+                                                    "plugin": True, "seen": {}})
         with System(repo=on(REPO, "silikos"), rpmnew=True):
-            self.assertEqual(silik.channel_read(), {"file": True, "key": "ok", "on": ["stable"], "unchecked": [], "new": True})
+            self.assertEqual(silik.channel_read(), {"file": True, "key": "ok", "on": ["stable"], "unchecked": [], "new": True,
+                                                    "plugin": True, "seen": {}})
+        with System(repo=on(REPO, "silikos"), plugin=False, seen={"silikos": {"revision": 7}, "baseos": {"revision": 9}}):
+            st = silik.channel_read()
+            self.assertEqual((st["plugin"], st["seen"]), (False, {"silikos": {"revision": 7}, "baseos": {"revision": 9}}))
         with System(repo=on(on(REPO, "silikos"), "silikos-next").replace("repo_gpgcheck=1", "repo_gpgcheck=0", 1)):
             st = silik.channel_read()
             self.assertEqual((st["on"], st["unchecked"]), (["stable", "next"], ["stable"]))
@@ -591,7 +606,8 @@ class Package(unittest.TestCase):
             self.assertTrue(k.startswith("SILIKOS-KEY-PLACEHOLDER"))
             self.assertNotIn(BEGIN, k.replace("    gpg", ""))
             self.assertIn("docs/REPO.md", k)
-        self.assertEqual(sorted(os.listdir(os.path.join(ROOT, PKG, "files"))), ["RPM-GPG-KEY-SilikOS", "silikos.repo"])
+        self.assertEqual(sorted(f for f in os.listdir(os.path.join(ROOT, PKG, "files")) if f != "__pycache__"),
+                         ["RPM-GPG-KEY-SilikOS", "silikos-repo.conf", "silikos.repo", "silikos_repo.py"])
 
     def test_a_committed_key_is_the_one_the_owner_s_document_names(self):
         k = text(PKG + "/files/RPM-GPG-KEY-SilikOS")
@@ -710,8 +726,8 @@ class Workflow(unittest.TestCase):
         self.assertRegex(s, r"uses: actions/deploy-pages@[0-9a-f]{40}  # v\d+")
         import test_public
         j = test_public.jobs(s)
-        self.assertEqual(list(j), ["packages", "release", "deploy", "prune"])
-        self.assertIn("needs: packages", j["release"])                       # the packages are there before the metadata name them
+        self.assertEqual(list(j), ["packages", "attest", "release", "deploy", "prune"])
+        self.assertIn("needs: [packages, attest]", j["release"])             # the packages are there before the metadata name them
         self.assertIn("needs: [packages, release]", j["deploy"])
         self.assertIn("needs: [packages, deploy]", j["prune"])               # and leave after the metadata stopped naming them
         self.assertIn("name: github-pages", j["deploy"])

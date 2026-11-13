@@ -103,6 +103,8 @@ jobs:
     needs: [build, build-uses]
     permissions:
       contents: write        # (keeps the tried packages in the release)
+      id-token: write        # (the run's identity, for the attestation of what is kept)
+      attestations: write    # (the attestation, kept by GitHub)
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
@@ -155,6 +157,11 @@ jobs:
             ls src/$t-[0-9]*.src.rpm > /dev/null || { echo "::error title=keep $t::no source package"; exit 1; }
             bash tools/release_keep.sh dev-tools dist/$t-[0-9]*.rpm src/$t-[0-9]*.src.rpm
           done
+      # (docs/SIGNING.md) where the kept packages were made: this workflow, at this commit, attested with the run's
+      # identity. The package repository (repo.yml) takes a tool's package from a release only with this
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4
+        with:
+          subject-path: dist/*.rpm
 
   # ARM: the recipes whose ExclusiveArch lists aarch64 (built and tried under emulation here first: docs/STATUS.md)
   build-arm:
@@ -195,6 +202,8 @@ jobs:
     needs: build-arm
     permissions:
       contents: write        # (keeps the tried packages in the release)
+      id-token: write        # (the run's identity, for the attestation of what is kept)
+      attestations: write    # (the attestation, kept by GitHub)
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 40
     steps:
@@ -243,3 +252,8 @@ jobs:
           for f in src/*.src.rpm; do
             gh release view dev-tools --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -qxF "$(basename "$f")" || bash tools/release_keep.sh dev-tools "$f"
           done
+      # (docs/SIGNING.md) where the kept packages were made: this workflow, at this commit, attested with the run's
+      # identity. The package repository (repo.yml) takes a tool's package from a release only with this
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4
+        with:
+          subject-path: dist/*.rpm

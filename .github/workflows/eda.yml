@@ -53,8 +53,17 @@ jobs:
             build/extra
             build/srpm
           key: eda-${{ matrix.tool }}-${{ steps.line.outputs.sum }}-${{ hashFiles('eda/common.inc', 'tools/build_eda.sh', format('eda/{0}.spec', matrix.tool)) }}
+      # (the audit's S8) any job that runs for main could have saved a cache entry under this key: the kept build is
+      # used only when its files are, byte for byte, files a release of this repository holds (an earlier run built,
+      # tried and kept them); otherwise it is built again (tools/cache_check.py)
+      - name: The kept build is a release's own, or it is built again
+        id: kept
+        if: steps.cache.outputs.cache-hit == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/cache_check.py build/extra build/srpm
       - name: Build ${{ matrix.tool }}
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.kept.outputs.ok != 'true'
         shell: bash
         run: |
           if ! bash tools/build_eda.sh ${{ matrix.tool }} > build.log 2>&1; then
@@ -109,20 +118,29 @@ jobs:
             build/extra
             build/srpm
           key: eda-kicad-${{ steps.line.outputs.sum }}-${{ hashFiles('eda/common.inc', 'tools/build_eda.sh', 'eda/kicad.spec', 'eda/opencascade.spec', 'eda/nng.spec', 'eda/ngspice.spec') }}
+      # (the audit's S8) any job that runs for main could have saved a cache entry under this key: the kept build is
+      # used only when its files are, byte for byte, files a release of this repository holds (an earlier run built,
+      # tried and kept them); otherwise it is built again (tools/cache_check.py)
+      - name: The kept build is a release's own, or it is built again
+        id: kept
+        if: steps.cache.outputs.cache-hit == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/cache_check.py build/extra build/srpm
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.kept.outputs.ok != 'true'
         continue-on-error: true
         with: { name: eda-opencascade, path: build/deps }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.kept.outputs.ok != 'true'
         continue-on-error: true
         with: { name: eda-nng, path: build/deps }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.kept.outputs.ok != 'true'
         continue-on-error: true
         with: { name: eda-ngspice, path: build/deps }
       - name: Build kicad
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.kept.outputs.ok != 'true'
         shell: bash
         run: |
           df -h . | tail -1
@@ -157,6 +175,8 @@ jobs:
     needs: build
     permissions:
       contents: write        # (keeps the tried package in the release)
+      id-token: write        # (the run's identity, for the attestation of what is kept)
+      attestations: write    # (the attestation, kept by GitHub)
     if: ${{ !cancelled() }}
     strategy:
       fail-fast: false
@@ -179,11 +199,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash eda/keep.sh ${{ matrix.tool }}
+      # (docs/SIGNING.md) where the kept packages were made: this workflow, at this commit, attested with the run's
+      # identity. The package repository (repo.yml) takes a tool's package from a release only with this
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4
+        with:
+          subject-path: dist/*.rpm
 
   kicad-trial:
     needs: kicad
     permissions:
       contents: write        # (keeps the tried package in the release)
+      id-token: write        # (the run's identity, for the attestation of what is kept)
+      attestations: write    # (the attestation, kept by GitHub)
     if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -203,6 +230,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash eda/keep.sh kicad
+      # (docs/SIGNING.md) where the kept packages were made: this workflow, at this commit, attested with the run's
+      # identity. The package repository (repo.yml) takes a tool's package from a release only with this
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4
+        with:
+          subject-path: dist/*.rpm
 
   # KiCad's 3D models: several gigabytes, asked for by nothing. Built and tried in one job, kept in the release
   # eda-optional (the ISO takes eda-tools only)
@@ -222,8 +254,17 @@ jobs:
             build/extra
             build/srpm
           key: eda-kicad-packages3d-${{ steps.line.outputs.sum }}-${{ hashFiles('eda/common.inc', 'tools/build_eda.sh', 'eda/kicad-packages3d.spec') }}
+      # (the audit's S8) any job that runs for main could have saved a cache entry under this key: the kept build is
+      # used only when its files are, byte for byte, files a release of this repository holds (an earlier run built,
+      # tried and kept them); otherwise it is built again (tools/cache_check.py)
+      - name: The kept build is a release's own, or it is built again
+        id: kept
+        if: steps.cache.outputs.cache-hit == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/cache_check.py build/extra build/srpm
       - name: Build kicad-packages3d
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.kept.outputs.ok != 'true'
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL; df -h . | tail -1
           if ! docker run --rm -v "$PWD:/w" -w /w almalinux:9 bash -c 'dnf -y -q install git tar gzip findutils && bash tools/build_eda.sh kicad-packages3d' > build.log 2>&1; then
@@ -259,6 +300,8 @@ jobs:
     needs: models
     permissions:
       contents: write        # (keeps the tried package in the release)
+      id-token: write        # (the run's identity, for the attestation of what is kept)
+      attestations: write    # (the attestation, kept by GitHub)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -274,6 +317,11 @@ jobs:
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL; df -h . | tail -1
           bash eda/keep.sh kicad-packages3d
+      # (docs/SIGNING.md) where the kept packages were made: this workflow, at this commit, attested with the run's
+      # identity. The package repository (repo.yml) takes a tool's package from a release only with this
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4
+        with:
+          subject-path: dist/*.rpm
 
   # ARM: built in an almalinux:9 container of the ARM runner, read-only token (upstream's build code runs there)
   build-arm:
@@ -315,6 +363,8 @@ jobs:
     needs: build-arm
     permissions:
       contents: write        # (keeps the tried package in the release eda-tools-aarch64)
+      id-token: write        # (the run's identity, for the attestation of what is kept)
+      attestations: write    # (the attestation, kept by GitHub)
     if: ${{ !cancelled() }}
     strategy:
       fail-fast: false
@@ -353,3 +403,8 @@ jobs:
           # with its source package; what they replace moves to the release sources-archive (tools/release_keep.sh)
           ls src/$t-[0-9]*.src.rpm > /dev/null || { echo "::error title=keep $t aarch64::no source package"; exit 1; }
           bash tools/release_keep.sh $rel dist/*.rpm src/$t-[0-9]*.src.rpm
+      # (docs/SIGNING.md) where the kept packages were made: this workflow, at this commit, attested with the run's
+      # identity. The package repository (repo.yml) takes a tool's package from a release only with this
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4
+        with:
+          subject-path: dist/*.rpm

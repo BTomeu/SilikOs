@@ -8,6 +8,16 @@
 #   3. deploy: the folder site/ of the repository at the root of GitHub Pages and the metadata under /repo/ (they name
 #      the releases' addresses for the packages).
 #   4. prune: versions older than the three newest leave the releases, once the metadata no longer name them.
+# Between 1 and 2, attest: a build provenance attestation (Sigstore, through GitHub) for every file this run puts into
+# a release and for the metadata: anyone can ask which workflow, at which commit, made a file
+# (tools/verify_release.sh, docs/SIGNING.md). Nothing is released that could not be attested.
+# What is signed and published has a known origin: SilikOS's own packages are the artifact of a green CI run of this
+# repository's main (or of a release tag on main), and a tool's package is taken from its release only with a
+# provenance attestation of this repository's workflows on main (the audit's S2: a file that something else put into
+# a release is left out, never signed).
+# Twice a month, with nothing new, the metadata are made and signed again: their revision is the time, and an
+# installed system warns when the newest it is given are old (docs/SIGNING.md, "Old metadata served again").
+# Without GitHub Pages (Settings > Pages) the packages still go to the releases and the deploy job is skipped, said.
 # Without the secrets SILIKOS_GPG_PRIVATE_KEY / SILIKOS_GPG_PASSPHRASE (of the environment package-signing) the
 # repository is published unsigned and says so; no installed system accepts it (its channels are off without a key,
 # and gpgcheck and repo_gpgcheck are on).
@@ -21,6 +31,8 @@ on:
   push:
     branches: [main]
     paths: ['site/**']       # (the site alone changed: published again with the packages of the last green CI of main)
+  schedule:
+    - cron: '17 4 1,15 * *'  # (the metadata again, with today's revision; nothing while there is no signing key)
   workflow_dispatch:
     inputs:
       channel:
@@ -36,13 +48,16 @@ on:
 concurrency:
   group: pkgrepo
   cancel-in-progress: false
-# read-only by default; the job release and the job prune write the releases, the job deploy the Pages site
+# read-only by default; the job release and the job prune write the releases, the job deploy the Pages site, the job
+# attest asks for the run's identity (id-token) and writes attestations: each its own, none of them the key's job
 permissions:
   contents: read
 jobs:
   packages:
     # a CI run is published when it is green, of this repository, and not a pull request's (its packages would be
-    # a stranger's); by hand and for the site, from main only (the scripts that see the key are main's)
+    # a stranger's); by hand, on the schedule and for the site, from main only (the scripts that see the key are
+    # main's). The step "Which channel, which CI run" then holds the run to more: the workflow file, the branch or
+    # tag, the commit on main
     if: ${{ (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event != 'pull_request' && github.event.workflow_run.head_repository.full_name == github.repository) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -52,8 +67,10 @@ jobs:
     permissions:
       contents: read
       actions: read          # (the artifact of the CI run)
+      attestations: read     # (where a tool's package came from, asked before it is signed)
     outputs:
       channel: ${{ steps.plan.outputs.channel }}
+      pages: ${{ steps.plan.outputs.pages }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with: { persist-credentials: false }
@@ -70,9 +87,32 @@ jobs:
         run: |
           set -euo pipefail
           channel=none; run=
+          # ci_run ID: the run ID is one whose packages may be published. A green run of THIS repository's workflow
+          # file ci.yml (a name can be taken by another file), started by a push, or by the end of a tool's workflow
+          # (which runs main's ci.yml at main's commit), on the branch main or on a release tag; never a pull
+          # request's, never one started by hand on another branch. Prints "BRANCH SHA".
+          ci_run() {
+            local j
+            j=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$1" -q '[.path, .status, .conclusion, .event, .head_repository.full_name, .repository.full_name, .head_branch, .head_sha] | join(" ")') || return 1
+            set -- $j
+            [ "$#" = 8 ] && [ "$1" = .github/workflows/ci.yml ] && [ "$2" = completed ] && [ "$3" = success ] \
+              && [ "$5" = "$GITHUB_REPOSITORY" ] && [ "$6" = "$GITHUB_REPOSITORY" ] || return 1
+            case $4 in push|workflow_run) ;; *) return 1 ;; esac
+            echo "$8" | grep -Eq '^[0-9a-f]{40}$' || return 1
+            echo "$7 $8"
+          }
+          # on_main SHA: the commit is main's, now or earlier (main is not behind it)
+          on_main() { [ "$(gh api "repos/$GITHUB_REPOSITORY/compare/$1...main" -q .behind_by 2> /dev/null)" = 0 ]; }
           if [ "$EVENT" = workflow_run ]; then
             run=$RUN_ID
-            if [ "$HEAD_BRANCH" = main ]; then
+            case $run in ''|*[!0-9]*) echo "::error::the run id is not a number"; exit 1 ;; esac
+            if ! what=$(ci_run "$run"); then
+              echo "::notice title=Package repository::run $run is not a green run of this repository's ci.yml started by a push: nothing is published"
+            elif [ "$what" != "$HEAD_BRANCH $HEAD_SHA" ]; then
+              echo "::error::run $run is not what this event says it is"; exit 1
+            elif ! on_main "$HEAD_SHA"; then
+              echo "::notice title=Package repository::the commit of run $run is not on main: nothing is published"
+            elif [ "$HEAD_BRANCH" = main ]; then
               channel=next
             elif echo "$HEAD_BRANCH" | grep -Eq '^v[0-9A-Za-z._-]+$' \
                  && [ "$(gh api "repos/$GITHUB_REPOSITORY/commits/tags/$HEAD_BRANCH" -q .sha 2> /dev/null)" = "$HEAD_SHA" ]; then
@@ -84,22 +124,31 @@ jobs:
             channel=${IN_CHANNEL:-next}; run=${IN_RUN:-}
             case $channel in next|stable) ;; *) echo "::error::the channel is next or stable"; exit 1 ;; esac
             if [ -z "$run" ]; then
-              run=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow CI --branch main --status success --limit 1 --json databaseId -q '.[0].databaseId')
+              run=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch main --event push --status success --limit 1 --json databaseId -q '.[0].databaseId')
             fi
             case $run in ''|*[!0-9]*) echo "::error::no green CI run of main was found, or the run id is not a number"; exit 1 ;; esac
             # a run named by hand is held to the same as one that started this by itself
-            what=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run" -q '[.name, .conclusion, .head_repository.full_name] | join(" ")')
-            event=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run" -q .event)
-            if [ "$what" != "CI success $GITHUB_REPOSITORY" ] || [ "$event" = pull_request ]; then
-              echo "::error::run $run is not a green CI run of this repository (or it is a pull request's)"; exit 1
+            what=$(ci_run "$run") || { echo "::error::run $run is not a green run of this repository's ci.yml started by a push"; exit 1; }
+            on_main "${what#* }" || { echo "::error::the commit of run $run is not on main"; exit 1; }
+            case ${what% *} in main|v[0-9A-Za-z]*) ;; *) echo "::error::run $run is of the branch ${what% *}: main or a release tag"; exit 1 ;; esac
+            # (the schedule publishes the metadata again so that their revision is fresh: of no use without a key)
+            if [ "$EVENT" = schedule ] && ! grep -q '^-----BEGIN PGP PUBLIC KEY BLOCK-----' packages/silikos-repos/files/RPM-GPG-KEY-SilikOS; then
+              echo "::notice title=Package repository::no signing key yet (docs/REPO.md): the scheduled run publishes nothing"
+              channel=none
             fi
           fi
           # the commit those packages were built from (the channel's STATE names it)
           sha=
           if [ "$channel" != none ]; then sha=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run" -q .head_sha); fi
           echo "$sha" | grep -Eq '^[0-9a-f]{40}$' || sha=
-          { echo "channel=$channel"; echo "run=$run"; echo "sha=$sha"; } >> "$GITHUB_OUTPUT"
-          echo "channel $channel, CI run $run, commit ${sha:-unknown}"
+          # GitHub Pages: off until the owner turns it on (Settings > Pages > Source: GitHub Actions). Without it the
+          # packages still go to the releases; the deploy job is skipped instead of failing, and says so here
+          pages=$(gh api "repos/$GITHUB_REPOSITORY" -q .has_pages 2> /dev/null || echo unknown)
+          if [ "$pages" != true ] && [ "$channel" != none ]; then
+            echo "::warning title=GitHub Pages is not enabled::the metadata are made but not published: no installed system can update from this repository until Settings > Pages > Source is GitHub Actions (docs/REPO.md). The packages go to the releases."
+          fi
+          { echo "channel=$channel"; echo "run=$run"; echo "sha=$sha"; echo "pages=$pages"; } >> "$GITHUB_OUTPUT"
+          echo "channel $channel, CI run $run, commit ${sha:-unknown}, pages $pages"
       - name: The packages (ours of that CI run, the tools' of their releases) and what each channel holds now
         if: steps.plan.outputs.channel != 'none'
         env:
@@ -124,13 +173,52 @@ jobs:
             else echo "::notice title=$t::no such release yet: the repository has none of its packages"; fi
           done
           rm -f w/tools/*.src.rpm      # (the tools' source packages stay in their releases and in sources-archive)
-          for f in w/tools/*.rpm; do [ ! -f "$f" ] || mv "$f" w/in/; done
           for c in next stable; do
             if echo "$tags" | grep -qxF "repo-el9-$c"; then all "repo-el9-$c" "w/pub/$c"; fi
           done
           echo "to publish: $(ls w/in | wc -l) files; published now: next $(ls w/pub/next | wc -l), stable $(ls w/pub/stable | wc -l)"; df -h . | tail -1
+      # (the audit's S2) A release is a place anything with a write token can put a file, and what lies there would be
+      # signed. So: a tool's package, and a package that is already published, is taken only with a build provenance
+      # attestation that says a workflow of this repository made that very file from main. What has none is left out
+      # and named; it is never signed. SilikOS's own packages of this run need none: they are the artifact of the
+      # CI run checked above
+      - name: Where each package came from (provenance), and the revision that is published
+        if: steps.plan.outputs.channel != 'none'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          vouched() { gh attestation verify "$1" --repo "$GITHUB_REPOSITORY" --source-ref refs/heads/main > /dev/null 2> w/verify.err; }
+          left=0; : > w/unvouched.next; : > w/unvouched.stable
+          for f in w/tools/*.rpm; do
+            [ -f "$f" ] || continue
+            if vouched "$f"; then mv "$f" w/in/; continue; fi
+            left=$((left + 1)); rm -f "$f"
+            echo "::warning title=no provenance::$(basename "$f") has no attestation of a workflow of this repository on main: left out, not signed ($(tail -1 w/verify.err | cut -c1-200))"
+          done
+          # what is published already: named for tools/build_pkgrepo.sh --unvouched, which keeps such a file only when
+          # it carries a good signature of the key (the owner signed it by hand), and never signs it
+          for c in next stable; do
+            for f in "w/pub/$c"/*.rpm; do
+              [ -f "$f" ] || continue
+              vouched "$f" || basename "$f" >> "w/unvouched.$c"
+            done
+          done
+          echo "tools' packages left out for want of provenance: $left; published without provenance: next $(wc -l < w/unvouched.next), stable $(wc -l < w/unvouched.stable); to publish: $(ls w/in | wc -l) files"
+          if [ "$left" -gt 0 ]; then
+            echo "::notice title=Package repository::$left packages were left out: a tool's package gets its attestation when its workflow (EDA tools, Dev tools, Wine) next keeps it; run them once (docs/SIGNING.md)"
+          fi
+          # the revision the site holds now: the new one must be higher (tools/build_pkgrepo.sh --after)
+          site=$(sed -n 's|^baseurl=\(https://[^$]*/\)el9/stable/.*|\1|p' packages/silikos-repos/files/silikos.repo | head -1)
+          for c in next stable; do
+            r=$(curl -fsS --max-time 30 "${site}el9/$c/STATE" 2> /dev/null | sed -n 's/^revision=\([0-9]\{1,12\}\)$/\1/p' | head -1) || r=
+            echo "$r" > "w/after.$c"; echo "published revision of $c: ${r:-none read}"
+          done
       # the key reaches this step only, as two variables of its environment; the step has no token. The packages are
-      # read (rpm, createrepo_c), never run. The only code is tools/build_pkgrepo.sh of this checkout and EL 9's tools
+      # read (rpm, createrepo_c), never run. The only code is tools/build_pkgrepo.sh of this checkout and EL 9's tools:
+      # the image by its digest (a tag can be moved to another image; this is the index of 27/10/2026, for both
+      # architectures, as `docker buildx imagetools inspect almalinux:9` gave it on 13/11/2026: the same command gives
+      # the next one), its packages from the base's repositories, each checked against the key in the image
       - name: Sign the packages, make and sign the metadata (EL 9)
         if: steps.plan.outputs.channel != 'none'
         env:
@@ -142,16 +230,17 @@ jobs:
           set -euo pipefail
           export BASE="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download"
           docker run --rm -e SILIKOS_GPG_PRIVATE_KEY -e SILIKOS_GPG_PASSPHRASE -e GITHUB_ACTIONS -e GITHUB_SHA="$PKG_SHA" -e CHANNEL -e BASE \
-            -v "$PWD:/src" -w /src almalinux:9 bash -c '
+            -v "$PWD:/src" -w /src almalinux:9@sha256:245f8aab832fe800aa42bdab5fad75ebbd8e0b4c9f24820a83c638b177857ae2 bash -c '
               set -euo pipefail
               dnf -y -q install rpm-sign createrepo_c dnf-utils > /dev/null
               other=$([ "$CHANNEL" = next ] && echo stable || echo next)
+              after() { r=$(cat "w/after.$1" 2> /dev/null || :); [ -z "$r" ] || echo "--after $r"; }
               # the channel of this run takes the new packages; the other one is made again from what it holds
               # (signed if it was not, its metadata signed again): both are always whole on the site
               bash tools/build_pkgrepo.sh --out w/site/repo --channel "$CHANNEL" --in w/in --published "w/pub/$CHANNEL" \
-                --pool "w/pool/$CHANNEL" --baseurl "$BASE/repo-el9-$CHANNEL"
+                --pool "w/pool/$CHANNEL" --baseurl "$BASE/repo-el9-$CHANNEL" --unvouched "w/unvouched.$CHANNEL" $(after "$CHANNEL")
               bash tools/build_pkgrepo.sh --out w/site/repo --channel "$other" --published "w/pub/$other" \
-                --pool "w/pool/$other" --baseurl "$BASE/repo-el9-$other"'
+                --pool "w/pool/$other" --baseurl "$BASE/repo-el9-$other" --unvouched "w/unvouched.$other" $(after "$other")'
           sudo chown -R "$(id -u):$(id -g)" w
       - name: The site (site/ at the root, the repository under /repo/) and what goes to the releases
         if: steps.plan.outputs.channel != 'none'
@@ -172,6 +261,14 @@ jobs:
               echo '```'; cat "_site/repo/el9/$c/STATE"; echo '```'
             done
           } >> "$GITHUB_STEP_SUMMARY"
+          # what this run publishes, by its sha256: the packages that go to the releases and the metadata of both
+          # channels (the job attest signs this list with the run's identity; tools/verify_release.sh reads it)
+          mkdir -p w/subjects
+          {
+            for c in next stable; do (cd "w/assets/$c/upload" && for f in *.rpm; do [ ! -f "$f" ] || sha256sum "$f"; done); done
+            (cd _site && find repo/el9 -type f \( -name repomd.xml -o -name repomd.xml.asc -o -name STATE \) | sort | xargs -r sha256sum)
+          } > w/subjects/SHA256SUMS
+          echo "attested: $(wc -l < w/subjects/SHA256SUMS) files"
           if grep -q '^signed=no' _site/repo/el9/*/STATE; then
             echo "::warning title=Package repository::published UNSIGNED: no installed system accepts it. The key is the owner's to make (docs/REPO.md)"
           fi
@@ -183,14 +280,41 @@ jobs:
           path: w/assets
           retention-days: 3
           compression-level: 0
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        if: steps.plan.outputs.channel != 'none'
+        with:
+          name: pkgrepo-subjects
+          path: w/subjects/SHA256SUMS
+          retention-days: 3
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9  # v5
         if: steps.plan.outputs.channel != 'none'
         with:
           path: _site
 
+  # Build provenance (docs/SIGNING.md): GitHub signs, with this run's identity (this workflow file, this commit, this
+  # repository: an OIDC token, no key of ours), the statement "this run made the files with these sha256". It says
+  # where a file was made, not that the commit is good. A job of its own: it holds neither the signing key nor a token
+  # that writes the repository, and it runs no script of the checkout; never started by a pull request (it needs the
+  # job packages, which none starts). Nothing goes to a release or to the site unless this job succeeded.
+  attest:
+    needs: packages
+    if: ${{ needs.packages.outputs.channel != 'none' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write        # (the run's identity, for Sigstore)
+      attestations: write    # (the attestation is kept by GitHub, for `gh attestation verify`)
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with: { name: pkgrepo-subjects, path: subjects }
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4
+        with:
+          subject-checksums: subjects/SHA256SUMS
+
   # the signed packages into the releases: the token that writes never meets the key
   release:
-    needs: packages
+    needs: [packages, attest]
     if: ${{ needs.packages.outputs.channel != 'none' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -215,8 +339,11 @@ jobs:
             echo "$rel: $(ls "assets/$c/upload" | wc -l) files"
           done
 
+  # (skipped, not failed, while the repository has no Pages site: the job packages says so in a warning. Run
+  # 43518509704 failed here with a 404 of the deployment, the packages and the releases being fine)
   deploy:
     needs: [packages, release]
+    if: ${{ needs.packages.outputs.pages == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
