@@ -1,5 +1,5 @@
 Name:           silikos-desktop
-Version:        0.17.0
+Version:        0.17.1
 Release:        1%{?dist}
 Summary:        The SilikOS desktop: the Silik layout and the Flow looks (bar, island), its accents, GTK and shell themes, Cascadia Mono
 License:        LicenseRef-SilikVolt AND OFL-1.1

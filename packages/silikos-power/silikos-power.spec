@@ -1,5 +1,5 @@
 Name:           silikos-power
-Version:        0.2.0
+Version:        0.2.1
 Release:        1%{?dist}
 Summary:        SilikOS power: the profile follows the mains, a saver profile for laptops, the battery's charge limit
 License:        LicenseRef-SilikVolt

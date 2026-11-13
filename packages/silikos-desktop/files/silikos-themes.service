@@ -10,6 +10,31 @@ Before=display-manager.service
 Type=oneshot
 ExecStart=-/usr/libexec/silikos/shell-theme
 ExecStart=-/usr/libexec/silikos/gtk-theme
+# Confined (owner, 13/11/2026: "audit it"): `systemd-analyze security` gave this unit 9.6, a root program with the
+# whole machine in reach. It needs to read the installed stylesheets and write /usr/share/themes: nothing else is left to it. (NoNewPrivileges is left
+# out on purpose: under SELinux it changes which domain the program runs in, and that was not run [A].)
+CapabilityBoundingSet=
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+UMask=0022
+ProtectKernelTunables=yes
+ReadWritePaths=/usr/share/themes
 
 [Install]
 WantedBy=multi-user.target

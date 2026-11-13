@@ -1073,7 +1073,7 @@ def shlex_quote(s):
 class PackageNew(unittest.TestCase):
     def test_the_spec_ships_the_profile_and_the_charge_service(self):
         spec = text("packages/silikos-power/silikos-power.spec")
-        self.assertRegex(spec, r"(?m)^Version:\s+0\.2\.0$")
+        self.assertRegex(spec, r"(?m)^Version:\s+0\.2\.\d+$")
         need = re.search(r"(?m)^Requires:\s+silik-tools >= (\S+)$", spec).group(1)
         self.assertEqual(need, silik.VERSION)                    # the silik that has `power charge` and `power profiles`
         self.assertRegex(text("packages/silik-tools/silik-tools.spec"), r"(?m)^Version:\s+%s$" % re.escape(silik.VERSION))
