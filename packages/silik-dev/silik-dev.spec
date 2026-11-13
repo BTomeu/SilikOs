@@ -59,7 +59,8 @@ for the same processor; OpenOCD's descriptions of probes and parts; the DFU and 
 lists what is on the system, the vendors' IDEs included. `silik dev install FILE` runs the installer of STM32CubeIDE
 (ST) or Code Composer Studio (TI) that the user downloaded: those are their vendors' programs under their vendors'
 licences and are not part of SilikOS, of its packages or of its ISO. The serial ports of USB adapters and boards
-belong to the user at the screen (70-silikos-serial.rules), as the debug probes do.
+belong to the user at the screen (70-silikos-serial.rules), as the debug probes do, and so do USB instruments
+that speak USBTMC (70-silikos-usbtmc.rules: PyVISA and the vendors' VISA libraries open them without root).
 
 %install
 install -d -m0755 %{buildroot}%{_datadir}/silikos/dev/try
@@ -71,6 +72,8 @@ done
 # Windows-only (Vector's interfaces) for the user's Windows VM
 install -Dm0644 %{_sourcedir}/70-silikos-serial.rules %{buildroot}%{_prefix}/lib/udev/rules.d/70-silikos-serial.rules
 install -Dm0644 %{_sourcedir}/70-silikos-usb-vm.rules %{buildroot}%{_prefix}/lib/udev/rules.d/70-silikos-usb-vm.rules
+# USB instruments (USBTMC: oscilloscopes, multimeters, supplies) for the person at the screen: PyVISA, a vendor's VISA
+install -Dm0644 %{_sourcedir}/70-silikos-usbtmc.rules %{buildroot}%{_prefix}/lib/udev/rules.d/70-silikos-usbtmc.rules
 
 %post
 # (the rules of a device already plugged in are applied when it is plugged again; reloading changes nothing running)
@@ -79,6 +82,7 @@ udevadm control --reload > /dev/null 2>&1 || :
 %files
 %{_prefix}/lib/udev/rules.d/70-silikos-serial.rules
 %{_prefix}/lib/udev/rules.d/70-silikos-usb-vm.rules
+%{_prefix}/lib/udev/rules.d/70-silikos-usbtmc.rules
 %dir %{_datadir}/silikos
 %dir %{_datadir}/silikos/dev
 %{_datadir}/silikos/dev/try
