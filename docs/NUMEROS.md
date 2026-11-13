@@ -212,14 +212,50 @@ màquina virtual compartida: una primera mesura, no una mitjana.
 - Segona execució (run 43436222754, commit 4c4163f, el mateix dia; 120 comprovacions bé, cap de fallada, 15G de disc):
   amb el perfil 9,3 i 9,3 s, escriptori a 8,8 s, 986 i 981 MB; sense, 9,7 i 9,9 s, escriptori a 9,1 i 9,3 s, 1607 i
   1350 MB. Coincideix amb la primera.
-- No hi ha encara la mateixa mesura sobre l'AlmaLinux Workstation de sèrie (`.github/workflows/compare.yml`, a mà), ni
-  en maquinari real.
+- En maquinari real: encara no.
+
+### Al costat de l'AlmaLinux Workstation de sèrie
+
+Workflow Compare, run 43446488850 (commit fd6e090, 13/11/2026): SilikOS (la seva ISO, sessió X11, perfil de `silik
+speed` posat) i l'AlmaLinux 9 Workstation tal com l'instal·la la base (la seva sessió per defecte, Wayland), instal·lats
+a la mateixa màquina virtual (4 CPU, 4096 MB, KVM) del mateix runner, dues arrencades de cadascun, mesurats pel mateix
+`silik bench system` dos minuts després de tenir l'escriptori. Una sola execució: una primera mesura.
+
+| | SilikOS 1 | SilikOS 2 | AlmaLinux 1 | AlmaLinux 2 |
+|---|---|---|---|---|
+| Arrencada: nucli + initrd + espai d'usuari | 1,34 + 3,11 + 7,62 = 12,07 s | 1,41 + 3,02 + 7,43 = 11,86 s | 1,37 + 3,06 + 6,93 = 11,37 s | 1,32 + 3,06 + 7,13 = 11,51 s |
+| Pantalla d'inici (gdm.service) | 7,34 s | 7,29 s | 7,23 s | 7,14 s |
+| Escriptori | 11,41 s | 11,26 s | 10,61 s | 10,56 s |
+| Memòria usada | 984 MB | 979 MB | 1135 MB | 1145 MB |
+| Memòria disponible (de 3655 MB) | 2671 MB | 2675 MB | 2520 MB | 2510 MB |
+| Processos | 99 | 99 | 106 | 106 |
+| Memòria dels processos (proporcional) | 778 MB | 777 MB | 909 MB | 900 MB |
+| Unitats en marxa (serveis) | 44 (32) | 44 (32) | 48 (36) | 48 (36) |
+| Disc usat a / | 8101 MB | 8101 MB | 5329 MB | 5329 MB |
+| Paquets (mida instal·lada) | 1551 (7363 MB) | 1551 (7363 MB) | 1231 (4582 MB) | 1231 (4582 MB) |
+
+- **Memòria: SilikOS en fa servir 151 a 166 MB menys** (979-984 contra 1135-1145 MB), amb 7 processos i 4 unitats
+  menys. És el perfil de `silik speed`.
+- **Arrencada: SilikOS arriba a l'escriptori 0,65 a 0,85 s més tard** (11,26-11,41 contra 10,56-10,61 s), i l'espai
+  d'usuari li costa 0,3 a 0,7 s més. No és més ràpid que la base en arrencar: és més lent.
+- On és la diferència: `plymouth-quit-wait.service` (acaba quan la pantalla d'inici és a punt) triga 4,70 s a SilikOS i
+  3,92 s a l'AlmaLinux, començant al mateix moment (2,87 i 2,77 s). SilikOS posa la pantalla d'inici i la sessió sobre
+  Xorg (`WaylandEnable=false`, per les eines EDA, que són programes X11: s'hi veuen `Xorg` i `gdm-x-session`);
+  l'AlmaLinux les posa sobre Wayland (`gdm-wayland-session`). Que els 0,8 s siguin d'arrencar Xorg per a la pantalla
+  d'inici és el que diuen aquestes dades, no una cosa provada [A]. De l'inici de sessió a l'escriptori, els dos triguen
+  el mateix (3,8 i 3,9 s).
+- `systemd-binfmt.service` (0,59 s) és a la cadena crítica de SilikOS i no a la de la base (Wine i l'emulador d'x86 hi
+  registren formats): `sysinit.target` hi arriba 0,13 s més tard.
+- Aquesta execució arrenca més lenta que les del CI del mateix dia (12 s contra 9,3 s, l'initrd 3,1 contra 2,1 s): és
+  un altre runner. Per això la comparació només val dins d'una mateixa execució.
+- PROPOSTA (no provada): pantalla d'inici sobre Wayland i sessió de l'usuari sobre Xorg. Cal veure-ho en una màquina
+  virtual abans de dir que guanya res.
 
 ## 10. Encara no mesurat
 
 | Què | Qui ho omplirà |
 |---|---|
-| Arrencada i memòria en maquinari real, i al costat de l'AlmaLinux de sèrie | el Ryzen; `compare.yml` |
+| Arrencada i memòria en maquinari real | el Ryzen |
 | Temps d'instal·lació i temps d'actualització | CI |
 | Espai real al disc del conjunt d'avui; mida de la ISO construïda | CI (`tools/build_iso.sh`, test d'instal·lació) |
 | aarch64 amb aquest mètode (del 12/11 només hi ha els nou RPM resolts sobre un contenidor: 895 paquets, 1,6 GB, 4,8 GB; no és comparable amb la taula 1) | `tools/weigh.sh` en una màquina ARM (segueix l'arquitectura) |

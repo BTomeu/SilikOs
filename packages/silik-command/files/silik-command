@@ -8,7 +8,6 @@
 #   silik-command [--query TEXT] [--theme light|dark] [--list TEXT] [--lang en|ca|es]
 #   --list prints the matches of TEXT as "address<TAB>twin" and exits (no window: tests, scripts).
 # Python 3.9, GTK 3 through python3-gobject; the logic above the "window" line has no GTK in it.
-import configparser
 import json
 import os
 import re
@@ -213,6 +212,28 @@ def exec_argv(line):
     return [p for p in parts if not (len(p) == 2 and p[0] == "%")]
 
 
+def desktop_entry(path):
+    """the [Desktop Entry] group of a desktop file as {key: value}, or None (no file, not text, no such group). Read by
+    hand: configparser took 0.4 ms a file, and the bar reads every one of them before its window opens
+    (docs/STATUS.md). As configparser read it: the group may come in pieces, the last value of a key stands"""
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    except (OSError, UnicodeDecodeError):
+        return None
+    e, inside = None, False
+    for line in text.split("\n"):
+        if line[:1] == "[":
+            inside = line.rstrip() == "[Desktop Entry]"
+            if inside and e is None:
+                e = {}
+        elif inside and line[:1] not in ("#", ";", ""):
+            k, sep, v = line.partition("=")
+            if sep:
+                e[k.strip()] = v.strip()
+    return e
+
+
 def app_items(dirs, lang="en"):
     seen, out = set(), []
     for d in dirs:
@@ -224,12 +245,8 @@ def app_items(dirs, lang="en"):
             if not fn.endswith(".desktop") or fn in seen or fn in HIDDEN_APPS:
                 continue
             seen.add(fn)
-            cp = configparser.RawConfigParser(strict=False)
-            cp.optionxform = str
-            try:
-                cp.read(os.path.join(d, fn), encoding="utf-8")
-                e = cp["Desktop Entry"]
-            except (configparser.Error, KeyError, UnicodeDecodeError):
+            e = desktop_entry(os.path.join(d, fn))
+            if e is None:
                 continue
             if e.get("Type", "Application") != "Application" or e.get("NoDisplay", "false").lower() == "true" or e.get("Hidden", "false").lower() == "true":
                 continue
@@ -593,6 +610,20 @@ def glass_mode():
         return None
 
 
+def desktop_theme():
+    """light or dark: the desktop's GTK theme, by its name (SilikOS, SilikOS-dark, SilikOS-cobalt-dark ...). Read in
+    this process once GTK is loaded: `gsettings get` was one more program to start before the window"""
+    try:
+        from gi.repository import Gio
+        src = Gio.SettingsSchemaSource.get_default()
+        schema = src.lookup("org.gnome.desktop.interface", True) if src else None
+        if schema and schema.has_key("gtk-theme") and "dark" in Gio.Settings.new("org.gnome.desktop.interface").get_string("gtk-theme").lower():
+            return "dark"
+    except Exception:       # (no GLib bindings, no settings service)
+        pass
+    return "light"
+
+
 def css_values(theme, composited, glass):
     """the stylesheet's values. GLASS: None or a key of GLASS. Rounded corners need a compositing window manager
     (GNOME has one), square without it; glass too (a translucent window without one is drawn over black)"""
@@ -610,6 +641,8 @@ def run_window(query, theme, lang, started=None):
     from gi.repository import Gdk, GLib, Gtk, Pango
 
     t = TEXT[lang]
+    if theme not in THEMES:
+        theme = desktop_theme()
     items = all_items(lang, started)
     css = Gtk.CssProvider()
     vals = css_values(theme, Gdk.Screen.get_default().is_composited(), glass_mode())
@@ -770,15 +803,7 @@ def main(argv):
         for it in match(all_items(lang) if asked is None else [], list_only, TEXT[lang], limit=50, asked=asked):
             print("%s\t%s" % (it.address, it.twin))
         return 0
-    started = [silik_json_start(a) for a in SILIK_LISTS]     # they answer while the theme is read and GTK loads
-    if theme not in THEMES:
-        theme = "light"
-        try:
-            out = subprocess.run(["gsettings", "get", "org.gnome.desktop.interface", "gtk-theme"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True, timeout=3).stdout
-            if "dark" in out.lower():
-                theme = "dark"
-        except (OSError, subprocess.TimeoutExpired):
-            pass
+    started = [silik_json_start(a) for a in SILIK_LISTS]     # they answer while GTK loads
     run_window(query, theme, lang, started)
     return 0
 

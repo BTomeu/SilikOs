@@ -155,6 +155,9 @@ rpcbind's socket on, GNOME Software not running, the state file, the doctor's ro
 `tests/install/compare.sh`): SilikOS (its ISO's own kickstart) and the stock AlmaLinux 9 Workstation
 (`tests/install/stock.ks.in`: the base's sources and its Workstation environment, nothing else) are installed in the
 same virtual machine on the same runner, each started once to settle and twice measured, with the same program.
+Its first run (43446488850, 13/11/2026): SilikOS uses 151 to 166 MB less memory (979-984 against 1135-1145 MB) and
+reaches the desktop 0.65 to 0.85 s later (11.26-11.41 against 10.56-10.61 s); the login screen is where the time
+goes (Xorg here, Wayland on the base). The table and what it does not show: `docs/NUMEROS.md` §9.
 
 What these measures are not: a virtual machine has no firmware or boot-loader time, a virtual disk, software
 rendering and 4 GB of memory; a runner is a shared machine. They compare two states of one system on one machine in

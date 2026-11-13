@@ -12,8 +12,11 @@ SilikOS ja s'hi pot instal·lar i actualitzar:
   res, el mateix mitjà es comprova (sha256 de cada fitxer i signatura de cada paquet).
 - **Provat de veritat aquí**: tot el cicle en contenidors `almalinux:9` sense sortida a Internet (crear, verificar,
   servir, instal·lar 201 paquets, manipulacions rebutjades, actualitzar, tornar enrere), i una instal·lació completa
-  d'una ISO reduïda en una màquina emulada sense targeta de xarxa. **No provat**: la ISO completa instal·lada en una
-  màquina (cal KVM: el workflow `Offline ISO` està escrit i no s'ha executat), ni cap maquinari real.
+  d'una ISO reduïda en una màquina emulada sense targeta de xarxa; i **la ISO completa instal·lada en una màquina
+  virtual sense targeta de xarxa** (workflow `Offline ISO`, run 43446493706, 13/11/2026): s'instal·la i arrenca fins a
+  l'escriptori, 81 comprovacions bé i 4 de fallades, totes quatre perquè aquella ISO no portava els paquets dels
+  releases (OpenOCD, dfu-util, les eines EDA obertes, Wine). El workflow ara els posa al mirall; aquesta segona
+  execució encara no ha acabat. **No provat**: cap maquinari real.
 - **Els paquets propis de SilikOS encara no van signats**: dins del mirall només els protegeix el sha256 del manifest.
 
 ---
@@ -202,9 +205,11 @@ no network; it does not show the SilikOS desktop installed from the whole ISO.
 
 ## Not verified
 
-- **The whole-set offline ISO installed in a machine.** It needs KVM. `.github/workflows/offline.yml` (started by
-  hand) builds the mirror and the ISO on `ubuntu-24.04` and installs it with the CI's own `tests/install/run.sh` in a
-  machine without a network device (`tests/install/offline.sh`): written, not run.
+- **The offline ISO with the releases' packages.** `.github/workflows/offline.yml` (started by hand) builds the mirror
+  and the ISO on `ubuntu-24.04` and installs it with the CI's own `tests/install/run.sh` in a machine without a
+  network device (`tests/install/offline.sh`). Its first run (43446493706) installed and started the system, 81
+  checks ok and 4 failed: the ISO had none of the releases' packages (OpenOCD, dfu-util, the open EDA tools, Wine).
+  The workflow now adds them to the mirror's set; not yet run to its end.
 - Real hardware, a real USB stick, a real lab. The installer's screens with this ISO (graphical mode: the emulated
   test was in text mode).
 - The list of what the installer adds by itself (`INSTALLER`) beyond the boot loader, which was read in anaconda's

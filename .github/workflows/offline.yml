@@ -31,15 +31,50 @@ jobs:
           df -h /
       - name: Unit tests
         run: python3 -m unittest discover -s tests
+      - name: Wine and the open EDA tools for the offline ISO too, when their workflows have made them (releases wine-*, eda-tools)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p build/extra
+          # get RELEASE PATTERN WHAT: its packages into build/extra. A release that does not exist yet is said (the ISO
+          # is then without WHAT); any other failure (the API, a download cut short) stops the job: an ISO quietly
+          # missing a release's packages would make a green run of a system without them
+          get() {
+            if out=$(gh release view "$1" --repo "$GITHUB_REPOSITORY" --json tagName 2>&1); then
+              gh release download "$1" --repo "$GITHUB_REPOSITORY" --pattern "$2" --dir build/extra --clobber \
+                || { echo "::error title=release $1::the download of its packages failed"; exit 1; }
+            elif echo "$out" | grep -qi 'not found'; then
+              echo "::notice title=$1::no such release yet: the ISO of this run has no $3"
+            else
+              echo "::error title=release $1::$out"; exit 1
+            fi
+          }
+          tags=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 50 --json tagName -q '.[].tagName') || { echo "::error title=releases::cannot list them"; exit 1; }
+          wine=$(echo "$tags" | grep '^wine-' | head -1 || true)
+          if [ -n "$wine" ]; then get "$wine" 'silik-wine-*.rpm' Wine; else echo "::notice title=Wine::no wine-* release yet: the ISO of this run has no Wine"; fi
+          get eda-tools '*.rpm' "the open EDA tools"                # (workflow EDA tools)
+          get dev-tools '*.rpm' "OpenOCD or dfu-util"               # (workflow Dev tools)
+          rm -f build/extra/*.src.rpm      # (the releases' source packages: kept there, not on the ISO)
+          rm -f build/extra/*.aarch64.rpm                           # (the ARM builds: the ISO here is x86_64)
+          ls -la build/extra
       # in EL 9, with the base's own rpmbuild, dnf, rpmkeys and createrepo_c: our packages, then the mirror of the
-      # whole SilikOS set (every package's signature checked on the way in)
+      # whole SilikOS set (every package's signature checked on the way in). The releases' packages (build/extra: the
+      # network ISO installs them, tools/build_iso.sh) go into the mirror's own repository and into its set: the
+      # first offline run had none of them, and the installed system had no OpenOCD, dfu-util or open EDA tools
       - name: Packages and the mirror
         run: |
           docker run --rm -v "$PWD:/src" -w /src almalinux:9 bash -c '
             set -e
             dnf -y -q install rpm-build createrepo_c dnf-plugins-core epel-release gnupg2 > /dev/null
             bash tools/build_rpms.sh
-            python3 packages/silik-tools/files/silik mirror create build/mirror --silikos build/repo --yes | grep -v "^([0-9]*/[0-9]*): "
+            mkdir -p build/own && cp build/repo/*.rpm build/own/
+            add=""
+            if ls build/extra/*.rpm > /dev/null 2>&1; then
+              cp build/extra/*.rpm build/own/
+              for n in $(rpm -qp --qf "%{NAME}\n" build/extra/*.rpm | grep -v -- "-devel\$" | sort -u); do add="$add --add $n"; done
+            fi
+            echo "the releases packages in the set:${add:- none}"
+            python3 packages/silik-tools/files/silik mirror create build/mirror --silikos build/own $add --yes | grep -v "^([0-9]*/[0-9]*): "
             python3 packages/silik-tools/files/silik mirror verify build/mirror'
           sudo chown -R "$(id -u):$(id -g)" build
           du -sh --exclude=.root build/mirror
