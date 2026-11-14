@@ -365,10 +365,20 @@ if command -v wine > /dev/null; then
     has win.question.exit "$o" "silik-exit 2"
     # an isolated program: a display of its own (Xephyr), its own network namespace, pasta for its network
     say win.isolated.parts info "$(rpm -q xorg-x11-server-Xephyr passt 2>&1 | tr '\n' ' '); the session's access list: $(asuser xhost 2>&1 | tr '\n' ' ')"
-    rm -f /home/tester/Windows/silikos-ci-iso.txt
+    # (an isolated prefix's drive W: is its own folder, ~/Windows/PREFIX: not the normal box's ~/Windows)
+    rm -f /home/tester/Windows/isolated/silikos-ci-iso.txt /home/tester/Windows/silikos-ci-iso.txt
     insession timeout 300 silik -q win open --isolated --yes /home/tester/Downloads/hello.exe 'Z:\home\tester\.ssh\id_test' 'W:\silikos-ci-iso.txt' > /tmp/ci-iso.out 2>&1
-    is win.isolated.ran "$(tr -d '\r' < /home/tester/Windows/silikos-ci-iso.txt 2> /dev/null)" "ran secret=hidden"
-    [ -s /home/tester/Windows/silikos-ci-iso.txt ] || tail -6 /tmp/ci-iso.out | while read -r line; do say win.isolated.output info "$line"; done
+    is win.isolated.ran "$(tr -d '\r' < /home/tester/Windows/isolated/silikos-ci-iso.txt 2> /dev/null)" "ran secret=hidden"
+    [ -s /home/tester/Windows/isolated/silikos-ci-iso.txt ] || tail -6 /tmp/ci-iso.out | while read -r line; do say win.isolated.output info "$line"; done
+    if [ -e /home/tester/Windows/silikos-ci-iso.txt ]; then say win.isolated.own-folder FAIL "it wrote into the normal box's ~/Windows"; else say win.isolated.own-folder ok "W: is ~/Windows/isolated"; fi
+    # a file that lies in the isolated prefix's folder runs isolated with no switch, and never in a prefix of the normal box
+    if [ -s /home/tester/Windows/isolated/silikos-ci-iso.txt ]; then
+      install -o tester -g tester -m 0644 /home/tester/Downloads/hello.exe /home/tester/Windows/isolated/left-behind.exe
+      o=$(insession sh -c 'timeout 120 silik win open --prefix default --yes /home/tester/Windows/isolated/left-behind.exe; echo "silik-exit $?"' 2>&1)
+      has win.isolated.stays-isolated "$(echo "$o" | tail -2 | tr '\n' ' ')" "silik-exit 69"
+      o=$(insession sh -c 'timeout 120 silik win open --no-sandbox --yes /home/tester/Windows/isolated/left-behind.exe; echo "silik-exit $?"' 2>&1)
+      has win.isolated.never-without-sandbox "$(echo "$o" | tail -2 | tr '\n' ' ')" "silik-exit 69"
+    fi
     is win.isolated.marked "$(asuser silik win isolate | tr '\n' ' ')" "isolated "
     if [ -f /home/tester/Downloads/win.exe ] && insession xwininfo -root > /dev/null 2>&1; then
       asuser systemd-run --quiet --user --collect -p WorkingDirectory=/home/tester -E DISPLAY=:0 silik win open --isolated --yes /home/tester/Downloads/win.exe > /dev/null 2>&1
@@ -393,6 +403,10 @@ except OSError as e: print("failed:", e.strerror)'
         has win.isolated.session-abstract "$(inbox python3 -c "$try" @/tmp/.X11-unix/X0)" "failed"
         has win.isolated.session-bus "$(inbox python3 -c "$try" /run/user/$uid/bus)" "failed"
         is win.isolated.runtime-folder "$(inbox ls -A /run/user/$uid | tr '\n' ' ')" "silik-win "
+        is win.isolated.shared-folder "$(inbox ls -A /home/tester/Windows | tr '\n' ' ')" "isolated "
+        # the system-call filter of the box's programs (its wineserver is the first of them: 2 = a filter is loaded)
+        kid=$(cut -d' ' -f1 /proc/$pid/task/$pid/children 2> /dev/null)
+        is win.isolated.filter "$(awk '/^Seccomp:/ {print $2}' /proc/${kid:-0}/status 2> /dev/null)" 2
         say win.isolated.x-sockets info "$(inbox ls /tmp/.X11-unix | tr '\n' ' ')"
         # its network: pasta's (an address beside lo), and nothing of this machine's loopback
         net=$(inbox ip -o -4 addr 2>&1 | awk '{print $2}' | tr '\n' ' ')
