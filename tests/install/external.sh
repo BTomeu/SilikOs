@@ -99,18 +99,28 @@ esac
 
 # the kickstart of the test: the ISO's own (its screen-mode lines, its boot loader line and its desktop taken out:
 # the base's core and the SilikOS packages this test is about) + the CI-only lines of external.ks.in
-python3 - "$work/shipped.ks" "$here/external.ks.in" "$here/external-check.sh" "$PASSPHRASE" "$mode" > "$work/external.ks" <<'EOF'
+python3 - "$work/shipped.ks" "$here/external.ks.in" "$here/external-check.sh" "$PASSPHRASE" "$mode" "${SILIK_CI_EXTERNAL_DEBUG:-}" > "$work/external.ks" <<'EOF'
 import re, sys
-shipped, extra, check, passphrase, mode = sys.argv[1:6]
+shipped, extra, check, passphrase, mode, debug = sys.argv[1:7]
+# SILIK_CI_EXTERNAL_DEBUG=1 (the graphical modes): the start is the graphical one still (the splash on the screen, the
+# passphrase asked there), and what the splash program and systemd say goes to the serial port, for a start that
+# does not arrive
+DEBUG = ('bootloader --append="vsyscall=xonly console=tty0 console=ttyS0,115200 plymouth.ignore-serial-consoles '
+         'plymouth.debug=stream:/dev/ttyS0 systemd.show_status=1 rd.systemd.show_status=1"')
+def graphical(extra):
+    lines = [l for l in extra.splitlines() if not l.startswith("bootloader ")]
+    if debug:
+        lines.insert(lines.index("zerombr"), DEBUG)
+    return "\n".join(lines) + "\n"
 ks = "\n".join(l for l in open(shipped).read().splitlines() if l not in ("graphical", "firstboot --enable")) + "\n"
 extra = open(extra).read()
 if mode == "desktop":
     # the shipped package set, services and boot loader line stay; the test's own boot loader line (the console on
     # the serial port, no splash) is left out: this installation starts as a person's does
-    extra = "\n".join(l for l in extra.splitlines() if not l.startswith("bootloader ")) + "\n"
+    extra = graphical(extra)
 elif mode == "splash":
     # the small set with the boot splash and SilikOS's theme; the shipped boot loader line stays, the test's goes
-    extra = "\n".join(l for l in extra.splitlines() if not l.startswith("bootloader ")) + "\n"
+    extra = graphical(extra)
     small = ["@core", "silik-tools", "silikos-security", "silikos-branding", "plymouth", "plymouth-scripts", "plymouth-theme-spinner",
              "cryptsetup", "mokutil", "efibootmgr"]
     ks = re.sub(r"(?ms)^%packages.*?^%end\n", "%packages\n" + "\n".join(small) + "\n%end\n", ks, count=1)
@@ -419,6 +429,13 @@ EOF
   echo "::group::[external] the console of '$stage': what the firmware started"
   clean "$out/external-$stage.log" | grep -a -i 'BdsDxe\|SILIKOS-CI|END' | cut -c1-220 | tail -12 || true
   echo "::endgroup::"
+  if [ -n "${SILIK_CI_EXTERNAL_DEBUG:-}" ]; then
+    echo "::group::[external] the serial port of '$stage' (debug): the splash program and systemd, the lines that matter and the last ones"
+    clean "$out/external-$stage.log" | grep -a -i 'error\|fail\|could not\|cannot\|crash\|segfault\|password\|passphrase\|renderer\|theme\|two-step\|cryptsetup\|Reached target\|Started\|emergency\|timed out' | cut -c1-200 | head -150 || true
+    echo "--- the last lines:"
+    clean "$out/external-$stage.log" | tail -60 | cut -c1-200 || true
+    echo "::endgroup::"
+  fi
   rows_of "$stage"
   if tr -d '\r' < "$out/external-$stage.log" | grep -a -q "^SILIKOS-CI|END|$stage"; then
     row ok "external.$stage.passphrase-at-the-splash" "the passphrase typed on the keyboard at the graphical start opened the disk (typed $typed time(s); screen-typing-N.png are the screens before each)"

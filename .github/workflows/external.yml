@@ -147,6 +147,10 @@ jobs:
       - name: The small set with the boot splash on the USB disk, encrypted; the graphical start, the passphrase at the splash
         env:
           SILIK_CI_EXTERNAL_MODE: splash
+          # (a diagnosis in progress, 14/11/2026: the graphical start does not arrive. What the splash program and
+          # systemd say goes to the serial port, and the start is given six minutes)
+          SILIK_CI_EXTERNAL_DEBUG: 1
+          SILIK_CI_BOOT_MIN: 3
         run: bash tests/install/external.sh build/SilikOS-*-netinstall.iso build/external-splash-test
       - name: The report
         if: always()
