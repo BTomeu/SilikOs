@@ -157,6 +157,7 @@ splash)
   for f in silikos.plymouth watermark.png lock.png entry.png bullet.png; do case " $in " in *" $f "*) ;; *) miss="$miss $f" ;; esac; done
   if [ -z "$miss" ]; then say splash.splash-in-initramfs ok "the theme and its dialog pictures are in the initramfs ($(echo $in | wc -w) files)"
   else say splash.splash-in-initramfs FAIL "missing in the initramfs:$miss (there: $in)"; fi
+  say splash.graphics info "the graphics drivers loaded: $(lsmod | awk '$1 ~ /drm|bochs|simple|virtio_gpu|qxl|vmwgfx|cirrus/ { printf "%s ", $1 }'); in the initramfs: $(lsinitrd "$img" 2> /dev/null | grep -o '[a-z_0-9-]*\(drm\|bochs\|cirrus\|qxl\|virtio-gpu\)[a-z_0-9-]*\.ko[.a-z]*' | sort -u | tr '\n' ' ' | cut -c1-220); renderers: $(lsinitrd "$img" 2> /dev/null | grep -o 'plymouth/renderers/[a-z-]*\.so' | tr '\n' ' ')"
   say splash.plymouth-log info "$(journalctl -b -u plymouth-start.service --no-pager 2> /dev/null | tail -3 | tr '\n' ' ' | cut -c1-200); $(grep -a -i 'error\|could not\|failed' /var/log/boot.log 2> /dev/null | head -3 | tr '\n' ' ' | cut -c1-200)"
   end ;;
 desktop)

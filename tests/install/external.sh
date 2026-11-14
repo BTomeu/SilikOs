@@ -99,18 +99,18 @@ esac
 
 # the kickstart of the test: the ISO's own (its screen-mode lines, its boot loader line and its desktop taken out:
 # the base's core and the SilikOS packages this test is about) + the CI-only lines of external.ks.in
-python3 - "$work/shipped.ks" "$here/external.ks.in" "$here/external-check.sh" "$PASSPHRASE" "$mode" "${SILIK_CI_EXTERNAL_DEBUG:-}" > "$work/external.ks" <<'EOF'
+python3 - "$work/shipped.ks" "$here/external.ks.in" "$here/external-check.sh" "$PASSPHRASE" "$mode" "${SILIK_CI_EXTERNAL_DEBUG:-}" "${SILIK_CI_EXTERNAL_THEME:-}" > "$work/external.ks" <<'EOF'
 import re, sys
-shipped, extra, check, passphrase, mode, debug = sys.argv[1:7]
-# SILIK_CI_EXTERNAL_DEBUG=1 (the graphical modes): the start is the graphical one still (the splash on the screen, the
-# passphrase asked there), and what the splash program and systemd say goes to the serial port, for a start that
-# does not arrive
-DEBUG = ('bootloader --append="vsyscall=xonly console=tty0 console=ttyS0,115200 plymouth.ignore-serial-consoles '
-         'plymouth.debug=stream:/dev/ttyS0 systemd.show_status=1 rd.systemd.show_status=1"')
+shipped, extra, check, passphrase, mode, debug, theme = sys.argv[1:8]
+# The graphical modes start as an installation made on the installer's screens does: rhgb quiet on the kernel's
+# command line. (The installer adds the two words itself after a graphical installation; after this test's text
+# installation with a console on the serial port it did not, and the start was a text one: seen 14/11/2026.)
+# SILIK_CI_EXTERNAL_DEBUG=1: the splash program also writes what it does to the serial port (nothing else changes).
+# SILIK_CI_EXTERNAL_THEME=base (the splash mode): without silikos-branding, the base's own splash theme.
+GRAPHICAL = 'bootloader --append="vsyscall=xonly rhgb quiet%s"' % (" plymouth.debug=stream:/dev/ttyS0" if debug else "")
 def graphical(extra):
     lines = [l for l in extra.splitlines() if not l.startswith("bootloader ")]
-    if debug:
-        lines.insert(lines.index("zerombr"), DEBUG)
+    lines.insert(lines.index("zerombr"), GRAPHICAL)
     return "\n".join(lines) + "\n"
 ks = "\n".join(l for l in open(shipped).read().splitlines() if l not in ("graphical", "firstboot --enable")) + "\n"
 extra = open(extra).read()
@@ -121,8 +121,8 @@ if mode == "desktop":
 elif mode == "splash":
     # the small set with the boot splash and SilikOS's theme; the shipped boot loader line stays, the test's goes
     extra = graphical(extra)
-    small = ["@core", "silik-tools", "silikos-security", "silikos-branding", "plymouth", "plymouth-scripts", "plymouth-theme-spinner",
-             "cryptsetup", "mokutil", "efibootmgr"]
+    small = ["@core", "silik-tools", "silikos-security", "plymouth", "plymouth-scripts", "plymouth-theme-spinner", "plymouth-system-theme",
+             "cryptsetup", "mokutil", "efibootmgr"] + ([] if theme == "base" else ["silikos-branding"])
     ks = re.sub(r"(?ms)^%packages.*?^%end\n", "%packages\n" + "\n".join(small) + "\n%end\n", ks, count=1)
     ks = "\n".join(l for l in ks.splitlines() if not l.startswith(("services ", "xconfig "))) + "\n"
 else:
@@ -431,9 +431,9 @@ EOF
   echo "::endgroup::"
   if [ -n "${SILIK_CI_EXTERNAL_DEBUG:-}" ]; then
     echo "::group::[external] the serial port of '$stage' (debug): the splash program and systemd, the lines that matter and the last ones"
-    clean "$out/external-$stage.log" | grep -a -i 'error\|fail\|could not\|cannot\|crash\|segfault\|password\|passphrase\|renderer\|theme\|two-step\|cryptsetup\|Reached target\|Started\|emergency\|timed out' | cut -c1-200 | head -150 || true
+    clean "$out/external-$stage.log" | grep -a -v 'on_boot_output\|update_status\|on_update \|print_connection_process' | grep -a -i 'error\|fail\|could not\|cannot\|crash\|segfault\|password\|renderer\|theme\|two-step\|drm\|frame-buffer\|device\|seat\|display\|splash\|label\|image\|timeout\|keyboard' | cut -c1-200 | head -220 || true
     echo "--- the last lines:"
-    clean "$out/external-$stage.log" | tail -60 | cut -c1-200 || true
+    clean "$out/external-$stage.log" | tail -40 | cut -c1-200 || true
     echo "::endgroup::"
   fi
   rows_of "$stage"

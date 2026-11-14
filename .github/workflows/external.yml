@@ -147,10 +147,10 @@ jobs:
       - name: The small set with the boot splash on the USB disk, encrypted; the graphical start, the passphrase at the splash
         env:
           SILIK_CI_EXTERNAL_MODE: splash
-          # (a diagnosis in progress, 14/11/2026: the graphical start does not arrive. What the splash program and
-          # systemd say goes to the serial port, and the start is given six minutes)
+          # (a diagnosis in progress, 14/11/2026: the graphical start does not arrive. The splash program writes what
+          # it does to the serial port, and the start is given eight minutes)
           SILIK_CI_EXTERNAL_DEBUG: 1
-          SILIK_CI_BOOT_MIN: 3
+          SILIK_CI_BOOT_MIN: 4
         run: bash tests/install/external.sh build/SilikOS-*-netinstall.iso build/external-splash-test
       - name: The report
         if: always()
@@ -170,6 +170,62 @@ jobs:
             build/external-splash-test/*.txt
             build/external-splash-test/*.ks
             build/external-splash-test/*.png
+
+
+  # The same with the base's own splash theme (no silikos-branding): what is SilikOS's doing and what is the base's
+  # in this virtual machine. Its rows about SilikOS's theme fail by design.
+  splash-base:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with: { persist-credentials: false }
+      - name: KVM for the runner's user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+      - name: Tools, the firmware, disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          bash tools/ci_apt.sh rpm createrepo-c xorriso mtools cpio isomd5sum qemu-system-x86 qemu-utils ovmf imagemagick tesseract-ocr
+          df -h /
+      - name: Packages
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src almalinux:9 bash -c 'dnf -y -q install rpm-build createrepo_c > /dev/null && bash tools/build_rpms.sh'
+          sudo chown -R "$(id -u):$(id -g)" build
+      - name: The ISO (the system alone)
+        run: |
+          createrepo_c --quiet build/repo && ls build/repo
+          bash tools/build_iso.sh
+      - name: The small set with the boot splash on the USB disk, encrypted; the graphical start, the passphrase at the splash
+        env:
+          SILIK_CI_EXTERNAL_MODE: splash
+          SILIK_CI_EXTERNAL_THEME: base
+          # (a diagnosis in progress, 14/11/2026: the graphical start does not arrive. The splash program writes what
+          # it does to the serial port, and the start is given eight minutes)
+          SILIK_CI_EXTERNAL_DEBUG: 1
+          SILIK_CI_BOOT_MIN: 4
+        run: bash tests/install/external.sh build/SilikOS-*-netinstall.iso build/external-splash-base-test
+      - name: The report
+        if: always()
+        run: |
+          {
+            echo '### The graphical start from an external disk (the boot splash)'
+            echo '```'
+            cat build/external-splash-base-test/report.txt 2>/dev/null || echo 'no report: see the consoles (artifact external-desktop-test)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        if: always()
+        with:
+          name: external-splash-base-test
+          path: |
+            build/external-splash-base-test/*.log
+            build/external-splash-base-test/*.txt
+            build/external-splash-base-test/*.ks
+            build/external-splash-base-test/*.png
 
   # The ISO as a person starts it (tests/install/media.sh): the one disk of a USB controller, UEFI firmware with
   # Secure Boot on, its own signed boot loader and its own menu; the entry for an external disk is chosen with the
