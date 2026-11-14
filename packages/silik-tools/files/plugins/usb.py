@@ -89,6 +89,19 @@ def as_user(user, argv):
             "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%d/bus" % uid] + list(argv)
 
 
+def there(f, cmd):
+    """is SilikOS's file F installed. polkit's rules folder is closed to everybody but polkitd and root (0700 on
+    EL 9), so a normal user cannot see the file there: the package's own list answers then (seen on an installed
+    system, 14/11/2026: the row said "not installed" of a rule that was working)"""
+    if os.path.exists(ROOT + f):
+        return True
+    d = os.path.dirname(ROOT + f)
+    if ROOT or not os.path.isdir(d) or os.access(d, os.X_OK):
+        return False
+    rc, out = cmd(["rpm", "-ql", "silikos-security"])
+    return rc == 0 and f in out.split("\n")
+
+
 def probe(silik, cmd=None):
     """what `silik usb` and `silik secure status` read; nothing is changed, nothing is asked as root.
     CMD: the read-only command runner, (exit code or None, output)"""
@@ -97,7 +110,7 @@ def probe(silik, cmd=None):
     st = {"uid": os.geteuid(), "user": su, "container": silik.sec_container(),
           "bus": os.path.isdir(ROOT + os.path.join(silik.SYSFS, "bus/usb/devices")),
           "installed": shutil.which("usbguard") is not None,
-          "files": {f: os.path.exists(ROOT + f) for f in FILES}}
+          "files": {f: there(f, cmd) for f in FILES}}
     st["unit"] = {u: silik.sec_unit(u) for u in UNITS}
     st["active"] = {u: silik.sec_active(u) for u in UNITS}
 

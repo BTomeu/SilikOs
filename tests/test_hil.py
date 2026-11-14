@@ -527,6 +527,8 @@ for = 150 ms
     def test_ctrl_c_gives_up_the_step_runs_the_teardown_and_writes_the_result(self):
         import signal
         before = signal.getsignal(signal.SIGINT)
+        if before is signal.SIG_IGN:        # (a shell that started the tests with `&` hands them Ctrl-C ignored)
+            self.skipTest("Ctrl-C is ignored in this process (started in the background of a shell without job control)")
 
         over = threading.Event()
 

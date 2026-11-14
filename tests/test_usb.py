@@ -567,5 +567,33 @@ class Docs(unittest.TestCase):
         self.assertIn("all-present", comp("usb", "allow", "", "3"))
 
 
+
+
+class Hidden(unittest.TestCase):
+    """polkit's rules folder is 0700 polkitd on EL 9: a normal user's `silik usb` cannot see the rule in it, and said
+    "not installed" of a rule that worked (the installation test of 14/11/2026). The package's list answers then"""
+
+    def test_a_folder_closed_to_the_user_is_asked_of_the_package(self):
+        mod = usb
+        asked = []
+
+        def cmd(argv):
+            asked.append(argv)
+            return 0, "/etc/usbguard/silikos-daemon.conf\n" + mod.POLKIT + "\n"
+        real_exists, real_isdir, real_access = os.path.exists, os.path.isdir, os.access
+        os.path.exists = lambda p: False
+        os.path.isdir = lambda p: True
+        os.access = lambda p, m: False
+        try:
+            self.assertTrue(mod.there(mod.POLKIT, cmd))
+            self.assertFalse(mod.there("/usr/share/polkit-1/rules.d/other.rules", cmd))
+            os.access = lambda p, m: True           # (a folder the user can look into: the file is simply not there)
+            n = len(asked)
+            self.assertFalse(mod.there(mod.POLKIT, cmd))
+            self.assertEqual(len(asked), n)
+        finally:
+            os.path.exists, os.path.isdir, os.access = real_exists, real_isdir, real_access
+        self.assertEqual(asked[0], ["rpm", "-ql", "silikos-security"])
+
 if __name__ == "__main__":
     unittest.main()

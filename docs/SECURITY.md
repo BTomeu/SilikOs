@@ -192,14 +192,35 @@ successful. It also found that hiding the server's socket file is not enough: th
 socket that any process in the same network namespace reaches, and EL 9's login admits every program of the user
 without the key. `silik win open --isolated` (the default answer of the question a file gets the first time it is
 opened) gives the program an X server of its own (Xephyr), a network namespace of its own with `pasta` for outbound
-connections only, no GPU device, no sound, and not the Downloads folder; the same attack then fails on every count.
-Both boxes now start with an empty kernel session keyring (the session's was inherited before). What remains: the
-nested server is a program and a fault in it is a way out; `~/Windows` is shared with every prefix; a program of
-the same user can still link the kernel's user keyring by number (a system-call filter would close it; there is
-none); nothing verifies an Authenticode signature; isolated means software graphics. For a hostile and capable
-program the Windows VM is still the answer. Run in an EL 9 container with an attack program standing in for Wine,
-and with a real Wine on the build machine; not yet seen on an installed system with SELinux enforcing (the CI's
-`win.isolated.*` rows).
+connections only, no GPU device, no sound, and not the Downloads folder.
+
+A second round (14/11/2026) attacked that box and got out of it or around it: a program started from a terminal
+kept the terminal and read a password typed there later; through `~/Windows`, then shared by every prefix, it
+replaced the library beside a program approved for the normal box and swapped an approved file after its SHA-256
+was taken; `silik win install PREFIX` answered "isolated" ran it in a prefix of the normal box, where it replaced a
+program; without bwrap on the `PATH` a marked prefix ran with the whole account; a stopped wineserver defeated
+`silik win stop`; it made a user namespace and was root in it, linked the user keyring by number and read and added
+keys; it reached a server of this machine through a bridge's address. All of these are closed and were run again:
+an isolated program gets pipes, never the terminal; a prefix of isolated programs has its own folder
+(`~/Windows/PREFIX`) and what lies in it runs isolated whatever was answered; an isolated run in a prefix of the
+normal box, without bwrap or with `--no-sandbox` is refused (exit 69); `silik win stop` ends the box's first
+process; both boxes have a system-call filter (no namespaces of their own, no keyring calls, no mount, bpf,
+io_uring, perf, userfaultfd); the box's connections leave by the default route's interface only.
+
+What remains: the nested server is a program and a fault in it is a way out (it runs outside the box, as the
+user); an isolated program reaches the local network and, on a cloud machine, the metadata address; inside its own
+window it can draw anything, a password question included, and only the window's title says where it comes from;
+what it leaves in its folder (a link, a look-alike file) is its word; the names of the user's kernel keys show in
+`/proc/keys`; the filter refuses a short list of calls, so a kernel fault in a call Wine uses is still reachable; a
+file outside the isolated folders can still be changed between its check and its run by a program the owner
+trusts; nothing verifies an Authenticode signature; isolated means software graphics. For a hostile and capable
+program the Windows VM is still the answer.
+
+Run in an EL 9 container with an attack program standing in for Wine, and with a real Wine on the build machine.
+**On an installed system (the CI of 14/11/2026, SELinux enforcing) the isolated box did not work yet**: `pasta`,
+confined by the base's own SELinux policy, was refused when joining the box (no network), and the first isolated
+opening of a file refused itself; that the session's display stays out of reach there is therefore not shown yet.
+Being fixed; until the CI's `win.isolated.*` rows are green, isolation is a container result.
 
 ## USB devices and what listens
 
@@ -363,7 +384,24 @@ user's to write; the plugins pass no input to a shell. Two things about USBGuard
 socket answered the group `wheel` without a password, as the base's file has it, so a program running as the
 owner could switch the policy and add a rule: **closed** (root alone; `silik usb allow` goes through `sudo`). And
 the polkit rule gives an active local session more than the two switches it is for (above, "USB devices"): said,
-not closable in polkit. The passes on the Windows box and on the supply chain: below, when they are in.
+not closable in polkit. The pass on the Windows box is in "Windows programs" above.
+
+**The supply chain.** Another reviewer attacked what the audit built, as a stranger with a GitHub account, a stolen
+token that writes releases, someone between a machine and the repository, and hostile input to the signing
+scripts. Found and fixed, each run first: the ISO took any package lying in the tools' releases and installed it as
+root (it now asks for the attestation of the workflow that keeps that release: `tools/vouched.sh`); an old signed
+package put back under the next version's name kept the real build out of the channel (a package is now held to
+the name in its header); the channel's metadata for the other architecture passed the replay check and left a
+machine's own packages without updates (refused); a tag on a commit outside main got a release and an attestation
+(refused, short of a token that can change workflows: the tag ruleset); the check of a signed tree passed links
+and added files. Nothing was found for a stranger: no `pull_request_target`, no self-hosted runner, fork pull
+requests get a read-only token, no event text reaches a shell unchecked. Open: PackageKit, so GNOME Software, goes
+around the replay check (run: it installed what dnf refused; SilikOS's speed profile keeps GNOME Software from
+downloading updates by itself, a person can still press the button); the Actions cache check can be replaced by
+the entry it checks (needs code running in a build job of main); a release token can make a channel offer an older
+genuine version to a machine that installs a tool for the first time; a refusal is said by `silik update` and
+`silik doctor`, not in the status bar. `docs/SIGNING.md` has the table. The provenance checks themselves
+(`gh attestation verify`) have not run on GitHub yet.
 
 ## What SilikOS does not do
 

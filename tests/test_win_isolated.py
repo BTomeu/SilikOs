@@ -136,8 +136,10 @@ class Isolated(Case):
         rc, l, e, x, box, enter = self.plan("win", "open", "--isolated", sub)
         self.assertIn("--ro-bind %s/Downloads/tool-1.2 %s/Downloads/tool-1.2" % (self.home, self.home), box[-1])
         self.assertNotIn("--ro-bind %s/Downloads %s/Downloads " % (self.home, self.home), box[-1])
-        # the shared folder is shared: what is put in ~/Windows is for every prefix
-        self.assertIn("--bind %s %s" % (self.shared, self.shared), box[-1])
+        # the shared folder of an isolated prefix is its own, ~/Windows/PREFIX: not the one of the normal box
+        # (tests/test_win_redbox.py: what an isolated program did with the common one)
+        self.assertIn("--bind %s/isolated %s/isolated " % (self.shared, self.shared), box[-1])
+        self.assertNotIn("--bind %s %s " % (self.shared, self.shared), box[-1])
         # the normal box still shows Downloads
         rc, l, e, x, box, enter = self.plan("win", "open", "--yes", exe)
         self.assertIn("--ro-bind %s/Downloads %s/Downloads " % (self.home, self.home), box[-1])
@@ -360,8 +362,11 @@ class Keyring(unittest.TestCase):
 
     def test_what_starts_in_the_sandbox_joins_a_new_session_keyring(self):
         src = text("packages/silik-tools/files/silik")
-        self.assertIn("start_new_session=True,\n                                     preexec_fn=win_no_keys())", src)   # the normal box
-        self.assertIn("subprocess.run(argv, check=False, preexec_fn=win_no_keys())", src)                             # each program entering
+        self.assertIn("start_new_session=True, preexec_fn=win_no_keys())", src)   # the normal box (its filter: bwrap --seccomp)
+        self.assertIn("subprocess.run(argv, check=False, preexec_fn=win_confine())", src)                             # each program entering
+        self.assertIn("win_relay(argv, console, win_confine()) if s.get(\"iso\")", src)                                 # (an isolated one)
+        body = src[src.index("def win_confine"):src.index("def _isatty")]
+        self.assertLess(body.index("keys()"), body.index("prctl(38"))             # the keyring first, then the filter that refuses keyctl
         body = src[src.index("def win_isolated_start"):src.index("def win_runtime_make")]
         self.assertLess(body.index("win_no_keys()"), body.index("subprocess.Popen(win_xephyr("))                      # the isolated box
 
