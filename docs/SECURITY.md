@@ -415,8 +415,8 @@ genuine version to a machine that installs a tool for the first time; a refusal 
 `silik doctor` and, since silikos-desktop 0.18.1, the status bar (`update repository refused`); a channel that is
 not reached and old metadata are still said by the two commands only. `docs/SIGNING.md` has the table. The provenance checks themselves
 (`gh attestation verify`) ran on GitHub on 14/11/2026: in the CI's install job (27 tool packages, all vouched for)
-and in the package repository's workflow (2 without an attestation left out). The tag check and the offline ISO's
-gate have not run.
+and in the package repository's workflow (2 without an attestation left out). The offline ISO's gate ran as well
+(run 43560436638); the tag check has not run.
 
 ## What SilikOS does not do
 

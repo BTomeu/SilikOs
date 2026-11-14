@@ -161,23 +161,64 @@ cap watt**: res d'això s'ha executat encara en un portàtil de veritat (consum,
 
 ## 5. Seguretat i actualitzacions
 
-- **SELinux** actiu (el de Red Hat), **tallafoc** que tanca les connexions entrants i **ssh** apagat per defecte.
+La seguretat va en tres capes: el que ve de fàbrica, el que s'activa si es demana, i el que SilikOS no és.
+
+### De fàbrica, sense fer res
+
+- **SELinux** actiu (el de Red Hat), **tallafoc** que tanca les connexions entrants i **ssh** apagat. Res no escolta
+  fora de la màquina: els serveis de descoberta de la xarxa (rpcbind, avahi, cups-browsed) vénen apagats i
+  `silik listen` els torna a engegar un per un.
 - **El sistema s'actualitza sol cada dia** amb tot el que publica la base. Mai reinicia pel seu compte: quan cal
-  reiniciar, l'escriptori ho diu. Amb `silik update --auto` es tria entre tot, només seguretat o res.
-- Els programes de Windows s'executen en una **capsa** (bubblewrap) que no veu les claus SSH ni els documents.
-- Els adaptadors USB (lectors CAN, ports sèrie, sondes de depuració) són de **qui seu davant la pantalla**, sense
-  haver de donar permisos especials a ningú.
+  reiniciar, l'escriptori ho diu. Abans de cada actualització es fa una **instantània** del sistema, i
+  `silik rollback` hi torna.
+- **El repositori de SilikOS no es pot falsejar amb còpies velles**: el sistema recorda la darrera revisió que ha
+  vist i rebutja metadades més antigues, d'un altre canal, d'una altra arquitectura o sense signar. Quan en rebutja
+  unes, ho diuen `silik update`, `silik doctor` i la barra d'estat.
+- **Cada paquet d'eina que entra a la ISO porta el certificat d'on s'ha construït** (l'atestació de GitHub: aquest
+  repositori, la branca `main`, el seu workflow). El que no en porta, es queda fora.
+- **USB amb la pantalla bloquejada**: un dispositiu nou es rebutja (USBGuard). Un teclat o un ratolí sí que
+  s'accepten, per poder desbloquejar. El que s'ha rebutjat es queda rebutjat fins que es torna a endollar o es
+  diu `silik usb allow`.
+- **Programes de Windows en una capsa** (bubblewrap) que no veu les claus SSH ni els documents. Un fitxer que no
+  s'ha executat mai aquí es pregunta abans, i la resposta per defecte és **aïllat**: `silik win open --isolated`
+  li dona una pantalla pròpia (no pot llegir el teclat ni fotografiar les altres finestres), xarxa només de
+  sortida, cap clau, ni targeta gràfica ni so.
+- Els adaptadors USB del banc (lectors CAN, ports sèrie, sondes) són de **qui seu davant la pantalla**, sense
+  permisos especials.
+
+### Si es demana
+
+| Ordre | Què fa | Què costa |
+|---|---|---|
+| `silik secure status` | una trentena de línies, cadascuna **ok**, **avís**, **malament** o **desconegut**, amb l'ordre que ho arregla | res: només mira |
+| `silik secure level hardened` | 19 ajustos d'un cop: el nucli es tanca i només carrega mòduls signats, la memòria es posa a zero en repartir-la, l'IOMMU estricte, deu contrasenyes dolentes bloquegen el compte deu minuts, la pantalla d'entrada no ensenya usuaris… | els mòduls sense signar deixen de carregar (NVIDIA compilat a la màquina abans d'enrolar-ne la clau, VirtualBox), no hi ha hibernació, i algunes eines de depuració del nucli no van. Cada ajust es pot deixar fora amb `--without`, i `silik secure level default` ho desfà tot |
+| xifrar el disc | es marca a l'instal·lador; després `silik disk tpm enroll` lliga el disc al xip TPM de la màquina amb un **PIN** | cal escriure el PIN a cada arrencada. Si canvia l'arrencada segura o el disc es posa en una altra màquina, el PIN ja no obre i cal la contrasenya o la clau de recuperació |
+
+`docs/HARDENED.md` diu què costa cada ajust, un per un; `docs/DISK.md`, el disc; `docs/USB.md`, l'USB.
+
+### El que no és
+
+- **No és GrapheneOS ni Qubes.** La base no es toca (és la condició de la compatibilitat amb Red Hat), i per tant el
+  nucli i les biblioteques són els de RHEL 9, sense endurir més del que es pot amb ajustos.
+- **La sessió és X11** (les eines EDA ho demanen): dos programes de la mateixa sessió es poden veure el teclat l'un
+  a l'altre. Per això la capsa aïllada de Windows porta el seu propi servidor de pantalla.
+- **Els programes que engega l'usuari no van confinats** (ni les eines EDA ni els IDE): el que protegeix d'ells és
+  el compte d'usuari, no una capsa.
+- **Res no és impenetrable.** S'ha auditat dues vegades atacant-lo (13 i 14/11/2026). La primera va trobar forats
+  al nostre codi, i es van arreglar. La segona no va trobar cap camí d'un usuari normal a root; el que va trobar a
+  la cadena de paquets i a la capsa de Windows es va arreglar, i el que queda obert és a `docs/SECURITY.md`.
 
 ## 6. Com es fa i com es comprova
 
 Tot està en un repositori de GitHub. Hi ha tres maneres de comprovar que funciona, de més ràpida a més real:
 
-1. **Proves automàtiques** (més de 1100 ara mateix): comproven el codi de `silik`, els fitxers de l'escriptori, les regles
+1. **Proves automàtiques** (més de 1600 ara mateix): comproven el codi de `silik`, els fitxers de l'escriptori, les regles
    de colors…, en segons.
 2. **El banc de proves**: un escriptori GNOME de veritat dins d'un contenidor, on s'instal·len els paquets i es fan
    fotos de pantalla. Totes les imatges dels colors, les icones, SavvyCAN o PulseView surten d'aquí.
 3. **La instal·lació real**: GitHub construeix la **ISO** (el disc d'instal·lació), la instal·la sola en una màquina
-   virtual, engega el sistema instal·lat, el revisa (121 comprovacions la darrera vegada) i desa fotos de pantalla.
+   virtual, engega el sistema instal·lat, el revisa (166 comprovacions la darrera vegada) i desa fotos de pantalla.
+   Tres proves més fan el mateix amb el disc xifrat, el nivell endurit i el tornar enrere.
    És la prova que compta.
 
 Cada eina que compilem nosaltres passa per una **prova de veritat** en un sistema net: el simulador ha de simular, el
@@ -186,48 +227,101 @@ descodificador ha de descodificar, la finestra ha d'obrir-se. No n'hi ha prou qu
 **Regla de la casa:** el fitxer `docs/STATUS.md` té dues taules, *verificat* i *no verificat*. Res passa a la primera
 sense haver-ho executat de veritat. Les suposicions es marquen amb [A].
 
-## 7. En quin punt som (13/11/2026)
+## 7. Què té de bo i què no
 
-**Fet i provat en una instal·lació de veritat (màquina virtual, a GitHub):**
-- Instal·lació desatesa completa: la darrera, 121 comprovacions bé i cap de fallada (run 43464588417).
-- Eines d'EDA, microcontroladors i Wine dins de la ISO; els tres aspectes de l'escriptori, els accents, el vidre.
-- Tornar enrere d'una actualització (`silik rollback`) en un disc LVM de veritat.
-- Els paquets i les eines també es construeixen i es proven en màquines ARM de GitHub.
-- **Al costat de l'AlmaLinux de sèrie, a la mateixa màquina virtual**: SilikOS fa servir uns 155 MB menys de memòria
-  i arriba a l'escriptori uns 0,7 s més tard (la seva sessió és X11, per les eines EDA; la de la base és Wayland).
-  `docs/NUMEROS.md` §9.
-- La ISO sense xarxa: s'instal·la i arrenca en una màquina sense targeta de xarxa; a la primera prova li faltaven
-  els paquets dels releases (OpenOCD, les eines EDA), i s'està tornant a provar amb ells.
+Sense adorns. Cada punt diu on s'ha vist; «vist» vol dir executat, no pensat.
+
+### El que té de bo
+
+| Què | On s'ha vist |
+|---|---|
+| **Compatibilitat amb Red Hat 9 intacta**: la base no es toca, i una prova ho vigila a cada canvi | les proves automàtiques; la instal·lació de la CI |
+| **Tot en un**: xips, microcontroladors, banc i Windows en una instal·lació desatesa, amb les eines provades fent feina de veritat (13 de 13 eines EDA, 7 de 7 de microcontroladors) | CI, sistema instal·lat en màquina virtual |
+| **Una sola ordre, `silik`, que ensenya el que fa**: res passa d'amagat, i `--dry-run` no toca res | tot el sistema |
+| **Menys memòria que la base de sèrie**: 160 a 175 MB menys que l'AlmaLinux Workstation, a la mateixa màquina | workflow Compare, 14/11/2026 |
+| **L'escriptori no costa temps**: la shell amb la nostra extensió arrenca igual de ràpid que la de sèrie (1,39–1,45 s contra 1,43–1,49 s) | workflow Compare, tres execucions |
+| **Tornar enrere d'una actualització** en un disc de veritat | CI, 70 comprovacions |
+| **Disc xifrat lligat al TPM amb PIN**: obre amb el PIN; no obre si canvia l'arrencada segura o la màquina | CI, 90 comprovacions, TPM de programari |
+| **Nivell endurit**: el nucli rebutja un mòdul sense signar | CI, 96 comprovacions |
+| **USB bloquejat amb la pantalla bloquejada** | CI, amb dispositius endollats a la màquina virtual |
+| **Capsa aïllada de Windows** que no arriba a la pantalla, al bus ni a les claus de la sessió | CI, amb SELinux actiu |
+| **Instal·lació sense xarxa**: una ISO de 4,6 GB que ho porta tot | workflow Offline ISO, 133 comprovacions |
+| **Diu la veritat de si mateix**: `docs/STATUS.md` separa el verificat del no verificat, i una comprovació que falta és una fallada, no un silenci | la CI mateixa |
+
+### El que no té de bo
+
+| Què | Per què | Què s'hi pot fer |
+|---|---|---|
+| **No s'ha engegat mai en maquinari de veritat** | tot és màquina virtual i contenidor | una setmana al Ryzen i al portàtil: és el pas que falta de debò |
+| **Cap watt mesurat, cap hora de bateria** | no hi ha hagut cap portàtil | el mateix |
+| **Arriba a l'escriptori una mica més tard que la base** (0,08 a 0,71 s, dins del soroll de la mesura) | la sessió X11, que cal per a l'EDA | res: és una decisió presa |
+| **El repositori de paquets no està publicat ni signat** | falten GitHub Pages i la clau, que són del propietari | fins llavors, un sistema instal·lat no rep les novetats de SilikOS (sí les de la base) |
+| **La capsa aïllada de Windows encara veu la xarxa local** (el router, un NAS) | la xarxa de la capsa és «només de sortida», no «només internet» | 4 a 6 hores de feina; no començat |
+| **Ocupa més**: 8,1 GB contra 5,3 GB de la base, 1557 paquets contra 1231 | porta les eines | són paquets: el que no es fa servir es pot desinstal·lar |
+| **GNOME 40 i X11 són vells** | són els de RHEL 9 | EL 10 està estudiat (`docs/EL10.md`), no fet |
+| **Les eines dels fabricants (Cadence, Synopsys, Altium) no s'han provat** | no en tenim cap llicència | qui en tingui, `silik eda` i `docs/EDA.md` |
+| **Cap adaptador de banc provat** (CAN, sondes, analitzadors) | no n'hi ha hagut cap | el banc de l'equip |
+| **A ARM no hi ha Wine ni les eines EDA dels fabricants** | no existeixen per a ARM | `silik` ho diu en lloc de fallar |
+| **Un sol mantenidor i cap usuari encara** | és un prototip | fer-lo servir |
+
+### El que no farà mai
+
+- Portar programari que no és de codi obert, llicències o claus.
+- Tocar la base per ser «més segur» o «més ràpid»: perdria l'única cosa que el fa útil per a l'EDA.
+- Triar o esborrar un disc pel seu compte a la instal·lació.
+- Dir que una cosa funciona sense haver-la executat.
+
+## 8. En quin punt som (14/11/2026)
+
+**Vist en un sistema instal·lat (màquina virtual amb KVM, a GitHub, SELinux actiu):**
+
+| Prova | Resultat | Execució |
+|---|---|---|
+| Instal·lació desatesa, escriptori, eines, Windows, USB, auditoria | 166 comprovacions bé, 0 malament | CI 43549553439 |
+| Nivell endurit: posar-lo, reiniciar, comprovar, treure'l | 96 bé, 0 malament | CI 43560389589 |
+| Disc xifrat + arrencada segura + TPM amb PIN, nou arrencades | 90 bé, 0 malament | CI 43560389589 |
+| Actualitzar i tornar enrere | 70 bé, 0 malament | CI 43560389589 |
+| ISO sense xarxa, en una màquina sense targeta de xarxa | 133 bé, 0 malament | Offline ISO 43560436638 |
+| Al costat de l'AlmaLinux de sèrie | 160–175 MB menys de memòria; escriptori 0,08–0,71 s més tard | Compare 43560434143 |
+
+Dues comprovacions d'USB de la primera fila (`silik usb allow` i que el dimoni rebutgi un usuari sense sudo) no
+s'havien executat mai per un error de l'script de prova, trobat i arreglat el 14/11: la propera execució les dirà.
+
+Les proves automàtiques són més de 1600, i passen a la CI de GitHub a x86_64 i a ARM.
 
 **Fet i provat al banc, encara no en una instal·lació real:**
-- Les eines CAN i el banc (SavvyCAN, cantools, PulseView…) amb maquinari de veritat: no hi ha hagut cap adaptador.
-- SDCC i el firmware fx2lafw (sense cap analitzador real connectat).
-- L'Inici que s'obre més ràpid (de 64–76 ms a 15–17 ms amb 152 aplicacions). El COMMAND bar que es queda carregat
-  sí que s'ha vist al sistema instal·lat (dues crides, un sol procés), però el temps mesurat és el del banc.
+- La barra d'estat que diu «repositori rebutjat».
+- Les eines CAN i el banc (SavvyCAN, cantools, PulseView…): sense cap adaptador de veritat.
+- Els temps de l'Inici i del COMMAND bar (el banc dibuixa sense targeta gràfica).
 
 **Només ho pot fer el propietari:**
-- **Activar GitHub Pages** (Settings → Pages → Source: GitHub Actions): és on es publicarà el repositori de paquets.
-- **La clau de signatura** dels paquets (`docs/REPO.md`): la genera i la guarda el propietari.
+- **Activar GitHub Pages** (Settings → Pages → Source: GitHub Actions): sense això cap sistema instal·lat pot rebre
+  les novetats de SilikOS.
+- **La clau de signatura** dels paquets (`docs/SIGNING.md`): ara el repositori surt sense signar i cap sistema
+  l'accepta.
+- **Regles de protecció** de la branca `main` i de les etiquetes `v*` a GitHub.
 - **Triar la llicència** del codi.
+- **Provar-lo en maquinari**: `docs/PRIMERA-HORA.md`.
 
-**No provat enlloc:** cap maquinari real (ni el Ryzen, ni una sonda, ni un adaptador CAN, ni un USB d'instal·lació).
+**No provat enlloc:** cap maquinari real (ni el Ryzen, ni un portàtil, ni un TPM de veritat, ni una sonda, ni un
+adaptador CAN, ni un USB d'instal·lació).
 
-**A ARM (aarch64), provat en un contenidor ARM emulat en aquesta màquina (12/11/2026):**
-- Els paquets de SilikOS són els mateixos per a les dues arquitectures: es construeixen i s'instal·len sobre AlmaLinux 9
-  ARM, `silik` funciona i diu l'arquitectura, i les proves passen amb el Python 3.9 d'ARM.
-- L'escriptori, el compilador ARM, gdb, stlink i les eines de banc d'EPEL existeixen per a ARM; dfu-util, stm32flash i
-  OpenOCD es compilen per a ARM amb les nostres receptes, i també el simulador ngspice.
-- El que no existeix a ARM, `silik` ho diu en lloc de fallar: Wine (al portàtil Snapdragon els programes de Windows
-  van al seu propi Windows), les eines dels fabricants d'EDA (són x86_64), el controlador NVIDIA.
-- La ISO ARM: `SILIK_ARCH=aarch64 bash tools/build_iso.sh`. Provada amb una còpia petita del disc d'AlmaLinux: el
-  menú UEFI diu SilikOS i el nucli arrenca amb la recepta. La ISO real (1,5 GB) no s'ha instal·lat enlloc.
-- Al Snapdragon X: com a màquina virtual Hyper-V (no provat). Detall: `docs/HARDWARE.md`.
+**A ARM (aarch64):**
+- Els paquets de SilikOS són els mateixos per a les dues arquitectures, i es construeixen i es proven en màquines
+  ARM de GitHub a cada canvi.
+- L'escriptori, el compilador ARM, gdb, stlink i les eines de banc existeixen per a ARM; dfu-util, stm32flash,
+  OpenOCD i ngspice es compilen amb les nostres receptes.
+- El que no existeix a ARM, `silik` ho diu en lloc de fallar: Wine, les eines dels fabricants d'EDA, el controlador
+  NVIDIA.
+- La ISO ARM no s'ha instal·lat enlloc. Al Snapdragon X: com a màquina virtual Hyper-V (no provat).
+  Detall: `docs/HARDWARE.md`.
 
 **Següents passos proposats:**
-- Fer-lo servir una setmana al Ryzen i apuntar on falla (`docs/PRIMERA-HORA.md`).
-- Mesurar l'arrencada en una màquina amb pantalla d'entrada (les de prova entren soles a la sessió).
+- Fer-lo servir una setmana al Ryzen i en un portàtil, i apuntar on falla.
+- Publicar i signar el repositori (els passos del propietari).
+- Tancar la xarxa local a la capsa aïllada de Windows.
 
-## 8. Petit glossari
+## 9. Petit glossari
 
 | Paraula | Vol dir |
 |---|---|
@@ -243,3 +337,8 @@ sense haver-ho executat de veritat. Les suposicions es marquen amb [A].
 | **DBC** | el fitxer que diu què vol dir cada trama d'un bus CAN (tensió, corrent, estat…) |
 | **uaccess** | la regla que dona un dispositiu USB a la persona que seu davant la pantalla |
 | **Accent** | el color opcional de l'escriptori; per defecte no n'hi ha (tinta) |
+| **TPM** | un xip de la placa que guarda una clau i només la dona si la màquina ha arrencat com sempre |
+| **Arrencada segura (Secure Boot)** | el firmware només engega un sistema signat |
+| **Lockdown** | el nucli no es deixa modificar ni per l'administrador mentre funciona |
+| **Atestació** | el certificat de GitHub que diu on i com s'ha construït un fitxer |
+| **USBGuard** | el servei que decideix quins dispositius USB s'accepten |

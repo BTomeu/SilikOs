@@ -136,8 +136,8 @@ with a disk from the start, then a keyboard and a disk plugged in through QEMU's
 disk plugged in (must be blocked), a keyboard (must be allowed), unlocked again (must read `apply-policy`, the
 disk still blocked), `silik usb allow all-present` (allowed). Seen there (runs 43537343489 and 43549553439,
 14/11/2026): every step up to the disk still blocked after unlocking, under SELinux enforcing with SilikOS's
-configuration file. Not seen: `silik usb allow all-present` and the daemon refusing a user without sudo (their two
-rows did not reach the report: the serial port lost them; they are said twice and counted from the next run on).
+configuration file. Not seen: `silik usb allow all-present` and the daemon refusing a user without sudo: their two
+checks never ran (a quoting fault of the test's script, fixed 14/11/2026: the next run says them).
 Also not seen: SELinux letting the daemon read
 `silikos-daemon.conf` (its path carries the type `usbguard_conf_t` by the policy's own pattern
 `/etc/usbguard(/.*)?`) [A]; polkit finding the session of a program that runs under `systemd --user` [A: the

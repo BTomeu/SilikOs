@@ -4,9 +4,9 @@
 The check scripts (check.sh, hardened-check.sh, rollback-check.sh, sealed-check.sh) say one line per check,
     SILIKOS-CI|<name>|ok or FAIL or info|<what was seen>
 on the port the kernel and systemd write to as well. A line that one of theirs cut, or that carries a byte that is
-no text, did not reach the report, and nothing said so: the installation test of 14/11/2026 (run 43549553439) said
-166 ok with two checks of its script missing. A missing line may be a FAIL. So each script keeps the lines of a
-start and, at its end, says them once more, numbered, and then how many they were:
+no text, did not reach the report, and nothing said so: a missing line may be a FAIL. (Seen on GitHub, run
+43560389589 of 14/11/2026: a line of the hardened test came whole only the second time.) So each script keeps the
+lines of a start and, at its end, says them once more, numbered, and then how many they were:
     SILIKOS-CI-AGAIN|<n>|<name>|<verdict>|<what was seen>
     SILIKOS-CI-ROWS|<n>
 This prints, for the host's scripts, the lines SILIKOS-CI|name|verdict|detail of every start in the logs:

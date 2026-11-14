@@ -1,13 +1,15 @@
 # The channel of the installed-system tests (tests/install/rows.py and the say/again lines of the four check scripts):
-# an installed test system says its checks on the serial port, where the kernel and systemd write too. The run of
-# 14/11/2026 (43549553439) said "166 ok, 0 failed" with two checks of its script missing from the report: a line
-# that does not arrive whole was dropped in silence, and it could have been a FAIL. Held here:
+# an installed test system says its checks on the serial port, where the kernel and systemd write too. A line that
+# does not arrive whole was dropped in silence, and it could have been a FAIL. Held here:
 #   - a line cut the first time comes from the second saying; one lost both times is a FAIL of the report;
 #   - a byte that is no text never drops a line;
 #   - a start that said checks and never their count is a FAIL;
 #   - every check script keeps its lines, says them again before every end and every restart, and the lines of the
 #     scripts themselves (run in bash here, the port a file) give rows.py what it expects;
 #   - the four host scripts read the port through rows.py.
+#   - no check is swallowed by the shell: the run of 14/11/2026 (43549553439) said "166 ok, 0 failed" with two checks
+#     of check.sh missing. They had never run: an apostrophe inside "${s:-... USBGuard's list}" opened a quoted string
+#     that closed four lines further down, at the next one. bash -n accepts that.
 #   python3 -m unittest discover -s tests -v
 import importlib.util
 import os
@@ -163,6 +165,58 @@ class TheScripts(unittest.TestCase):
         self.assertIn('--name hardened.rows', text("hardened.sh"))
         self.assertIn('--name "sealed.$name.rows"', text("sealed.sh"))
         self.assertIn('--name "$part.rows"', text("rollback.sh"))
+
+
+class NothingSwallowed(unittest.TestCase):
+    SHELL = [os.path.join("tests/install", f) for f in sorted(os.listdir(HERE)) if f.endswith((".sh", ".in"))] + ["kickstart/silikos.ks"]
+
+    def test_no_apostrophe_inside_a_parameter_expansion(self):
+        # "${var:-word's}" inside double quotes: bash takes the apostrophe as the start of a quoted string, which
+        # runs on to the next apostrophe of the file, lines away; what lies between is text, not commands
+        for rel in self.SHELL:
+            with open(os.path.join(ROOT, rel), encoding="utf-8") as f:
+                for n, line in enumerate(f, 1):
+                    if line.lstrip().startswith("#"):
+                        continue
+                    self.assertNotRegex(line, r"\$\{[A-Za-z_0-9]+:?[-+=?][^}']*'", "%s:%d" % (rel, n))
+
+    def test_the_checks_after_the_unlock_all_run(self):
+        # the lines of check.sh from the unlocked policy to the status, run by bash with stand-ins
+        s = text("check.sh")
+        i, j = s.index("\nis usb.unlocked-policy "), s.index("\nsay usb.status info ")
+        stand = ("say() { echo \"$1 $2\"; }\nis() { say \"$1\" ok; }\nsaver() { :; }\nug() { :; }\nuline() { echo \"$1\"; }\n"
+                 "udev() { echo '7: allow id 46f4:0001 serial \"SILIKDISK2\"'; }\nasuser() { return 1; }\nsilik() { echo allowed; }\n")
+        r = subprocess.run(["bash", "-c", stand + s[i:j] + "\n"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+        self.assertEqual(r.returncode, 0, r.stdout)
+        said = r.stdout.split("\n")
+        self.assertEqual(said[:1], ["usb.unlocked-policy ok"])
+        self.assertIn("usb.user-refused ok", said)               # (asuser fails here: the daemon refused)
+        self.assertIn("usb.allow-present ok", said)
+        self.assertEqual(len([l for l in said if l.startswith("usb.")]), 4, r.stdout)
+
+    PARSED = r"(?:^\s+|\|\| |&& |\{ |\( )(?:say|is|has|hasnot) ([a-z][a-z0-9]*[.-][a-z0-9.-]*[a-z0-9]) "
+
+    def swallowed(self, script):
+        """the checks named in SCRIPT that are not commands in it as bash itself reads it: the script as the body of
+        a function, printed back by declare -f, where every command stands on a line of its own (or after || or &&)
+        and what a stray quote swallowed stays as it was written, after its `then` or its `)`"""
+        names = set(re.findall(r"(?:^|[;({]|then|else|do|\)|\|\||&&) *(?:say|is|has|hasnot) ([a-z][a-z0-9]*[.-][a-z0-9.-]*[a-z0-9]) ", script, re.M))
+        body = "\n".join(script.split("\n")[1:])
+        r = subprocess.run(["bash", "-c", "f() {\n%s\n}\ndeclare -f f" % body], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        self.assertEqual(r.returncode, 0, r.stderr[-400:])
+        return names, sorted(names - set(re.findall(self.PARSED, r.stdout, re.M)))
+
+    def test_every_check_named_in_a_script_is_a_command_of_it(self):
+        for name in CHECKS:
+            names, lost = self.swallowed(text(name))
+            self.assertGreater(len(names), 20, name)
+            self.assertEqual(lost, [], name)
+
+    def test_that_test_sees_the_fault_of_14_11(self):
+        s = text("check.sh")
+        self.assertEqual(s.count("${s:-not in the list of USBGuard}"), 2)
+        _, lost = self.swallowed(s.replace("${s:-not in the list of USBGuard}", "${s:-not in USBGuard's list}"))
+        self.assertEqual(lost, ["usb.allow-present", "usb.user-refused"])
 
 
 if __name__ == "__main__":

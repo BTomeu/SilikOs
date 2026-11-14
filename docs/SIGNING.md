@@ -314,6 +314,8 @@ attestation, made one attestation for 18 files, put the packages in the release,
 is off, and said the tree is not signed). The plugin is loaded by dnf as root on an installed system under SELinux
 (row `update.replay-check`).
 
-Not run: the tag check and the attestation step of the CI's release job (they need a tag), `offline.yml`'s gate,
+`offline.yml`'s gate ran too (run 43560436638: 27 vouched for, none left out).
+
+Not run: the tag check and the attestation step of the CI's release job (they need a tag),
 the schedule, the cache check inside a job, signing (no key), a hardware token, the plugin refusing a real replay
 on an installed system, the real timer.

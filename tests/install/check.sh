@@ -95,12 +95,12 @@ for i in $(seq 1 15); do [ "$(saver)" = "(false,)" ] && break; sleep 2; done
 sleep 3
 is usb.unlocked-policy "$(saver) $(ug get-parameter InsertedDevicePolicy)" "(false,) apply-policy"
 s=$(udev SILIKDISK2)
-case "$s" in *": block "*) say usb.stays-blocked ok "after unlocking, still: $(uline "$s" | cut -c1-120)";; *) say usb.stays-blocked FAIL "after unlocking, the disk that was plugged in while locked: $(uline "${s:-not in USBGuard's list}")";; esac
+case "$s" in *": block "*) say usb.stays-blocked ok "after unlocking, still: $(uline "$s" | cut -c1-120)";; *) say usb.stays-blocked FAIL "after unlocking, the disk that was plugged in while locked: $(uline "${s:-not in the list of USBGuard}")";; esac
 # the daemon does not answer a program that merely runs as the administrator (the file of the base lets wheel in)
 o=$(asuser usbguard list-devices 2>&1 | head -2 | tr '\n' ';')
 if asuser usbguard list-devices > /dev/null 2>&1; then say usb.user-refused FAIL "the daemon answered the user without sudo: $o"; else say usb.user-refused ok "$o"; fi
 o=$(silik usb allow all-present 2>&1 | tr '\n' ';'); s=$(udev SILIKDISK2)
-case "$s" in *": allow "*) say usb.allow-present ok "$o";; *) say usb.allow-present FAIL "silik usb allow all-present said: $o the disk: $(uline "${s:-not in USBGuard's list}")";; esac
+case "$s" in *": allow "*) say usb.allow-present ok "$o";; *) say usb.allow-present FAIL "silik usb allow all-present said: $o the disk: $(uline "${s:-not in the list of USBGuard}")";; esac
 say usb.status info "$(asuser silik usb | head -8 | tr -s ' ' | tr '\n' ';')"
 is usb.desktop-errors "$(journalctl -b --no-pager -o cat 2> /dev/null | grep -cE 'USBGuard DBus|appending USBGuard rule|Failed to (contact|fetch) USBGuard')" 0
 
