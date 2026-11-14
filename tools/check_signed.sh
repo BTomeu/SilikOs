@@ -7,8 +7,16 @@
 #                          holds FILE and nothing else: a package signed by any other key the system trusts fails)
 #   every repodata/repomd.xml   has a repomd.xml.asc beside it that gpgv accepts against FILE, carries a revision,
 #                          and, under el9/CHANNEL/, the content tag silikos-channel=CHANNEL
-#   every SHA256SUMS       has a SHA256SUMS.asc that gpgv accepts, and its lines hold for the files beside it
+#   every SHA256SUMS       has a SHA256SUMS.asc that gpgv accepts, its lines hold for the files beside it, and it
+#                          names every file beside and below it (but itself, its signature and its attestation): a
+#                          file somebody added to a signed tree fails
+#   no link anywhere below DIR  (a link is not looked into here, and a web server or an upload follows it: an
+#                          unsigned package, or unsigned metadata, would be published through one)
 #   no private key anywhere below DIR
+# --whole                 each DIR must be one signed whole: a SHA256SUMS with its signature at its top (what
+#                         tools/sign_release.sh makes). Without it, a tree with no SHA256SUMS is checked for its
+#                         packages and metadata only, and said so: its other files (the key it offers,
+#                         silikos.repo) are then vouched for by nothing. What publishes an owner-signed tree asks --whole.
 # --allow-unsigned-sums   a SHA256SUMS without a signature is checked for its sums only (a CI release before the
 #                         owner signed it)
 # --sums-only             only the SHA256SUMS files and their signatures (a release folder: its packages are vouched
@@ -16,12 +24,13 @@
 # Prints each command it runs ($ ...) and one line per finding. Exit: 0 all good, 1 something is not, 2 usage.
 # Needs rpm, gpg (gpgv), sha256sum.
 set -uo pipefail
-keyfile=; allow_sums=0; sums_only=0; dirs=()
+keyfile=; allow_sums=0; sums_only=0; whole=0; dirs=()
 while [ $# -gt 0 ]; do
   case $1 in
     --key-file) keyfile=${2:?}; shift 2 ;;
     --allow-unsigned-sums) allow_sums=1; shift ;;
     --sums-only) sums_only=1; shift ;;
+    --whole) whole=1; shift ;;
     -h|--help) sed -n '2,/^# Needs/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) echo "error: unknown option $1" >&2; exit 2 ;;
     *) dirs+=("$1"); shift ;;
@@ -53,6 +62,13 @@ for d in "${dirs[@]}"; do
   # no private key in what is published
   # (the marker is put together here so that this file does not hold it: the tree's own test looks for it)
   while IFS= read -r f; do fail "$f holds a private key"; done < <(grep -rlF -e "-----BEGIN PGP PRIV""ATE KEY BLOCK-----" "$d" 2> /dev/null)
+  # no link: what it points to is not checked below, and would be published
+  while IFS= read -r f; do fail "$f is a link: what it points to is not checked, and a server or an upload would follow it"; done < <(find "$d" -type l | sort)
+  if [ ! -f "$d/SHA256SUMS" ] || [ -L "$d/SHA256SUMS" ]; then
+    if [ "$whole" = 1 ]; then fail "$d has no SHA256SUMS at its top (--whole): nothing says which files are the whole of it"
+    elif [ "$sums_only" = 0 ]; then echo "note: $d has no SHA256SUMS at its top: its packages and metadata are checked, its other files (a key, silikos.repo) are vouched for by nothing"; fi
+  elif [ "$whole" = 1 ] && [ ! -f "$d/SHA256SUMS.asc" ]; then fail "$d/SHA256SUMS has no signature (--whole)"
+  fi
   while IFS= read -r f; do
     n_rpm=$((n_rpm + 1))
     echo "\$ rpm --dbpath KEYRING -K $f"
@@ -79,6 +95,10 @@ for d in "${dirs[@]}"; do
     else echo "note: $f is not signed (--allow-unsigned-sums): its sums only"; fi
     echo "\$ (cd $(dirname "$f") && sha256sum --check --quiet --strict SHA256SUMS)"
     (cd "$(dirname "$f")" && sha256sum --check --quiet --strict SHA256SUMS) > "$tmp/sums.log" 2>&1 || fail "$f: $(grep -v '^sha256sum: WARNING' "$tmp/sums.log" | head -3 | tr '\n' ' ')"
+    # the list is the whole of what was signed: a file beside or below it that it does not name was added later
+    sed -n 's/^[0-9a-f]\{64\} [ *]//p' "$f" | sed 's|^\./||' | sort -u > "$tmp/named"
+    (cd "$(dirname "$f")" && find . -type f ! -path ./SHA256SUMS ! -path ./SHA256SUMS.asc ! -path ./SHA256SUMS.attestation.jsonl | sed 's|^\./||' | sort) > "$tmp/there"
+    while IFS= read -r x; do fail "$(dirname "$f")/$x is not named in $f: nothing vouches for it"; done < <(comm -13 "$tmp/named" "$tmp/there")
   done < <(find "$d" -type f -name SHA256SUMS | sort)
 done
 echo "checked: $n_rpm packages, $n_md repomd.xml, $n_sums SHA256SUMS; $bad not good"

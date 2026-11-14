@@ -13,8 +13,8 @@
 # (tools/verify_release.sh, docs/SIGNING.md). Nothing is released that could not be attested.
 # What is signed and published has a known origin: SilikOS's own packages are the artifact of a green CI run of this
 # repository's main (or of a release tag on main), and a tool's package is taken from its release only with a
-# provenance attestation of this repository's workflows on main (the audit's S2: a file that something else put into
-# a release is left out, never signed).
+# provenance attestation of the workflow that keeps that release (eda.yml, dev.yml, wine.yml), on main
+# (tools/vouched.sh; the audit's S2: a file that something else put into a release is left out, never signed).
 # Twice a month, with nothing new, the metadata are made and signed again: their revision is the time, and an
 # installed system warns when the newest it is given are old (docs/SIGNING.md, "Old metadata served again").
 # Without GitHub Pages (Settings > Pages) the packages still go to the releases and the deploy job is skipped, said.
@@ -156,7 +156,7 @@ jobs:
           RUN: ${{ steps.plan.outputs.run }}
         run: |
           set -euo pipefail
-          mkdir -p w/in w/tools w/pub/next w/pub/stable
+          mkdir -p w/in w/tools/eda w/tools/dev w/tools/wine w/pub/next w/pub/stable
           gh run download "$RUN" --repo "$GITHUB_REPOSITORY" --name silikos-packages --dir w/in
           gh run download "$RUN" --repo "$GITHUB_REPOSITORY" --name silikos-sources --dir w/in
           tags=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate -q '.[].tag_name')
@@ -168,40 +168,55 @@ jobs:
               gh release download "$1" --repo "$GITHUB_REPOSITORY" --pattern '*.rpm' --dir "$2" --clobber
             fi
           }
+          # (each release into the folder of the workflow that keeps it: its packages are held to that workflow's
+          # attestation in the next step)
           for t in eda-tools eda-optional eda-tools-aarch64 dev-tools $wine; do
-            if echo "$tags" | grep -qxF "$t"; then all "$t" w/tools
+            case $t in eda-*) wf=eda ;; dev-tools) wf=dev ;; *) wf=wine ;; esac
+            if echo "$tags" | grep -qxF "$t"; then all "$t" "w/tools/$wf"
             else echo "::notice title=$t::no such release yet: the repository has none of its packages"; fi
           done
-          rm -f w/tools/*.src.rpm      # (the tools' source packages stay in their releases and in sources-archive)
+          rm -f w/tools/*/*.src.rpm    # (the tools' source packages stay in their releases and in sources-archive)
           for c in next stable; do
             if echo "$tags" | grep -qxF "repo-el9-$c"; then all "repo-el9-$c" "w/pub/$c"; fi
           done
           echo "to publish: $(ls w/in | wc -l) files; published now: next $(ls w/pub/next | wc -l), stable $(ls w/pub/stable | wc -l)"; df -h . | tail -1
       # (the audit's S2) A release is a place anything with a write token can put a file, and what lies there would be
       # signed. So: a tool's package, and a package that is already published, is taken only with a build provenance
-      # attestation that says a workflow of this repository made that very file from main. What has none is left out
-      # and named; it is never signed. SilikOS's own packages of this run need none: they are the artifact of the
-      # CI run checked above
+      # attestation that says THE workflow that keeps that release (eda.yml, dev.yml, wine.yml; for what is published
+      # already, also this one) made that very file from main, on GitHub's runners: tools/vouched.sh. Never "any
+      # workflow of main" (the second pass, 14/11/2026). What has none is left out and named; it is never signed.
+      # SilikOS's own packages of this run need none: they are the artifact of the CI run checked above, and no
+      # release's file takes the place of one of them (an attestation is asked by a file's contents, not its name:
+      # tools/build_pkgrepo.sh then holds every package to the name in its own header)
       - name: Where each package came from (provenance), and the revision that is published
         if: steps.plan.outputs.channel != 'none'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          vouched() { gh attestation verify "$1" --repo "$GITHUB_REPOSITORY" --source-ref refs/heads/main > /dev/null 2> w/verify.err; }
+          # vouched FILE WORKFLOWS: tools/vouched.sh of this checkout (what it printed: w/verify.out)
+          vouched() { bash tools/vouched.sh --repo "$GITHUB_REPOSITORY" --ref refs/heads/main --workflow "$2" "$1" > w/verify.out 2>&1; }
           left=0; : > w/unvouched.next; : > w/unvouched.stable
-          for f in w/tools/*.rpm; do
-            [ -f "$f" ] || continue
-            if vouched "$f"; then mv "$f" w/in/; continue; fi
-            left=$((left + 1)); rm -f "$f"
-            echo "::warning title=no provenance::$(basename "$f") has no attestation of a workflow of this repository on main: left out, not signed ($(tail -1 w/verify.err | cut -c1-200))"
+          for wf in eda dev wine; do
+            for f in "w/tools/$wf"/*.rpm; do
+              [ -f "$f" ] || continue
+              b=$(basename "$f")
+              if [ -e "w/in/$b" ]; then
+                left=$((left + 1)); rm -f "$f"
+                echo "::warning title=name taken::a release of $wf.yml holds $b, the name of a package that is already among those to publish (SilikOS's own of this CI run, or another release's): the release's file is left out"
+                continue
+              fi
+              if vouched "$f" "$wf.yml"; then mv -n "$f" w/in/; continue; fi
+              left=$((left + 1)); rm -f "$f"
+              echo "::warning title=no provenance::$b has no attestation of $wf.yml of this repository on main: left out, not signed ($(grep '^NOT vouched' w/verify.out | tail -1 | cut -c1-300))"
+            done
           done
           # what is published already: named for tools/build_pkgrepo.sh --unvouched, which keeps such a file only when
           # it carries a good signature of the key (the owner signed it by hand), and never signs it
           for c in next stable; do
             for f in "w/pub/$c"/*.rpm; do
               [ -f "$f" ] || continue
-              vouched "$f" || basename "$f" >> "w/unvouched.$c"
+              vouched "$f" repo.yml,eda.yml,dev.yml,wine.yml || basename "$f" >> "w/unvouched.$c"
             done
           done
           echo "tools' packages left out for want of provenance: $left; published without provenance: next $(wc -l < w/unvouched.next), stable $(wc -l < w/unvouched.stable); to publish: $(ls w/in | wc -l) files"
