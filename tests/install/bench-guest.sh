@@ -76,6 +76,23 @@ case $phase in
         | grep -E 'gdm[-a-z]*\[|Xorg|X\.Org|Xwayland|gnome-session[-a-z]*\[|GNOME Shell started|Started GNOME Shell|org\.gnome\.Shell@|gnome-shell\[[0-9]+\]: (Enabling|Loading|Extension|JS (ERROR|WARNING))|New session [0-9c]+ of user|Reached target (GNOME|Graphical|Session|Basic|Main User|Current graphical)|Startup finished|plymouth-quit' \
         | grep -v -E 'GnomeDesktop-WARNING|gdm-(x|wayland)-session\[[0-9]+\]: (\(|[[:space:]]|X Protocol|Build |Current |Kernel command|Markers:)' \
         | cut -c1-220 | head -90
+      # What an X11 login runs before the session's own programs (docs/SESSION.md): the session's shell sources every
+      # file of xinitrc.d (the Qt packages' two each run glxinfo), then gnome-session checks the graphics with its two
+      # helpers (only where DISPLAY is set: not in a Wayland session). Each is timed here, three runs, in the running
+      # session; "true" is what running anything as the user costs this script.
+      echo; echo "\$ ls /etc/X11/xinit/xinitrc.d"; ls /etc/X11/xinit/xinitrc.d 2>&1 | tr '\n' ' '
+      xenv=$(for p in $(pgrep -u "$user" -x gsd-xsettings; pgrep -u "$user" -x ibus-x11; pgrep -u "$user" -x gsd-keyboard); do
+               tr '\0' '\n' < /proc/$p/environ 2> /dev/null | grep -E '^(DISPLAY|XAUTHORITY)='; done | sort -u | tr '\n' ' ')
+      echo; echo; echo "\$ three runs of each, in ms (and the last exit code), as $user with $xenv"
+      for c in "true" "glxinfo" "/usr/libexec/gnome-session-check-accelerated-gl-helper --print-renderer" \
+               "/usr/libexec/gnome-session-check-accelerated-gles-helper --print-renderer" "bash -lc true"; do
+        line=$(printf '%-76s' "$c")
+        for i in 1 2 3; do
+          t0=$(date +%s%N); asuser env $xenv $c > /dev/null 2>&1; rc=$?
+          line="$line $(( ($(date +%s%N) - t0) / 1000000 ))"
+        done
+        echo "$line  (rc $rc)"
+      done
     } | block session
     finish "$(awk '/^MemTotal|^MemAvailable/ {printf "%s %d MB ", $1, $2 / 1024}' /proc/meminfo)" ;;
   *)

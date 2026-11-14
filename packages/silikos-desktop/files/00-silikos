@@ -33,12 +33,16 @@ switch-input-source=['XF86Keyboard']
 switch-input-source-backward=['<Shift>XF86Keyboard']
 
 [org/gnome/shell/extensions/user-theme]
+# (read only where a user has the user-theme extension on; `silik look --accent` keeps it in step with the accent)
 name='SilikOS'
 
 [org/gnome/shell]
 # no "take the tour" dialog of the base's desktop on the first login
 welcome-dialog-last-shown-version='4294967295'
-enabled-extensions=['user-theme@gnome-shell-extensions.gcampax.github.com', 'silik-shell@silikvolt.com']
+# The shell's own parts take the SilikOS stylesheet from the session's environment (60-silikos-shell.conf) and, with an
+# accent, from silik-shell. The user-theme extension is not turned on: it loaded the same stylesheet over itself at
+# every start (docs/SESSION.md, 14/11/2026). Where a user has it on, it does the work as before.
+enabled-extensions=['silik-shell@silikvolt.com']
 favorite-apps=['com.silikvolt.SilikStudio.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Terminal.desktop', 'firefox.desktop', 'org.gnome.gedit.desktop', 'virt-manager.desktop', 'gnome-control-center.desktop']
 
 [org/virt-manager/virt-manager/connections]

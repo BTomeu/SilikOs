@@ -144,7 +144,10 @@ class Extension(unittest.TestCase):
         warm = self.ext.split("    _warmStart() {")[1].split("\n    }\n")[0]
         self.assertIn("timeout_add", warm)
         self.assertIn("if (this._list._silikRow.size < apps.length) this._warmId = GLib.idle_add(", warm)
-        self.assertEqual(self.ext.count("idle_add"), 1)
+        self.assertIn("else this._warmPane();", warm)                   # (the last slice: the pane itself, then nothing)
+        # the other idle moment: the Qt palette brought in line once, after the desktop is up (tests/test_session_start.py)
+        self.assertEqual(self.ext.count("idle_add"), 2)
+        self.assertIn("this._qtId = GLib.idle_add(GLib.PRIORITY_LOW, () => { this._qtId = 0; this._qt(); return GLib.SOURCE_REMOVE; });", self.ext)
         self.assertIn("GLib.source_remove(this._warmId)", self.ext.split("    _down() {")[1].split("\n    }\n")[0])
         for loop in ("add_tick_callback", "setInterval", "Mainloop", "queue_repaint"):
             self.assertNotIn(loop, self.flow)

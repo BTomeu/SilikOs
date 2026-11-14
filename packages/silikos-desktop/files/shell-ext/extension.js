@@ -29,6 +29,12 @@ const Flow = Me.imports.flow;
 const RAIL_W = 152, SB_H = 22, START_W = 660, START_H = 520;
 const FLOW_W = 640, FLOW_H = 548, PIN_COLS = 4, RECENT_N = 5;      /* Start in a Flow look */
 const SCHEMA = 'com.silikvolt.silikos.shell';                      /* key "look": silik | bar | island */
+/* the shell's own stylesheet in the SilikOS look, made on the system for ink and for each accent (shell-theme) */
+const THEMES = '/usr/share/themes';
+const SHELL_CSS = '/org/gnome/shell/theme/gnome-shell.css';        /* the shell's own, in its resource bundle */
+const USER_THEME = 'user-theme@gnome-shell-extensions.gcampax.github.com';
+/* qt5ct's plugin: without it nothing reads the file `silik look --qt` writes (silik: QT5CT_PLUGIN_DIRS, the same) */
+const QT5CT_PLUGIN = '/usr/lib64/qt5/plugins/platformthemes/libqt5ct.so';
 const COMMAND_ID = 'org.silikvolt.Command.desktop';   /* the COMMAND bar is the title bar's command line, not a rail key */
 /* the power field: tuned's profile in `silik power`'s words (packages/silik-tools: POWER_WORD) */
 const TUNED_ACTIVE = '/etc/tuned/active_profile';
@@ -321,22 +327,48 @@ function lookSettings() {
     } catch (e) { return null; }
 }
 
+/* is the SilikOS stylesheet already the shell's own in this session? (60-silikos-shell.conf: GLib reads the file in
+   place of the one in the shell's bundle, on the lock and login screens too.) Not while GTK's theme is HighContrast:
+   the shell then takes its high-contrast stylesheet, which is not replaced */
+function shellCssIsOurs() {
+    const want = SHELL_CSS + '=' + THEMES + '/SilikOS/gnome-shell/gnome-shell.css';
+    return (GLib.getenv('G_RESOURCE_OVERLAYS') || '').split(':').includes(want) && St.Settings.get().gtk_theme !== 'HighContrast';
+}
+
+/* a session where the user-theme extension is on (the desktop's defaults turned it on until 14/11/2026; a user's own
+   list of extensions may have it): the shell's theme is that extension's work, from the key `silik look --accent`
+   writes for it */
+function userThemeOn() {
+    try {
+        if (!global.settings.get_strv('enabled-extensions').includes(USER_THEME) ||
+            global.settings.get_strv('disabled-extensions').includes(USER_THEME)) return false;
+        /* (listed and not on the system: nobody would load the theme) */
+        return [GLib.get_user_data_dir()].concat(GLib.get_system_data_dirs())
+            .some(d => GLib.file_test(GLib.build_filenamev([d, 'gnome-shell', 'extensions', USER_THEME, 'extension.js']), GLib.FileTest.EXISTS));
+    } catch (e) { return false; }
+}
+
 class SilikShell {
     enable() {
         this._settings = lookSettings();
         if (this._settings) this._lookSig = this._settings.connect('changed::look', () => this._switch());
         if (this._settings && this._settings.settings_schema.has_key('accent'))
-            this._accentSig = this._settings.connect('changed::accent', () => { this._accent(); this._qt(); });
+            this._accentSig = this._settings.connect('changed::accent', () => { this._theme(); this._accent(); this._qt(); });
         if (this._settings && this._settings.settings_schema.has_key('glass')) {
             this._glassSig = this._settings.connect('changed::glass', () => this._glass());
             if (this._settings.settings_schema.has_key('glass-mode'))
                 this._glassModeSig = this._settings.connect('changed::glass-mode', () => this._glass());
         }
+        /* (GTK's theme changes with the accent, and to and from HighContrast; the list of extensions when user-theme
+           is turned on or off: the shell's theme is looked at again, and is left alone when it is already the one) */
+        this._gtkThemeSig = St.Settings.get().connect('notify::gtk-theme', () => this._theme());
+        this._extsSig = global.settings.connect('changed::enabled-extensions', () => this._theme());
+        this._theme();
         this._accent();
-        this._qt();
         this._up();
         this._watchSaver();
         this._glass();
+        this._qtSoon();
     }
 
     disable() {
@@ -344,6 +376,12 @@ class SilikShell {
         this._down();
         this._accent(true);
         this._glass(true);
+        this._theme(true);
+        St.Settings.get().disconnect(this._gtkThemeSig);
+        global.settings.disconnect(this._extsSig);
+        this._gtkThemeSig = this._extsSig = 0;
+        if (this._qtSig) { Main.layoutManager.disconnect(this._qtSig); this._qtSig = 0; }
+        if (this._qtId) { GLib.source_remove(this._qtId); this._qtId = 0; }
         if (this._settings) {
             this._settings.disconnect(this._lookSig);
             if (this._accentSig) this._settings.disconnect(this._accentSig);
@@ -358,10 +396,31 @@ class SilikShell {
         this._saver = false;
     }
 
+    /* The shell's own parts (the panel's menus, the calendar, dialogs, the windows view) in the SilikOS look: the
+       stylesheet THEMES/SilikOS[-<accent>]/gnome-shell/gnome-shell.css, put over the shell's own as its theme. In ink
+       it is not loaded where the session already has it as the shell's own stylesheet (shellCssIsOurs): the
+       user-theme extension loaded the same file over itself at every start, about 18 ms of the shell's start in
+       the rig for nothing (the file read and parsed twice more, every widget matched against its rules twice; the
+       picture is the same to the pixel: docs/SESSION.md, 14/11/2026). With an accent, and in a session without that
+       environment, it is loaded here. The lock screen, where the shell turns extensions off, has the shell's own
+       stylesheet: ink, as before. */
+    _theme(off) {
+        if (!off && userThemeOn()) { this._themeIs = null; return; }
+        let path = null;
+        if (!off) {
+            const id = this._accentSig ? this._settings.get_string('accent') : 'ink';
+            if (id !== 'ink' || !shellCssIsOurs()) path = THEMES + '/' + (id === 'ink' ? 'SilikOS' : 'SilikOS-' + id) + '/gnome-shell/gnome-shell.css';
+            if (path && !GLib.file_test(path, GLib.FileTest.EXISTS)) path = null;      /* (not made on this system: the shell's own) */
+        }
+        if (path === (this._themeIs || null)) return;
+        this._themeIs = path;
+        try { Main.setThemeStylesheet(path); Main.loadTheme(); } catch (e) { logError(e, 'silik-shell: theme ' + path); }
+    }
+
     /* the accent (key "accent"; `silik look --accent`): the extension's rules that take it are accent-<id>.css
        (tools/gen_accents.py), one class more specific than stylesheet.css: a stylesheet loaded later does not win at
        the same specificity. "ink" has no file. The shell's own parts and GTK take it from the themes SilikOS-<id>,
-       which `silik look --accent` chooses. A new theme of the shell (user-theme) keeps the stylesheets loaded. */
+       which `silik look --accent` chooses (the shell's: _theme). A new theme of the shell keeps the stylesheets loaded. */
     _accent(off) {
         const theme = St.ThemeContext.get_for_stage(global.stage).get_theme();
         if (this._accentFile) {
@@ -1010,8 +1069,23 @@ class SilikShell {
        says it, or when qt5ct is not installed). A file seeded from the ink one, or an accent set with gsettings, is
        brought in line at login and at each change */
     _qt() {
-        if (!this._accentSig) return;
+        if (!this._accentSig || !GLib.file_test(QT5CT_PLUGIN, GLib.FileTest.EXISTS)) return;     /* (no qt5ct: nothing to bring in line) */
         try { GLib.spawn_command_line_async('silik look --qt -q'); } catch (e) { /* silik-tools older than the key */ }
+    }
+
+    /* at login it waits until the desktop is up and the shell has nothing else to do: starting a program costs the
+       shell 9-12 ms of its own time (measured in the rig, docs/SESSION.md), and the shell's unit is not started
+       until enable() returns. Nothing of the first picture needs it. */
+    _qtSoon() {
+        const idle = () => {
+            this._qtId = GLib.idle_add(GLib.PRIORITY_LOW, () => { this._qtId = 0; this._qt(); return GLib.SOURCE_REMOVE; });
+        };
+        if (!Main.layoutManager._startingUp) { idle(); return; }
+        this._qtSig = Main.layoutManager.connect('startup-complete', () => {
+            Main.layoutManager.disconnect(this._qtSig);
+            this._qtSig = 0;
+            idle();
+        });
     }
 
     _closeStart(now) {
@@ -1127,7 +1201,7 @@ class SilikShell {
     /* Start's list made before it is opened, a few rows at a time while the shell has nothing else to do (after the
        session has started, and after a change of the installed applications or of the icon theme): the first
        opening then costs what the later ones do. Each slice is a few milliseconds; the rows are also styled and
-       measured then (what their first showing would do) */
+       measured then (what their first showing would do). The last slice is the pane itself (_warmPane) */
     _warmStart() {
         if (this._warmId) GLib.source_remove(this._warmId);
         const slice = () => {
@@ -1136,9 +1210,36 @@ class SilikShell {
             const apps = this._appList();
             for (const b of this._rowsFor(apps, 12)) b.get_preferred_height(-1);
             if (this._list._silikRow.size < apps.length) this._warmId = GLib.idle_add(GLib.PRIORITY_LOW, slice);
+            else this._warmPane();
             return GLib.SOURCE_REMOVE;
         };
         this._warmId = GLib.timeout_add(GLib.PRIORITY_LOW, 2000, slice);
+    }
+
+    /* ...and the pane as the first opening fills it: the category keys, a Flow look's first page (the pinned
+       applications with their icons at that size; the desktop reads its list of recent files from the disk the first
+       time it is asked), then the pane put among the things on the screen once and measured there, which is where
+       its parts take their style and their text is laid out for the first time. The first opening of a session took
+       25-40 ms of the shell's time where the later ones take 7-8: 10-12 ms of it that first measure, 4-6 ms the
+       first showing (measured in the rig, docs/SESSION.md). Nothing is seen: the pane is at opacity 0, which the
+       shell does not draw, and it is hidden again before the shell draws its next picture. An opening sets all of
+       this again from what is true then. */
+    _warmPane() {
+        const b = this._startBox;
+        if (!b || this._startOpen || b.visible) return;
+        this._apps = this._appList();
+        this._favIds = AppFavorites.getAppFavorites().getFavorites().map(a => a.get_id());
+        this._cat = 'all';
+        this._sel = 0;
+        this._view = 'home';
+        this._fillCats();
+        this._fill();
+        b.remove_all_transitions();
+        b.opacity = 0;
+        b.show();
+        this._layout();
+        b.hide();
+        b.opacity = 255;
     }
 
     _move(d) {
