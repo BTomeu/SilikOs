@@ -1129,6 +1129,45 @@ class Documents(unittest.TestCase):
         self.assertTrue(os.path.islink(os.path.join(ROOT, "packages/silik-tools/files/doc/HARDENED.md")) or
                         os.path.isfile(os.path.join(ROOT, "packages/silik-tools/files/doc/HARDENED.md")))
 
+    def unsigned_module_checks(self, check):
+        """the module without a signature proves the lockdown only if it could load without it (the first CI run:
+        SELinux refused the file in /root at every stage, and the row "refused" passed for that reason)"""
+        code = "\n".join(l for l in check.splitlines() if not l.lstrip().startswith("#"))
+        # where modules live, with their label; SELinux is never loosened for it
+        self.assertIn("UNSIGNED=/lib/modules/$(uname -r)/extra/silikci-unsigned.ko", code)
+        self.assertIn('restorecon "$(dirname "$UNSIGNED")" "$UNSIGNED"', code)
+        self.assertNotIn("/root/silikci-unsigned", code)
+        for no in ("setenforce", "semanage permissive", "chcon", "selinux=0", "enforcing=0"):
+            self.assertNotIn(no, code)
+        stage = {n: code.split("\n%s)\n" % n, 1)[1].split("\n%s)\n" % (n + 1), 1)[0] for n in (1, 2, 3)}
+        # 1: it loads before the level is set, the level refuses the lockdown while it is there, and it is taken away
+        # before the level is set (else the lockdown would rightly be left out)
+        one = stage[1]
+        self.assertIn('is set-unsigned-module-loads "exit $rc $o" "exit 0 "', one)
+        self.assertLess(one.index("set-unsigned-module-loads"), one.index("set-refuses-the-lockdown"))
+        self.assertLess(one.index("set-refuses-the-lockdown"), one.index("\n    gone\n"))
+        self.assertLess(one.index("\n    gone\n"), one.index("o=$(silik secure level hardened 2>&1)"))
+        self.assertLess(one.index("doctor > $S/doctor"), one.index("insmod"))          # (the baselines are taken on an untainted kernel)
+        # 2: refused by the kernel's own check, not by any failure; and the kernel says so itself
+        two = stage[2]
+        self.assertIn('elif kernel_refused "$o"; then say held-unsigned-module ok', two)
+        self.assertNotIn('if [ $rc -ne 0 ]; then say held-unsigned-module ok', two)
+        self.assertIn("grep -i 'unsigned module'", two)
+        self.assertIn("say held-unsigned-module-kernel FAIL", two)
+        self.assertLess(two.index("held-unsigned-module-kernel"), two.index("\n    gone\n"))
+        self.assertLess(two.index("\n    gone\n"), two.index("held-level"))            # (the file is not there when the level is read)
+        # 3: it loads again
+        self.assertIn('is back-unsigned-module-loads "exit $rc $o" "exit 0 "', stage[3])
+        self.assertIn("gone", stage[3])
+        # what counts as the kernel's refusal: its three answers, and never SELinux's
+        fn = [l for l in code.splitlines() if l.startswith("kernel_refused()")][0]
+        script = fn + '\nfor t in "$@"; do kernel_refused "$t" && echo yes || echo no; done'
+        answers = ["insmod: ERROR: could not insert module x.ko: Key was rejected by service", "insmod: ERROR: could not insert module x.ko: Operation not permitted",
+                   "insmod: ERROR: could not insert module x.ko: Required key not available", "insmod: ERROR: could not insert module x.ko: Permission denied",
+                   "insmod: ERROR: could not insert module x.ko: File exists", "insmod: ERROR: could not load module x.ko: No such file or directory", ""]
+        r = subprocess.run(["bash", "-c", script, "x"] + answers, stdout=subprocess.PIPE, universal_newlines=True)
+        self.assertEqual(r.stdout.split(), ["yes", "yes", "yes", "no", "no", "no", "no"])
+
     def test_the_installed_system_test(self):
         for script in ("tests/install/hardened.sh", "tests/install/hardened-check.sh"):
             r = subprocess.run(["bash", "-n", os.path.join(ROOT, script)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
@@ -1144,6 +1183,7 @@ class Documents(unittest.TestCase):
         for a in ALL_ARGS.split():
             self.assertIn(a, check)
         ci = text(".github/workflows/ci.yml")
+        self.unsigned_module_checks(check)
         self.assertIn("\n  hardened-test:\n", ci)
         self.assertLess(ci.index("\n  rollback-test:\n"), ci.index("\n  hardened-test:\n"))
         job = ci.split("\n  hardened-test:\n", 1)[1]
