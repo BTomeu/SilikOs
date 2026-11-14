@@ -1,0 +1,5 @@
+# SilikOS: the last unattended installation on main
+
+Commit d7397974ea2b97f7b391ac626677e04e315635cc, run 43637110315.
+
+`report.txt`: what the installed system reported on its first boot. `desktop.png`, `start.png`, `command.png`, `windows-program.png`, `windows-installed.png`, `eda-*.png`, `look-*.png` (the Silik, bar and island looks chosen from the COMMAND bar, Start in each, the bar look after its lock screen; the island is the default), `accent-volt-vivid.png`, `accent-volt-vivid-start.png` (the accent volt violet with its title bars, chosen from the COMMAND bar, Start in it), `idle-lock.png` (when the session had locked itself during the checks), `lock.png`, `unlock.png`, `unlocked.png`, `logout.png`, `login.png`, `login-prompt.png`: its screen (the desktop, Start after the Super key, the COMMAND bar after Super+Space, a Windows program and the open EDA tools opened from the COMMAND bar, the lock screen and its password prompt, the session after the password, the question before logging out, the login screen and its password prompt).

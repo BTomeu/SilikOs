@@ -1,0 +1,270 @@
+SilikOS installation test: SilikOS-9.8-x86_64-netinstall.iso, 2026-11-14T21:36Z, disk after installation 15G
+ok    usb.daemon                   usbguard and usbguard-dbus run (usbguard-1.1.4-2.el9.x86_64) 
+ok    usb.config                   -c /etc/usbguard/silikos-daemon.conf allow apply-policy 
+ok    usb.desktop                  true 
+ok    usb.rules                    allow id *:* label "GNOME_SETTINGS_DAEMON_RULE" 
+ok    usb.present-allowed          3 devices, all allowed; the disk plugged in from the start: 4: allow id 46f4:0001 serial "SILIKBOOT" name "QEMU USB HARDDRIVE" via-port "2-1" with-interface 08:06:50 with-connect-type "unknown" 
+info  usb.host                     kbd-in-1 
+info  usb.host                     disk-in-1 
+ok    usb.unlocked-accepts         session unlocked; keyboard: 5: allow id 0627:0001 serial "SILIKKBD1" name "QEMU USB Keyboard" via-port "1-2" with-inte; disk: 6: allow id 46f4:0001 serial "SILIKDISK1" name "QEMU USB HARDDRIVE" via-port "2-3" with-in 
+info  usb.host                     kbd-out-1 
+ok    usb.locked-policy            (true,) block 
+info  usb.host                     disk-in-2 
+ok    usb.locked-blocks            screen locked; 7: block id 46f4:0001 serial "SILIKDISK2" name "QEMU USB HARDDRIVE" via-port "2-4" with-interface 08:06:50 with-connect-type "unknown" 
+info  usb.host                     kbd-in-2 
+ok    usb.locked-keyboard          screen locked; 8: allow id 0627:0001 serial "SILIKKBD2" name "QEMU USB Keyboard" via-port "1-5" with-interface 03:01:01 with-connect-type "unknown" 
+info  usb.host                     kbd-out-2 
+ok    usb.unlocked-policy          (false,) apply-policy 
+ok    usb.stays-blocked            after unlocking, still: 7: block id 46f4:0001 serial "SILIKDISK2" name "QEMU USB HARDDRIVE" via-port "2-4" with-interface 08:06:50 with-connect- 
+ok    usb.user-refused             ERROR: IPC connect: service=usbguard: Operation not permitted; 
+ok    usb.allow-present            $ usbguard allow-device 7; 
+info  usb.status                   ● ok refused while the screen is locked (USBGuard, the desktop's level lockscreen); a keyboard, a mouse or a hub is still accepted;daemon usbguard.service enabled, running; usbguard-dbus.service enabled, running;config SilikOS's (/etc/usbguard/silikos-daemon.conf);level lockscreen: a new device is r
+ok    usb.desktop-errors           0 
+ok    name.pretty                  SilikOS 
+ok    name.id                      almalinux 
+ok    name.redhat-release          AlmaLinux 
+ok    name.boot-entries            SilikOS 
+ok    package.silik-tools          silik-tools-0.10.5-1.el9.noarch 
+ok    package.silik-command        silik-command-0.9.0-1.el9.noarch 
+ok    package.silikos-branding     silikos-branding-0.5.0-1.el9.noarch 
+ok    package.silikos-desktop      silikos-desktop-0.18.3-1.el9.noarch 
+ok    package.silikos-security     silikos-security-0.5.1-1.el9.noarch 
+ok    package.silikos-power        silikos-power-0.2.2-1.el9.noarch 
+ok    package.silikos-repos        silikos-repos-0.2.2-1.el9.noarch 
+ok    package.silik-eda-compat     silik-eda-compat-0.2.1-1.el9.noarch 
+ok    package.silik-eda-open       silik-eda-open-0.3.0-1.el9.noarch 
+ok    package.silik-dev            silik-dev-0.5.1-1.el9.noarch 
+ok    package.silik-win            silik-win-0.5.0-1.el9.noarch 
+ok    security.selinux             Enforcing 
+ok    security.firewalld           active 
+ok    security.zone                silikos 
+ok    security.sshd                not enabled 
+ok    security.update-timer        active disabled 
+ok    update.auto                  all 
+ok    update.repo-medium           no repository of the installation medium is kept 
+ok    update.channel               off 
+ok    update.replay-check          silikos-repo 
+ok    power.auto                   enabled active 
+ok    power.trim                   enabled 
+ok    power.profile                performance 
+info  power.tuned                  Current active profile: throughput-performance 
+ok    speed.profile                True 
+info  speed.items                  kdump=off modem=off storage-arrays=off multipath=off rpcbind=off makecache=off locate=off indexer=off software=off 
+ok    speed.units                  disabled  
+ok    speed.not-running            0 
+ok    speed.rpcbind-on-demand      rpcbind.service=disabled rpcbind.socket=disabled  
+ok    listen.units                 disabled  
+ok    listen.not-running           0 
+info  listen.silik                 ● off nfs rpcbind.service disabled, rpcbind.socket disabled;● off mdns avahi-daemon.service disabled, avahi-daemon.socket disabled;● off printers cups-browsed.service disabled;nothing listens beyond this machine; 
+ok    speed.software-not-started   no 
+ok    speed.state                  "kdump":{"units":{"kdump.service" 
+ok    speed.doctor                 ok 
+info  speed.udev-settle            inactive (inactive: no start waits for udev to settle) 
+info  speed.kept                   NetworkManager-wait-online enabled, firewalld active, auditd active, chronyd active, fstrim.timer enabled 
+ok    security.ptrace_scope        1 
+ok    security.dmesg_restrict      1 
+ok    kernel.vsyscall              vsyscall=xonly 
+ok    kernel.modules-extra         installed 
+ok    kernel.vcan                  vcan.ko 
+ok    kernel.vcan-loads            silikci 
+ok    hw.check                     exit 0: 12 devices of this machine, kernel 5.14.0-687.66.2.el9_8.x86_64 x86_64: 11 with a driver, 0 without, 0 not told by the list, 1 that often have none (--all lists them) 
+info  secure.status                exit 1: 17 ok, 8 warn, 2 bad, 3 unknown 
+info  secure.row                   ▼ bad      disk encryption    / with /home (/dev/vda3) is not encrypted: whoever holds the machine reads the disk 
+info  secure.row                   ◆ warn     Secure Boot        not possible: this system was not started through UEFI 
+info  secure.row                   ? unknown  screen lock        a user's setting: run `silik secure status` as the desktop's user, or with sudo from their session 
+info  secure.row                   ▼ bad      login              the login screen opens a session without a password 
+info  secure.row                   ◆ warn     kernel lockdown    none: root can change the running kernel (unsigned modules, /dev/mem, another kernel by kexec); Secure Boot turns the lockdown on by itself 
+info  secure.row                   ◆ warn     module signatures  not enforced: root can load any kernel module; not the base's, signed: kvdo 
+info  secure.row                   ? unknown  firmware updates   the vendors' firmware service (LVFS) is off, as the base ships it: nothing says whether a firmware update or a new Secure Boot revocation list (dbx) waits. Processor microcode comes with the system's updates 
+info  secure.row                   ◆ warn     processor flaws    3 of 18 not mitigated: spec_rstack_overflow (Vulnerable: Safe RET, no microcode); spec_store_bypass (Vulnerable); tsa (Vulnerable: No microcode) 
+info  secure.row                   ◆ warn     TPM                none seen: the disk cannot be tied to this machine's boot chain; its passphrase is the whole protection 
+info  secure.row                   ◆ warn     swap               /dev/vda2 is not encrypted: what programs hold in memory (keys, an open design) reaches the disk in clear 
+info  secure.row                   ◆ warn     IOMMU              off: a device on a bus (Thunderbolt, PCIe, FireWire) reads and writes all memory 
+info  secure.row                   ◆ warn     kexec              on: root can start any other kernel from this one, past the firmware's check 
+info  secure.row                   ? unknown  USB devices        USBGuard runs, level lockscreen; whether this session's desktop switches it is not visible (no GNOME session answers here) 
+ok    secure.usb                   ok 1 
+ok    secure.listening             ok 
+info  secure.row-user              ● ok       listening          nothing listens beyond this machine (4 on the loopback only) 
+info  secure.row-user              ● ok       USB devices        refused while the screen is locked (USBGuard, the desktop's level lockscreen); a keyboard, a mouse or a hub is still accepted 
+ok    desktop.gdm                  active 
+ok    desktop.shell                gnome-shell runs for tester 
+ok    desktop.session-type         x11 
+ok    desktop.extension            ENABLED 
+ok    desktop.shell-js-errors      0 
+info  desktop.shell-js-other       0 JS ERROR lines in all; the first:  
+ok    desktop.gtk-theme            'SilikOS' 
+ok    desktop.icon-theme           'SilikOS' 
+ok    desktop.gtk-theme-made       made by 
+ok    desktop.gtk-theme-import     0 
+ok    desktop.gtk-theme-blue       0 
+ok    desktop.shell-theme          made 
+ok    desktop.shell-theme-blue     0 
+ok    desktop.user-theme-off       not enabled: ['silik-shell@silikvolt.com'] 
+ok    desktop.user-theme-name      'SilikOS' 
+ok    desktop.shell-stylesheet     /org/gnome/shell/theme/gnome-shell.css=/usr/share/themes/SilikOS 
+ok    desktop.super-space          silik-command 
+ok    bar.stays                    the window IsViewable, the socket 600 tester, the second call exit 0 in 61 ms (through systemd-run), 1 process 
+ok    look.default                 island ink glass-on 
+ok    look.silik                   $ gsettings set com.silikvolt.silikos.shell look silik; windows have 152,34,1128,744: rail and title bar; no error of the extension 
+ok    look.bar                     $ gsettings set com.silikvolt.silikos.shell look bar; windows have 0,0,1280,754: room from the top left, the bottom kept; no error of the extension 
+ok    look.island                  $ gsettings set com.silikvolt.silikos.shell look island; windows have 0,0,1280,726: room from the top left, the bottom kept; no error of the extension 
+ok    accent.steel-themes          made; blue 0 
+ok    accent.steel-vivid-themes    made; blue 0 
+ok    accent.cobalt-themes         made; blue 0 
+ok    accent.cobalt-vivid-themes   made; blue 0 
+ok    accent.silicon-themes        made; blue 0 
+ok    accent.silicon-vivid-themes  made; blue 0 
+ok    accent.volt-themes           made; blue 0 
+ok    accent.volt-vivid-themes     made; blue 0 
+ok    accent.spark-themes          made; blue 0 
+ok    accent.gtk-parse             0 errors in 10 themes 
+ok    accent.volt-vivid            'volt-vivid' 'SilikOS-volt-vivid' 'SilikOS-volt-vivid' 0 errors 
+ok    accent.ink-again             'ink' 'SilikOS' 'SilikOS' 
+ok    boot.plymouth                silikos 
+ok    silik.status                 system         SilikOS 9.8 base           AlmaLinux release 9.8 (Olive Jaguar) arch           x86_64 
+info  silik.eda-check              session: - shared tools folder /opt/eda: present 
+ok    eda.podman                   podman version 5.8.2 
+ok    win.bwrap                    bubblewrap 0.6.3 
+ok    win.wine                     wine-11.0 
+info  win.selinux-context          the session: unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023 ; selinuxuser_execmod off 
+ok    win.selinux-rule             silikos_wine 
+ok    win.selinux-label            wine_exec_t 
+info  win.open.unit                the session's unit of that command ended with 1 (the command itself: 0) 
+ok    win.open.ran                 exit 0: ran secret=hidden 
+ok    win.open.sandboxed           bwrap 
+ok    win.sandbox-ends             nothing of the sandbox is left 8 s after the program (SDL2: 2.26.0) 
+ok    win.window                   "win.exe" 
+ok    win.32bit                    ran secret=hidden 
+ok    win.installer                win/silik-test 
+ok    win.installer-entry          Exec=silik win run default --  
+ok    win.installed-window         "siliktest.exe" 
+ok    win.msi                      silikmsi.exe 
+info  win.addons                   silik-wine-mono-10.4.1-1.el9.x86_64 silik-wine-gecko-2.47.4-1.el9.x86_64  
+ok    win.dotnet                   a .NET program ran 
+info  win.dotnet.chatter           0 lines of GLib in the output of the two commands 
+ok    win.question.no-answer-no-run nowhere to ask 
+ok    win.question.exit            silik-exit 2 
+info  win.isolated.parts           xorg-x11-server-Xephyr-1.20.11-34.el9_8.5.x86_64 passt-0^20251210.gd04c480-7.el9_8.x86_64 passt-selinux-0^20251210.gd04c480-7.el9_8.noarch ; the session's access list: access control enabled, only authorized clients can connect SI:localuser:tester  
+info  win.isolated.session-mark    SILIK_CI_SESSION(STRING) = "session"; the session's socket file: inode 159 
+ok    win.isolated.ran             ran secret=hidden 
+ok    win.isolated.own-folder      W: is ~/Windows/isolated 
+ok    win.isolated.stays-isolated  silik-exit 69 
+ok    win.isolated.never-without-sandbox silik-exit 69 
+ok    win.isolated.marked          isolated  
+ok    win.isolated.window          "silik-win-isolated" 
+ok    win.isolated.not-on-the-session 0 
+ok    win.isolated.own-display     CONNECTED 
+ok    win.isolated.session-socket  no socket of the box is the session's server: X153:00 
+ok    win.isolated.display-number  :153 
+ok    win.isolated.session-socket-file 159 
+ok    win.isolated.session-abstract failed:  
+ok    win.isolated.session-bus     failed:  
+ok    win.isolated.runtime-folder  silik-win  
+ok    win.isolated.shared-folder   isolated  
+ok    win.isolated.filter          2 
+info  win.isolated.x-sockets       X153  
+ok    win.isolated.own-network     own 
+ok    win.isolated.network         lo enp0s2  
+info  win.isolated.selinux         Xephyr unconfined_u:unconfined_r:xserver_t:s0-s0:c0.c1023 pasta unconfined_u:unconfined_r:pasta_t:s0-s0:c0.c1023 
+info  win.isolated.pasta-said       
+info  win.isolated.pasta-files     unconfined_u:object_r:user_tmp_t:s0 /run/user/1000/silik-win/isolated/pasta.log unconfined_u:object_r:user_tmp_t:s0 /run/user/1000/silik-win/isolated/pasta.pid ; the folder: unconfined_u:object_r:user_tmp_t:s0 /run/user/1000/silik-win/isolated; the box: unconfined_u:unconfined_r:unconfined_t:s0-s0:c
+ok    win.isolated.ends            0 0 0 
+ok    win.isolated.session-socket-after 159 
+info  win.selinux-domain           unconfined_u:unconfined_r:wine_t:s0-s0:c0.c1023 
+info  win.user-namespaces          max_user_namespaces 14356 
+info  win.selinux-denial           8 { connectto } comm=usbguard-daemon system_u:system_r:usbguard_t:s0 -> system_u:system_r:systemd_machined_t:s0 unix_stream_socket 
+ok    eda.klayout                  klayout-0.30.13-1.silik.el9.x86_64 
+ok    eda.magic                    magic-8.3.696-1.silik.el9.x86_64 
+ok    eda.xschem                   xschem-3.4.7-1.silik.el9.x86_64 
+ok    eda.ngspice                  ngspice-47-2.silik.el9.x86_64 
+ok    eda.netgen                   netgen-1.5.328-1.silik.el9.x86_64 
+ok    eda.yosys                    yosys-0.70-1.silik.el9.x86_64 
+ok    eda.nvc                      nvc-1.23.1-1.silik.el9.x86_64 
+ok    eda.qucs-s                   qucs-s-26.1.1-1.silik.el9.x86_64 
+ok    eda.devsim                   devsim-2.8.2-1.silik.el9.x86_64 
+ok    eda.kicad                    kicad-10.0.8-1.silik.el9.x86_64 
+ok    eda.kicad-symbols            kicad-symbols-10.0.8-1.silik.el9.noarch 
+ok    eda.kicad-footprints         kicad-footprints-10.0.8-1.silik.el9.noarch 
+ok    eda.kicad-templates          kicad-templates-10.0.8-1.silik.el9.noarch 
+ok    eda.opencascade              opencascade-7.9.3-1.silik.el9.x86_64 
+ok    eda.nng                      nng-1.12.5-1.silik.el9.x86_64 
+ok    eda.ngspice-run              5.000000e-01 
+ok    eda.klayout-run              KLayout 
+ok    eda.magic-run                metal1 
+ok    eda.xschem-run               XSCHEM 
+ok    eda.kicad-run                10.0.8 
+ok    eda.kicad-ngspice            present 
+ok    eda.devsim-run               imported; math libraries: libopenblas.so,liblapack.so,libblas.so 
+ok    eda.iverilog                 iverilog-12.0-12.el9.x86_64 
+ok    eda.verilator                verilator-5.022-3.el9.x86_64 
+ok    eda.gtkwave                  gtkwave-3.3.118-1.el9.x86_64 
+ok    eda.try                      13 ok, 0 failed, 0 not run 
+info  eda.try-job                  ● sim        an inverter's output is high for a low input and low for a high one 
+info  eda.try-job                  ● schematic  Xschem turned one of its own schematics (an RLC circuit) into a netlist; ngspice simulated it 
+info  eda.try-job                  ● layout     the inverter drawn in Magic breaks no design rule; Magic extracted its two transistors; Netgen: the layout matches the schematic 
+info  eda.try-job                  ● postlayout the extraction carries the layout's parasitic capacitances; the extracted inverter switches in simulation: 70 ps falling, 93 ps rising 
+info  eda.try-job                  ● gds        KLayout reads the GDS file Magic wrote 
+info  eda.try-job                  ● digital    the counter counts ten clock edges in simulation 
+info  eda.try-job                  ● waves      the simulation's waveforms, packed by GTKWave's tools and read back, have the count in them 
+info  eda.try-job                  ● gates      Yosys wrote the counter as gates; the gates count the same ten clock edges in Icarus Verilog 
+info  eda.try-job                  ● verilate   Verilator compiled the counter and its bench to a program, and it counts ten 
+info  eda.try-job                  ● vhdl       the VHDL counter counts ten clock edges in simulation 
+info  eda.try-job                  ● lint       Verilator finds nothing to complain about in the counter 
+info  eda.try-job                  ● synth      Yosys synthesised the counter to gates and flip-flops 
+info  eda.try-job                  ● device     a pn diode simulated by DEVSIM conducts forward and blocks in reverse; its forward current grows with the bias: 0.018 A/cm2 at 0.5 V, 9.6e-08 A/cm2 at -0.5 V 
+info  eda.tools                    13 of 13 open tools on the system 
+info  eda.xschem-windows           "xschem - untitled.sch": ("tk" "Tk"); 
+info  eda.xschem-trouble           dumps: none; journal: ci-xschem.service: Main process exited, code=exited, status=1/FAILURE/ci-xschem.service: Failed with result 'exit-code'./Stopped /usr/bin/xschem./ 
+info  eda.magic-windows            "layout1": ("layout1" "Toplevel");"tkcon 2.3 Main": ("tkcon.tcl" "Tkcon.tcl");"tkcon.tcl #2": ("tkcon.tcl #2" "Tkcon.tcl");"(UNNAMED)": ("magic" "magic"); 
+info  eda.magic-trouble            dumps: none; journal: ci-magic.service: Main process exited, code=exited, status=1/FAILURE/ci-magic.service: Failed with result 'exit-code'./Stopped /usr/bin/magic./ 
+info  eda.klayout-windows          "klayout": ();"KLayout 0.30.13": ("klayout" "klayout");"Qt Selection Owner for klayout": ();"Tip": ("klayout" "klayout"); 
+info  eda.klayout-trouble          dumps: none; journal: ci-klayout.service: Failed with result 'timeout'./Stopped /usr/bin/klayout./ci-klayout.service: Consumed 2.025s CPU time./ 
+info  eda.qucs-s-windows           "Qt Selection Owner for qucs-s": ();"qucs-s": ();"qucs-s": ("qucs-s" "Qucs-s");"Set simulator": ("qucs-s" "qucs-s"); 
+info  eda.qucs-s-trouble           dumps: none; journal: Started /usr/bin/qucs-s./Stopping /usr/bin/qucs-s.../Stopped /usr/bin/qucs-s./ 
+info  eda.kicad-windows            "kicad": ("kicad" "Kicad");"kicad": ("kicad" "KiCad");"KiCad Setup": ("kicad" "KiCad"); 
+info  eda.kicad-trouble            dumps: none; journal: Started /usr/bin/kicad./Stopping /usr/bin/kicad.../Stopped /usr/bin/kicad./ 
+ok    dev.compiler                 arm-none-eabi-gcc (Fedora 12.4.0-1.el9) 12.4.0 
+ok    dev.try                      7 ok, 0 failed, 0 not run 
+info  dev.try-job                  ● build   a Cortex-M4 program compiled; its vector table is at the start of flash (0x08000000); its reset handler is in flash; its data is in RAM (0x20000000); an initialised variable among them; whose initial values are loaded from flash (a segment at a RAM address with a flash load address): 192 b
+info  dev.try-job                  ● libc    the C library for this processor (newlib-nano, hard float) links 
+info  dev.try-job                  ● cxx     C++ for the same processor compiles and links 
+info  dev.try-job                  ● debug   the debugger reads the program: main is in flash; it knows the source line; it disassembles the ARM code 
+info  dev.try-job                  ● probe   OpenOCD reads its descriptions of the ST-LINK probe and the STM32G4 (no probe is plugged in for that); and of TI's XDS110 probe and the MSP432 
+info  dev.try-job                  ● dfu     dfu-util starts 
+info  dev.try-job                  ● stlink  the ST-LINK tools start 
+ok    package.openocd              openocd-0.12.0-1.silik.el9.x86_64 
+ok    package.dfu-util             dfu-util-0.11-1.silik.el9.x86_64 
+info  dev.tools                    23 of 23 embedded and bench tools on the system; the probes' rules: 49-stlinkv1.rules 49-stlinkv2-1.rules 49-stlinkv2.rules 49-stlinkv3.rules 60-openocd.rules  
+info  system.memory                3654 MB, 2536 MB available; swap 6 of 2457 MB used 
+ok    system.oom                   nothing was killed for lack of memory 
+ok    system.failed-units           
+info  system.failed-mcelog         mcelog.service failed (the base's): mcelog.service: Main process exited, code=exited, status=1/FAILURE mcelog.service: Failed with result 'exit-code'.  
+info  system.packages              1669 packages, 13G used 
+ok    audit.listening               
+info  audit.listening-local        tcp/127.0.0.1:631/cupsd tcp/[::1]:631/cupsd udp/127.0.0.1:323/chronyd udp/[::1]:323/chronyd  
+info  audit.firewall               default zone silikos;  target: DROP; interfaces: enp0s2; services: dhcpv6-client; ports: ; 
+ok    audit.ours-setuid             
+ok    audit.ours-world-writable     
+info  audit.setuid                 35 setuid or setgid files on /; of no package:  
+info  audit.capabilities           /usr/bin/newuidmap cap_setuid=ep;/usr/bin/newgidmap cap_setgid=ep;/usr/bin/arping cap_net_raw=p;/usr/bin/dumpcap cap_net_admin,cap_net_raw=ep;/usr/bin/clockdiff cap_net_raw=p;/usr/bin/gnome-keyring-daemon cap_ipc_lock=ep;/usr/sbin/mtr-packet cap_net_raw=ep;/usr/libexec/gstreamer- 
+info  audit.sysctl                 kptr_restrict=1 dmesg_restrict=1 yama.ptrace_scope=1 unprivileged_bpf_disabled=2 core.bpf_jit_harden=1 kexec_load_disabled=0 perf_event_paranoid=2 sysrq=16 suid_dumpable=0 protected_symlinks=1 protected_hardlinks=1 protected_fifos=2 protected_regular=2 max_user_namespaces=14356 unprivileged_userfaul
+info  audit.sysctl-net             ipv4.conf.all.rp_filter=0 ipv4.conf.all.accept_redirects=0 ipv4.conf.all.send_redirects=0 ipv4.conf.all.accept_source_route=0 ipv4.tcp_syncookies=1 ipv4.ip_forward=0 ipv6.conf.all.accept_ra=1 ipv6.conf.all.accept_redirects=0 ipv6.conf.all.use_tempaddr=0 ipv4.icmp_echo_ignore_broadcasts=1  
+info  audit.boot                   lockdown: [none] integrity confidentiality; secure boot: EFI variables are not supported on this system; cmdline: BOOT_IMAGE=(hd0,msdos1)/vmlinuz-5.14.0-687.66.2.el9_8.x86_64 root=UUID=b208ca55-a723-4121-b94c-fb32d9f5e18d ro vsyscall=xonly crashkernel=1G-2G:192M,2G-64G:256M,64G-:512M resume=UU 
+info  audit.modules                module signatures enforced: N; 76 modules loaded; tainted: 0 
+info  audit.unconfined-services    awk ps (sd-pam) silikos-ci-chec sort systemd tr  
+info  audit.units                  silikos-update 9.6 UNSAFE; silikos-security-update 9.6 UNSAFE; silikos-power-auto 1.5 OK; silikos-power-charge 1.7 OK; silikos-themes 1.5 OK; silikos-rollback-finish 9.6 UNSAFE;  
+ok    audit.unit-themes            exit 0, success, the stylesheet is back as it was 
+ok    audit.unit-power             exit 0, success, tuned throughput-performance 
+info  audit.unit-power-back        tuned balanced; 0 AVC denials naming silik, tuned or themes in the last ten minutes 
+ok    audit.login                  Profile ID: sssd Enabled features: - without-nullok ; nullok in the login files: 0 line(s) 
+ok    audit.software-updates       false 
+info  audit.new-settings           notifications on the locked screen: false; ip6-privacy: 1; tipc: install /bin/false ; 2 2 0 0 0  
+info  audit.accounts               root: PS; users with a shell: root tester ; empty passwords: ; wheel: tester 
+info  audit.sudo                   ;User tester may run the following commands on localhost:; (ALL) ALL;; timestamp_timeout:  
+info  audit.mounts                 /[] /boot[] /dev/shm[nosuid,nodev,] ; encrypted: 0 
+info  audit.coredumps              ProcessSizeMax=1G ; core limit unlimited; umask 0022 
+info  audit.usb                    usbguard: usbguard-1.1.4-2.el9.x86_64, active; GNOME usb-protection true level 'lockscreen'; thunderbolt: cat: /sys/bus/thunderbolt/devices/domain 
+info  audit.lock                   lock-enabled true, lock-delay uint32 0, idle-delay uint32 300; faillock deny: ; pwquality minlen:  
+info  audit.network                MAC: ; resolved: inactive; avahi: inactive; cups: active; geoclue: inactive; abrt: inactive 
+info  audit.repos                  [appstream] gpgcheck=1 repo_gpgcheck=-; [baseos] gpgcheck=1 repo_gpgcheck=-; [crb] gpgcheck=1 repo_gpgcheck=-; [extras] gpgcheck=1 repo_gpgcheck=-; [epel-cisco-openh264] gpgcheck=1 repo_gpgcheck=0; [epel] gpgcheck=1 repo_gpgcheck=-;  
+info  session.locked               (true,) after 15 min of checks without a key 
