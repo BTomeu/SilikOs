@@ -113,7 +113,7 @@ if [ $rc -ne 0 ]; then
 fi
 row ok image.installed "the shipped package set installed onto the image: $(du -h "$img" | cut -f1) of ${gb} GB used"
 # what the image must and must not carry, as its own last step said it
-said() { clean "$out/install.log" | sed -n "s/^SILIKOS-IMG|$1|//p" | tail -1; }
+said() { clean "$out/install.log" | sed -n "s/^SILIKOS-IMG|$1|//p" | tail -1 | sed 's/[[:space:]]*$//'; }
 [ "$(said users)" = none ] && row ok image.no-user "no user in the image: the first start asks for one" || row FAIL image.no-user "users in the image: $(said users)"
 case "$(said root)" in L*) row ok image.root-locked "root is locked ($(said root))" ;; *) row FAIL image.root-locked "root's password state: '$(said root)'" ;; esac
 [ "$(said machine-id)" = empty ] && row ok image.no-machine-id "no machine id: each system makes its own at its first start" || row FAIL image.no-machine-id "machine id: $(said machine-id)"
