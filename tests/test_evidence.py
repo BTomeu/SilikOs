@@ -23,9 +23,9 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HERE = os.path.join(ROOT, "tests/install")
 LOGS = os.path.join(ROOT, "tests/data/rows")
-MUST = {"run.sh": "install", "hardened.sh": "hardened", "rollback.sh": "rollback", "sealed.sh": "sealed"}
+MUST = {"run.sh": "install", "hardened.sh": "hardened", "rollback.sh": "rollback", "sealed.sh": "sealed", "external.sh": "external"}
 CHECK = {"install": ("check.sh", ""), "offline": ("check.sh", ""), "hardened": ("hardened-check.sh", "hardened."),
-         "rollback": ("rollback-check.sh", ""), "sealed": ("sealed-check.sh", "sealed.")}
+         "rollback": ("rollback-check.sh", ""), "sealed": ("sealed-check.sh", "sealed."), "external": ("external-check.sh", "external.")}
 
 spec = importlib.util.spec_from_file_location("rows", os.path.join(HERE, "rows.py"))
 rows = importlib.util.module_from_spec(spec)
@@ -148,7 +148,7 @@ class TheHosts(unittest.TestCase):
     def test_the_lists_name_checks_of_their_scripts(self):
         for must, (script, prefix) in CHECK.items():
             names = [l for l in text("tests/install/must-%s.txt" % must).split("\n") if l and not l.startswith("#")]
-            self.assertGreater(len(names), 60, must)
+            self.assertGreater(len(names), 40 if must == "external" else 60, must)
             self.assertEqual(len(names), len(set(names)), must)
             s = text("tests/install/" + script)
             said = set(re.findall(r"(?:say|is|has|hasnot) ([A-Za-z0-9._:-]+) ", s))

@@ -1,0 +1,46 @@
+# The checks the external-disk test must say with a verdict (ok or FAIL): tests/install/external.sh adds a FAIL row
+# for each one that is not in its report. Informative rows (what the firmware started, its entries, USBGuard and the
+# saver profile where the small installation has them) are not here.
+external.install.entry
+external.install.finished
+external.install.one-usb-disk
+external.install.boot-order-kept
+external.install.no-entry-removed
+external.install.own-disk-untouched
+external.first.uefi
+external.first.encrypted
+external.first.silik-status
+external.first.root-on-usb
+external.first.esp-on-the-disk
+external.first.esp-removable-path
+external.first.other-disks-unused
+external.first.silik-disk-says-external
+external.first.silik-disk-says-travel
+external.first.failed-units
+external.first.passphrase-asked
+external.first.finished
+external.again.uefi
+external.again.encrypted
+external.again.silik-status
+external.again.root-on-usb
+external.again.firmware-entries-settled
+external.again.passphrase-asked
+external.again.finished
+external.again.own-disk-untouched
+external.other.uefi
+external.other.encrypted
+external.other.silik-status
+external.other.root-on-usb
+external.other.secure-boot
+external.other.generic-package
+external.other.generic-dracut
+external.other.initramfs-generic
+external.other.passphrase-asked
+external.other.finished
+external.sata.uefi
+external.sata.encrypted
+external.sata.silik-status
+external.sata.root-on-sata
+external.sata.silik-disk-not-external
+external.sata.passphrase-asked
+external.sata.finished

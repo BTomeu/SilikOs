@@ -1,0 +1,117 @@
+# ======================================================================================================================
+# CI ONLY (tests/install/external.ks.in). NEVER PART OF THE SHIPPED KICKSTART OR OF THE ISO.
+# The installation onto an external disk (tests/install/external.sh; docs/DISK.md): the installer is started with
+# the options of the ISO's own entry "Install SilikOS on an external disk" (inst.leavebootorder), in a machine with
+# two disks: the computer's own (it must not be written) and one on USB. The shipped kickstart names no disk; a
+# person ticks the external one in the installer. Here the test does it: the one disk whose transport is USB.
+# The disk is encrypted, as the guide asks for a disk that travels. The firmware's boot entries are said before and
+# after the installation, on the installer's console.
+# ======================================================================================================================
+text
+%include /tmp/silikci-disk.ks
+zerombr
+autopart --encrypted --passphrase=@PASSPHRASE@
+bootloader --append="vsyscall=xonly console=ttyS0,115200 plymouth.enable=0 rd.plymouth=0 quiet"
+lang en_US.UTF-8
+keyboard us
+timezone UTC --utc
+rootpw --plaintext silikos-ci
+user --name=tester --password=silikos-ci --plaintext --groups=wheel
+firstboot --disable
+poweroff
+
+%pre
+con=/dev/ttyS0
+efi() {
+python3 - "$1" <<'EFI' > $con 2>&1
+# the firmware's boot entries, read from its variables (no tool of the installer's is needed): the order, then each
+# entry's number and name. One line each: SILIKOS-EFI|WHEN|...
+import os, struct, sys
+when, d = sys.argv[1], "/sys/firmware/efi/efivars"
+def var(n):
+    with open(os.path.join(d, n), "rb") as f:
+        return f.read()[4:]                     # (the first four bytes are the variable's attributes)
+def say(t):
+    sys.stdout.write("\r\nSILIKOS-EFI|%s|%s\r\n" % (when, t))
+try:
+    names = sorted(os.listdir(d))
+except OSError as e:
+    say("none: %s" % e); sys.exit(0)
+order = [n for n in names if n.startswith("BootOrder-")]
+if order:
+    b = var(order[0])
+    say("BootOrder: " + ",".join("%04X" % x for x in struct.unpack("<%dH" % (len(b) // 2), b[:len(b) // 2 * 2])))
+else:
+    say("BootOrder: none")
+for n in names:
+    if len(n) > 9 and n.startswith("Boot") and n[8] == "-" and all(c in "0123456789ABCDEF" for c in n[4:8]):
+        b = var(n)
+        label = b[6:].decode("utf-16-le", "replace").split("\0")[0]
+        say("%s %s" % (n[:8], label))
+say("end")
+EFI
+}
+d=$(lsblk -d -n -o NAME,TYPE,TRAN | awk '$2 == "disk" && $3 == "usb" { print $1 }')
+n=$(echo "$d" | grep -c .)
+printf '\r\nSILIKOS-EXT|disks|%s\r\n' "$(lsblk -d -n -o NAME,TYPE,TRAN,SIZE | tr -s ' ' | tr '\n' ';')" > $con
+printf '\r\nSILIKOS-EXT|usb-disks|%s|%s\r\n' "$n" "$(echo $d)" > $con
+# (not exactly one disk on USB: a name no disk has, so that the installer stops instead of choosing one)
+[ "$n" = 1 ] || d=silikci-no-single-usb-disk
+printf 'ignoredisk --only-use=%s\nclearpart --all --initlabel --drives=%s\n' "$d" "$d" > /tmp/silikci-disk.ks
+efi pre
+%end
+
+%post --nochroot
+con=/dev/ttyS0
+efi() {
+python3 - "$1" <<'EFI' > $con 2>&1
+# the firmware's boot entries, read from its variables (no tool of the installer's is needed): the order, then each
+# entry's number and name. One line each: SILIKOS-EFI|WHEN|...
+import os, struct, sys
+when, d = sys.argv[1], "/sys/firmware/efi/efivars"
+def var(n):
+    with open(os.path.join(d, n), "rb") as f:
+        return f.read()[4:]                     # (the first four bytes are the variable's attributes)
+def say(t):
+    sys.stdout.write("\r\nSILIKOS-EFI|%s|%s\r\n" % (when, t))
+try:
+    names = sorted(os.listdir(d))
+except OSError as e:
+    say("none: %s" % e); sys.exit(0)
+order = [n for n in names if n.startswith("BootOrder-")]
+if order:
+    b = var(order[0])
+    say("BootOrder: " + ",".join("%04X" % x for x in struct.unpack("<%dH" % (len(b) // 2), b[:len(b) // 2 * 2])))
+else:
+    say("BootOrder: none")
+for n in names:
+    if len(n) > 9 and n.startswith("Boot") and n[8] == "-" and all(c in "0123456789ABCDEF" for c in n[4:8]):
+        b = var(n)
+        label = b[6:].decode("utf-16-le", "replace").split("\0")[0]
+        say("%s %s" % (n[:8], label))
+say("end")
+EFI
+}
+efi post
+printf '\r\nSILIKOS-EXT|layout|%s\r\n' "$(lsblk -n -l -o NAME,TYPE,FSTYPE,MOUNTPOINT | tr -s ' ' | tr '\n' ';' | cut -c1-900)" > $con
+%end
+
+%post --log=/root/silikos-ci-post.log
+install -m 0755 /dev/stdin /usr/local/sbin/silikos-ci-external <<'CHECK'
+@CHECK@
+CHECK
+cat > /etc/systemd/system/silikos-ci-external.service <<'UNIT'
+[Unit]
+Description=SilikOS CI: the system on an external disk, one stage at each start, reported on the serial port
+After=multi-user.target network-online.target tuned.service usbguard.service
+Wants=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/silikos-ci-external
+StandardOutput=journal
+TimeoutStartSec=25min
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl enable silikos-ci-external.service
+%end
