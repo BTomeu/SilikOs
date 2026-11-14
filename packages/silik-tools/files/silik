@@ -815,9 +815,14 @@ def prefix_dir(n):
     return os.path.join(WINE_ROOT, n)
 
 
-def win_shared():
-    """the one folder of the home that Windows programs see and write: drive W:"""
-    return os.environ.get("SILIK_WIN_SHARED") or os.path.join(os.path.expanduser("~"), "Windows")
+def win_shared(name=None):
+    """the folder of the home that Windows programs see and write, drive W:. ~/Windows ($SILIK_WIN_SHARED) for the
+    programs of the normal box. A prefix of isolated programs (`name`: win_apart) has a folder of its own inside it,
+    ~/Windows/NAME, and does not see the rest: with one folder for all, an isolated program changed the files
+    beside a program the owner had approved for the normal box, or the program itself between the moment it was
+    checked and the moment it ran, and its code then ran there, on the session's display (seen, 14/11/2026)"""
+    base = os.environ.get("SILIK_WIN_SHARED") or os.path.join(os.path.expanduser("~"), "Windows")
+    return os.path.join(base, name) if name else base
 
 
 def win_runtime(name):
@@ -895,9 +900,45 @@ def win_mark(ctx, name, on=True):
         win_private_write(win_marks_file(), "".join(n + "\n" for n in sorted(names)))
 
 
+def win_apart(a, name):
+    """True for a prefix of isolated programs: asked for (--isolated, or the answer to the question), or the prefix
+    is marked"""
+    return bool(getattr(a, "isolated", False)) or name in win_marked()
+
+
 def win_iso(a, name):
-    """True when the prefix's programs run isolated: asked for (--isolated), or the prefix is marked"""
-    return win_boxed(a) and (bool(getattr(a, "isolated", False)) or name in win_marked())
+    """True when the prefix's programs run isolated here (win_apart, and there is a sandbox to isolate them in;
+    where there is none they do not run at all: win_exec)"""
+    return win_boxed(a) and win_apart(a, name)
+
+
+def win_shared_of(a, name):
+    """the shared folder of prefix `name`: its own when its programs are isolated ones"""
+    return win_shared(name if win_apart(a, name) else None)
+
+
+def win_from_isolated(f):
+    """the prefix of isolated programs that file f belongs to: f lies in that prefix or in its shared folder
+    (~/Windows/NAME); None for any other file. Such a file is one an isolated program wrote or could change, so it
+    runs isolated, in that prefix, whatever was answered for it (or for a file with the same SHA-256) before"""
+    for n in sorted(win_marked()):
+        if any(_under(f, os.path.realpath(top)) for top in (win_shared(n), os.path.join(WINE_ROOT, n))):
+            return n
+    return None
+
+
+def win_real(ctx, path):
+    """the file behind `path`, links followed, unless the path lies where Windows programs write (the shared
+    folder, a prefix) and leads out of there: a program can leave a link named like an installer that points at a
+    file elsewhere in the home, and opening it would show that file's whole folder to the sandbox (seen). Such a
+    link is not followed: the command ends"""
+    f, given = os.path.realpath(path), os.path.abspath(path)
+    tops = [win_shared(), WINE_ROOT]
+    real = [os.path.realpath(x) for x in tops]
+    if any(_under(given, x) for x in tops + real) and not any(_under(f, x) for x in real):
+        win_die(ctx, "%s is a link that leads out of %s (to %s): not followed. Open that file itself if it is the one you mean"
+                % (win_plain(given), [x for x in tops + real if _under(given, x)][0], win_plain(f)), 2)
+    return f
 
 
 def _under(p, top):
@@ -994,7 +1035,7 @@ def win_show(f, d, iso=False):
     folder is too much. An isolated sandbox (`iso`) is not shown the Downloads folder: a file that lies directly
     in it is shown alone, so that a program nobody trusts yet cannot read, and send away, the other downloads"""
     always = [] if iso else win_always()
-    if any(_under(f, t) for t in [win_shared(), d, "/usr", "/etc"] + [p for p in [wine_opt()] if p] + always):
+    if any(_under(f, t) for t in [win_shared(os.path.basename(d) if iso else None), d, "/usr", "/etc"] + [p for p in [wine_opt()] if p] + always):
         return []
     folder = os.path.dirname(f)
     return [folder] if win_narrow(folder) and not (iso and folder in win_always()) else [f]
@@ -1029,14 +1070,14 @@ def win_env(d, display=True, iso=None):
     return ["%s=%s" % (k, e[k]) for k in sorted(e)]
 
 
-def win_sandbox(name, d, show=(), net=True, info_fd=None, iso=None):
+def win_sandbox(name, d, show=(), net=True, info_fd=None, iso=None, filter_fd=None):
     """the bwrap command line of a prefix's sandbox, up to "--": new user, process, IPC and host-name namespaces
     (and network, without `net`); the system read-only, the prefix and the shared folder read-write, `show`
     read-only, the display, sound and GPU; nothing else of the home folder.
     `iso` (win_env's): an isolated sandbox. Its own network namespace always (its network, when it has one, comes
     from pasta: win_pasta); of the display, the socket and the key of its own server only; no GPU device; the sound
     sockets only when asked"""
-    home, rt, shared = os.path.expanduser("~"), win_runtime(name), win_shared()
+    home, rt, shared = os.path.expanduser("~"), win_runtime(name), win_shared(name if iso else None)
     xrd_host = os.environ.get("XDG_RUNTIME_DIR") or ""
     xrd = xrd_host or "/run/user/%d" % os.getuid()
     # env -i: the first process of the sandbox is bwrap itself, and it must not carry this command's environment
@@ -1046,6 +1087,8 @@ def win_sandbox(name, d, show=(), net=True, info_fd=None, iso=None):
         a += ["--die-with-parent"]      # (its parent is the process that also holds its display: win_isolated_start)
     if info_fd is not None:
         a += ["--info-fd", str(info_fd)]
+    if filter_fd is not None:           # the system calls a Windows program has no use for (win_filter)
+        a += ["--seccomp", str(filter_fd)]
 
     def ro(p):
         a.extend(["--ro-bind", p, p])
@@ -1113,7 +1156,7 @@ def win_no_keys():
     the KEYRING kind, CIFS credentials, an eCryptfs key): run on EL 9, a key of the session was read from inside the
     box. Returns the function to call in the child, or None where the call is not known (not x86_64 or aarch64).
     It is not the whole answer: a program of the same user can still link the USER keyring by its number (seen);
-    only a system-call filter would stop that (docs/WINDOWS.md)."""
+    the system-call filter stops that (win_filter: keyctl is refused once this call is made, win_confine)."""
     nr = {"x86_64": 250, "aarch64": 219}.get(os.uname().machine)
     if nr is None:
         return None
@@ -1127,6 +1170,217 @@ def win_no_keys():
     def join():
         call(*args)
     return join
+
+
+# -- the system calls a sandboxed program has no use for
+# bubblewrap takes the capabilities away, but a program in the box could still make a user namespace of its own and
+# be root in it (seen, 14/11/2026: a network device made, a file system mounted): that is where most of the
+# kernel's privilege-escalation faults of the last years were reached from. It could also read the kernel's key
+# list and link the user keyring by its number (seen: a key of the session read, one added). Wine needs none of
+# these calls. They are refused by a filter of the kernel (seccomp) that bwrap loads for the box's first program
+# and that every program entering the box loads before it enters: EPERM, and ENOSYS for clone3, which cannot be
+# looked into (the C library then uses clone, whose flags can).
+WIN_REFUSED = ("unshare", "mount", "umount", "umount2", "pivot_root", "open_tree", "move_mount", "fsopen", "fsconfig", "fsmount",
+               "fspick", "mount_setattr", "keyctl", "add_key", "request_key", "bpf", "perf_event_open", "userfaultfd",
+               "io_uring_setup", "io_uring_enter", "io_uring_register", "open_by_handle_at", "clone3")
+# setns is not among them: every program enters the box with it (nsenter), and with unshare and clone's namespace
+# flags refused a program of the box has no namespace to enter but its own.
+WIN_CALLS = {       # the numbers of those calls, of clone and of ioctl (the kernel's tables: x86_64, i386, the generic one)
+    "x86_64": {"unshare": 272, "mount": 165, "umount2": 166, "pivot_root": 155, "open_tree": 428, "move_mount": 429, "fsopen": 430,
+               "fsconfig": 431, "fsmount": 432, "fspick": 433, "mount_setattr": 442, "keyctl": 250, "add_key": 248, "request_key": 249,
+               "bpf": 321, "perf_event_open": 298, "userfaultfd": 323, "io_uring_setup": 425, "io_uring_enter": 426,
+               "io_uring_register": 427, "open_by_handle_at": 304, "clone3": 435, "clone": 56, "ioctl": 16},
+    "i386": {"unshare": 310, "mount": 21, "umount": 22, "umount2": 52, "pivot_root": 217, "open_tree": 428, "move_mount": 429,
+             "fsopen": 430, "fsconfig": 431, "fsmount": 432, "fspick": 433, "mount_setattr": 442, "keyctl": 288, "add_key": 286,
+             "request_key": 287, "bpf": 357, "perf_event_open": 336, "userfaultfd": 374, "io_uring_setup": 425, "io_uring_enter": 426,
+             "io_uring_register": 427, "open_by_handle_at": 342, "clone3": 435, "clone": 120, "ioctl": 54},
+    "aarch64": {"unshare": 97, "mount": 40, "umount2": 39, "pivot_root": 41, "open_tree": 428, "move_mount": 429, "fsopen": 430,
+                "fsconfig": 431, "fsmount": 432, "fspick": 433, "mount_setattr": 442, "keyctl": 219, "add_key": 217, "request_key": 218,
+                "bpf": 280, "perf_event_open": 241, "userfaultfd": 282, "io_uring_setup": 425, "io_uring_enter": 426,
+                "io_uring_register": 427, "open_by_handle_at": 265, "clone3": 435, "clone": 220, "ioctl": 29},
+}
+# (a 32-bit Windows program is an i386 program to the kernel, with its own numbers: both tables on x86_64)
+WIN_ARCHS = {"x86_64": ((0xc000003e, "x86_64"), (0x40000003, "i386")), "aarch64": ((0xc00000b7, "aarch64"),)}
+CLONE_NAMESPACES = 0x7e020000       # CLONE_NEWNS, NEWCGROUP, NEWUTS, NEWIPC, NEWUSER, NEWPID, NEWNET
+TIOCSTI, TIOCLINUX = 0x5412, 0x541c  # typing into a terminal, and the console's own paste
+
+
+def win_filter(machine=None):
+    """the filter as the kernel takes it (classic BPF, 8 bytes an instruction); None for a machine whose numbers
+    are not written here. What it says: a call of another architecture than this machine's: EPERM; a call in
+    WIN_REFUSED: EPERM (clone3: ENOSYS); clone with a namespace flag: EPERM; ioctl TIOCSTI or TIOCLINUX: EPERM;
+    anything else: allowed"""
+    import struct
+    archs = WIN_ARCHS.get(machine or os.uname().machine)
+    if not archs:
+        return None
+    allow, eperm, enosys = 0x7fff0000, 0x00050000 | errno.EPERM, 0x00050000 | errno.ENOSYS
+    ld, jeq, jset, jge, ret = 0x20, 0x15, 0x45, 0x35, 0x06
+
+    def ins(code, k, jt=0, jf=0):
+        return struct.pack("<HBBI", code, jt, jf, k)
+
+    blocks = []
+    for arch, table in archs:
+        calls = WIN_CALLS[table]
+        b = [ins(ld, 0)]                                           # the call's number
+        if table == "x86_64":
+            b += [ins(jge, 0x40000000, 0, 1), ins(ret, enosys)]    # (the x32 numbers: a third table nobody uses)
+        for name in WIN_REFUSED:
+            if name in calls:
+                b += [ins(jeq, calls[name], 0, 1), ins(ret, enosys if name == "clone3" else eperm)]
+        b += [ins(jeq, calls["clone"], 0, 4), ins(ld, 16), ins(jset, CLONE_NAMESPACES, 0, 1), ins(ret, eperm), ins(ret, allow),
+              ins(jeq, calls["ioctl"], 0, 4), ins(ld, 24), ins(jeq, TIOCSTI, 1, 0), ins(jeq, TIOCLINUX, 0, 1), ins(ret, eperm),
+              ins(ret, allow)]
+        blocks.append((arch, b))
+    out = [ins(ld, 4)]                                              # the architecture of the call
+    for i, (arch, b) in enumerate(blocks):
+        # to its block: over the tests of the architectures after it, the "no" below and the blocks before it
+        out.append(ins(jeq, arch, len(blocks) - 1 - i + 1 + sum(len(x[1]) for x in blocks[:i]), 0))
+    out.append(ins(ret, eperm))
+    for _arch, b in blocks:
+        out += b
+    return b"".join(out)
+
+
+def win_filter_file(rt):
+    """the filter as a file of the prefix's runtime folder (bwrap reads it from a descriptor: --seccomp); None
+    when this machine has none"""
+    f = win_filter()
+    if f is None:
+        return None
+    path = os.path.join(rt, "seccomp.bpf")
+    if read_bytes(path) != f:
+        win_private_write_bytes(path, f)
+    return path
+
+
+def read_bytes(path):
+    try:
+        with open(path, "rb") as fh:
+            return fh.read()
+    except OSError:
+        return None
+
+
+def win_private_write_bytes(path, data):
+    tmp = "%s.%d.tmp" % (path, os.getpid())
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(data)
+    os.replace(tmp, path)
+
+
+def win_confine():
+    """what every program entering a sandbox calls before it starts (after the fork, before nsenter): win_no_keys,
+    then no new privileges and the filter (prctl PR_SET_NO_NEW_PRIVS, PR_SET_SECCOMP). A filter stays for the
+    program and everything it starts. When the kernel does not take it the program does not start (exit 126):
+    a box without the filter is not the box that was promised. None where nothing can be called (no ctypes)"""
+    keys, f = win_no_keys(), win_filter()
+    if f is None:
+        return keys
+    try:
+        import ctypes
+
+        class Prog(ctypes.Structure):
+            _fields_ = [("len", ctypes.c_ushort), ("filter", ctypes.c_void_p)]
+
+        buf = ctypes.create_string_buffer(f, len(f))
+        prog = Prog(len(f) // 8, ctypes.cast(buf, ctypes.c_void_p))
+        prctl = ctypes.CDLL(None, use_errno=True).prctl
+    except (OSError, AttributeError):
+        return keys
+    one, zero = ctypes.c_ulong(1), ctypes.c_ulong(0)
+
+    def confine():
+        if keys:
+            keys()
+        if prctl(38, one, zero, zero, zero) != 0 or prctl(22, ctypes.c_ulong(2), ctypes.byref(prog), zero, zero) != 0:
+            os.write(2, b"silik: the kernel did not take the sandbox's system-call filter (seccomp): the program is not started\n")
+            os._exit(126)
+    confine.keep = (buf, prog)      # (the filter's bytes live as long as the function)
+    return confine
+
+
+def _isatty(fd):
+    try:
+        return os.isatty(fd)
+    except OSError:
+        return False
+
+
+def win_relay(argv, console=False, preexec=None):
+    """runs a command of an isolated sandbox without handing it this command's terminal; returns its exit code.
+    A terminal given to a program stays in its hands when the command has ended: a helper that an isolated program
+    left behind turned the terminal's echo on, wrote to it, and read the password typed at the next prompt (seen,
+    14/11/2026). So where one of this command's three streams is a terminal the program gets a pipe, and this
+    command copies: its output to the terminal, and what is typed to a console program (`console`); a windowed one
+    reads nothing (/dev/null). The pipes end with this command. A stream that is not a terminal (a file, a pipe:
+    `> out.txt`) is passed as it is: the owner named it."""
+    import select
+    tty = [_isatty(fd) for fd in (0, 1, 2)]
+    if not any(tty):
+        return subprocess.run(argv, check=False, preexec_fn=preexec).returncode
+    p = subprocess.Popen(argv, preexec_fn=preexec, stdin=(subprocess.PIPE if console else subprocess.DEVNULL) if tty[0] else None,
+                         stdout=subprocess.PIPE if tty[1] else None, stderr=subprocess.PIPE if tty[2] else None)
+    out = {}
+    if tty[1]:
+        out[p.stdout.fileno()] = 1
+    if tty[2]:
+        out[p.stderr.fileno()] = 2
+    inp = p.stdin.fileno() if tty[0] and console else None
+    if inp is not None:
+        os.set_blocking(inp, False)
+    pending, end = b"", None
+
+    def no_input():
+        try:
+            p.stdin.close()
+        except OSError:
+            pass
+
+    try:
+        while True:
+            done = p.poll() is not None
+            if done and end is None:
+                end = time.time() + 0.5     # what the program wrote before it ended; not what a helper writes after
+            r, w, _ = select.select(list(out) + ([0] if inp is not None and not pending else []),
+                                    [inp] if inp is not None and pending else [], [], 0 if done else 0.1)
+            for fd in r:
+                if fd in out:
+                    b = os.read(fd, 65536)
+                    if not b:
+                        del out[fd]
+                        continue
+                    to = out[fd]
+                    while b:
+                        b = b[os.write(to, b):]
+                else:
+                    pending = os.read(0, 65536)
+                    if not pending:         # the end of what is typed (Ctrl+D)
+                        no_input()
+                        inp = None
+            if w:
+                try:
+                    pending = pending[os.write(inp, pending):]
+                except BlockingIOError:
+                    pass
+                except OSError:             # the program closed its input
+                    no_input()
+                    inp, pending = None, b""
+            if done and (not r or time.time() > end):
+                break
+    finally:
+        if p.poll() is None:
+            p.kill()
+            p.wait()
+        for f in (p.stdin, p.stdout, p.stderr):
+            try:
+                if f is not None:
+                    f.close()
+            except OSError:
+                pass
+    return p.returncode
 
 
 # -- an isolated sandbox's own display
@@ -1191,13 +1445,35 @@ def win_xephyr(name, rt, displayfd):
             "-title", WIN_TITLE[win_lang()] % name, "-name", "silik-win-isolated"]
 
 
-def win_pasta(pid):
+def win_route_out(ctx):
+    """the interfaces this machine's default routes leave by: (IPv4's, IPv6's), '' where there is none or `ip`
+    does not say"""
+    out = []
+    for fam in ("-4", "-6"):
+        dev = ""
+        try:
+            for r in json.loads(ctx.query(["ip", "-j", fam, "route", "show", "default"]) or "[]"):
+                d = r.get("dev") or ""
+                if d and all(c.isalnum() or c in "-_.:@" for c in d) and len(d) < 16:
+                    dev = dev or d
+        except (ValueError, TypeError, AttributeError):
+            pass
+        out.append(dev)
+    return tuple(out)
+
+
+def win_pasta(pid, out=("", "")):
     """the network of an isolated sandbox: pasta (the package passt) joins the sandbox's network namespace and
     carries its connections out as this user's own. No port of the sandbox is opened to this machine (-t/-u none),
     none of this machine's loopback ports is reachable from inside (-T/-U none), and the gateway's address is not
-    this machine (--no-map-gw): what listens on localhost here is not there. pasta leaves when the namespace goes."""
-    return [pasta_bin() or "pasta", "--quiet", "--config-net", "-t", "none", "-u", "none", "-T", "none", "-U", "none", "--no-map-gw",
-            "--userns", "/proc/%s/ns/user" % pid, "--netns", "/proc/%s/ns/net" % pid]
+    this machine (--no-map-gw): what listens on localhost here is not there. pasta leaves when the namespace goes.
+    `out` (win_route_out): its connections leave by the interface of the default route and by no other
+    (--outbound-if4/6). Without that a connection to another address of this machine (a bridge of virtual machines
+    or containers, a second network) was delivered here: a server listening on every address answered the box, and
+    so would a virtual machine behind the bridge (seen, 14/11/2026)."""
+    return [pasta_bin() or "pasta", "--quiet", "--config-net", "-t", "none", "-u", "none", "-T", "none", "-U", "none", "--no-map-gw"] + \
+           (["--outbound-if4", out[0]] if out[0] else []) + (["--outbound-if6", out[1]] if out[1] else []) + \
+           ["--userns", "/proc/%s/ns/user" % pid, "--netns", "/proc/%s/ns/net" % pid]
 
 
 def win_display_alive(n):
@@ -1214,7 +1490,7 @@ def win_display_alive(n):
         s.close()
 
 
-def win_isolated_start(ctx, name, d, rt, show, net, fd, iso, tail, logf):
+def win_isolated_start(ctx, name, d, rt, show, net, fd, iso, tail, logf, filt=None):
     """starts an isolated sandbox: its X server, then bwrap, both children of ONE small process that stays (a
     child of this command, named silik-win-box) and does nothing but wait for the first of the two to end, and then
     end the other: the window closed by the owner ends every program of the box at once, with or without a window
@@ -1261,8 +1537,12 @@ def win_isolated_start(ctx, name, d, rt, show, net, fd, iso, tail, logf):
                     raise OSError("the X server (Xephyr) did not start")
                 time.sleep(0.02)
                 n = read(disp)
-            b = subprocess.Popen(win_sandbox(name, d, show, net, info_fd=fd, iso=dict(iso, display=n.strip())) + tail(n.strip()), pass_fds=(fd,))
+            ffd = os.open(filt, os.O_RDONLY) if filt else None
+            b = subprocess.Popen(win_sandbox(name, d, show, net, info_fd=fd, iso=dict(iso, display=n.strip()), filter_fd=ffd) + tail(n.strip()),
+                                 pass_fds=(fd,) if ffd is None else (fd, ffd))
             os.close(fd)
+            if ffd is not None:
+                os.close(ffd)
             gone = 0
             while gone not in (x.pid, b.pid):
                 gone = os.wait()[0]
@@ -1389,9 +1669,10 @@ def win_session(ctx, name, d, show=(), net=True, iso=False, sound=False):
         if iso:
             win_echo(ctx, win_xephyr(name, rt, 3), "3>%s &" % shlex.quote(os.path.join(rt, "display")))
             win_xkb_set(ctx, iso)
-        win_echo(ctx, win_sandbox(name, d, show, net, info_fd=3, iso=iso) + tail(), "3>%s &" % shlex.quote(info))
+        win_echo(ctx, win_sandbox(name, d, show, net, info_fd=3, iso=iso, filter_fd=4 if win_filter() else None) + tail(),
+                 "3>%s%s &" % (shlex.quote(info), " 4<%s" % shlex.quote(os.path.join(rt, "seccomp.bpf")) if win_filter() else ""))
         if iso and net:
-            ctx.echo(win_pasta("PID"))
+            ctx.echo(win_pasta("PID", win_route_out(ctx)))
         return {"pid": 0, "ns": "", "show": show, "net": net, "iso": iso}
     win_runtime_make(rt)
     with open(os.path.join(rt, "lock"), "w") as lock:
@@ -1404,11 +1685,13 @@ def win_session(ctx, name, d, show=(), net=True, iso=False, sound=False):
             os.mkdir(os.path.join(rt, sub), 0o700)
         fd = os.open(info, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         logf = os.path.join(rt, "session.log")
+        filt = win_filter_file(rt)
+        ffd = os.open(filt, os.O_RDONLY) if filt else None
         if iso:
-            box, n = win_isolated_start(ctx, name, d, rt, show, net, fd, iso, tail, logf)
+            box, n = win_isolated_start(ctx, name, d, rt, show, net, fd, iso, tail, logf, filt)
             iso = dict(iso, display=n)
             win_xkb_set(ctx, iso)
-            argv = win_sandbox(name, d, show, net, info_fd=fd, iso=iso) + tail(n)
+            argv = win_sandbox(name, d, show, net, info_fd=fd, iso=iso, filter_fd=ffd) + tail(n)
 
             def ended():
                 try:
@@ -1416,17 +1699,19 @@ def win_session(ctx, name, d, show=(), net=True, iso=False, sound=False):
                 except ChildProcessError:
                     return True
         else:
-            argv = win_sandbox(name, d, show, net, info_fd=fd) + tail()
-        win_echo(ctx, argv, "%d>%s &" % (fd, shlex.quote(info)))
+            argv = win_sandbox(name, d, show, net, info_fd=fd, filter_fd=ffd) + tail()
+        win_echo(ctx, argv, "%d>%s%s &" % (fd, shlex.quote(info), " %d<%s" % (ffd, shlex.quote(filt)) if filt else ""))
         ctx.note(win_short(argv))
         if not iso:
             with open(logf, "wb") as log:
-                p = subprocess.Popen(argv, pass_fds=(fd,), stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True,
-                                     preexec_fn=win_no_keys())
+                p = subprocess.Popen(argv, pass_fds=(fd,) if ffd is None else (fd, ffd), stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                                     start_new_session=True, preexec_fn=win_no_keys())
 
             def ended():
                 return p.poll() is not None
         os.close(fd)
+        if ffd is not None:
+            os.close(ffd)
         t0, pid = time.time(), 0
         while not (pid and win_server_socket(rt)):
             if ended() or time.time() - t0 > 30:
@@ -1438,7 +1723,7 @@ def win_session(ctx, name, d, show=(), net=True, iso=False, sound=False):
                 pid = 0
         if iso and net:
             # (pasta puts itself in the background once the network is there, and leaves with the namespace)
-            rc, _ = ctx.run(win_pasta(pid), check=False)
+            rc, _ = ctx.run(win_pasta(pid, win_route_out(ctx)), check=False)
             if rc:
                 print("silik: pasta exited %d: the programs of prefix %s have no network" % (rc, name), file=sys.stderr)
         s = {"pid": pid, "ns": os.readlink("/proc/%d/ns/pid" % pid), "show": show, "net": net}
@@ -1449,7 +1734,7 @@ def win_session(ctx, name, d, show=(), net=True, iso=False, sound=False):
         return s
 
 
-def win_enter(ctx, d, s, cmd, cwd=None, display=True):
+def win_enter(ctx, d, s, cmd, cwd=None, display=True, console=False):
     """runs a Wine command inside the prefix's running sandbox `s`: nsenter into its namespaces, then no new
     privileges, death with this command, a session of its own (no hold on the terminal) and a clean environment"""
     pid = s.get("pid")
@@ -1461,7 +1746,7 @@ def win_enter(ctx, d, s, cmd, cwd=None, display=True):
         print("silik: %s" % e, file=sys.stderr)
         return 126
     cwd = cwd or os.getcwd()
-    seen = [d, win_shared(), "/usr", "/etc"] + [p for p in s.get("show", ()) if os.path.isdir(p)]
+    seen = [d, win_shared(os.path.basename(d) if s.get("iso") else None), "/usr", "/etc"] + [p for p in s.get("show", ()) if os.path.isdir(p)]
     cwd = cwd if any(_under(cwd, t) for t in seen) else os.path.join(d, "home")
     # env -i first: what enters the sandbox carries none of this command's environment, not even for a moment
     argv = ["env", "-i", "nsenter", "--preserve-credentials", "-t", str(pid or "PID")] + flags + \
@@ -1472,7 +1757,8 @@ def win_enter(ctx, d, s, cmd, cwd=None, display=True):
         return 0
     ctx.note(win_short(argv))
     try:
-        rc = subprocess.run(argv, check=False, preexec_fn=win_no_keys()).returncode
+        # (an isolated program is not given this command's terminal: win_relay; `console`: it reads what is typed)
+        rc = win_relay(argv, console, win_confine()) if s.get("iso") else subprocess.run(argv, check=False, preexec_fn=win_confine()).returncode
     except OSError as e:
         print("silik: %s" % e, file=sys.stderr)
         return 126
@@ -1504,9 +1790,35 @@ def win_desktop(cmd):
     return cmd[:1] + ["explorer", "/desktop=silik,%s" % win_screen()] + cmd[1:] if cmd[:1] == ["wine"] and cmd[1:2] != ["explorer"] else cmd
 
 
+def win_apart_check(ctx, a, name):
+    """ends the command when the programs of prefix `name` are isolated ones (win_apart) and what was asked would
+    run them, or let them reach, outside an isolated sandbox. Three ways that happened (seen, 14/11/2026):
+    - no bwrap found (a PATH without it): the "isolated" program ran with no sandbox at all, after one line on
+      the standard error that a double-click never shows; --no-sandbox on a marked prefix did the same on request;
+    - an existing prefix that is not marked (`silik win install work setup.exe`, the question answered "isolated"):
+      the program ran isolated once, in a prefix whose other programs run on the session's display, and replaced
+      one of them; the next start of that one ran its code there. The programs of a prefix are not protected from
+      each other, so an isolated run is for a prefix of isolated programs only"""
+    if not win_apart(a, name):
+        return
+    d = prefix_dir(name)
+    if os.path.isdir(d) and name not in win_marked():
+        win_die(ctx, "prefix %s is not one of isolated programs: its programs use this session's display, and a program run isolated in it "
+                "could change them, so nothing was run. Either `silik win isolate %s` (every program of %s then runs isolated), or "
+                "another prefix (--prefix NEW, or none: the prefix \"%s\"), or the normal box if you trust this file (--yes)" % (name, name, name, WIN_ISOLATED), 69)
+    if ctx.dry:
+        return
+    if getattr(a, "no_sandbox", False):
+        win_die(ctx, "prefix %s is one of isolated programs: --no-sandbox would give them this user's whole account. "
+                "`silik win isolate --off %s` first, if that is what you mean" % (name, name), 69)
+    if win_cannot_isolate():
+        win_die(ctx, "prefix %s runs isolated, and it cannot here: %s" % (name, win_cannot_isolate()), 69)
+
+
 def win_exec(ctx, name, d, cmd, a=None, show=(), cwd=None, arch=None, window=True):
     """runs a Wine command of prefix `name` (in its sandbox when bwrap is there) and returns its exit code.
     `window`: False for a console program typed in a terminal (it is not put on Wine's desktop when isolated)"""
+    win_apart_check(ctx, a, name)       # (again here: nothing of an isolated prefix runs without passing it)
     if window and win_iso(a, name):
         cmd = win_desktop(list(cmd))
     tail = wine_argv(d, cmd, arch)
@@ -1555,13 +1867,13 @@ def win_exec(ctx, name, d, cmd, a=None, show=(), cwd=None, arch=None, window=Tru
                        "without sound" if iso and sound and not s["iso"].get("sound") else \
                        "not showing " + " ".join(p for p in show if not any(_under(p, q) for q in s["show"]))
                 win_die(ctx, "the programs of prefix %s are running in a sandbox %s, and a running sandbox is not changed: close them "
-                        "(or `silik win stop %s`) and run this again, or put the file in %s" % (name, what, name, win_shared()), 75)
+                        "(or `silik win stop %s`) and run this again, or put the file in %s" % (name, what, name, win_shared(name if iso else None)), 75)
         if not s and not ctx.dry and win_outside(d):
             win_die(ctx, "prefix %s is in use by a Wine started outside the sandbox: close its programs (`silik win stop %s`) first" % (name, name))
         fresh = not s
         s = s or win_session(ctx, name, d, show, net, iso, sound)
         t0 = time.time()
-        rc = win_enter(ctx, d, s, tail, cwd)
+        rc = win_enter(ctx, d, s, tail, cwd, console=not window)
         # the sandbox can end while this program was entering it (the same 3 s): the program then failed or was
         # killed at once, and is started again in a new one. (An isolated sandbox also ends when its window is
         # closed, and a closed window is not opened again: not one this command started itself, and one that was
@@ -1586,7 +1898,7 @@ def win_need_wine(ctx):
 
 def win_prepare(ctx, name, a=None, create=False, arch="win64"):
     """before a program runs: the prefix (made on first use when `create`), its home, the shared folder, drive W:"""
-    d, shared = prefix_dir(name), win_shared()
+    d, shared = prefix_dir(name), win_shared_of(a, name)
     new = not os.path.isdir(d)
     win_need_wine(ctx)
     if new and not create:
@@ -1690,8 +2002,9 @@ def win_isolate(ctx, a):
         die("the programs of prefix %s are running: close them (`silik win stop %s`) first" % (a.prefix, a.prefix), 75)
     win_mark(ctx, a.prefix, not a.off)
     if not ctx.dry:
+        win_sync_all(ctx)           # (its programs' names in the applications list say so)
         print("prefix %s: %s" % (a.prefix, "its programs run on this session's display again: they can read its keyboard, screen and clipboard" if a.off
-                                 else "its programs run isolated from now on (a display of their own)"))
+                                 else "its programs run isolated from now on (a display of their own; their shared folder, drive W:, is %s)" % win_shared(a.prefix)))
     return 0
 
 
@@ -1699,12 +2012,19 @@ def win_run(ctx, a):
     d = prefix_dir(a.prefix)
     if not a.cmd:
         die("silik win run [--isolated] [--no-net] [--no-sandbox] PREFIX -- PROGRAM.exe [ARGS]", 2)
-    win_prepare(ctx, a.prefix, a)
+    win_need_wine(ctx)
+    if not os.path.isdir(d) and not ctx.dry:
+        die("no prefix %s; `silik win create %s`" % (a.prefix, a.prefix))
     cmd, show = list(a.cmd), []
     if os.path.isabs(cmd[0]) and os.path.isfile(cmd[0]):      # a file of this system: what `open` does for it
-        cmd[0] = os.path.realpath(cmd[0])
+        cmd[0] = win_real(ctx, cmd[0])
+        if win_from_isolated(cmd[0]):                           # a file of an isolated prefix runs isolated
+            a.isolated = True
         if not _under(cmd[0], "/usr"):                          # (the system's own programs are not asked about)
             win_gate(ctx, a, cmd[0], a.prefix)
+    win_apart_check(ctx, a, a.prefix)
+    win_prepare(ctx, a.prefix, a)
+    if os.path.isabs(cmd[0]) and os.path.isfile(cmd[0]):
         show = win_show(cmd[0], d, win_iso(a, a.prefix))
     # a console program typed in a terminal keeps the terminal (its output, its exit code)
     prog = cmd[0] if os.path.isabs(cmd[0]) else win_unix(d, cmd[0])
@@ -1958,19 +2278,23 @@ def win_open(ctx, a):
     """what a double-click on a Windows file runs. Installers and portable programs are not told apart: both run in
     the prefix (the one named, or "default", made on first use); an installer installs into it. Without a terminal
     (a double-click) a console program or a batch file gets Wine's console window, as it gets one on Windows."""
-    f = os.path.realpath(a.file)
+    f = win_real(ctx, a.file)
     ext = os.path.splitext(f)[1].lower()
     if ext not in WIN_EXT:
         win_die(ctx, "%s: not a Windows program (%s)" % (a.file, " ".join(WIN_EXT)), 2)
     if not os.path.isfile(f) and not ctx.dry:
         win_die(ctx, "no such file: " + a.file)
     win_need_wine(ctx)                      # (no question about a program that cannot run here at all)
+    theirs = win_from_isolated(f)
+    if theirs:                              # a file of an isolated prefix runs isolated, there: no answer changes that
+        a.isolated, a.prefix = True, a.prefix or theirs
     win_gate(ctx, a, f, a.prefix or WIN_DEFAULT)
     # an isolated program never goes into "default", where the trusted ones are: the prefix "isolated" is for those
     name = a.prefix or (WIN_ISOLATED if getattr(a, "isolated", False) and win_boxed(a) else WIN_DEFAULT)
     if getattr(a, "isolated", False) and win_boxed(a) and (name == WIN_ISOLATED or not os.path.isdir(prefix_dir(name))):
         win_mark(ctx, name)                 # a prefix made isolated stays so (the prefix "isolated" always is)
-    d, shared = win_prepare(ctx, name, a, create=True), win_shared()
+    win_apart_check(ctx, a, name)
+    d, shared = win_prepare(ctx, name, a, create=True), win_shared_of(a, name)
     show = win_show(f, d, win_iso(a, name)) if win_boxed(a) else []
     if show:
         print("silik: %s is shown to the program, read-only (the file is outside %s)" % (show[0], shared), file=sys.stderr)
@@ -1995,6 +2319,9 @@ def win_install(ctx, a):
     return win_open(ctx, a)
 
 
+WIN_STOP_WAIT = 10      # seconds `silik win stop` gives the wineserver to end its programs before the box is ended
+
+
 def win_stop(ctx, a):
     """ends every program of the prefix (wineserver -k), in the sandbox when that is where they run"""
     d = prefix_dir(a.prefix)
@@ -2003,10 +2330,25 @@ def win_stop(ctx, a):
     s = win_session_info(a.prefix)
     tail = wine_argv(d, ["wineserver", "-k"])
     if s:
-        win_enter(ctx, d, s, tail, display=False)
+        # (timeout: `wineserver -k` waits for the server to go, and a program of the box can keep it from going)
+        win_enter(ctx, d, s, wine_argv(d, ["timeout", "--signal=KILL", "10", "wineserver", "-k"]), display=False)
         t0 = time.time()
-        while not ctx.dry and win_session_info(a.prefix) and time.time() - t0 < 10:
+        while not ctx.dry and win_session_info(a.prefix) and time.time() - t0 < WIN_STOP_WAIT:
             time.sleep(0.1)
+        # Asking was not enough when a program of the box stopped its wineserver (kill -STOP: it is alive and never
+        # answers): `silik win stop` then returned 0 with every program still running (seen, 14/11/2026). The box's
+        # first process is the first of its process namespace: the kernel ends every process of the box with it
+        left = {} if ctx.dry else win_session_info(a.prefix)
+        if left:
+            ctx.echo(["kill", "-KILL", str(left["pid"])])
+            try:
+                os.kill(left["pid"], signal.SIGKILL)
+            except OSError:
+                pass
+            t0 = time.time()
+            while os.path.exists("/proc/%d" % left["pid"]) and read("/proc/%d/stat" % left["pid"]).rpartition(")")[2].split()[:1] != ["Z"] \
+                    and time.time() - t0 < 5:
+                time.sleep(0.05)
     else:
         ctx.run(tail, check=False)
     win_reap(ctx, a.prefix)
@@ -2271,7 +2613,7 @@ def win_menu(name):
     """the start-menu entries Wine's winemenubuilder wrote for prefix `name` -> [(slug, entry, icon files)]"""
     d = prefix_dir(name)
     top = os.path.join(d, "home", ".local", "share")
-    out, used = [], set()
+    out, used, marked = [], set(), win_marked()
     for dp, dn, fns in os.walk(os.path.join(top, "applications", "wine")):
         dn.sort()
         for fn in sorted(fns):
@@ -2298,10 +2640,19 @@ def win_menu(name):
                 slug, n = "%s-%d" % (base, n), n + 1
             used.add(slug)
             icons = win_icons(top, e.get("Icon", "\0"))
-            new = {"Type": "Application", "Name": e.get("Name") or fn[:-8],
+            # (the icons are the prefix's own: a folder on the way that is a link out of the prefix would make this
+            # command copy a file of the home into the icon theme)
+            if icons and not _under(os.path.realpath(os.path.join(top, "icons", "hicolor")), os.path.realpath(d)):
+                icons = []
+            # a program chooses its own name and icon; an isolated one must not pass for another application of
+            # this desktop (seen: an entry named Firefox with its icon), so its name says what it is
+            tag = {"": " (isolated)", "[ca]": " (aïllat)", "[es]": " (aislado)"} if name in marked else {"": ""}
+            new = {"Type": "Application", "Name": (e.get("Name") or fn[:-8]) + tag[""],
                    "Exec": exec_line(["silik", "win", "run", name, "--"] + run),
                    "Icon": "silik-win-%s-%s" % (name, e["Icon"]) if icons else WIN_ICON,
                    "X-SilikOS-Prefix": name}
+            for lang in sorted(tag)[1:]:
+                new["Name" + lang] = (e.get("Name") or fn[:-8]) + tag[lang]
             for k in ("Comment", "Path", "StartupNotify", "StartupWMClass", "Categories"):
                 # a window class that is not a Windows program's would let the entry claim another application's windows
                 if e.get(k) and (k != "StartupWMClass" or e[k].lower().endswith(".exe")):
@@ -2346,7 +2697,9 @@ def win_sync_all(ctx, say=False):
             try:
                 if not os.path.exists(dst) or os.path.getsize(dst) != os.path.getsize(src) or os.path.getmtime(dst) < os.path.getmtime(src):
                     os.makedirs(os.path.dirname(dst), exist_ok=True)
-                    shutil.copyfile(src, dst)
+                    # (not through a link put there after the look: the file comes from inside a prefix)
+                    with os.fdopen(os.open(src, os.O_RDONLY | os.O_NOFOLLOW), "rb") as fi, open(dst, "wb") as fo:
+                        shutil.copyfileobj(fi, fo)
                     changed += 1
             except OSError:
                 pass

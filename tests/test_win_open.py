@@ -97,7 +97,8 @@ class Open(Case):
         self.assertIn("$ ln -sfn %s %s/dosdevices/w:" % (self.shared, d), l)       # the shared folder is drive W:
         box = [x for x in l if " /usr/bin/bwrap " in x]
         self.assertTrue(box and all(x.startswith("$ env -i /usr/bin/bwrap --unshare-user --unshare-pid --unshare-ipc") for x in box))
-        self.assertTrue(box[0].endswith("WINEPREFIX=%s wineserver --foreground 3>%s/silik-win/default/session.json &" % (d, self.rt)))
+        self.assertIn("WINEPREFIX=%s wineserver --foreground 3>%s/silik-win/default/session.json" % (d, self.rt), box[0])
+        self.assertTrue(box[0].endswith(" &"))
         self.assertTrue(any(x.endswith("WINEARCH=win64 WINEPREFIX=%s wineboot --init" % d) for x in l))
         # no Mono or Gecko on the system: the set-up leaves their libraries out, so that Wine asks nothing
         self.assertTrue(any(" WINEDLLOVERRIDES=mscoree,mshtml= WINEARCH=win64 " in x and x.endswith("wineboot --init") for x in l))
