@@ -1,0 +1,42 @@
+# The checks the SilikOS 10 lab installation test (el10/lab/run.sh, workflow el10.yml) must say with a verdict
+# (ok or FAIL), one name a line. A check that is skipped, swallowed by the shell or lost on the way is then a FAIL
+# of the report, not a row that is simply not there (as tests/install/must-install.txt for the EL 9 product).
+base.release
+base.kernel
+name.pretty
+name.id
+name.base-fields
+name.boot-entries
+package.silik-tools
+package.silik-command
+package.silikos-branding
+package.silikos-desktop
+package.silikos-security
+package.silikos-power
+package.silik-eda-compat
+package.silik-eda-open
+package.silik-dev
+package.none-of-el9
+layout.root-thin
+target.default
+target.graphical
+gdm.active
+gdm.wayland
+session.wayland
+session.shell
+shell.metadata
+shell.enabled
+shell.active
+shell.no-js-error
+silik.status-system
+silik.status-base
+silik.look
+terminal.runs
+theme.gtk
+theme.gtk-setting
+security.selinux
+security.firewalld
+security.zone
+security.sshd
+security.nullok
+units.failed

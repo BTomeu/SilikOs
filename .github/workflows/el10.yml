@@ -1,0 +1,128 @@
+# SilikOS 10 lab (docs/EL10.md): the EL 10 track, on its own branch. SilikOS 9 is the product and its CI is ci.yml;
+# nothing here builds, tests or publishes the product. What this does:
+#   packages  the lab's packages built inside EL 10 (el10/build_rpms.sh: the product's, with what EL 10 forces), the
+#             whole set of the lab's kickstart resolved against AlmaLinux 10 and EPEL (el10/lab_resolve.sh)
+#   shell     the port of the shell extension in a headless GNOME Shell 49 of AlmaLinux 10, the three looks
+#             (el10/shell_check.sh)
+#   install   the lab ISO made from AlmaLinux 10's boot ISO (el10/build_iso.sh), installed unattended in a virtual
+#             machine (KVM), the installed system started, its checks said on the serial port and its screen saved
+#             (el10/lab/run.sh)
+# No job writes anything to the repository, a release or a package repository.
+name: EL 10 lab
+on:
+  push:
+    branches: [el10-lab]
+  workflow_dispatch:
+concurrency:
+  group: el10-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  packages:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with: { persist-credentials: false }
+      - name: The tests of the track
+        run: python3 -m unittest -v tests.test_el10 tests.test_el10_lab
+      - name: Packages (built in an EL 10 container), and the lab's whole set resolved against the base's repositories
+        run: |
+          bash el10/box.sh -- bash -c '
+            set -e
+            dnf -y -q install rpm-build createrepo_c cpio > /dev/null
+            bash el10/build_rpms.sh
+            bash el10/lab_resolve.sh'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: silikos10-lab-packages
+          path: build/el10/repo/*.rpm
+
+  shell:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with: { persist-credentials: false }
+      - name: The image with GNOME Shell 49 (AlmaLinux 10)
+        run: bash el10/shell_image.sh
+      - name: The ported extension in a headless GNOME Shell 49, the three looks
+        run: SILIK_SHELL_RUN=1 bash el10/shell_check.sh
+      - name: The pictures, small, in the log
+        if: always()
+        run: |
+          bash tools/ci_apt.sh imagemagick || exit 0
+          for p in build/el10/out/shell-island.png build/el10/out/shell-island-start.png build/el10/out/shell-silik.png build/el10/out/shell-bar-command.png; do
+            [ -s "$p" ] || continue
+            echo "-----PIC $(basename "$p" .png) BEGIN-----"
+            convert "$p" -resize 800x -quality 55 jpg:- | base64 -w 120
+            echo "-----PIC $(basename "$p" .png) END-----"
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        if: always()
+        with:
+          name: el10-shell
+          if-no-files-found: ignore
+          path: |
+            build/el10/out/*.png
+            build/el10/out/*.log
+
+  install:
+    needs: packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 170
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with: { persist-credentials: false }
+      - name: KVM for the runner's user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+      - name: Tools and disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          bash tools/ci_apt.sh rpm createrepo-c xorriso mtools cpio isomd5sum qemu-system-x86 qemu-utils imagemagick
+          df -h /
+      # the lab's packages as the packages job built them (in EL 10, with the base's rpmbuild): the ISO carries those
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with: { name: silikos10-lab-packages, path: build/el10/repo }
+      - name: The lab ISO
+        run: |
+          createrepo_c --quiet build/el10/repo && ls build/el10/repo
+          bash el10/build_iso.sh
+      - name: Install the ISO in a virtual machine, boot the installed system, check it
+        env:
+          SILIK_LAB_PICS: 1
+        run: bash el10/lab/run.sh build/el10/SilikOS-*-lab-*-netinstall.iso build/el10/lab-test
+      - name: The report
+        if: always()
+        run: |
+          {
+            echo '### SilikOS 10 lab installed and booted'
+            echo '```'
+            cat build/el10/lab-test/report.txt 2>/dev/null || echo 'no report: see the installer console (artifact el10-lab-test)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        if: always()
+        with:
+          name: el10-lab-test
+          if-no-files-found: ignore
+          path: |
+            build/el10/lab-test/*.log
+            build/el10/lab-test/*.txt
+            build/el10/lab-test/*.png
+            build/el10/lab-test/ci.ks
+      # The lab ISO this job has just installed and checked, to download (Actions, this run, Artifacts). A lab
+      # system, not the product: docs/EL10.md says what of it has run and what has not.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        if: always()
+        with:
+          name: silikos10-lab-iso
+          if-no-files-found: ignore
+          path: build/el10/SilikOS-*-lab-*-netinstall.iso
+          compression-level: 0
+          retention-days: 14
