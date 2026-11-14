@@ -22,10 +22,14 @@ Si el portàtil és molt nou, mira abans `docs/DRIVERS.md`: diu quin Wi-Fi, quin
 
 ## 1. La ISO
 
-Encara no hi ha cap ISO per baixar amb un enllaç fix. Dues maneres:
+Encara no hi ha cap ISO per baixar amb un enllaç fix. Tres maneres:
 
-- **Del CI**: a GitHub, Actions → CI → l'última execució en verd → Artifacts → `silikos-iso` (cal tenir sessió
-  iniciada a GitHub; els artefactes caduquen al cap de 90 dies).
+- **Del CI, la ISO de xarxa (2 GB)**: a GitHub, Actions → CI → l'última execució **en verd** de `main` → Artifacts
+  → `silikos-iso` (cal tenir sessió iniciada a GitHub; baixa un `.zip` amb la ISO a dins; es guarda 14 dies).
+  És la ISO que aquella mateixa execució ha instal·lat i comprovat. Fins al 14/11/2026 aquest artefacte només es
+  desava amb una etiqueta de versió, i no n'hi ha cap: aquesta guia enviava a un artefacte que no existia.
+- **Del CI, la ISO sense xarxa (4,6 GB)**: Actions → Offline ISO → Run workflow; quan acaba en verd, Artifacts →
+  `silikos-offline-iso`. Porta tots els paquets: la instal·lació no baixa res (`docs/OFFLINE.md`). Cal un USB de 8 GB.
 - **Fer-la**: en qualsevol Linux amb `xorriso`, `mtools`, `cpio`, `curl` i `gpg`: `bash tools/build_iso.sh`
   (`docs/BUILD.md`).
 

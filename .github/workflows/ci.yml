@@ -199,12 +199,16 @@ jobs:
             build/install-test/*.png
             build/install-test/*.ppm
             build/install-test/ci.ks
+      # The ISO this job has just installed and checked, to download (Actions, this run, Artifacts): every run of
+      # main and every tag. Until 14/11/2026 only a tag kept it, and there is no tag yet: docs/PRIMERA-HORA.md sent
+      # people to an artifact that did not exist. A run of main keeps it 14 days (2 GB each); a tag's, 90.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
         with:
           name: silikos-iso
           path: build/SilikOS-*-netinstall.iso
           compression-level: 0
+          retention-days: ${{ startsWith(github.ref, 'refs/tags/v') && 90 || 14 }}
 
   # the last report and pictures of main, kept on the branch ci-results by a job of its own (written 13/11/2026, not
   # run yet): the token that writes never meets the workspace where the ISO was built and the virtual machine ran,
