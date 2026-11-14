@@ -157,7 +157,9 @@ def restart(pr):
 
 
 def runs(steps):
-    return [" ".join(s[1]) for s in steps if s[0] in ("run", "check")]
+    """the command lines of a plan, without the `sudo` a plan made by a normal user carries (the CI's tests are a
+    normal user's; a real run is root's: lvl_sudo)"""
+    return [" ".join(s[1][1:] if s[1][:1] == ["sudo"] else s[1]) for s in steps if s[0] in ("run", "check")]
 
 
 def writes(steps):
