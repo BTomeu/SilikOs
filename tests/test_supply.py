@@ -112,6 +112,18 @@ class Judge(unittest.TestCase):
         for args in ((NOW - 10 * DAY, NOW), (NOW - 99 * DAY, 0), (None, 0), (5, 9)):
             self.assertNotEqual(self.j(rid="baseos", tags=(), signed=False, rev=args[0], mark=args[1])[0], "refuse")
 
+    def test_another_architecture_s_metadata_are_refused_whatever_their_revision(self):
+        x86, arm = STABLE + ("silikos-arch=x86_64",), STABLE + ("silikos-arch=aarch64",)
+        self.assertEqual(plug.judge("silikos", str(NOW), x86, True, NOW - 9, NOW, arch="x86_64")[:2], ("ok", ""))
+        v = plug.judge("silikos", str(NOW), arm, True, NOW - 9, NOW, arch="x86_64")
+        self.assertEqual((v[0], v[1], v[3]), ("refuse", "arch", NOW - 9))
+        self.assertIn("made for aarch64, not for this machine's x86_64", v[2])
+        self.assertEqual(plug.judge("silikos", str(NOW), STABLE, True, 0, NOW, arch="aarch64")[:2], ("refuse", "arch"))
+        self.assertEqual(plug.judge("silikos", str(NOW), arm, True, 0, NOW, arch="aarch64")[:2], ("ok", ""))
+        self.assertEqual(plug.judge("silikos", str(NOW), arm, True, 0, NOW)[:2], ("ok", ""))        # dnf did not say which machine: not judged
+        # the channel is asked first: the other channel's metadata for the other architecture are the other channel's
+        self.assertEqual(plug.judge("silikos", str(NOW), NEXT + ("silikos-arch=aarch64",), True, 0, NOW, arch="x86_64")[1], "channel")
+
     def test_the_mark_never_goes_down(self):
         for rid, tags in (("silikos", STABLE), ("silikos", NEXT), ("baseos", ())):
             for rev in (None, 0, 5, NOW - 400 * DAY, NOW - 100, NOW, NOW + 400 * DAY):
@@ -174,9 +186,10 @@ class Notes(unittest.TestCase):
 
 # ---------------------------------------------------------------- the plugin against a made-up dnf
 class FakeRepo:
-    def __init__(self, rid, revision, tags=(), repo_gpgcheck=True, age=0, loaded=True):
+    def __init__(self, rid, revision, tags=(), repo_gpgcheck=True, age=0, loaded=True, held=None):
         self.id, self.repo_gpgcheck, self._repo = rid, repo_gpgcheck, self
         self.revision, self.tags, self.age, self.loaded = revision, tags, age, loaded
+        self.held = loaded if held is None else held       # dnf holds packages of it (a repository that loaded)
 
     def getRevision(self):
         if not self.loaded:
@@ -190,12 +203,17 @@ class FakeRepo:
         return self.age
 
 
+class FakeConf:
+    def __init__(self, arch):
+        self.substitutions = {"basearch": arch, "arch": arch, "releasever": "9"}
+
+
 class FakeBase:
-    def __init__(self, repos):
+    def __init__(self, repos, arch=None):
         self.repos = self
         self._repos = repos
         self.sack = self
-        self.conf = None
+        self.conf = FakeConf(arch) if arch else None
         self.excluded = []
 
     def iter_enabled(self):
@@ -206,7 +224,7 @@ class FakeBase:
 
     def filterm(self, reponame):
         self._q = reponame
-        return ["pkg-a", "pkg-b"]
+        return ["pkg-a", "pkg-b"] if any(r.id == reponame and r.held for r in self._repos) else []
 
     def add_excludes(self, q):
         self.excluded.append(self._q)
@@ -226,10 +244,10 @@ class Plugin(unittest.TestCase):
             p.stop()
         self.tmp.cleanup()
 
-    def sack(self, *repos, state=None):
+    def sack(self, *repos, state=None, arch=None):
         if state is not None:
             write(self.path, json.dumps(state))
-        base = FakeBase(list(repos))
+        base = FakeBase(list(repos), arch)
         p = plug.SilikosRepo(base, None)
         with self.assertLogs("dnf", level="DEBUG") as log:
             plug.logger.debug("start")
@@ -276,12 +294,71 @@ class Plugin(unittest.TestCase):
         base, said, state = self.sack(FakeRepo("silikos", "", loaded=False))
         self.assertEqual((base.excluded, said, state), ([], [], {"silikos": {"revision": NOW - 5}}))
 
+    def test_another_architecture_s_metadata_are_taken_out_and_not_remembered(self):
+        # (the second pass, 14/11/2026: the channel's own newest aarch64 metadata at the x86_64 address passed every
+        # check, and the machine's x86_64 packages got no update, in silence. Run with dnf: docs/SIGNING.md)
+        arm = STABLE + ("silikos-arch=aarch64",)
+        base, said, state = self.sack(FakeRepo("silikos", str(NOW - 5), arm), state={"silikos": {"revision": NOW - 900, "seen": NOW - 50}},
+                                      arch="x86_64")
+        self.assertEqual(base.excluded, ["silikos"])
+        self.assertIn("made for aarch64, not for this machine's x86_64", said[0])
+        self.assertEqual(state["silikos"]["revision"], NOW - 900)          # its revision is not taken as the mark
+        self.assertEqual(state["silikos"]["seen"], NOW - 50)               # and the repository was not "reached"
+        self.assertEqual(state["silikos"]["said"]["why"], "arch")
+        base, said, state = self.sack(FakeRepo("silikos", str(NOW - 5), STABLE + ("silikos-arch=x86_64",)), arch="x86_64")
+        self.assertEqual((base.excluded, said), ([], []))
+        base, said, _ = self.sack(FakeRepo("silikos", str(NOW - 5), STABLE), arch="x86_64")       # no architecture named: not ours
+        self.assertEqual(base.excluded, ["silikos"])
+        self.assertIn("made for no architecture", said[0])
+        base, said, _ = self.sack(FakeRepo("silikos", str(NOW - 5), arm + ("silikos-arch=x86_64",)), arch="x86_64")    # two names: not ours
+        self.assertEqual(base.excluded, ["silikos"])
+        base, said, _ = self.sack(FakeRepo("baseos", str(NOW - 5), ("silikos-arch=aarch64",)), arch="x86_64")          # the base: never
+        self.assertEqual(base.excluded, [])
+
+    def test_each_repository_is_judged_by_itself_and_what_cannot_be_judged_is_not_taken(self):
+        class Broken(FakeRepo):
+            def getContentTags(self):
+                return 7                                                   # (tuple(7) raises: something this file did not expect)
+
+        class Odd(FakeRepo):
+            @property
+            def repo_gpgcheck(self):
+                raise KeyError("no such option")
+
+            @repo_gpgcheck.setter
+            def repo_gpgcheck(self, v):
+                pass
+
+        # a repository of the base whose reading goes wrong: said; SilikOS's old one after it is still refused
+        base, said, state = self.sack(Odd("baseos", str(NOW - 9)), FakeRepo("silikos", str(NOW - 500), STABLE),
+                                      state={"silikos": {"revision": NOW - 5}})
+        self.assertEqual(base.excluded, ["silikos"])
+        self.assertIn("the check of baseos did not run (KeyError", said[0])
+        self.assertIn("an old repository is served again", said[1])
+        # a SilikOS channel that cannot be judged gives nothing to the run, and the other one is still judged
+        base, said, state = self.sack(Odd("silikos", str(NOW - 5), STABLE), FakeRepo("silikos-next", str(NOW - 5), NEXT))
+        self.assertEqual(base.excluded, ["silikos"])
+        self.assertIn("REFUSED silikos: the check of its metadata did not run (KeyError", said[0])
+        self.assertEqual(state["silikos-next"]["revision"], NOW - 5)
+        # metadata that cannot be read while dnf holds packages of the channel: out, and noted for silik update
+        base, said, state = self.sack(Broken("silikos", str(NOW - 5), STABLE))
+        self.assertEqual(base.excluded, ["silikos"])
+        self.assertIn("its metadata could not be read by the check (TypeError)", said[0])
+        self.assertEqual((state["silikos"]["said"]["verdict"], state["silikos"]["said"]["why"]), ("refuse", "unread"))
+        # a repository that did not load has nothing to give: left to dnf, which said so
+        before = plug.read_state(self.path)
+        base, said, state = self.sack(FakeRepo("silikos", "", loaded=False))
+        self.assertEqual((base.excluded, said, state), ([], [], before))
+
     def test_nothing_of_the_plugin_ever_stops_a_dnf(self):
-        base = FakeBase([FakeRepo("silikos", str(NOW), STABLE)])
+        base = FakeBase([FakeRepo("silikos", str(NOW), STABLE), FakeRepo("baseos", str(NOW))])
         p = plug.SilikosRepo(base, None)
         with mock.patch.object(plug, "read_state", side_effect=MemoryError("x")), self.assertLogs("dnf", level="WARNING") as log:
             p.sack()                                                       # no exception leaves it
         self.assertIn("did not run", log.records[0].getMessage())
+        # ... and what was not checked is not taken: SilikOS's channel gives nothing to that run, the base goes on
+        self.assertEqual(base.excluded, ["silikos"])
+        self.assertIn("REFUSED silikos: it was not checked", log.records[1].getMessage())
         p.read_config = mock.Mock(side_effect=ValueError("broken file"))
         with self.assertLogs("dnf", level="WARNING") as log:
             p.config()
@@ -780,6 +857,39 @@ class Sign(unittest.TestCase):
         self.assertEqual(self.sh(self.CHECK, "--key-file", self.pub, "--sums-only", d)[0], 1)              # unsigned: said
         self.assertEqual(self.sh(self.CHECK, "--key-file", self.pub, "--sums-only", "--allow-unsigned-sums", d)[0], 0)
 
+    def test_a_signed_folder_is_a_whole_no_link_and_no_file_added(self):
+        # (the second pass: an unsigned package as a link, unsigned metadata through a link, a file nobody signed
+        # beside the signed ones, a tree without its list: each passed)
+        d = self.release("rel-whole")
+        self.assertEqual(self.sh(self.SIGN, "--key", self.fpr["owner"], "--key-file", self.pub, "--sums", d)[0], 0)
+        self.assertEqual(self.sh(self.CHECK, "--key-file", self.pub, "--sums-only", "--whole", d)[0], 0)
+        write(os.path.join(d, "SHA256SUMS.attestation.jsonl"), "{}\n")                # (the CI's own file beside the list)
+        self.assertEqual(self.sh(self.CHECK, "--key-file", self.pub, "--sums-only", d)[0], 0)
+        write(os.path.join(d, "RPM-GPG-KEY-Other"), "someone else's key\n")
+        rc, out = self.sh(self.CHECK, "--key-file", self.pub, "--sums-only", d)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("FAIL %s/RPM-GPG-KEY-Other is not named in %s/SHA256SUMS: nothing vouches for it" % (d, d), out)
+        os.unlink(os.path.join(d, "RPM-GPG-KEY-Other"))
+        write(os.path.join(d, "sub", "SHA256SUMS.more"), "x\n")                       # a name like the list's is still a file
+        self.assertEqual(self.sh(self.CHECK, "--key-file", self.pub, "--sums-only", d)[0], 1)
+        shutil.rmtree(os.path.join(d, "sub"))
+        os.symlink("/etc/hostname", os.path.join(d, "evil-1-1.el9.noarch.rpm"))
+        rc, out = self.sh(self.CHECK, "--key-file", self.pub, "--sums-only", d)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("FAIL %s/evil-1-1.el9.noarch.rpm is a link" % d, out)
+        os.unlink(os.path.join(d, "evil-1-1.el9.noarch.rpm"))
+        self.assertEqual(self.sh(self.CHECK, "--key-file", self.pub, "--sums-only", d)[0], 0)
+        # a folder without its list: said, and refused when the whole is asked for
+        os.unlink(os.path.join(d, "SHA256SUMS.asc"))
+        rc, out = self.sh(self.CHECK, "--key-file", self.pub, "--sums-only", "--allow-unsigned-sums", "--whole", d)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("SHA256SUMS has no signature (--whole)", out)
+        os.unlink(os.path.join(d, "SHA256SUMS"))
+        rc, out = self.sh(self.CHECK, "--key-file", self.pub, "--sums-only", "--whole", d)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("has no SHA256SUMS at its top (--whole)", out)
+        self.assertIn('check_signed.sh" --key-file "$keyfile" --whole "$out"', text("tools/sign_release.sh"))
+
     def test_what_it_refuses_to_sign(self):
         d = self.release("rel2")
         rc, out = self.sh(self.SIGN, "--key", self.fpr["other"], "--key-file", self.pub, "--sums", d)
@@ -876,6 +986,239 @@ class Sign(unittest.TestCase):
         self.assertIn("--gpg-name \"$fpr\"", s)
 
 
+# ---------------------------------------------------------------- the second pass (14/11/2026): tools/vouched.sh
+GH2 = r'''#!/bin/sh
+# a stand-in for `gh attestation verify FILE ... --signer-workflow R/.github/workflows/W ...`: FILE is attested by W
+# when "NAME:W" is in $FAKE_ATTESTED; `gh api .../compare/SHA...main -q .behind_by` answers $FAKE_BEHIND_<first 4 of SHA>
+echo "$@" >> "$FAKE_GH_LOG"
+if [ "$1" = api ]; then
+  sha=${2#*/compare/}; sha=${sha%...main}; eval "v=\${FAKE_BEHIND_$(echo "$sha" | cut -c1-4)-}"
+  [ -n "$v" ] || { echo '{"message":"No common ancestor"}'; exit 1; }
+  echo "$v"; exit 0
+fi
+if [ "$1 $2" = "release view" ]; then echo '{"tagName":"x"}'; exit 0; fi
+if [ "$1 $2" = "release list" ]; then echo "wine-11.0"; echo eda-tools; echo dev-tools; exit 0; fi
+if [ "$1 $2" = "release download" ]; then
+  while [ $# -gt 0 ]; do [ "$1" = --dir ] && d=$2; shift; done
+  cp "$FAKE_RELEASE"/* "$d/"; exit 0
+fi
+[ "$1 $2" = "attestation verify" ] || exit 2
+f=$(basename "$3"); w=
+while [ $# -gt 0 ]; do [ "$1" = --signer-workflow ] && w=${2##*/}; shift; done
+case " $FAKE_ATTESTED " in *" $f:$w "*) echo "Verification succeeded!"; exit 0 ;; esac
+echo "no attestations found for subject" >&2; exit 1
+'''
+
+
+class Vouched(unittest.TestCase):
+    """tools/vouched.sh against a made-up gh: a file is taken only with the attestation of the workflow that keeps
+    its release. The real `gh attestation verify` needs GitHub and Sigstore: the workflows' first run shows it."""
+    SCRIPT = os.path.join(ROOT, "tools/vouched.sh")
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.d = os.path.join(self.tmp.name, "from")
+        for n in ("ngspice-46-1.silik.el9.x86_64.rpm", "openocd-0.12.0-1.silik.el9.x86_64.rpm", "tzdata-9999-1.el9.noarch.rpm"):
+            write(os.path.join(self.d, n), "contents of " + n)
+        self.bin = os.path.join(self.tmp.name, "bin")
+        write(os.path.join(self.bin, "gh"), GH2)
+        os.chmod(os.path.join(self.bin, "gh"), 0o755)
+        self.log = os.path.join(self.tmp.name, "gh.log")
+        self.attested = "ngspice-46-1.silik.el9.x86_64.rpm:eda.yml openocd-0.12.0-1.silik.el9.x86_64.rpm:dev.yml"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_(self, *args, gh=True, env=None):
+        path = (self.bin + os.pathsep if gh else "") + "/usr/bin:/bin"
+        if not gh and shutil.which("gh", path=path):
+            self.skipTest("gh is in /usr/bin")
+        e = dict(os.environ, PATH=path, FAKE_GH_LOG=self.log, FAKE_ATTESTED=self.attested, **(env or {}))
+        e.pop("GITHUB_ACTIONS", None) if not (env or {}).get("GITHUB_ACTIONS") else None
+        e.pop("GITHUB_REPOSITORY", None)
+        p = subprocess.run(["bash", self.SCRIPT] + list(args), env=e, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+        return p.returncode, p.stdout
+
+    def f(self, n):
+        return os.path.join(self.d, n)
+
+    def test_only_the_workflow_that_keeps_the_release_vouches(self):
+        ng, oo = self.f("ngspice-46-1.silik.el9.x86_64.rpm"), self.f("openocd-0.12.0-1.silik.el9.x86_64.rpm")
+        rc, out = self.run_("--workflow", "eda.yml", ng)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("$ gh attestation verify %s --repo BTomeu/SilikOs --source-ref refs/heads/main --signer-workflow "
+                      "BTomeu/SilikOs/.github/workflows/eda.yml --deny-self-hosted-runners" % ng, out)
+        self.assertIn("vouched ngspice-46-1.silik.el9.x86_64.rpm (eda.yml)", out)
+        with open(self.log) as f:              # what gh was really asked: the repository, main, that workflow, GitHub's runners
+            self.assertEqual(f.read().strip(), "attestation verify %s --repo BTomeu/SilikOs --source-ref refs/heads/main --signer-workflow "
+                                               "BTomeu/SilikOs/.github/workflows/eda.yml --deny-self-hosted-runners" % ng)
+        # a package another workflow of main attested is not this release's: dev.yml's in a release of eda.yml
+        rc, out = self.run_("--workflow", "eda.yml", oo)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("NOT vouched openocd-0.12.0-1.silik.el9.x86_64.rpm: no attestation of eda.yml of BTomeu/SilikOs at refs/heads/main "
+                      "(no attestations found for subject)", out)
+        self.assertTrue(os.path.exists(oo))                                # nothing is deleted without --drop
+        # what is published already may be any of the four
+        rc, out = self.run_("--workflow", "repo.yml,eda.yml,dev.yml,wine.yml", oo)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("vouched openocd-0.12.0-1.silik.el9.x86_64.rpm (dev.yml)", out)
+
+    def test_what_nothing_vouches_for_is_left_out_and_named(self):
+        rc, out = self.run_("--workflow", "eda.yml", "--drop", *[self.f(n) for n in sorted(os.listdir(self.d))], env={"GITHUB_ACTIONS": "true"})
+        self.assertEqual(rc, 0, out)                                       # the caller goes on, without them
+        self.assertEqual(os.listdir(self.d), ["ngspice-46-1.silik.el9.x86_64.rpm"])
+        self.assertIn("::warning title=no provenance::tzdata-9999-1.el9.noarch.rpm has no attestation of eda.yml of this repository on main: "
+                      "left out, neither signed nor put on an ISO", out)
+        self.assertIn("vouched for: 1; not: 2 (left out)", out)
+        # a pattern that matched nothing, and a link, are not packages
+        os.symlink("/etc/hostname", self.f("link-1-1.el9.noarch.rpm"))
+        rc, out = self.run_("--workflow", "eda.yml", "--drop", self.f("*.rpm"), self.f("link-1-1.el9.noarch.rpm"))
+        self.assertEqual((rc, out.strip()), (0, "vouched for: 0; not: 0 (left out)"))
+
+    def test_it_never_says_vouched_when_it_could_not_ask(self):
+        ng = self.f("ngspice-46-1.silik.el9.x86_64.rpm")
+        rc, out = self.run_("--workflow", "eda.yml", ng, gh=False)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("NOT vouched ngspice-46-1.silik.el9.x86_64.rpm", out)
+        self.assertIn("gh is not installed: nothing was asked", out)
+        for bad in (["--workflow", "any", ng], [ng], ["--workflow", "eda.yml;id", ng], ["--workflow", "../x.yml", ng],
+                    ["--workflow", "eda.yml", "--ref", "main", ng], ["--workflow", "eda.yml", "--repo", "x", ng],
+                    ["--workflow", "eda.yml", "--any-workflow", ng]):
+            self.assertEqual(self.run_(*bad)[0], 2, bad)
+        self.assertEqual(subprocess.run(["bash", "-n", self.SCRIPT]).returncode, 0)
+        self.assertTrue(os.access(self.SCRIPT, os.X_OK))
+
+    def test_the_isos_take_a_release_s_package_only_with_its_workflow_s_attestation(self):
+        # (the second pass: a file put into a release went on the ISO, and its name into the kickstart, unasked)
+        for wf in ("ci.yml", "offline.yml"):
+            s = text(".github/workflows/" + wf)
+            job = test_public.jobs(s)["install" if wf == "ci.yml" else "offline"]
+            self.assertRegex(job, r"(?m)^      attestations: read\b", wf)
+            self.assertNotIn("--dir build/extra", job, wf)                  # nothing is downloaded straight into the ISO's folder
+            self.assertEqual(job.count("gh release download"), 1, wf)
+            self.assertIn('bash tools/vouched.sh --repo "$GITHUB_REPOSITORY" --ref refs/heads/main --workflow "$4" --drop build/from/*.rpm', job, wf)
+            self.assertLess(job.index("gh release download"), job.index("bash tools/vouched.sh"), wf)
+            self.assertLess(job.index("bash tools/vouched.sh"), job.index('mv -n "$f" build/extra/'), wf)
+            for call in ("get \"$wine\" 'silik-wine-*.rpm' Wine wine.yml;", "get eda-tools '*.rpm' \"the open EDA tools\" eda.yml ",
+                         "get dev-tools '*.rpm' \"OpenOCD or dfu-util\" dev.yml "):
+                self.assertIn(call, job, wf)
+            self.assertEqual(len(re.findall(r"(?m)^\s+(?:if \[ -n \"\$wine\" \]; then )?get ", job)), 3, wf)
+            # the step, run: the release holds a tool's own package, one that another workflow attested, and a stranger's
+            step = job[job.index("          mkdir -p build/extra\n"):job.index("          ls -la build/extra")]
+            step = "\n".join(l[10:] for l in step.split("\n"))
+            with tempfile.TemporaryDirectory() as d:
+                shutil.copytree(os.path.join(ROOT, "tools"), os.path.join(d, "tools"))
+                rel = os.path.join(d, "release")
+                for n in ("ngspice-46-1.silik.el9.x86_64.rpm", "ngspice-46-1.silik.el9.src.rpm", "ngspice-46-1.silik.el9.aarch64.rpm",
+                          "openocd-0.12.0-1.silik.el9.x86_64.rpm", "silik-wine-11.0-1.el9.x86_64.rpm", "tzdata-9999-1.el9.noarch.rpm"):
+                    write(os.path.join(rel, n), "contents of " + n)
+                e = dict(os.environ, PATH=self.bin + os.pathsep + "/usr/bin:/bin", FAKE_GH_LOG=self.log, FAKE_RELEASE=rel, GITHUB_REPOSITORY="o/r",
+                         FAKE_ATTESTED="ngspice-46-1.silik.el9.x86_64.rpm:eda.yml openocd-0.12.0-1.silik.el9.x86_64.rpm:dev.yml "
+                                       "silik-wine-11.0-1.el9.x86_64.rpm:wine.yml tzdata-9999-1.el9.noarch.rpm:ci.yml")
+                e.pop("GITHUB_ACTIONS", None)
+                p = subprocess.run(["bash", "-e", "-c", step], cwd=d, env=e, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+                self.assertEqual(p.returncode, 0, p.stdout)
+                # each release's own package and nothing else: not the stranger's tzdata (attested by another workflow
+                # of main, even), not a package under the wrong release, no source package, no ARM build
+                self.assertEqual(sorted(os.listdir(os.path.join(d, "build/extra"))),
+                                 ["ngspice-46-1.silik.el9.x86_64.rpm", "openocd-0.12.0-1.silik.el9.x86_64.rpm", "silik-wine-11.0-1.el9.x86_64.rpm"], wf)
+                self.assertEqual(p.stdout.count("NOT vouched tzdata-9999-1.el9.noarch.rpm"), 3, wf)
+                self.assertFalse(os.path.exists(os.path.join(d, "build/from")))
+
+    def test_a_tag_gets_a_release_and_an_attestation_only_on_a_commit_of_main(self):
+        # (the second pass: ci.yml gave any tagged commit a release and this repository's attestation; repo.yml asked)
+        r = test_public.jobs(text(".github/workflows/ci.yml"))["release"]
+        self.assertLess(r.index("- name: The tag is on a commit of main"), r.index("actions/download-artifact@"))
+        self.assertLess(r.index("- name: The tag is on a commit of main"), r.index("attest-build-provenance@"))
+        self.assertLess(r.index("- name: The tag is on a commit of main"), r.index("gh release create"))
+        self.assertNotIn("actions/checkout", r)                            # still nothing of the tagged tree runs here
+        step = r[r.index("          set -euo pipefail\n          on_main()"):r.index("      - uses: actions/download-artifact@")]
+        step = "\n".join(l[10:] for l in step.split("\n"))
+        on, off, none = "a" * 40, "b" * 40, "c" * 40
+
+        def tag(sha):
+            e = dict(os.environ, PATH=self.bin + os.pathsep + "/usr/bin:/bin", FAKE_GH_LOG=self.log, GITHUB_REPOSITORY="o/r", GITHUB_SHA=sha,
+                     GITHUB_REF_NAME="v9.9.9", FAKE_BEHIND_aaaa="0", FAKE_BEHIND_bbbb="3")
+            p = subprocess.run(["bash", "-c", step], env=e, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+            return p.returncode, p.stdout
+        self.assertEqual(tag(on), (0, "the tag v9.9.9 is on %s, a commit of main\n" % on))
+        for sha in (off, none, "main", ""):          # a commit main does not hold, one GitHub cannot compare, no commit
+            rc, out = tag(sha)
+            self.assertEqual(rc, 1, sha)
+            self.assertIn("::error title=release::this tag is on %s, which is not a commit of main: no release, no attestation" % sha, out)
+        with open(self.log) as f:
+            self.assertIn("api repos/o/r/compare/%s...main -q .behind_by" % on, f.read())
+
+
+class Names(test_repo.Build):
+    """(the second pass) provenance is asked by a file's contents; tools/build_pkgrepo.sh holds it to its name"""
+
+    def test_an_old_package_under_the_next_version_s_name_does_not_keep_the_real_one_out(self):
+        test_repo.pubkey(self.key, test_repo.KEY_A)
+        pub = os.path.join(self.d, "pub")
+        test_repo.rpm(pub, "silik-tools-0.6.13-1.el9.noarch.rpm", sig=test_repo.KEY_A)
+        # the attacker: the same signed 0.6.13, a file the gate vouches for, put there as 0.6.14 before 0.6.14 exists
+        test_repo.rpm(pub, "silik-tools-0.6.14-1.el9.noarch.rpm", sig=test_repo.KEY_A, called="silik-tools-0.6.13-1.el9.noarch.rpm")
+        un = os.path.join(self.d, "unvouched")
+        write(un, "")
+        rc, out, err = self.build("--published", pub, "--unvouched", un, "--pool", self.pool, "--baseurl", "https://x/y", key=test_repo.KEY_A)
+        self.assertEqual(rc, 0, err)
+        self.assertIn("silik-tools-0.6.14-1.el9.noarch.rpm is published under a name that is not its package's (silik-tools-0.6.13-1.el9.noarch): "
+                      "it leaves the channel", err)
+        self.assertIn("1 under a name that is not their package's left out", out)
+        with open(os.path.join(self.pool, "silik-tools-0.6.14-1.el9.noarch.rpm")) as f:
+            self.assertNotIn("name=", f.read())                            # the real 0.6.14, of --in, is the one published
+        with open(os.path.join(self.pool, "UPLOAD")) as f:
+            self.assertIn("silik-tools-0.6.14-1.el9.noarch.rpm", f.read().split())
+        # ... and the release keeps the file that goes up under that name: never both put there and removed
+        with open(os.path.join(self.pool, "DELETE")) as f:
+            self.assertNotIn("silik-tools-0.6.14-1.el9.noarch.rpm", f.read().split())
+        self.assertIn("silik-tools-0.6.14-1.el9.noarch.rpm", self.listed("next", "x86_64"))
+
+    def test_a_new_package_that_is_not_called_what_it_is_is_left_out(self):
+        test_repo.rpm(self.inn, "kicad-99-1.silik.el9.x86_64.rpm", called="kicad-9.0-1.silik.el9.x86_64.rpm")
+        test_repo.rpm(self.inn, "magic-8.4~rc1-1.silik.el9.x86_64.rpm")
+        test_repo.rpm(self.inn, "xschem-3.4.rc1-1.silik.el9.x86_64.rpm", called="xschem-3.4~rc1-1.silik.el9.x86_64.rpm")   # (as a release names it)
+        rc, out, err = self.build("--keep", "0")
+        self.assertEqual(rc, 0, err)
+        names = self.listed("next", "x86_64")
+        self.assertNotIn("kicad-99-1.silik.el9.x86_64.rpm", names)
+        self.assertIn("kicad-99-1.silik.el9.x86_64.rpm is not called what its package is (kicad-9.0-1.silik.el9.x86_64): left out, not signed", err)
+        self.assertIn("magic-8.4~rc1-1.silik.el9.x86_64.rpm", names)
+        self.assertIn("xschem-3.4.rc1-1.silik.el9.x86_64.rpm", names)
+        self.assertIn("silik-tools-0.6.14-1.el9.noarch.rpm", names)        # the others are published as ever
+
+    def test_a_name_no_package_has_is_nobody_s(self):
+        pub = os.path.join(self.d, "pub")
+        test_repo.pubkey(self.key, test_repo.KEY_A)
+        test_repo.rpm(pub, "evil-9-1.el9.noarch digests signatures OK\n.rpm")      # (a line of rpm -K's answer in its name)
+        test_repo.rpm(pub, "ngspice-46-1.silik.el9.x86_64.rpm", sig=test_repo.KEY_A)
+        un = os.path.join(self.d, "unvouched")
+        write(un, "evil-9-1.el9.noarch digests signatures OK\n.rpm\n")
+        rc, out, err = self.build("--published", pub, "--unvouched", un, "--pool", self.pool, "--baseurl", "https://x/y", key=test_repo.KEY_A)
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(sorted(n for n in os.listdir(self.pool) if "evil" in n), [])
+        self.assertIn("a published file has a name no package has (evil-9-1.el9.noarch?digests?signatures?OK?.rpm)", err)
+        with open(os.path.join(self.pool, "DELETE")) as f:
+            self.assertEqual(f.read(), "")                                 # no line of it reaches the list of what is removed
+        self.assertIn("ngspice-46-1.silik.el9.x86_64.rpm", self.listed("next", "x86_64"))
+
+    def test_a_published_file_of_unknown_origin_and_the_real_one_of_its_name(self):
+        pub = os.path.join(self.d, "pub")
+        test_repo.rpm(pub, "silik-tools-0.6.14-1.el9.noarch.rpm", body="someone else's")       # unsigned, unvouched, the name of a new one
+        test_repo.rpm(pub, "magic-8-1.silik.el9.x86_64.rpm")                                    # unvouched, and nothing replaces it
+        un = os.path.join(self.d, "unvouched")
+        write(un, "silik-tools-0.6.14-1.el9.noarch.rpm\nmagic-8-1.silik.el9.x86_64.rpm\n")
+        rc, out, err = self.build("--published", pub, "--unvouched", un, "--pool", self.pool, "--baseurl", "https://x/y")
+        self.assertEqual(rc, 0, err)
+        with open(os.path.join(self.pool, "UPLOAD")) as f:
+            self.assertIn("silik-tools-0.6.14-1.el9.noarch.rpm", f.read().split())
+        with open(os.path.join(self.pool, "DELETE")) as f:
+            self.assertEqual(f.read().split(), ["magic-8-1.silik.el9.x86_64.rpm"])
+        with open(os.path.join(self.pool, "silik-tools-0.6.14-1.el9.noarch.rpm")) as f:
+            self.assertIn("body=x", f.read())
+
+
 # ---------------------------------------------------------------- the workflows
 class Workflows(unittest.TestCase):
     def setUp(self):
@@ -911,7 +1254,9 @@ class Workflows(unittest.TestCase):
         ci = test_public.jobs(self.ci)
         for name in ("packages", "arm", "install", "rollback-test"):
             self.assertNotIn("id-token", ci[name], name)
-            self.assertNotIn("attestations", ci[name], name)
+            self.assertNotIn("attestations: write", ci[name], name)
+        # (the installation job reads attestations, to ask where a release's package was made: it writes none)
+        self.assertRegex(ci["install"], r"(?m)^    permissions:\n      contents: read\n      attestations: read\b")
 
     def test_the_package_repository_attests_what_it_publishes_in_a_job_of_its_own(self):
         a = self.j["attest"]
@@ -958,11 +1303,18 @@ class Workflows(unittest.TestCase):
                 self.assertRegex(body, PIN + r"\n        with:\n          subject-path: dist/\*\.rpm$", "%s: %s" % (wf, name))
                 self.assertIn("release_keep.sh", body + text("eda/keep.sh"))
         p = self.j["packages"]
-        self.assertIn('vouched() { gh attestation verify "$1" --repo "$GITHUB_REPOSITORY" --source-ref refs/heads/main', p)
+        self.assertIn('vouched() { bash tools/vouched.sh --repo "$GITHUB_REPOSITORY" --ref refs/heads/main --workflow "$2" "$1" > w/verify.out 2>&1; }', p)
         gate, sign = p.index("vouched()"), p.index("secrets.SILIKOS_GPG_PRIVATE_KEY")
         self.assertLess(gate, sign)                                        # asked before anything is signed
-        self.assertIn('if vouched "$f"; then mv "$f" w/in/; continue; fi\n            left=$((left + 1)); rm -f "$f"', p)
-        self.assertIn('vouched "$f" || basename "$f" >> "w/unvouched.$c"', p)
+        # a tool's package: only the workflow that keeps its release vouches for it; no other file of main does
+        self.assertIn('case $t in eda-*) wf=eda ;; dev-tools) wf=dev ;; *) wf=wine ;; esac', p)
+        self.assertIn('all "$t" "w/tools/$wf"', p)
+        self.assertIn('if vouched "$f" "$wf.yml"; then mv -n "$f" w/in/; continue; fi\n              left=$((left + 1)); rm -f "$f"', p)
+        self.assertIn('vouched "$f" repo.yml,eda.yml,dev.yml,wine.yml || basename "$f" >> "w/unvouched.$c"', p)
+        self.assertNotIn("gh attestation verify", p)                       # nowhere by hand, without the workflow's name
+        # a release's file never takes the place of one of SilikOS's own packages of the CI run
+        self.assertLess(p.index('if [ -e "w/in/$b" ]; then'), p.index('if vouched "$f" "$wf.yml"'))
+        self.assertNotIn('mv "$f" w/in/', p)
         self.assertEqual(p.count('--unvouched "w/unvouched.$'), 2)
         self.assertRegex(p, r"(?m)^      attestations: read\b")
         # the step with the key is still the only one with it, and has no token

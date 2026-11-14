@@ -11,6 +11,11 @@
 #                    other contents (dnf holds metadata that names its checksum): the published file stays and the
 #                    one of --in is left out, and said when its contents are not the same. The one exception: a
 #                    published file that carries no good signature of the key in use is signed and replaced.
+#   A package is held to its name: a file that is not called NAME-VERSION-RELEASE.ARCH.rpm as its own header says
+#                    (a *.src.rpm: NAME-VERSION-RELEASE.src.rpm) is left out of --in and leaves --published. Provenance
+#                    is asked by a file's sha256, never by its name: an old package that was really built and signed
+#                    here, put back under the next version's file name, would otherwise be "already published" and
+#                    keep the real build out for good (run: docs/SIGNING.md, the second pass).
 #   --unvouched FILE names of published files (one a line) that nothing vouches for: no build provenance attestation
 #                    says a workflow of the repository made them (.github/workflows/repo.yml asks). Such a file
 #                    stays only if it already carries a good signature of the key in use (the owner signed it);
@@ -134,14 +139,37 @@ fi
 # a keyring of its own with the public half: what "signed by our key" is checked against
 if [ "$signing" = 1 ]; then mkdir "$tmp/rpmdb"; rpm --dbpath "$tmp/rpmdb" --import "$pub"; fi
 signed_ok() { [ "$signing" = 1 ] && rpm --dbpath "$tmp/rpmdb" -K "$1" 2> /dev/null | grep -q 'digests signatures OK$'; }
+# own_name FILE: FILE is called what its header says. (~ and ^ of a version count as the dot a GitHub release
+# gives them in a file's name.) A name with anything but letters, digits and . _ + ~ ^ - is nobody's
+own_name() {
+  local b want
+  b=$(basename "$1")
+  case $b in -*|*[!A-Za-z0-9._+~^-]*) return 1 ;; esac
+  case $b in
+    *.src.rpm) want=$(rpm -qp --nosignature --qf '%{NAME}-%{VERSION}-%{RELEASE}.src.rpm' "$1" 2> /dev/null) || return 1 ;;
+    *) want=$(rpm -qp --nosignature --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}.rpm' "$1" 2> /dev/null) || return 1 ;;
+  esac
+  [ -n "$want" ] && [ "$(printf '%s' "$b" | tr '~^' '..')" = "$(printf '%s' "$want" | tr '~^' '..')" ]
+}
 contents() { rpm -qp --nosignature --qf '[%{FILEDIGESTS} %{FILEMODES:octal} %{FILENAMES}\n]' "$1" 2> /dev/null; rpm -qp --nosignature --scripts --triggers -R "$1" 2> /dev/null; }
 
 # ---- the pool: what is published, then what is new
-: > "$tmp/upload"; : > "$tmp/delete"; : > "$tmp/was"; dropped=0
+: > "$tmp/upload"; : > "$tmp/delete"; : > "$tmp/was"; dropped=0; misnamed=0
 if [ -n "$published" ] && [ -d "$published" ]; then
   for f in "$published"/*.rpm; do
     [ -f "$f" ] || continue
     b=$(basename "$f")
+    if ! own_name "$f"; then
+      # (published under a name that is not its package's: it leaves the channel, and the release when its name
+      # can be written on a line)
+      misnamed=$((misnamed + 1))
+      case $b in
+        -*|*[!A-Za-z0-9._+~^-]*) warn "a published file has a name no package has ($(printf '%s' "$b" | tr -c 'A-Za-z0-9._+~^-' '?' | cut -c1-80)): it is left out; remove it from the release by hand" ;;
+        *) warn "$b is published under a name that is not its package's ($(rpm -qp --nosignature --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}' "$f" 2> /dev/null | tr -c 'A-Za-z0-9._+~^-' '?' | cut -c1-80)): it leaves the channel"
+           echo "$b" >> "$tmp/delete" ;;
+      esac
+      continue
+    fi
     if [ -n "$unvouched" ] && grep -qxF "$b" "$unvouched" && ! signed_ok "$f"; then
       # (published, of unknown origin, and not signed by our key: it leaves the channel and the release)
       warn "$b is published without provenance and without a good signature of the key: it leaves the channel, unsigned"
@@ -157,6 +185,11 @@ for d in ${ins[@]+"${ins[@]}"}; do
     [ -f "$f" ] || continue
     b=$(basename "$f")
     rpm -qp --nosignature "$f" > /dev/null 2>&1 || { echo "error: $f is not a package" >&2; exit 1; }
+    if ! own_name "$f"; then
+      misnamed=$((misnamed + 1))
+      warn "$(printf '%s' "$b" | tr -c 'A-Za-z0-9._+~^-' '?' | cut -c1-80) is not called what its package is ($(rpm -qp --nosignature --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}' "$f" 2> /dev/null | tr -c 'A-Za-z0-9._+~^-' '?' | cut -c1-80)): left out, not signed"
+      continue
+    fi
     if [ -f "$pool/$b" ]; then
       same=$((same + 1))
       if grep -qxF "$b" "$tmp/was" && [ "$(contents "$f")" != "$(contents "$pool/$b")" ]; then
@@ -279,8 +312,10 @@ ES  Los paquetes que SilikOS añade a su base: silik, el escritorio, Wine, las h
     El fichero STATE de cada canal dice si está firmado y con qué clave. Un canal sin firmar lo rechaza cualquier
     sistema instalado. La clave: RPM-GPG-KEY-SilikOS, aquí, cuando la hay.
 EOF
-sort -u "$tmp/upload" > "$pool/UPLOAD"; sort -u "$tmp/delete" > "$pool/DELETE"
-say "$(grep -c . "$tmp/list.x86_64" || :) packages for x86_64, $(grep -c . "$tmp/list.aarch64" || :) for aarch64; $new new, $same already published under their name, $resigned signed again, $pruned older left out, $dropped of unknown origin left out"
+# (a name that is put there in this run is never also removed: the release would lose the file the metadata name.
+# It happens when a published file of unknown origin leaves and the real package of that name is among the new ones)
+sort -u "$tmp/upload" > "$pool/UPLOAD"; sort -u "$tmp/delete" | grep -vxFf "$pool/UPLOAD" > "$pool/DELETE" || :
+say "$(grep -c . "$tmp/list.x86_64" || :) packages for x86_64, $(grep -c . "$tmp/list.aarch64" || :) for aarch64; $new new, $same already published under their name, $resigned signed again, $pruned older left out, $dropped of unknown origin left out, $misnamed under a name that is not their package's left out"
 say "revision $revision ($(date -u -d "@$revision" +%Y-%m-%dT%H:%M:%SZ 2> /dev/null || echo "seconds since 1970")), in every repomd.xml with the channel's name"
 if [ "$signing" = 1 ]; then say "signed with $fpr: every package, and repomd.xml.asc of each architecture"
 else say "NOT SIGNED (no key was given): no installed system accepts this tree"; fi

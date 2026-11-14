@@ -95,6 +95,9 @@ jobs:
     needs: packages
     runs-on: ubuntu-24.04
     timeout-minutes: 170
+    permissions:
+      contents: read
+      attestations: read     # (where a release's package was made, asked before it goes on the ISO)
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with: { persist-credentials: false }
@@ -114,13 +117,24 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p build/extra
-          # get RELEASE PATTERN WHAT: its packages into build/extra. A release that does not exist yet is said (the ISO
-          # is then without WHAT); any other failure (the API, a download cut short) stops the job: an ISO quietly
-          # missing a release's packages would make a green run of a system without them
+          # get RELEASE PATTERN WHAT WORKFLOW: its packages into build/extra. A release that does not exist yet is said
+          # (the ISO is then without WHAT); any other failure (the API, a download cut short) stops the job: an ISO
+          # quietly missing a release's packages would make a green run of a system without them.
+          # Each package goes on the ISO only with the build provenance attestation of WORKFLOW, the one that keeps
+          # that release, on main (tools/vouched.sh). A release is a place anything with a token that writes can put a
+          # file, and the installer installs every package of the ISO by its name, as root, without a signature: the
+          # package repository asked this before it signs (the audit's S2), the ISO did not (the second pass,
+          # 14/11/2026). What nothing vouches for is left out and named; the installation test then says what is missing
           get() {
             if out=$(gh release view "$1" --repo "$GITHUB_REPOSITORY" --json tagName 2>&1); then
-              gh release download "$1" --repo "$GITHUB_REPOSITORY" --pattern "$2" --dir build/extra --clobber \
+              rm -rf build/from; mkdir -p build/from
+              gh release download "$1" --repo "$GITHUB_REPOSITORY" --pattern "$2" --dir build/from --clobber \
                 || { echo "::error title=release $1::the download of its packages failed"; exit 1; }
+              # (the source packages stay in the release; the ARM builds: the ISO here is x86_64)
+              rm -f build/from/*.src.rpm build/from/*.aarch64.rpm
+              bash tools/vouched.sh --repo "$GITHUB_REPOSITORY" --ref refs/heads/main --workflow "$4" --drop build/from/*.rpm
+              for f in build/from/*.rpm; do [ ! -f "$f" ] || mv -n "$f" build/extra/; done
+              rm -rf build/from
             elif echo "$out" | grep -qi 'not found'; then
               echo "::notice title=$1::no such release yet: the ISO of this run has no $3"
             else
@@ -129,9 +143,9 @@ jobs:
           }
           tags=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 50 --json tagName -q '.[].tagName') || { echo "::error title=releases::cannot list them"; exit 1; }
           wine=$(echo "$tags" | grep '^wine-' | head -1 || true)
-          if [ -n "$wine" ]; then get "$wine" 'silik-wine-*.rpm' Wine; else echo "::notice title=Wine::no wine-* release yet: the ISO of this run has no Wine"; fi
-          get eda-tools '*.rpm' "the open EDA tools"                # (workflow EDA tools)
-          get dev-tools '*.rpm' "OpenOCD or dfu-util"               # (workflow Dev tools)
+          if [ -n "$wine" ]; then get "$wine" 'silik-wine-*.rpm' Wine wine.yml; else echo "::notice title=Wine::no wine-* release yet: the ISO of this run has no Wine"; fi
+          get eda-tools '*.rpm' "the open EDA tools" eda.yml        # (workflow EDA tools)
+          get dev-tools '*.rpm' "OpenOCD or dfu-util" dev.yml       # (workflow Dev tools)
           rm -f build/extra/*.src.rpm      # (the releases' source packages: kept there, not on the ISO)
           rm -f build/extra/*.aarch64.rpm                           # (the ARM builds: the ISO here is x86_64)
           ls -la build/extra
@@ -236,6 +250,18 @@ jobs:
       id-token: write        # (the run's identity, for the attestation)
       attestations: write    # (the attestation is kept by GitHub, for `gh attestation verify`)
     steps:
+      # (the second pass, 14/11/2026) a tag can be put on any commit by whoever can push one, and this job gives what
+      # that commit builds a release and this repository's attestation (ci.yml, refs/tags/v...). Only a commit of main
+      # gets either: main is not behind it (the package repository asks the same before it publishes a tag's CI run)
+      - name: The tag is on a commit of main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          on_main() { [ "$(gh api "repos/$GITHUB_REPOSITORY/compare/$1...main" -q .behind_by 2> /dev/null)" = 0 ]; }
+          echo "$GITHUB_SHA" | grep -Eq '^[0-9a-f]{40}$' && on_main "$GITHUB_SHA" \
+            || { echo "::error title=release::this tag is on $GITHUB_SHA, which is not a commit of main: no release, no attestation"; exit 1; }
+          echo "the tag $GITHUB_REF_NAME is on $GITHUB_SHA, a commit of main"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           path: dist

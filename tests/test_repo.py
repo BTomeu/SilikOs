@@ -62,6 +62,10 @@ if me == "rpm":
         fmt = val("--qf")
         if fmt == "%{ARCH}":
             sys.stdout.write(arch(a[-1]))
+        elif fmt and fmt.startswith("%{NAME}-%{VERSION}-%{RELEASE}"):
+            # what the header says the package is called: the file's own name, or the field name= of a made-up one
+            called = d.get("name") or os.path.basename(a[-1])
+            sys.stdout.write(called if fmt.endswith(".rpm") else called[:-4])
         elif fmt:
             print(d.get("body", ""))
         elif "--scripts" not in a:
@@ -132,8 +136,9 @@ def write(path, value):
         f.write(value)
 
 
-def rpm(d, name, sig="", body="x"):
-    write(os.path.join(d, name), "FAKERPM\nsig=%s\nbody=%s\n" % (sig, body))
+def rpm(d, name, sig="", body="x", called=None):
+    """a made-up package file NAME; CALLED: what its header says it is called, when that is not its file name"""
+    write(os.path.join(d, name), "FAKERPM\nsig=%s\nbody=%s\n%s" % (sig, body, "name=%s\n" % called if called else ""))
 
 
 def pubkey(path, *fprs):

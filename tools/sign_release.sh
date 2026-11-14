@@ -81,7 +81,7 @@ run bash "$root/tools/build_pkgrepo.sh" "${args[@]}"
 # every file of the result by its sha256, and that list signed: one signature says "this is the whole of what I signed"
 (cd "$out" && find . -type f ! -name 'SHA256SUMS*' | sort | sed 's|^\./||' | xargs -r -d '\n' sha256sum > SHA256SUMS)
 run gpg --yes --local-user "$fpr" --digest-algo SHA256 --armor --detach-sign --output "$out/SHA256SUMS.asc" "$out/SHA256SUMS"
-if ! run bash "$root/tools/check_signed.sh" --key-file "$keyfile" "$out" > "$out.check.log" 2>&1; then
+if ! run bash "$root/tools/check_signed.sh" --key-file "$keyfile" --whole "$out" > "$out.check.log" 2>&1; then
   tail -20 "$out.check.log" >&2; rm -rf "$out"
   echo "error: the result does not verify against $keyfile: $out is removed (the log: $out.check.log)" >&2; exit 1
 fi
