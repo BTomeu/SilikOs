@@ -148,6 +148,8 @@ splash)
   is splash.root-on-usb "/ on $disk, attached by ${tran:-nothing}" "/ on $disk, attached by usb"
   cmd=$(cat /proc/cmdline)
   say splash.command-line info "$cmd"
+  # (the consoles the kernel writes to: a serial one makes the splash program ask for the passphrase there, in text)
+  is splash.no-serial-console "$(cat /sys/class/tty/console/active 2>&1)" "tty0"
   has splash.graphical-start "$cmd" "rhgb"
   hasnot splash.splash-not-off "$cmd" "plymouth.enable=0"
   is splash.splash-theme "$(plymouth-set-default-theme 2>&1)" "silikos"
@@ -166,6 +168,8 @@ desktop)
   common
   is desktop.root-on-usb "/ on $disk, attached by ${tran:-nothing}" "/ on $disk, attached by usb"
   cmd=$(cat /proc/cmdline)
+  # (the consoles the kernel writes to: a serial one makes the splash program ask for the passphrase there, in text)
+  is desktop.no-serial-console "$(cat /sys/class/tty/console/active 2>&1)" "tty0"
   has desktop.graphical-start "$cmd" "rhgb"
   hasnot desktop.splash-not-off "$cmd" "plymouth.enable=0"
   is desktop.splash-theme "$(plymouth-set-default-theme 2>&1)" "silikos"

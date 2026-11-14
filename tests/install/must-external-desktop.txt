@@ -12,6 +12,7 @@ external.desktop.uefi
 external.desktop.encrypted
 external.desktop.silik-status
 external.desktop.root-on-usb
+external.desktop.no-serial-console
 external.desktop.graphical-start
 external.desktop.splash-not-off
 external.desktop.splash-theme

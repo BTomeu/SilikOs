@@ -19,6 +19,9 @@ Read `docs/PLAN.md` and `docs/STATUS.md` first.
   (SilikStudio's `desktop/linux`, RPM by its `tools/package_rpm.sh`, built ON EL 9: the Ubuntu-built package does not
   start on glibc 2.34). The RPM is a build product of the other repository: `build/extra/`, never committed here.
   Speed claims are measured or not made.
+- **Commits are not made as Claude** (owner, 14/11/2026: "no facis commits com a Claude"): the author is the owner
+  (`BTomeu`, the account's GitHub no-reply address, as the repository's git configuration has it); no
+  `Co-Authored-By` line, no session link, no model's name anywhere in a commit.
 - No vendor software, licences, keys or the user's files in the repository.
 - The kickstart never selects or erases a disk.
 - Every action of the desktop goes through `silik` and prints the commands it runs; the COMMAND bar shows the same

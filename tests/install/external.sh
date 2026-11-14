@@ -108,10 +108,21 @@ shipped, extra, check, passphrase, mode, debug, theme = sys.argv[1:8]
 # SILIK_CI_EXTERNAL_DEBUG=1: the splash program also writes what it does to the serial port (nothing else changes).
 # SILIK_CI_EXTERNAL_THEME=base (the splash mode): without silikos-branding, the base's own splash theme.
 GRAPHICAL = 'bootloader --append="vsyscall=xonly rhgb quiet%s"' % (" plymouth.debug=stream:/dev/ttyS0" if debug else "")
+# The installer writes the consoles of its own command line into the installed system, and this test's installer
+# has one on the serial port: the splash program then asks for the passphrase there, in text, and the screen stays
+# black (seen 14/11/2026, with SilikOS's theme and with the base's alike). A computer has no such console: the
+# test takes it out of the installed system at the end of the installation.
+NO_SERIAL = """
+%post
+grubby --update-kernel=ALL --remove-args="console=ttyS0,115200" || :
+sed -i 's/ *console=ttyS0,115200//' /etc/default/grub /etc/kernel/cmdline 2> /dev/null || :
+grubby --info=DEFAULT 2>&1 | grep '^args' > /root/silikos-ci-args
+%end
+"""
 def graphical(extra):
     lines = [l for l in extra.splitlines() if not l.startswith("bootloader ")]
     lines.insert(lines.index("zerombr"), GRAPHICAL)
-    return "\n".join(lines) + "\n"
+    return "\n".join(lines) + "\n" + NO_SERIAL
 ks = "\n".join(l for l in open(shipped).read().splitlines() if l not in ("graphical", "firstboot --enable")) + "\n"
 extra = open(extra).read()
 if mode == "desktop":

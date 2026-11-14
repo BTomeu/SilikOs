@@ -8,6 +8,7 @@ external.install.own-disk-untouched
 external.splash.uefi
 external.splash.encrypted
 external.splash.root-on-usb
+external.splash.no-serial-console
 external.splash.graphical-start
 external.splash.splash-not-off
 external.splash.splash-theme
