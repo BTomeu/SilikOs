@@ -431,6 +431,21 @@ a normal user, the public repository) and had to run every claim. What they prov
 | T3 | The message line of the status bar says whatever a program of the user wrote into that file: a sentence that reads as the system speaking | medium (a place to phish from; no privilege) | **as designed, now said**: that line is the user's programs' line (the last command `silik` ran), not the system's word. The update and power fields are read from root's files and cannot be forged by a user (run: the reviewer could not). Nothing typed there is run |
 | T4 | A `.desktop` file in the user's own applications folder can carry the name of a system entry; Start shows the name, the COMMAND bar shows the real command line before Enter (run: the line shown is the line executed) | low (any desktop) | not changed |
 
+**The evidence was attacked too** (the fourth reviewer's target was not the product but its proof: "a regression
+that goes unnoticed"). It found that this project's own green was worth less than it said, and ran each case:
+
+| | What was run | State |
+|---|---|---|
+| E1 | A CI run was "success", the badge green and its packages taken by the repository workflow, with the hardened, sealed or rollback job **failed** (`continue-on-error`, left from the day those jobs were written): runs 43532259867 and 43549553439 | **closed**: the three jobs count and a release needs them |
+| E2 | The reader of the installed system's checks dropped a whole start, its FAIL lines included, when the machine started again and the next start ended well; a count of 0, a count cut on the way, a number said twice, a FAIL said only the first time: each gave a green report | **closed** (the reader, `rows.py` of the installed-system tests): each is a FAIL line now; the green runs' own rows give none |
+| E3 | Nothing listed the checks that must be there: the offline ISO's job was green with 48 checks of the installation test absent; without the Windows test program, or with Wine left off the ISO, 31 checks vanish and nothing is red; the lockdown's only proof could become an `info` | **closed**: a list of the checks that must be said (`must-NAME.txt`, beside the tests) for each of the five tests; a check of the list without a verdict is a FAIL |
+| E4 | A host script ended with 0 when its stages never ran; a stage file that held nothing ran no check at all | **closed** |
+| E5 | The reader's own failure was `\|\| true`: a host whose locale could not write one character gave a report cut before a FAIL, and ended with 0 | **closed**: a FAIL line, and the reader writes UTF-8 whatever the locale |
+| E6 | Checks that could not fail: a command that died with a traceback counted as ok (`hw.check`), `secure.status` could only be ok or info, "nothing listens" was said when `ss` did not run, a failed unit was an `info` | **closed for those**; **open**, said in `docs/STATUS.md`: about ten weaker ones (a count of 0 when the journal cannot be asked, "refused" for any failure of the asking program, a substring match) |
+| E7 | The guard written the same day against swallowed checks knew one spelling of the fault: `${v#'}` lost a check and every test passed | **closed** for an apostrophe in any `${...}` |
+| E8 | Unit tests that ran nowhere: two of the provenance gate skipped on GitHub's runners because `gh` is installed there, the one place the scripts are used; the test of the EL 10 port skips exactly when the port is stale, and it is | the two **run everywhere now**; the EL 10 port **is stale and said so** (not verified, below) |
+| E9 | 37 things broken on purpose in copies of the tree: 33 seen by a test, 4 not (`silik secure status --json` ending with 0 on a bad row, the kickstart's `--disabled=sshd` taken out, the USB row ok with the daemon not running) | **closed**: a test for each |
+
 What held, each tried for real: no way from a normal user's program or from another user to root, to the owner's
 session, or to a forged `ok` (the isolated interpreter of `silik`, sudo's clean environment, the plugin loader's
 ownership check, names and arguments never through a shell, the notes of root not a user's to write); the

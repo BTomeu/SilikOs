@@ -107,12 +107,23 @@ rm -f "$out/disk.qcow2"
 # (rows.py: every check whole and counted; a line the serial port lost is a FAIL here, not a silence)
 python3 "$here/rows.py" --name hardened.rows "$out/boot.log" | while IFS='|' read -r _ name verdict detail; do
   printf '%-5s %-44s %s\n' "$verdict" "$name" "$detail"
-done >> "$out/report.txt" || true
+done >> "$out/report.txt" || echo "FAIL  hardened.reader                          rows.py did not get to the end of the log: rows are missing" >> "$out/report.txt"
 if ! grep -q 'SILIKOS-CI|DONE' "$out/boot.log"; then
   echo "FAIL  hardened.finished                        the installed system did not finish its three stages in $t_boot min" >> "$out/report.txt"; status=1
   echo "the last lines of its console:" >&2; clean "$out/boot.log" | tail -30 >&2
 fi
 
+# every check of the list must be there with a verdict (tests/install/must-hardened.txt): one that was skipped, swallowed by
+# the shell or lost on the way is a FAIL of the report, not a row that is simply not there
+# (SILIK_CI_MUST_FILE: another list, for the unit tests' stand-in machines, which say a few checks only)
+mustf=${SILIK_CI_MUST_FILE:-$here/must-hardened.txt}
+if [ -f "$mustf" ]; then
+  while read -r must; do
+    case $must in ''|'#'*) continue ;; esac
+    awk -v m="$must" '($1 == "ok" || $1 == "FAIL") && $2 == m { f = 1 } END { exit !f }' "$out/report.txt" \
+      || printf '%-5s %-44s %s\n' FAIL "$must" "was not said by the installed system (it is in must-hardened.txt)" >> "$out/report.txt"
+  done < "$mustf"
+fi
 echo "SilikOS hardened level test: $(basename "$iso"), $(date -u +%Y-%m-%dT%H:%MZ)"
 cat "$out/report.txt"
 grep -q '^FAIL' "$out/report.txt" && status=1
@@ -127,7 +138,7 @@ step() {   # step NUMBER TITLE PREFIX: the checks whose names start with hardene
   first=$(grep -E "$rx" "$out/report.txt" | grep '^FAIL' | head -1 | cut -c7- | tr -s ' ' | cut -c1-240 || true)
   if [ "$fail" -gt 0 ]; then echo "::error title=hardened level, step $n: $title::$fail of $((ok + fail)) checks failed; the first: $first"
   elif [ "$ok" -gt 0 ]; then echo "::notice title=hardened level, step $n: $title::$ok checks ok"
-  else echo "::error title=hardened level, step $n: $title::it did not run (see report.txt and the consoles in the artifact hardened-test)"; fi
+  else echo "::error title=hardened level, step $n: $title::it did not run (see report.txt and the consoles in the artifact hardened-test)"; status=1; fi
 }
 step 1 "silik secure level hardened: every item set, the exceptions said" set
 step 2 "after a restart each item holds" held

@@ -1,0 +1,18 @@
+
+SILIKOS-CI|usb.daemon|ok|runs
+
+SILIKOS-CI|security.selinux|FAIL|saw Permissive, wanted Enforcing
+[   93.1] Kernel panic - not syncing
+[    0.0] Linux version 5.14.0
+
+SILIKOS-CI|usb.daemon|ok|runs
+
+SILIKOS-CI|security.selinux|ok|Enforcing
+
+SILIKOS-CI-AGAIN|1|usb.daemon|ok|runs
+
+SILIKOS-CI-AGAIN|2|security.selinux|ok|Enforcing
+
+SILIKOS-CI-ROWS|2
+
+SILIKOS-CI|DONE

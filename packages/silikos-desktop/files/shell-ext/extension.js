@@ -165,7 +165,7 @@ function readLast(file, done) {
         try { stream = f.read_finish(res); } catch (e) { done(''); return; }
         stream.read_bytes_async(LAST_MAX, GLib.PRIORITY_DEFAULT, null, (st, r) => {
             let text = '';
-            try { text = lastLine(st.read_bytes_finish(r).toArray(), imports.byteArray.toString); } catch (e) { text = ''; }
+            try { text = lastLine(st.read_bytes_finish(r).toArray(), b => imports.byteArray.toString(b)); } catch (e) { text = ''; }
             try { st.close(null); } catch (e) { /* closed with the object */ }
             done(text);
         });

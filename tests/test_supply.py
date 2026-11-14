@@ -47,6 +47,17 @@ PIN = r"actions/attest-build-provenance@[0-9a-f]{40}  # v\d+"
 
 
 # ---------------------------------------------------------------- the judgement
+def without(program, folder):
+    """a PATH that has every program of /usr/bin and /bin but PROGRAM: FOLDER, filled with links"""
+    if not os.path.isdir(folder):
+        os.makedirs(folder)
+        for d in ("/bin", "/usr/bin"):
+            for n in os.listdir(d):
+                if n != program and not os.path.lexists(os.path.join(folder, n)):
+                    os.symlink(os.path.join(d, n), os.path.join(folder, n))
+    return folder
+
+
 class Judge(unittest.TestCase):
     def j(self, rid="silikos", rev=NOW - 100, tags=STABLE, signed=True, mark=0, now=NOW, age=0, **kw):
         return plug.judge(rid, str(rev) if rev is not None else "", tags, signed, mark, now, age, **kw)
@@ -864,9 +875,10 @@ class VerifyRelease(unittest.TestCase):
         self.tmp.cleanup()
 
     def verify(self, *args, attested=None, gh=True):
-        path = (self.bin + os.pathsep if gh else "") + "/usr/bin:/bin"
-        if not gh and shutil.which("gh", path=path):
-            self.skipTest("gh is in /usr/bin")
+        # (without gh: a folder of links to every program of /usr/bin and /bin but that one. A runner of GitHub has gh
+        # in /usr/bin: these cases were skipped there, the one place the scripts are used: the third pass of 14/11/2026)
+        path = self.bin + os.pathsep + "/usr/bin:/bin" if gh else without("gh", os.path.join(self.tmp.name, "no-gh"))
+        self.assertTrue(gh or not shutil.which("gh", path=path))
         env = dict(os.environ, PATH=path, FAKE_GH_LOG=self.log, FAKE_ATTESTED=" ".join(self.files if attested is None else attested))
         p = subprocess.run(["bash", self.SCRIPT] + list(args) + [self.d], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
         return p.returncode, p.stdout
@@ -1180,9 +1192,10 @@ class Vouched(unittest.TestCase):
         self.tmp.cleanup()
 
     def run_(self, *args, gh=True, env=None):
-        path = (self.bin + os.pathsep if gh else "") + "/usr/bin:/bin"
-        if not gh and shutil.which("gh", path=path):
-            self.skipTest("gh is in /usr/bin")
+        # (without gh: a folder of links to every program of /usr/bin and /bin but that one. A runner of GitHub has gh
+        # in /usr/bin: these cases were skipped there, the one place the scripts are used: the third pass of 14/11/2026)
+        path = self.bin + os.pathsep + "/usr/bin:/bin" if gh else without("gh", os.path.join(self.tmp.name, "no-gh"))
+        self.assertTrue(gh or not shutil.which("gh", path=path))
         e = dict(os.environ, PATH=path, FAKE_GH_LOG=self.log, FAKE_ATTESTED=self.attested, **(env or {}))
         e.pop("GITHUB_ACTIONS", None) if not (env or {}).get("GITHUB_ACTIONS") else None
         e.pop("GITHUB_REPOSITORY", None)

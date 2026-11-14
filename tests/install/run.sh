@@ -259,12 +259,21 @@ rm -f "$out/disk.qcow2" "$out/ks.img"
 
 # the report
 # (rows.py: every check whole and counted; a line the serial port lost is a FAIL here, not a silence)
-python3 "$here/rows.py" "$out/boot.log" > "$work/lines" || true
+python3 "$here/rows.py" "$out/boot.log" > "$work/lines" || echo "SILIKOS-CI|report.reader|FAIL|rows.py ended with $? before the end of the log: the rows below it are missing" >> "$work/lines"
 fail=0
 { echo "SilikOS installation test: $(basename "$iso"), $(date -u +%Y-%m-%dT%H:%MZ), disk after installation $used"
   while IFS='|' read -r _ name verdict detail; do
     printf '%-5s %-28s %s\n' "$verdict" "$name" "$detail"
   done < "$work/lines"
+  # every check of the list must be there with a verdict: a check that was skipped, swallowed or lost is red
+  mustf=${SILIK_CI_MUST_FILE:-$here/must-${SILIK_CI_MUST:-install}.txt}        # (SILIK_CI_MUST_FILE: the unit tests' own list)
+  if [ -f "$mustf" ]; then
+    while read -r must; do
+      case $must in ''|'#'*) continue;; esac
+      awk -F'|' -v m="$must" '$2 == m && ($3 == "ok" || $3 == "FAIL") { f = 1 } END { exit !f }' "$work/lines" \
+        || printf '%-5s %-28s %s\n' FAIL "$must" "was not said by the installed system (it is in must-${SILIK_CI_MUST:-install}.txt)"
+    done < "$mustf"
+  fi
   [ $done_ = 1 ] || echo "FAIL  first-boot                   the installed system did not finish its checks in $t_boot min"
 } > "$out/report.txt"
 cat "$out/report.txt"

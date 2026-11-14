@@ -40,10 +40,10 @@ def whole(row):
 def rows(lines, name="report.rows", notes=None):
     """The rows ("name|verdict|detail") of the starts in these lines, in order."""
     notes = notes if notes is not None else []
-    out, first, again = [], [], {}
+    out, first, again, twice = [], [], {}, 0
 
     def close(sent):
-        nonlocal first, again
+        nonlocal first, again, twice
         if sent is None:
             if not first and not again:
                 return
@@ -55,14 +55,27 @@ def rows(lines, name="report.rows", notes=None):
             out.append("%s|FAIL|a start said %d checks and never how many they were: it did not get to its end, or "
                        "that line was cut on the serial port" % (name, len(got)))
         else:
-            second = [again[k] for k in range(1, sent + 1) if k in again]
+            second = [again[k] for k in sorted(again) if 1 <= k <= sent]
+            said = [r for r in first if whole(r)]
             if len(second) == sent:
                 only = collections.Counter(second)
                 only.subtract(first)
                 for r in second:
                     if take(only, r):
                         notes.append("whole only the second time: " + r)
+                # a FAIL said the first time is never dropped because the second saying has no such line
+                # (by its name: a FAIL line cut in its middle the first time is the second saying's whole one)
+                left = collections.Counter(r.split("|", 2)[0] for r in said if r.split("|", 2)[1] == "FAIL")
+                left.subtract(r.split("|", 2)[0] for r in second if r.split("|", 2)[1] == "FAIL")
+                out.extend([r for r in said if r.split("|", 2)[1] == "FAIL" and take(left, r.split("|", 2)[0])])
                 out.extend(second)
+                # more checks said than counted: a start before this one that never said its count (it did not get
+                # to its end and the machine started again), or a count that is not the number of checks
+                if len(said) > sent or len(again) > sent or twice:
+                    out.append("%s|FAIL|%d checks were said and the count that followed was %d (%d numbered lines, %d "
+                               "numbers said twice): a start that did not get to its end before this one, or a count "
+                               "cut on the serial port; one of the checks left out may be a FAIL"
+                               % (name, len(said), sent, len(again), twice))
             else:
                 left = collections.Counter(first)
                 left.subtract(second)
@@ -75,7 +88,7 @@ def rows(lines, name="report.rows", notes=None):
                                   sent - len(got)))
                 else:
                     notes.append("the second saying came short (%d of %d); the first filled it" % (len(second), sent))
-        first, again = [], {}
+        first, again, twice = [], {}, 0
 
     for line in lines:
         if line.startswith("SILIKOS-CI|"):
@@ -86,6 +99,7 @@ def rows(lines, name="report.rows", notes=None):
         elif line.startswith("SILIKOS-CI-AGAIN|"):
             m = re.match(r"SILIKOS-CI-AGAIN\|(\d+)\|(.*)$", line)
             if m and whole(m.group(2)):
+                twice += again.get(int(m.group(1)), m.group(2)) != m.group(2)
                 again[int(m.group(1))] = m.group(2)
             else:
                 notes.append("cut: " + line[:200])
@@ -117,6 +131,10 @@ def main(argv):
         print(__doc__.strip().split("\n")[0], file=sys.stderr)
         return 2
     out = sys.stdout
+    try:        # (a host whose locale cannot write a row's character must not end the report in its middle)
+        out.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
     for path in argv:
         notes = []
         for r in rows(lines_of(path), name, notes):

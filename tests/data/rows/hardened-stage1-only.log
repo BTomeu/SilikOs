@@ -1,0 +1,187 @@
+
+SILIKOS-CI|hardened.set-before|info|cmdline: root=UUID=7c30db91-4771-425e-8bfd-07089528ee31 ro vsyscall=xonly crashkernel=1G-2G:192M,2G-64G:256M,64G-:512M resume=UUID=a240fe38-b7ff-4b2b-aa54-3644cba0e88d console=ttyS0,115200 ; kernel.kptr_restrict=1 net.core.bpf_jit_harden=1 kernel.kexec_load_disabled=0 dev.tty.legacy_tiocsti=1 kerne
+
+SILIKOS-CI|hardened.set-level-before|ok|default
+
+SILIKOS-CI|hardened.set-unsigned-module-file|info|system_u:object_r:modules_object_t:s0 /lib/modules/5.14.0-687.66.2.el9_8.x86_64/extra/silikci-unsigned.ko; SELinux Enforcing
+
+SILIKOS-CI|hardened.set-unsigned-module-loads|ok|exit 0
+
+SILIKOS-CI|hardened.set-unsigned-module-taints|ok|E
+
+SILIKOS-CI|hardened.set-refuses-the-lockdown|ok|would stop loading
+
+SILIKOS-CI|hardened.set-refuses-the-lockdown-names-it|ok|vcan
+
+SILIKOS-CI|hardened.set-unsigned-module-gone|ok|0 loaded, 0 files
+
+SILIKOS-CI|hardened.set-files-before|ok|
+
+SILIKOS-CI|hardened.set-dry-run|ok|exit 0
+
+SILIKOS-CI|hardened.set-dry-run-prints|ok|sudo grubby --update-kernel=ALL '--args=lockdown=integrity module.sig_enforce=1 init_on_alloc=1 page_alloc.shuffle=1 intel_iommu=on iommu.strict=1 efi=disable_early_pci_dma debugfs=off'
+
+SILIKOS-CI|hardened.set-dry-run-changed-nothing|ok|0
+
+SILIKOS-CI|hardened.set-run|ok|exit 0
+
+SILIKOS-CI|hardened.set-output|info|kernel.kptr_restrict = 2;net.core.bpf_jit_harden = 2;kernel.kexec_load_disabled = 1;dev.tty.legacy_tiocsti = 0;kernel.sysrq = 0;Make sure that SSSD service is configured and enabled. See SSSD documentation for more information.;;No rules;enabled 1;failure 1;pid 659;rate_limit 0;backlog_limit 8192;lo
+
+SILIKOS-CI|hardened.set-says-except|ok|level: hardened, except: Secure Boot
+
+SILIKOS-CI|hardened.set-says-encryption|ok|/ is not encrypted
+
+SILIKOS-CI|hardened.set-entry-lockdown|ok|0 boot entries without lockdown=integrity
+
+SILIKOS-CI|hardened.set-entry-module.sig_enforce|ok|0 boot entries without module.sig_enforce=1
+
+SILIKOS-CI|hardened.set-entry-init_on_alloc|ok|0 boot entries without init_on_alloc=1
+
+SILIKOS-CI|hardened.set-entry-page_alloc.shuffle|ok|0 boot entries without page_alloc.shuffle=1
+
+SILIKOS-CI|hardened.set-entry-intel_iommu|ok|0 boot entries without intel_iommu=on
+
+SILIKOS-CI|hardened.set-entry-iommu.strict|ok|0 boot entries without iommu.strict=1
+
+SILIKOS-CI|hardened.set-entry-efi|ok|0 boot entries without efi=disable_early_pci_dma
+
+SILIKOS-CI|hardened.set-entry-debugfs|ok|0 boot entries without debugfs=off
+
+SILIKOS-CI|hardened.set-not-running-yet|ok|no lockdown=integrity
+
+SILIKOS-CI|hardened.set-kernel-settings|ok|kernel.kptr_restrict=2 net.core.bpf_jit_harden=2 kernel.kexec_load_disabled=1 dev.tty.legacy_tiocsti=0 kernel.sysrq=0
+
+SILIKOS-CI|hardened.set-files|ok|/etc/sysctl.d/61-silikos-hardened.conf /etc/dconf/db/local.d/60-silikos-hardened /etc/dconf/db/local.d/locks/60-silikos-hardened /etc/dconf/db/gdm.d/60-silikos-hardened /etc/NetworkManager/conf.d/60-silikos-hardened.conf /etc/ssh/sshd_config.d/00-silikos-hardened.conf /etc/audit/rules.d/11-loginuid.
+
+SILIKOS-CI|hardened.set-note-mode|ok|600 root
+
+SILIKOS-CI|hardened.set-choice|ok|hardened
+
+SILIKOS-CI|hardened.set-items|info|lockdown=pending memory=pending iommu=pending early-dma=pending debugfs=pending kptr=on bpf-jit=on kexec=on tiocsti=on sysrq=on locks=on faillock=on userlist=on automount=on wifi-mac=on dhcp-name=on thunderbolt=n/a audit=on sshd=on
+
+SILIKOS-CI|hardened.set-pending|ok|lockdown=pending
+
+SILIKOS-CI|hardened.set-faillock|ok|with-faillock
+
+SILIKOS-CI|hardened.set-faillock-pam|ok|3 lines
+
+SILIKOS-CI|hardened.set-faillock-values|ok|deny = 10;unlock_time = 600;
+
+SILIKOS-CI|hardened.set-lock-refuses-a-write|ok|false
+
+SILIKOS-CI|hardened.set-lock-leaves-the-rest|ok|true
+
+SILIKOS-CI|hardened.set-automount|ok|false
+
+SILIKOS-CI|hardened.set-userlist|ok|true
+
+SILIKOS-CI|hardened.set-network|ok|wifi.cloned-mac-address=stable;ipv4.dhcp-send-hostname=0;ipv6.dhcp-send-hostname=0;
+
+SILIKOS-CI|hardened.set-audit-rules|ok|module-load
+
+SILIKOS-CI|hardened.set-audit-loginuid|ok|loginuid_immutable 1
+
+SILIKOS-CI|hardened.set-sshd|ok|maxauthtries 4;passwordauthentication no;permitrootlogin no;
+
+SILIKOS-CI|hardened.set-sshd-unit|info|sshd: disabled, inactive
+
+SILIKOS-CI|hardened.set-again|ok|exit 0, 0 commands
+
+SILIKOS-CI|hardened.set-again-says|ok|nothing to change
+
+SILIKOS-CI-AGAIN|1|hardened.set-before|info|cmdline: root=UUID=7c30db91-4771-425e-8bfd-07089528ee31 ro vsyscall=xonly crashkernel=1G-2G:192M,2G-64G:256M,64G-:512M resume=UUID=a240fe38-b7ff-4b2b-aa54-3644cba0e88d console=ttyS0,115200 ; kernel.kptr_restrict=1 net.core.bpf_jit_harden=1 kernel.kexec_load_disabled=0 dev.tty.legacy_tiocsti=1 kerne
+
+SILIKOS-CI-AGAIN|2|hardened.set-level-before|ok|default
+
+SILIKOS-CI-AGAIN|3|hardened.set-unsigned-module-file|info|system_u:object_r:modules_object_t:s0 /lib/modules/5.14.0-687.66.2.el9_8.x86_64/extra/silikci-unsigned.ko; SELinux Enforcing
+
+SILIKOS-CI-AGAIN|4|hardened.set-unsigned-module-loads|ok|exit 0
+
+SILIKOS-CI-AGAIN|5|hardened.set-unsigned-module-taints|ok|E
+
+SILIKOS-CI-AGAIN|6|hardened.set-refuses-the-lockdown|ok|would stop loading
+
+SILIKOS-CI-AGAIN|7|hardened.set-refuses-the-lockdown-names-it|ok|vcan
+
+SILIKOS-CI-AGAIN|8|hardened.set-unsigned-module-gone|ok|0 loaded, 0 files
+
+SILIKOS-CI-AGAIN|9|hardened.set-files-before|ok|
+
+SILIKOS-CI-AGAIN|10|hardened.set-dry-run|ok|exit 0
+
+SILIKOS-CI-AGAIN|11|hardened.set-dry-run-prints|ok|sudo grubby --update-kernel=ALL '--args=lockdown=integrity module.sig_enforce=1 init_on_alloc=1 page_alloc.shuffle=1 intel_iommu=on iommu.strict=1 efi=disable_early_pci_dma debugfs=off'
+
+SILIKOS-CI-AGAIN|12|hardened.set-dry-run-changed-nothing|ok|0
+
+SILIKOS-CI-AGAIN|13|hardened.set-run|ok|exit 0
+
+SILIKOS-CI-AGAIN|14|hardened.set-output|info|kernel.kptr_restrict = 2;net.core.bpf_jit_harden = 2;kernel.kexec_load_disabled = 1;dev.tty.legacy_tiocsti = 0;kernel.sysrq = 0;Make sure that SSSD service is configured and enabled. See SSSD documentation for more information.;;No rules;enabled 1;failure 1;pid 659;rate_limit 0;backlog_limit 8192;lo
+
+SILIKOS-CI-AGAIN|15|hardened.set-says-except|ok|level: hardened, except: Secure Boot
+
+SILIKOS-CI-AGAIN|16|hardened.set-says-encryption|ok|/ is not encrypted
+
+SILIKOS-CI-AGAIN|17|hardened.set-entry-lockdown|ok|0 boot entries without lockdown=integrity
+
+SILIKOS-CI-AGAIN|18|hardened.set-entry-module.sig_enforce|ok|0 boot entries without module.sig_enforce=1
+
+SILIKOS-CI-AGAIN|19|hardened.set-entry-init_on_alloc|ok|0 boot entries without init_on_alloc=1
+
+SILIKOS-CI-AGAIN|20|hardened.set-entry-page_alloc.shuffle|ok|0 boot entries without page_alloc.shuffle=1
+
+SILIKOS-CI-AGAIN|21|hardened.set-entry-intel_iommu|ok|0 boot entries without intel_iommu=on
+
+SILIKOS-CI-AGAIN|22|hardened.set-entry-iommu.strict|ok|0 boot entries without iommu.strict=1
+
+SILIKOS-CI-AGAIN|23|hardened.set-entry-efi|ok|0 boot entries without efi=disable_early_pci_dma
+
+SILIKOS-CI-AGAIN|24|hardened.set-entry-debugfs|ok|0 boot entries without debugfs=off
+
+SILIKOS-CI-AGAIN|25|hardened.set-not-running-yet|ok|no lockdown=integrity
+
+SILIKOS-CI-AGAIN|26|hardened.set-kernel-settings|ok|kernel.kptr_restrict=2 net.core.bpf_jit_harden=2 kernel.kexec_load_disabled=1 dev.tty.legacy_tiocsti=0 kernel.sysrq=0
+
+SILIKOS-CI-AGAIN|27|hardened.set-files|ok|/etc/sysctl.d/61-silikos-hardened.conf /etc/dconf/db/local.d/60-silikos-hardened /etc/dconf/db/local.d/locks/60-silikos-hardened /etc/dconf/db/gdm.d/60-silikos-hardened /etc/NetworkManager/conf.d/60-silikos-hardened.conf /etc/ssh/sshd_config.d/00-silikos-hardened.conf /etc/audit/rules.d/11-loginuid.
+
+SILIKOS-CI-AGAIN|28|hardened.set-note-mode|ok|600 root
+
+SILIKOS-CI-AGAIN|29|hardened.set-choice|ok|hardened
+
+SILIKOS-CI-AGAIN|30|hardened.set-items|info|lockdown=pending memory=pending iommu=pending early-dma=pending debugfs=pending kptr=on bpf-jit=on kexec=on tiocsti=on sysrq=on locks=on faillock=on userlist=on automount=on wifi-mac=on dhcp-name=on thunderbolt=n/a audit=on sshd=on
+
+SILIKOS-CI-AGAIN|31|hardened.set-pending|ok|lockdown=pending
+
+SILIKOS-CI-AGAIN|32|hardened.set-faillock|ok|with-faillock
+
+SILIKOS-CI-AGAIN|33|hardened.set-faillock-pam|ok|3 lines
+
+SILIKOS-CI-AGAIN|34|hardened.set-faillock-values|ok|deny = 10;unlock_time = 600;
+
+SILIKOS-CI-AGAIN|35|hardened.set-lock-refuses-a-write|ok|false
+
+SILIKOS-CI-AGAIN|36|hardened.set-lock-leaves-the-rest|ok|true
+
+SILIKOS-CI-AGAIN|37|hardened.set-automount|ok|false
+
+SILIKOS-CI-AGAIN|38|hardened.set-userlist|ok|true
+
+SILIKOS-CI-AGAIN|39|hardened.set-network|ok|wifi.cloned-mac-address=stable;ipv4.dhcp-send-hostname=0;ipv6.dhcp-send-hostname=0;
+
+SILIKOS-CI-AGAIN|40|hardened.set-audit-rules|ok|module-load
+
+SILIKOS-CI-AGAIN|41|hardened.set-audit-loginuid|ok|loginuid_immutable 1
+
+SILIKOS-CI-AGAIN|42|hardened.set-sshd|ok|maxauthtries 4;passwordauthentication no;permitrootlogin no;
+
+SILIKOS-CI-AGAIN|43|hardened.set-sshd-unit|info|sshd: disabled, inactive
+
+SILIKOS-CI-AGAIN|44|hardened.set-again|ok|exit 0, 0 commands
+
+SILIKOS-CI-AGAIN|45|hardened.set-again-says|ok|nothing to change
+
+SILIKOS-CI-ROWS|45
+[    0.000000] Linux version 5.14.0 (the restart)
+
+SILIKOS-CI-ROWS|0
+
+SILIKOS-CI|DONE

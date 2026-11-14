@@ -125,12 +125,23 @@ for part in thin plain; do
   # (rows.py: every check whole and counted; a line the serial port lost is a FAIL here, not a silence)
   python3 "$here/rows.py" --name "$part.rows" "$out/$part-boot.log" | while IFS='|' read -r _ name verdict detail; do
     printf '%-5s %-44s %s\n' "$verdict" "$name" "$detail"
-  done >> "$out/report.txt" || true
+  done >> "$out/report.txt" || printf '%-5s %-44s %s\n' FAIL "$part.reader" "rows.py did not get to the end of the log: rows are missing" >> "$out/report.txt"
   if [ $finished = 0 ]; then
     echo "FAIL  $part.finished                   the installed system did not finish its stages in $t_boot min" >> "$out/report.txt"; status=1
   fi
 done
 
+# every check of the list must be there with a verdict (tests/install/must-rollback.txt): one that was skipped, swallowed by
+# the shell or lost on the way is a FAIL of the report, not a row that is simply not there
+# (SILIK_CI_MUST_FILE: another list, for the unit tests' stand-in machines, which say a few checks only)
+mustf=${SILIK_CI_MUST_FILE:-$here/must-rollback.txt}
+if [ -f "$mustf" ] && [ -z "$only" ]; then
+  while read -r must; do
+    case $must in ''|'#'*) continue ;; esac
+    awk -v m="$must" '($1 == "ok" || $1 == "FAIL") && $2 == m { f = 1 } END { exit !f }' "$out/report.txt" \
+      || printf '%-5s %-44s %s\n' FAIL "$must" "was not said by the installed system (it is in must-rollback.txt)" >> "$out/report.txt"
+  done < "$mustf"
+fi
 echo "SilikOS rollback test: $(basename "$iso"), $(date -u +%Y-%m-%dT%H:%MZ)"
 cat "$out/report.txt"
 grep -q '^FAIL' "$out/report.txt" && status=1
@@ -145,7 +156,7 @@ step() {   # step NUMBER TITLE PREFIX...: the checks whose names start with one 
   first=$(grep -E "$rx" "$out/report.txt" | grep '^FAIL' | head -1 | cut -c7- | tr -s ' ' | cut -c1-240 || true)
   if [ "$fail" -gt 0 ]; then echo "::error title=rollback step $n: $title::$fail of $((ok + fail)) checks failed; the first: $first"
   elif [ "$ok" -gt 0 ]; then echo "::notice title=rollback step $n: $title::$ok checks ok"
-  else echo "::error title=rollback step $n: $title::it did not run (see report.txt and the consoles in the artifact rollback-test)"; fi
+  else echo "::error title=rollback step $n: $title::it did not run (see report.txt and the consoles in the artifact rollback-test)"; status=1; fi
 }
 if [ -z "$only" ] || [ "$only" = thin ]; then
   step 1 "thin layout after automatic partitioning" layout thin

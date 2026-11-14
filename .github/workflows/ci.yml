@@ -243,7 +243,7 @@ jobs:
   # for a tag v* of this repository, never for a pull request, and has no checkout.
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [install, arm]
+    needs: [install, arm, rollback-test, hardened-test, sealed-test]
     runs-on: ubuntu-24.04
     permissions:
       contents: write        # (the release)
@@ -297,12 +297,11 @@ jobs:
   # small installation on plain partitions, where `silik snapshot` says "not available" and `silik rollback
   # --packages` goes back. The ISO is built here from the packages job's packages (the system alone, without the
   # other workflows' releases), beside the installation test, which it does not touch.
-  # continue-on-error: this job is new and has never run (written 13/11/2026 where nothing of LVM, KVM or a boot
-  # could run): it must not stop the ISO or a release until it has passed. Each step of the plan is an annotation.
+  # The job counts: a run with this job red is a red run, and a release needs it (the third pass of 14/11/2026: it had
+  # `continue-on-error` since the day it was written, and two runs were "success" with it failed).
   rollback-test:
     needs: packages
     runs-on: ubuntu-24.04
-    continue-on-error: true
     timeout-minutes: 170
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
@@ -350,12 +349,11 @@ jobs:
   # module without a signature refused, the kernel settings, the desktop session, silik doctor), then `level default`,
   # another restart, and everything as it was. The machine has no Secure Boot and no encrypted disk: the level must
   # say "hardened, except". A job of its own, beside the installation test, which it does not touch.
-  # continue-on-error: this job is new and has never run (written 13/11/2026 where no KVM, no kernel of the base and
-  # no boot could run): it must not stop the ISO or a release until it has passed. Each step is an annotation.
+  # The job counts: a run with this job red is a red run, and a release needs it (the third pass of 14/11/2026: it had
+  # `continue-on-error` since the day it was written, and two runs were "success" with it failed).
   hardened-test:
     needs: packages
     runs-on: ubuntu-24.04
-    continue-on-error: true
     timeout-minutes: 170
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
@@ -406,12 +404,11 @@ jobs:
   # `silik disk tpm enroll` with a PIN; the PIN opens the disk; with Secure Boot off, and with another TPM, the PIN
   # does not and the passphrase does; the first machine again; an empty and a wrong PIN; `silik disk tpm remove`;
   # the passphrase again. The ISO is built here from the packages job's packages, as in rollback-test.
-  # continue-on-error: this job is new and has never run (written 13/11/2026 where no virtual machine, firmware or
-  # TPM could run): it must not stop the ISO or a release until it has passed. Each start is an annotation.
+  # The job counts: a run with this job red is a red run, and a release needs it (the third pass of 14/11/2026: it had
+  # `continue-on-error` since the day it was written, and two runs were "success" with it failed).
   sealed-test:
     needs: packages
     runs-on: ubuntu-24.04
-    continue-on-error: true
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4

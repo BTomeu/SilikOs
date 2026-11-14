@@ -26,4 +26,5 @@ echo "qemu: \$(printf '%s ' "\${args[@]}" | grep -o -- '-nic [^ ]*' | tr '\n' ' 
 exec "$real" "\${args[@]}"
 SHIM
 chmod +x "$shim/qemu-system-x86_64"
-PATH="$shim:$PATH" bash "$here/run.sh" "$@"
+# (its own list of the checks that must be said: there is no Windows test program on this test's disk)
+SILIK_CI_MUST=offline PATH="$shim:$PATH" bash "$here/run.sh" "$@"

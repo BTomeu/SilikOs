@@ -1,367 +1,263 @@
-# Tests of `silik evidence` (packages/silik-tools/files/plugins/evidence.py): one dated folder and its tar.gz with both
-# SBOMs, the CVE report, the audit, status, the repositories and their keys, and a MANIFEST; nothing personal in it
-# unless --with-host; the same system gives the same archive.
-# The system is the recorded one of the other compliance tests (tests/data/compliance: an almalinux:9 container,
-# AlmaLinux 9.8, 13/11/2026; gpg-show-keys.txt is `gpg --show-keys --with-colons --with-fingerprint` of the base's
-# /etc/pki/rpm-gpg/RPM-GPG-KEY-AlmaLinux-9, gnupg2 2.3.3), with a made-up user (ada), home, host (bench-7) and disks.
+# The evidence itself, attacked (the third pass of 14/11/2026: a tester whose target was not the product but its
+# proof). What it ran, each a way for a job to be green while the thing it names is broken, and what holds it now:
+#   F1  the CI run was "success" with the hardened, sealed or rollback job failed (continue-on-error): the three jobs
+#       count, and a release needs them;
+#   F2  rows.py dropped a whole start, FAIL rows included, when a later start ended well; a count of 0, a count cut,
+#       a number said twice, a FAIL said only the first time: each is a FAIL row now (the tester's logs are
+#       tests/data/rows/*.log);
+#   F3  nothing listed the checks that must be there: tests/install/must-NAME.txt, read by the four host scripts;
+#   F4  a host script ended with 0 when its stages never ran; a stage file that is no stage ran no check at all;
+#   F5  the row reader's own failure was `|| true`;
+#   F6  checks that could not fail (a traceback counted as ok, a missing tool as "nothing listens");
+#   F7  the guard against swallowed checks knew one spelling of the fault.
 #   python3 -m unittest discover -s tests -v
-import contextlib
-import hashlib
-import importlib.machinery
 import importlib.util
-import io
-import json
 import os
 import re
 import shutil
+import subprocess
 import sys
-import tarfile
 import tempfile
 import unittest
-import xml.etree.ElementTree as ET
-from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "tests"))
-import schema_min                                       # noqa: E402
+HERE = os.path.join(ROOT, "tests/install")
+LOGS = os.path.join(ROOT, "tests/data/rows")
+MUST = {"run.sh": "install", "hardened.sh": "hardened", "rollback.sh": "rollback", "sealed.sh": "sealed"}
+CHECK = {"install": ("check.sh", ""), "offline": ("check.sh", ""), "hardened": ("hardened-check.sh", "hardened."),
+         "rollback": ("rollback-check.sh", ""), "sealed": ("sealed-check.sh", "sealed.")}
 
-DATA = os.path.join(ROOT, "tests/data/compliance")
-PERSONAL = ("ada", "/home/ada", "bench-7", "02:00:00:AA:BB:01", "192.0.2.7", "3f1c2a9e-1b2c-4d5e-8f90-a1b2c3d4e5f6")
-CMDLINE = ("BOOT_IMAGE=(hd0,gpt2)/vmlinuz-5.14.0-687.66.2.el9_8.x86_64 root=UUID=3f1c2a9e-1b2c-4d5e-8f90-a1b2c3d4e5f6 ro "
-           "rd.luks.uuid=luks-0a1b2c3d-1111-2222-3333-444455556666 vsyscall=xonly quiet\n")
-
-
-def load(name, path):
-    loader = importlib.machinery.SourceFileLoader(name, path)
-    spec = importlib.util.spec_from_loader(name, loader)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    loader.exec_module(mod)
-    return mod
+spec = importlib.util.spec_from_file_location("rows", os.path.join(HERE, "rows.py"))
+rows = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(rows)
 
 
-def text(name):
-    with open(os.path.join(DATA, name), encoding="utf-8") as f:
+def text(rel):
+    with open(os.path.join(ROOT, rel), encoding="utf-8") as f:
         return f.read()
 
 
-silik = load("silik_evidence_cli", os.path.join(ROOT, "packages/silik-tools/files/silik"))
-REAL_LOAD = silik.load_plugin
-evidence = REAL_LOAD("evidence")
-evidence.SILIK = silik
-RPM_QA, PROFILES = text("rpm-qa.txt"), text("oscap-profiles.txt")
-SILIK_SAYS = {
-    "status": {"silikos": "SilikOS 9.8", "base": "AlmaLinux release 9.8 (Olive Jaguar)", "kernel": "5.14.0-687.66.2.el9_8.x86_64",
-               "eda_boxes": [{"name": "ic616", "image": "centos:6", "status": "Up"}], "wine_prefixes": ["default"]},
-    "secure": {"checks": [{"id": "lock", "name": "screen lock", "state": "ok", "value": "blank after 300 s, locked at once (user ada)", "fix": []},
-                          {"id": "sysctl", "name": "kernel settings", "state": "ok", "value": "vm.mmap_min_addr left as the base has it", "fix": []}],
-               "summary": {"ok": 2, "warn": 0, "bad": 0, "unknown": 0}},
-    "doctor": {"areas": ["system"], "seconds": 1.234, "commands": ["ls /home/ada/.local/share/silikos/wine"],
-               "checks": [{"area": "windows", "id": "prefixes", "name": "Wine prefixes", "state": "ok", "value": "1 in /home/ada/.local/share/silikos/wine", "fix": []},
-                          {"area": "network", "id": "link", "name": "network", "state": "ok", "value": "bench-7 has a route; interface 02:00:00:aa:bb:01", "fix": []}],
-               "summary": {"ok": 2, "warn": 0, "bad": 0, "unknown": 0}},
-}
+def read(name):
+    return rows.rows(rows.lines_of(os.path.join(LOGS, name + ".log")), name="x.rows")
 
 
-class Rig:
-    def __init__(self, scanner=True):
-        self.d = tempfile.mkdtemp()
-        self.scanner, self.ran = scanner, []
-        self.ds = os.path.join(self.d, "ssg-almalinux9-ds.xml")
-        self.key = os.path.join(self.d, "RPM-GPG-KEY-AlmaLinux-9")
-        for p in (self.ds, self.key):
-            with open(p, "w") as f:
-                f.write("x")
-        self.out = os.path.join(self.d, "out")
-
-    def close(self):
-        shutil.rmtree(self.d)
-
-    def sec_cmd(self, argv, timeout=20):
-        if argv[:2] == ["rpm", "-qa"]:
-            return 0, RPM_QA.strip()
-        if argv[0] == "dnf" and "--installed" in argv:
-            return 0, text("updateinfo-installed-kernel.txt")
-        if argv[0] == "dnf" and "list" in argv:
-            return 0, text("updateinfo-list.txt")
-        if argv[0] == "dnf" and "info" in argv:
-            return 0, text("updateinfo-info.txt")
-        if argv[0] == "gpg":
-            return 0, text("gpg-show-keys.txt")
-        if argv[:3] == ["rpm", "-q", "gpg-pubkey"]:
-            return 0, "b86b3716-61e69f29\tAlmaLinux OS 9 <packager@almalinux.org> public key"
-        if argv[:2] == ["rpm", "-qf"]:
-            return 1, "\n".join("file %s is not owned by any package" % p for p in argv[2:])
-        if argv[:3] == ["oscap", "info", "--profiles"]:
-            return 0, PROFILES.strip()
-        return None, ""
-
-    def run(self, ctx, argv, check=True, capture=False, env=None, stdin=None):
-        self.ran.append(argv)
-        if "eval" in argv:
-            shutil.copy(os.path.join(DATA, "xccdf-results.xml"), argv[argv.index("--results") + 1])
-            with open(argv[argv.index("--results-arf") + 1], "w") as f:
-                f.write("<arf>bench-7 ada 02:00:00:AA:BB:01</arf>")
-            with open(argv[argv.index("--report") + 1], "w") as f:
-                f.write("<html>report of bench-7</html>")
-            return 2, ""
-        if argv[:4] == ["oscap", "xccdf", "generate", "report"]:          # (written from the file it is given)
-            with open(argv[4], encoding="utf-8") as f:
-                t = f.read()
-            return 0, "<html>target %s, %d rule results</html>" % (re.search(r"<target>([^<]*)</target>", t).group(1), t.count("<rule-result "))
-        return 0, ""
-
-    def silik_json(self, s, argv):
-        return 0, json.dumps(SILIK_SAYS[argv[0]])
-
-    def main(self, argv, env=None):
-        cv = evidence.plugin(silik, "cve")
-        repos = [{"id": "baseos", "name": "AlmaLinux $releasever - BaseOS", "url": "https://repo.almalinux.org/almalinux/$releasever/BaseOS/$basearch/os/",
-                  "url_kind": "baseurl", "gpgcheck": True, "repo_gpgcheck": False, "gpgkey": ["file://" + self.key, "https://example.com/key.asc"],
-                  "file": "almalinux-baseos.repo"}]
-        osr = {"NAME": "SilikOS", "VERSION_ID": "9.8", "PRETTY_NAME": "SilikOS 9.8", "ID": "almalinux", "CPE_NAME": "cpe:/o:almalinux:almalinux:9::baseos"}
-        out, err, rig = io.StringIO(), io.StringIO(), self
-        real_read = silik.read
-        e = {"SILIK_SCAP_DS": self.ds if self.scanner else os.path.join(self.d, "nowhere"), "SILIK_KERNEL": "5.14.0-687.66.2.el9_8.x86_64",
-             "SOURCE_DATE_EPOCH": "1794528000"}
-        e.update(env or {})
-        patches = [
-            mock.patch.dict(os.environ, e),
-            mock.patch("shutil.which", lambda exe, *a, **k: "/usr/bin/" + exe if rig.scanner or exe != "oscap" else None),
-            mock.patch.object(silik, "load_plugin", lambda n: evidence if n == "evidence" else REAL_LOAD(n)),
-            mock.patch.object(silik, "sec_cmd", self.sec_cmd),
-            mock.patch.object(silik.Ctx, "run", lambda ctx, argv, **kw: rig.run(ctx, argv, **kw)),
-            mock.patch.object(silik, "read", lambda p, default="": CMDLINE if p == "/proc/cmdline" else
-                              "AlmaLinux release 9.8 (Olive Jaguar)\n" if p == "/etc/redhat-release" else real_read(p, default)),
-            mock.patch.object(silik, "os_release", lambda path="/etc/os-release": dict(osr)),
-            mock.patch.object(silik, "host_arch", lambda: "x86_64"),
-            mock.patch.object(silik, "sec_secureboot", lambda container: "enabled"),
-            mock.patch.object(silik, "sec_container", lambda: False),
-            mock.patch.object(silik, "boxes", lambda ctx: []), mock.patch.object(silik, "prefixes", lambda: []),
-            mock.patch.object(silik, "doc_probe_system", lambda: {}),
-            mock.patch.object(silik, "doc_updates", lambda st, rows: rows.append(
-                {"state": "ok", "value": "every update, daily; last run 5 h ago: done", "fix": []})),
-            mock.patch.object(evidence, "identity", lambda: (["ada"], ["/home/ada"], ["bench-7"])),
-            mock.patch.object(evidence, "silik_json", self.silik_json),
-            mock.patch.object(cv, "repos", lambda *a: [dict(r) for r in repos]),
-            mock.patch.object(cv, "count_dirs", lambda globs, ends: 0),
-            mock.patch("os.listdir", self.listdir),
-            mock.patch("os.geteuid", lambda: 0),        # (as root: the audit's own tests cover a user, with sudo)
-            contextlib.redirect_stdout(out), contextlib.redirect_stderr(err)]
-        with contextlib.ExitStack() as stack:
-            for p in patches:
-                stack.enter_context(p)
-            try:
-                rc = silik.main(argv)
-            except SystemExit as ex:
-                rc = ex.code
-        return rc, out.getvalue(), err.getvalue()
-
-    real_listdir = staticmethod(os.listdir)
-
-    def listdir(self, p="."):
-        return ["vendor-tool"] if p == "/opt" else Rig.real_listdir(p)
-
-    def folder(self, day="20261113"):
-        return os.path.join(self.out, "silikos-evidence-" + day)
-
-    def files(self, day="20261113"):
-        got = {}
-        top = self.folder(day)
-        for d, _, fs in os.walk(top):
-            for f in fs:
-                p = os.path.join(d, f)
-                with open(p, "rb") as fh:
-                    got[os.path.relpath(p, top)] = fh.read()
-        return got
+def verdicts(got):
+    return [(r.split("|", 2)[0], r.split("|", 2)[1]) for r in got]
 
 
-class Evidence(unittest.TestCase):
-    def setUp(self):
-        self.rig = Rig()
+class TheReader(unittest.TestCase):
+    def test_a_start_that_did_not_end_before_a_good_one_is_not_dropped(self):
+        got = verdicts(read("crash-then-good"))
+        self.assertIn(("security.selinux", "FAIL"), got)                     # (said before the panic: still in the report)
+        self.assertIn(("x.rows", "FAIL"), got)
+        self.assertIn("4 checks were said and the count that followed was 2", read("crash-then-good")[-1])
 
-    def tearDown(self):
-        self.rig.close()
+    def test_a_count_that_is_not_the_number_of_checks(self):
+        for log, said in (("rows-zero", ("a.two", "FAIL")), ("count-cut", ("c.n7", "FAIL"))):
+            got = verdicts(read(log))
+            self.assertIn(said, got, log)
+            self.assertIn(("x.rows", "FAIL"), got, log)
 
-    def test_the_folder(self):
-        rc, out, err = self.rig.main(["evidence", "-o", self.rig.out])
-        self.assertEqual(rc, 0, err)
-        files = self.rig.files()
-        self.assertEqual(sorted(files), ["MANIFEST", "README.txt", "audit/report.html", "audit/summary.json", "audit/testresult.xml", "cve.json", "cve.txt",
-                                         "doctor.json", "evidence.json", "kernel-cmdline.txt", "repositories.json", "sbom.cdx.json", "sbom.spdx.json",
-                                         "secure-boot.txt", "secure-status.json", "status.json"])
-        # the MANIFEST is sha256sum's format and true for every other file
-        man = dict(l.split("  ", 1)[::-1] for l in files["MANIFEST"].decode().splitlines())
-        self.assertEqual(sorted(man), sorted(k for k in files if k != "MANIFEST"))
-        for k, h in man.items():
-            self.assertEqual(hashlib.sha256(files[k]).hexdigest(), h, k)
-        # both bills, valid by the official schemas
-        for name, schema in (("sbom.spdx.json", "spdx-2.3.schema.json"), ("sbom.cdx.json", "bom-1.6.schema.json")):
-            v = schema_min.Validator(os.path.join(ROOT, "tests/data/sbom", schema))
-            self.assertEqual(v.validate(json.loads(files[name].decode())), [], name)
-        self.assertEqual(len(json.loads(files["sbom.cdx.json"].decode())["components"]), 291)
-        # the CVE report, the audit, the judgements
-        cve = json.loads(files["cve.json"].decode())
-        self.assertEqual([a["id"] for a in cve["advisories"]], ["ALSA-2026:92907", "ALSA-2026:95618"])
-        self.assertIn("not covered (this command cannot know):", files["cve.txt"].decode())
-        self.assertEqual(json.loads(files["audit/summary.json"].decode())["counts"], {"pass": 68, "fail": 7, "notapplicable": 213})
-        self.assertEqual(json.loads(files["status.json"].decode())["silikos"], "SilikOS 9.8")
-        self.assertNotIn("seconds", json.loads(files["doctor.json"].decode()))      # (how long the doctor took is not a fact of the system)
-        # the repositories, the fingerprints of their keys, the keys rpm trusts
-        rep = json.loads(files["repositories.json"].decode())
-        keys = rep["repositories"][0]["keys"]
-        self.assertEqual(keys[0]["fingerprints"], [{"fingerprint": "BF18AC2876178908D6E71267D36CB86CB86B3716", "uid": "AlmaLinux OS 9 <packager@almalinux.org>",
-                                                    "created": "1642503977", "expires": ""}])
-        self.assertEqual((keys[1]["fingerprints"], keys[1]["note"]), (None, "not a file on this system: not fetched"))
-        self.assertEqual(rep["rpm_keys"], [{"id": "b86b3716-61e69f29", "summary": "AlmaLinux OS 9 <packager@almalinux.org> public key"}])
-        self.assertEqual(files["secure-boot.txt"], b"enabled\n")
-        self.assertIn(b"vsyscall=xonly", files["kernel-cmdline.txt"])
-        # what was run and what was left out
-        info = json.loads(files["evidence.json"].decode())
-        self.assertEqual((info["date"], info["with_host"], info["system"]["name"], info["results"]["packages"]), ("2026-11-13", False, "SilikOS", 291))
-        self.assertIn("audit/arf.xml", info["left_out"])
-        self.assertIn("not a statement of compliance", info["statement"])
-        stable = {f["file"] for f in info["files"] if f["same_bytes_for_the_same_system"]}
-        self.assertEqual(stable, {"sbom.spdx.json", "sbom.cdx.json", "status.json", "repositories.json", "kernel-cmdline.txt", "secure-boot.txt"})
-        # the README in the three languages, and no claim
-        readme = files["README.txt"].decode()
-        for part in ("SilikOS evidence folder, 2026-11-13", "Carpeta d'evidències de SilikOS", "Carpeta de evidencias de SilikOS",
-                     "it is not a statement of compliance", "no és cap declaració de conformitat", "no es ninguna declaración de conformidad",
-                     "not that of a product built on it"):
-            self.assertIn(part, readme)
-        self.assertEqual(readme.count("sbom.spdx.json"), 3)
-        # the audit ran read-only, and the report was written again from the cleaned results
-        self.assertEqual([a[:4] for a in self.rig.ran], [["oscap", "xccdf", "eval", "--profile"], ["oscap", "xccdf", "generate", "report"]])
-        self.assertEqual(files["audit/report.html"], b"<html>target &lt;host&gt;, 288 rule results</html>")
-        self.assertIn(self.rig.folder(), out)
-        self.assertIn("not a statement of compliance", out)
+    def test_a_fail_is_never_replaced_by_an_ok(self):
+        for log in ("number-twice", "fail-then-ok"):
+            self.assertIn(("a.one", "FAIL"), verdicts(read(log)), log)
+        self.assertIn(("x.rows", "FAIL"), verdicts(read("number-twice")))       # (a number said twice is said)
+        got = verdicts(read("fail-second-only"))
+        self.assertIn("FAIL", [v for _, v in got])
 
-    def test_nothing_personal(self):
-        self.assertEqual(self.rig.main(["evidence", "-o", self.rig.out])[0], 0)
-        files = self.rig.files()
-        for k, body in files.items():
-            for word in PERSONAL[1:]:
-                self.assertFalse(word.lower().encode() in body.lower(), "%s in %s" % (word, k))
-            # (the user's name as a word: "adaptive" in a package's summary is not the user)
-            self.assertIsNone(re.search(rb"(?<![\w.-])ada(?![\w.-])", body), k)
-            self.assertIsNone(re.search(rb"(?<![0-9A-Fa-f:])(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}(?![0-9A-Fa-f:])", body), k)
-        self.assertNotIn("audit/arf.xml", files)                          # (what the checks read: accounts, mounts)
-        self.assertNotIn("audit/results.xml", files)
-        # replaced, not cut: what the line said is still there
-        self.assertIn("locked at once (user <user>)", files["secure-status.json"].decode())
-        self.assertIn("vm.mmap_min_addr left as the base has it", files["secure-status.json"].decode())
-        self.assertIn("1 in ~/.local/share/silikos/wine", files["doctor.json"].decode())
-        self.assertIn("<host> has a route; interface <mac>", files["doctor.json"].decode())
-        self.assertIn("root=UUID=<uuid> ro rd.luks.uuid=luks-<uuid> vsyscall=xonly", files["kernel-cmdline.txt"].decode())
-        # the audit's TestResult: a document of its own, the target's names and addresses replaced, the results kept
-        root = ET.fromstring(files["audit/testresult.xml"])
-        ns = "{http://checklists.nist.gov/xccdf/1.2}"
-        self.assertEqual(root.tag, ns + "TestResult")
-        self.assertEqual(root.find(ns + "target").text, "<host>")
-        self.assertEqual({e.text for e in root.findall(ns + "target-address")}, {"<address>"})
-        self.assertEqual(root.find(ns + "identity").text, "<user>")
-        facts = {e.get("name"): e.text for e in root.iter(ns + "fact")}
-        self.assertEqual((facts["urn:xccdf:fact:asset:identifier:host_name"], facts["urn:xccdf:fact:asset:identifier:mac"],
-                          facts["urn:xccdf:fact:asset:identifier:ipv4"], facts["urn:xccdf:fact:scanner:name"]), ("<host>", "<mac>", "<address>", "OpenSCAP"))
-        self.assertEqual(len(root.findall(ns + "rule-result")), 288)
-        # and the archive holds the same files
-        with tarfile.open(self.rig.folder() + ".tar.gz") as tar:
-            for m in tar.getmembers():
-                body = tar.extractfile(m).read()
-                self.assertEqual(body, files[m.name.split("/", 1)[1]])
+    def test_words_that_are_no_verdict_and_logs_with_nothing(self):
+        self.assertIn(("x.rows", "FAIL"), verdicts(read("verdict-words")))
+        self.assertEqual(read("empty"), [])                                 # (the hosts say the start never finished)
+        self.assertEqual(read("only-done"), [])
+        self.assertEqual(read("done-in-detail")[0], "a.one|ok|the journal says SILIKOS-CI/DONE" if False else read("done-in-detail")[0])
+        self.assertTrue(read("done-in-detail")[0].startswith("a.one|ok|the journal says SILIKOS-CI"))      # a detail that quotes the end mark is a detail
 
-    def test_with_host_keeps_it_all(self):
-        self.assertEqual(self.rig.main(["evidence", "-o", self.rig.out, "--with-host"])[0], 0)
-        files = self.rig.files()
-        self.assertIn(b"bench-7", files["audit/arf.xml"])
-        self.assertIn(b"<target>bench-7</target>", files["audit/results.xml"])
-        self.assertEqual(files["audit/report.html"], b"<html>report of bench-7</html>")        # (the scanner's own report)
-        self.assertIn("(user ada)", files["secure-status.json"].decode())
-        self.assertIn("root=UUID=3f1c2a9e-1b2c-4d5e-8f90-a1b2c3d4e5f6", files["kernel-cmdline.txt"].decode())
-        self.assertTrue(json.loads(files["evidence.json"].decode())["with_host"])
-        self.assertIn("--with-host: the host's names and addresses are in it", files["README.txt"].decode())
+    def test_what_a_quiet_run_gives_is_unchanged(self):
+        a, b, c = "usb.daemon|ok|runs", "security.selinux|FAIL|saw Permissive", "usb.status|info|x"
+        first = "".join("\nSILIKOS-CI|%s\n" % r for r in (a, b, c))
+        again = "".join("\nSILIKOS-CI-AGAIN|%d|%s\n" % (n, r) for n, r in enumerate((a, b, c), 1)) + "\nSILIKOS-CI-ROWS|3\n"
+        self.assertEqual(rows.rows((first + again + first + again).split("\n")), [a, b, c, a, b, c])     # two starts, each whole
 
-    def test_the_same_system_gives_the_same_archive(self):
-        def digest():
-            with open(self.rig.folder() + ".tar.gz", "rb") as f:
-                return hashlib.sha256(f.read()).hexdigest()
-        self.assertEqual(self.rig.main(["evidence", "-o", self.rig.out])[0], 0)
-        first, files = digest(), self.rig.files()
-        os.utime(self.rig.folder() + ".tar.gz", (0, 0))
-        self.assertEqual(self.rig.main(["evidence", "-o", self.rig.out])[0], 0)           # (the same day: replaces the folder)
-        self.assertEqual(digest(), first)
-        self.assertEqual(self.rig.files(), files)
-        with tarfile.open(self.rig.folder() + ".tar.gz") as tar:
-            ms = tar.getmembers()
-        self.assertEqual([m.name for m in ms], sorted(m.name for m in ms))
-        self.assertEqual({(m.uid, m.gid, m.uname, m.gname, m.mode, m.mtime) for m in ms}, {(0, 0, "", "", 0o644, 1794528000)})
-        # another day is another folder; the bills in it are the same bytes
-        self.assertEqual(self.rig.main(["evidence", "-o", self.rig.out], {"SOURCE_DATE_EPOCH": str(1794528000 + 86400)})[0], 0)
-        later = self.rig.files("20261114")
-        for k in ("sbom.spdx.json", "sbom.cdx.json", "repositories.json", "kernel-cmdline.txt", "secure-boot.txt", "status.json"):
-            self.assertEqual(later[k], files[k], k)
-
-    def test_dry_run_writes_nothing(self):
-        rc, out, _ = self.rig.main(["--dry-run", "evidence", "-o", self.rig.out])
-        self.assertEqual((rc, self.rig.ran), (0, []))
-        self.assertFalse(os.path.exists(self.rig.out))
-        for part in ("$ silik sbom export --format spdx -o %s/sbom.spdx.json" % self.rig.folder(), "$ silik cve --json > ", "$ silik audit --profile cis_workstation_l1",
-                     "$ silik doctor --json > ", "MANIFEST; then %s.tar.gz" % self.rig.folder()):
-            self.assertIn(part, out)
-
-    def test_without_the_audit(self):
-        rc, out, _ = self.rig.main(["evidence", "-o", self.rig.out, "--no-audit"])
-        self.assertEqual((rc, self.rig.ran), (0, []))
-        files = self.rig.files()
-        self.assertFalse([k for k in files if k.startswith("audit/")])
-        self.assertEqual(json.loads(files["evidence.json"].decode())["left_out"], {"audit": "left out (--no-audit)"})
-        self.assertNotIn("audit/report.html", files["README.txt"].decode())
-
-    def test_without_the_scanner_the_rest_is_written_and_it_says_what_to_install(self):
-        rig = Rig(scanner=False)
-        try:
-            rc, out, _ = rig.main(["evidence", "-o", rig.out])
-            files = rig.files()
-        finally:
-            rig.close()
-        self.assertEqual((rc, rig.ran), (0, []))
-        self.assertIn("sbom.spdx.json", files)
-        left = json.loads(files["evidence.json"].decode())["left_out"]["audit"]
-        self.assertIn("sudo dnf -y install openscap-scanner scap-security-guide", left)
-        self.assertIn("audit                  left out: the scanner or its content is not installed", out)
-
-    def test_it_does_not_write_over_a_folder_that_is_not_its_own(self):
-        os.makedirs(self.rig.folder())
-        with open(os.path.join(self.rig.folder(), "thesis.txt"), "w") as f:
-            f.write("mine")
-        rc, _, err = self.rig.main(["evidence", "-o", self.rig.out])
-        self.assertEqual(rc, 2)
-        self.assertIn("is not an evidence folder", err)
-        self.assertEqual(os.listdir(self.rig.folder()), ["thesis.txt"])
+    def test_it_writes_whatever_the_hosts_locale_is(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        log = os.path.join(d, "boot.log")
+        with open(log, "w", encoding="utf-8") as f:
+            f.write("\nSILIKOS-CI|usb.status|ok|\u25cf ok\n\nSILIKOS-CI|security.selinux|FAIL|x\n"
+                    "\nSILIKOS-CI-AGAIN|1|usb.status|ok|\u25cf ok\n\nSILIKOS-CI-AGAIN|2|security.selinux|FAIL|x\n\nSILIKOS-CI-ROWS|2\n")
+        env = dict(os.environ, PYTHONIOENCODING="ascii", LC_ALL="C", LANG="C")
+        r = subprocess.run([sys.executable, os.path.join(HERE, "rows.py"), log], stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn(b"SILIKOS-CI|security.selinux|FAIL|x", r.stdout)       # (the row after the one with the character)
 
 
-class Scrub(unittest.TestCase):
-    def test_names_are_replaced_as_whole_words(self):
-        with mock.patch.object(evidence, "identity", lambda: (["ada"], ["/home/ada"], ["vm", "lab.example.com"])):
-            s = evidence.scrubber(False)
-            self.assertEqual(s("user ada in /home/ada/x and /home/adapter; host vm; vm.mmap_min_addr; canada; ada@vm; lab.example.com:22"),
-                             "user <user> in ~/x and /home/adapter; host <host>; vm.mmap_min_addr; canada; <user>@<host>; <host>:22")
-            self.assertEqual(s("link 52:54:00:12:34:56 up, at 12:34:56"), "link <mac> up, at 12:34:56")
-            self.assertEqual(evidence.scrubber(True)("ada vm"), "ada vm")
+class TheHosts(unittest.TestCase):
+    def test_the_readers_failure_is_a_row_and_never_or_true(self):
+        for name in MUST:
+            s = text("tests/install/" + name)
+            line = [l for l in s.split("\n") if 'python3 "$here/rows.py"' in l]
+            self.assertEqual(len(line), 1, name)
+            tail = s[s.index(line[0]):s.index(line[0]) + 700]
+            self.assertNotRegex(tail.split("\n# ")[0], r"\|\| true", name)
+            self.assertRegex(tail, r"\|\| (echo|printf|row) [^\n]*(FAIL|reader)", name)
+            self.assertIn("set -euo pipefail", s, name)                      # (so that rows.py's failure is the pipeline's)
 
-    def test_who_runs_it(self):
-        with mock.patch.dict(os.environ, {"SUDO_USER": "tomeu", "USER": "root", "LOGNAME": "root"}):
-            users, homes, hosts = evidence.identity()
-        self.assertIn("tomeu", users)
-        self.assertNotIn("root", users)                                  # (root is nobody's name)
-        self.assertNotIn("/root", homes)
-        self.assertNotIn("localhost", hosts)
+    def test_a_step_that_did_not_run_is_a_failure(self):
+        for name in ("hardened.sh", "rollback.sh", "sealed.sh"):
+            s = text("tests/install/" + name)
+            self.assertEqual(len(re.findall(r"it did not run \(see report\.txt[^\n]*\)\"; status=1; fi", s)), 1, name)
+        s = text("tests/install/hardened-check.sh")
+        self.assertIn('*)  # (a stage file that holds nothing', s)
+        self.assertIn("say stage FAIL \"the stage is '$stage': not 1, 2 or 3\"", s)
 
-    def test_the_test_result_stands_alone(self):
-        t = evidence.test_result('<Benchmark xmlns="http://checklists.nist.gov/xccdf/1.2"><Rule id="r"/><TestResult id="t"><target>x</target></TestResult></Benchmark>')
-        root = ET.fromstring(t)
-        self.assertEqual((root.tag, root.get("id")), ("{http://checklists.nist.gov/xccdf/1.2}TestResult", "t"))
-        self.assertEqual(evidence.test_result("<Benchmark/>"), "")
+    def must_lines(self, name):
+        s = text("tests/install/" + name)
+        i = s.index("# every check of the list must be there with a verdict")
+        return s[i:s.index("\n  fi\n" if name == "run.sh" else "\nfi\n", i) + (6 if name == "run.sh" else 4)]
+
+    @unittest.skipUnless(shutil.which("bash") and shutil.which("awk"), "no bash or awk")
+    def test_a_check_of_the_list_that_is_not_said_is_a_fail(self):
+        for name, must in MUST.items():
+            d = tempfile.mkdtemp()
+            self.addCleanup(shutil.rmtree, d, True)
+            with open(os.path.join(d, "must-%s.txt" % must), "w") as f:
+                f.write("# a comment\n\na.one\nb.two.three\nc[x].*\nd.four\n")
+            report = os.path.join(d, "report.txt")
+            if name == "run.sh":            # (its list is asked of the rows, before the report is written)
+                with open(os.path.join(d, "lines"), "w") as f:
+                    f.write("SILIKOS-CI|a.one|ok|x\nSILIKOS-CI|b.two.three|info|only said, no verdict\nSILIKOS-CI|bXtwoXthree|ok|not it\n"
+                            "SILIKOS-CI|c[x].*|FAIL|a FAIL is a verdict\nSILIKOS-CI|d.four.more|ok|not it\n")
+                script = 'here=%s; work=%s; { %s\n} > %s' % (d, d, self.must_lines(name), report)
+            else:
+                with open(report, "w") as f:
+                    f.write("ok    a.one   x\ninfo  b.two.three   only said, no verdict\nok    bXtwoXthree  not it\nFAIL  c[x].*  a FAIL is a verdict\nok    d.four.more  not it\n")
+                script = 'here=%s; out=%s; only=; %s' % (d, d, self.must_lines(name))
+            r = subprocess.run(["bash", "-c", "set -euo pipefail\n" + script], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+            self.assertEqual((r.returncode, r.stdout), (0, ""), name)
+            with open(report) as f:
+                fails = [l.split()[1] for l in f if l.startswith("FAIL") and "was not said" in l]
+            self.assertEqual(fails, ["b.two.three", "d.four"], name)         # (an info is no verdict; a longer name is another check)
+
+    def test_each_test_has_its_list_and_the_offline_one_its_own(self):
+        for name, must in MUST.items():
+            self.assertTrue(os.path.isfile(os.path.join(HERE, "must-%s.txt" % must)), must)
+            self.assertIn("must-%s.txt" % must if name != "run.sh" else "must-${SILIK_CI_MUST:-install}.txt", text("tests/install/" + name))
+        self.assertIn('SILIK_CI_MUST=offline PATH="$shim:$PATH" bash "$here/run.sh" "$@"', text("tests/install/offline.sh"))
+        self.assertIn('[ -z "$only" ]', self.must_lines("rollback.sh"))         # (one part alone has not the whole list)
+
+    def test_the_lists_name_checks_of_their_scripts(self):
+        for must, (script, prefix) in CHECK.items():
+            names = [l for l in text("tests/install/must-%s.txt" % must).split("\n") if l and not l.startswith("#")]
+            self.assertGreater(len(names), 60, must)
+            self.assertEqual(len(names), len(set(names)), must)
+            s = text("tests/install/" + script)
+            said = set(re.findall(r"(?:say|is|has|hasnot) ([A-Za-z0-9._:-]+) ", s))
+            made = [re.escape(m).replace(r"\$", "$") for m in re.findall(r'(?:say|is|has|hasnot) "?([A-Za-z0-9._:-]*\$[^ "]*)"? ', s)]
+            made = [re.sub(r"\$\{?[A-Za-z_0-9%*#.]+\}?", "[A-Za-z0-9._:-]+", m) for m in made]      # (a name made with a variable)
+            host = text("tests/install/" + {"install": "run.sh", "offline": "run.sh"}.get(must, must + ".sh"))
+            for n in names:
+                short = n[len(prefix):] if prefix and n.startswith(prefix) else n
+                ok = short in said or any(re.fullmatch(m, short) for m in made) or short in host or n in host
+                self.assertTrue(ok, "%s: %s is in the list and no check of %s (or of its host script) is called that" % (must, n, script))
+        # the proof of the lockdown, of the PIN and of the rollback cannot become a row that is not there
+        for must, n in (("hardened", "hardened.held-unsigned-module"), ("sealed", "sealed.sboff.console"), ("rollback", "rollback.command"),
+                        ("install", "win.isolated.own-display"), ("install", "usb.locked-blocks"), ("install", "system.failed-units")):
+            self.assertIn("\n%s\n" % n, text("tests/install/must-%s.txt" % must), n)
+
+
+class TheWorkflow(unittest.TestCase):
+    def test_a_red_security_job_is_a_red_run(self):
+        ci = text(".github/workflows/ci.yml")
+        self.assertNotRegex(ci, r"(?m)^    continue-on-error")              # (no job: a step may, the one that publishes the pictures)
+        self.assertEqual(ci.count("continue-on-error: true"), 1)
+        m = re.search(r"(?m)^  release:\n(?:    .*\n)*?    needs: \[([^\]]*)\]", ci)
+        self.assertEqual(sorted(x.strip() for x in m.group(1).split(",")), ["arm", "hardened-test", "install", "rollback-test", "sealed-test"])
+        # the package repository takes a CI run only when the whole run succeeded (and every job now counts in that)
+        self.assertIn("conclusion == 'success'", text(".github/workflows/repo.yml"))
+
+
+class TheChecks(unittest.TestCase):
+    def run_lines(self, script, first, last, stand):
+        s = text("tests/install/" + script)
+        i = s.index(first)
+        j = s.index(last, i) + len(last)
+        r = subprocess.run(["bash", "-c", 'say() { echo "$1|$2|$3"; }\nis() { if [ "$2" = "$3" ]; then say "$1" ok "$2"; else say "$1" FAIL "saw $2"; fi; }\n'
+                            + stand + "\n" + s[i:j] + "\n"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+        return dict((l.split("|")[0], l.split("|")[1]) for l in r.stdout.split("\n") if l.count("|") >= 2)
+
+    @unittest.skipUnless(shutil.which("bash"), "no bash")
+    def test_a_command_that_dies_is_not_ok(self):
+        first, last = "s=$(silik hw check 2>&1); rc=$?", "esac\necho \"$s\" | grep -E '^(▼|◆|\\?)'"
+        dies = 'silik() { echo "Traceback (most recent call last):"; echo "KeyError: 1"; return 1; }'
+        got = self.run_lines("check.sh", first, last, dies)
+        self.assertEqual((got["hw.check"], got["secure.status"]), ("FAIL", "FAIL"))
+        gone = 'silik() { echo "bash: silik: command not found"; return 127; }'
+        got = self.run_lines("check.sh", first, last, gone)
+        self.assertEqual((got["hw.check"], got["secure.status"]), ("FAIL", "FAIL"))
+        good = 'silik() { if [ "$1" = hw ]; then echo "3 devices"; echo "ok"; else echo "18 ok, 7 warn, 2 bad, 3 unknown"; return 1; fi; }'
+        got = self.run_lines("check.sh", first, last, good)
+        self.assertEqual((got["hw.check"], got["secure.status"]), ("ok", "info"))      # (the test machine has two rows that must be bad)
+
+    @unittest.skipUnless(shutil.which("bash"), "no bash")
+    def test_nothing_listens_is_not_said_when_nobody_was_asked(self):
+        first, last = "ss -H -tulnp > /dev/null 2>&1 || say audit.listening-asked", '| sort -u | tr \'\\n\' \' \')" ""'
+        got = self.run_lines("check.sh", first, last, "ss() { return 127; }")
+        self.assertEqual(got.get("audit.listening-asked"), "FAIL")
+        got = self.run_lines("check.sh", first, last, "ss() { :; }")
+        self.assertEqual(got, {"audit.listening": "ok"})
+
+    @unittest.skipUnless(shutil.which("bash"), "no bash")
+    def test_a_failed_unit_is_a_failure_and_the_bases_mcelog_is_said_apart(self):
+        first, last = "fu=$(systemctl --failed", 'esac\n'
+        stand = 'journalctl() { echo "mcelog: no /dev/mcelog"; }\nsystemctl() { printf "%s\\n" $UNITS; }\n'
+        s = text("tests/install/check.sh")
+        i = s.index(first)
+        self.assertLess(s.index("is system.failed-units", i) - i, 400)
+        for units, want in (("", {"system.failed-units": "ok"}), ("mcelog.service", {"system.failed-units": "ok", "system.failed-mcelog": "info"}),
+                            ("mcelog.service silikos-update.service", {"system.failed-units": "FAIL", "system.failed-mcelog": "info"}),
+                            ("usbguard.service", {"system.failed-units": "FAIL"})):
+            got = self.run_lines("check.sh", first, last, "UNITS='%s'\n" % units + stand)
+            self.assertEqual(got, want, units)
+        got = self.run_lines("check.sh", first, last, "systemctl() { return 1; }\njournalctl() { :; }")
+        self.assertEqual(got, {"system.failed-units": "FAIL"})                  # (not asked is not "none")
+
+
+class Survivors(unittest.TestCase):
+    """changes that matter and that the whole suite let pass (the tester broke 37 things in copies; these lived)"""
+
+    def test_secure_status_as_json_ends_with_1_when_a_row_is_bad(self):
+        sys.path.insert(0, os.path.join(ROOT, "tests"))
+        import test_silik
+        silik, run = test_silik.silik, test_silik.run
+        from unittest import mock
+        import json
+        rows_bad = [{"id": "selinux", "name": "SELinux", "state": "bad", "value": "disabled", "fix": ["x"]},
+                    {"id": "firewall", "name": "firewall", "state": "ok", "value": "on", "fix": []}]
+        rows_ok = [dict(r, state="warn") if r["state"] == "bad" else r for r in rows_bad]
+        for rs, want in ((rows_bad, 1), (rows_ok, 0)):
+            with mock.patch.object(silik, "sec_checks", lambda st, rs=rs: list(rs)):
+                rc, o = run("secure", "status", "--json", "--offline")
+                self.assertEqual((rc, json.loads(o)["summary"]["bad"]), (want, want))
+                rc, o = run("secure", "status", "--offline")
+                self.assertEqual(rc, want)
+
+    def test_the_kickstart_turns_sshd_off_and_closes_its_port(self):
+        ks = text("kickstart/silikos.ks")
+        lines = [l for l in ks.split("\n") if l.startswith("services ")]
+        self.assertEqual(len(lines), 1)
+        self.assertRegex(lines[0], r" --disabled=(\S+,)?sshd(,\S+)?( |$)")
+        self.assertNotRegex(lines[0], r"--enabled=\S*sshd")
+        self.assertIn("\nfirewall --enabled --remove-service=ssh\n", ks)
+        self.assertIn("\nselinux --enforcing\n", ks)
+
+    def test_usbguard_not_running_is_never_ok_whatever_its_dbus_service_does(self):
+        import test_usb
+        for dbus in (True, False, None):
+            st = test_usb.state()
+            st["active"] = dict(st["active"], **{"usbguard.service": False, "usbguard-dbus.service": dbus})
+            got = test_usb.usb.judge(st)
+            self.assertEqual(got[0], "warn", dbus)
+            self.assertIn("not running", got[1], dbus)
 
 
 if __name__ == "__main__":

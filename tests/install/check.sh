@@ -158,9 +158,13 @@ is kernel.modules-extra "$(rpm -q "kernel-modules-extra-$(uname -r)" > /dev/null
 has kernel.vcan "$(modinfo -n vcan 2>&1)" "vcan.ko"
 is kernel.vcan-loads "$(modprobe vcan 2>&1 && ip link add silikci type vcan 2>&1 && ip -br link show silikci | awk '{print $1}'; ip link del silikci 2> /dev/null)" silikci
 s=$(silik hw check 2>&1); rc=$?
-say hw.check "$([ $rc -le 1 ] && echo ok || echo FAIL)" "exit $rc: $(echo "$s" | tail -2 | head -1)"
+# (exit 0 or 1 are its answers; a command that died says Traceback and also ends with 1; any other code is no answer)
+case "$rc" in 0|1) hwv=ok;; *) hwv=FAIL;; esac
+case "$s" in *Traceback*) hwv=FAIL;; esac
+say hw.check $hwv "exit $rc: $(echo "$s" | tail -2 | head -1)"
 s=$(silik secure status 2>&1); rc=$?
-say secure.status "$([ $rc = 0 ] && echo ok || echo info)" "exit $rc: $(echo "$s" | tail -1)"
+# (exit 1: a row is bad, and this test machine has two that must be: no encryption, a login without a password; anything else is the command's fault)
+case "$rc:$(echo "$s" | tail -1)" in 0:*" ok, "*" bad, "*) say secure.status ok "exit $rc: $(echo "$s" | tail -1)";; 1:*" ok, "*" bad, "*) say secure.status info "exit $rc: $(echo "$s" | tail -1)";; *) say secure.status FAIL "exit $rc: $(echo "$s" | tail -2 | tr '\n' ' ')";; esac
 echo "$s" | grep -E '^(▼|◆|\?)' | while read -r line; do say secure.row info "$line"; done
 # the two rows a user's own session can judge (root has no desktop to ask): USB devices and what listens
 u=$(asuser silik secure status --offline)
@@ -423,8 +427,8 @@ except OSError as e: print("failed:", e.strerror)'
         case "$seen" in *:1*|*:01*) say win.isolated.session-socket FAIL "the session's server answers inside the box:$seen";; *) say win.isolated.session-socket ok "no socket of the box is the session's server:$seen";; esac
         if [ "$disp" = 0 ]; then say win.isolated.display-number FAIL "the box's server took the session's display number 0"; else say win.isolated.display-number ok ":$disp"; fi
         is win.isolated.session-socket-file "$(stat -c %i /tmp/.X11-unix/X0 2> /dev/null)" "$x0"
-        has win.isolated.session-abstract "$(inbox python3 -c "$try" @/tmp/.X11-unix/X0)" "failed"
-        has win.isolated.session-bus "$(inbox python3 -c "$try" /run/user/$uid/bus)" "failed"
+        has win.isolated.session-abstract "$(inbox python3 -c "$try" @/tmp/.X11-unix/X0 | grep '^failed: ')" "failed: "
+        has win.isolated.session-bus "$(inbox python3 -c "$try" /run/user/$uid/bus | grep '^failed: ')" "failed: "
         is win.isolated.runtime-folder "$(inbox ls -A /run/user/$uid | tr '\n' ' ')" "silik-win "
         is win.isolated.shared-folder "$(inbox ls -A /home/tester/Windows | tr '\n' ' ')" "isolated "
         # the system-call filter of the box's programs (its wineserver is the first of them: 2 = a filter is loaded)
@@ -433,8 +437,10 @@ except OSError as e: print("failed:", e.strerror)'
         say win.isolated.x-sockets info "$(inbox ls /tmp/.X11-unix | tr '\n' ' ')"
         # its network: pasta's (an address beside lo), and nothing of this machine's loopback
         net=$(inbox ip -o -4 addr 2>&1 | awk '{print $2}' | tr '\n' ' ')
+        # the box's network namespace is not this machine's (the names of the interfaces are the same in both: pasta copies them)
+        is win.isolated.own-network "$([ -n "$(inbox readlink /proc/self/ns/net | grep '^net:\[')" ] && [ "$(inbox readlink /proc/self/ns/net)" != "$(readlink /proc/self/ns/net)" ] && echo own || echo "NOT its own: $(inbox readlink /proc/self/ns/net)")" own
         if ! ip route 2> /dev/null | grep -q '^default'; then say win.isolated.network info "this machine has no default route: pasta has nothing to carry ($net)"
-        else case "$net" in "lo ") say win.isolated.network FAIL "only lo: pasta did not give the box a network ($(pgrep -u tester -c pasta) pasta; $(tail -3 /tmp/ci-iso.out | tr '\n' ' '))";; *) say win.isolated.network ok "$net";; esac; fi
+        else case "$net" in "lo ") say win.isolated.network FAIL "only lo: pasta did not give the box a network ($(pgrep -u tester -c pasta) pasta; $(tail -3 /tmp/ci-iso.out | tr '\n' ' '))";; "lo "[a-z]*) say win.isolated.network ok "$net";; *) say win.isolated.network FAIL "not read: $net";; esac; fi
         say win.isolated.selinux info "Xephyr $(ps -o label= -C Xephyr 2>&1 | head -1) pasta $(ps -o label= -C pasta,pasta.avx2 2>&1 | head -1)"
         # what pasta itself said, where it was told to write, and what the box's first process is to SELinux
         say win.isolated.pasta-said info "$(tail -5 $s/pasta.log 2>&1 | tr '\n' ' ')"
@@ -534,7 +540,13 @@ say system.memory info "$(free -m | awk '/^Mem:/ { printf "%d MB, %d MB availabl
 n=$(journalctl -b --no-pager -o cat 2> /dev/null | grep -ciE 'out of memory: killed|oom-kill')
 if [ "$n" = 0 ]; then say system.oom ok "nothing was killed for lack of memory"
 else say system.oom FAIL "$n lines: $(journalctl -b --no-pager -o cat 2> /dev/null | grep -iE 'out of memory: killed|oom-kill' | tail -3 | cut -c1-150 | tr '\n' '/')"; fi
-say system.failed-units info "$(systemctl --failed --no-legend | awk '{print $2}' | tr '\n' ' ')"
+# a failed unit is a failure. One is the base's own and not SilikOS's to judge: mcelog cannot start in a virtual machine
+# whose host is an AMD processor (it fails on the stock AlmaLinux of the same runner too: workflow Compare, 14/11/2026;
+# on hardware the unit is skipped where the kernel's EDAC module is loaded [A]). It is said apart, with its reason
+fu=$(systemctl --failed --no-legend --plain 2>&1 | awk '{print $1}' | tr '\n' ' ')
+systemctl --failed --no-legend --plain > /dev/null 2>&1 || fu="systemctl --failed did not run"
+is system.failed-units "$(echo "$fu" | tr ' ' '\n' | grep -v '^mcelog\.service$' | tr '\n' ' ' | sed 's/ *$//')" ""
+case "$fu" in *mcelog.service*) say system.failed-mcelog info "mcelog.service failed (the base's): $(journalctl -b -u mcelog.service -o cat --no-pager 2>&1 | tail -2 | tr '\n' ' ' | cut -c1-200)";; esac
 say system.packages info "$(rpm -qa | wc -l) packages, $(df -h / | awk 'NR==2 {print $3}') used"
 # ---- what someone attacking this system finds (13/11/2026: the owner asked for an audit). Facts of the installed
 # system, most of them `info` rows that docs/SECURITY.md reads; the three that are SilikOS's own promise are checks:
@@ -542,6 +554,7 @@ say system.packages info "$(rpm -qa | wc -l) packages, $(df -h / | awk 'NR==2 {p
 ours="silik-tools silik-command silikos-branding silikos-desktop silikos-security silikos-power silikos-repos silik-eda-compat silik-eda-open silik-dev silik-win"
 # nothing may listen beyond this machine. The one exception: NetworkManager's own DHCP clients (UDP 68, and UDP 546 for
 # DHCPv6, which the zone opens), which take the answers to this machine's own requests
+ss -H -tulnp > /dev/null 2>&1 || say audit.listening-asked FAIL "ss -tulnp did not run (exit $?): the row below says nothing"
 is audit.listening "$(ss -H -tulnp 2> /dev/null | awk '$5 !~ /^(127\.|\[::1\]|\[::ffff:127\.)/ && $5 !~ /%lo:/ { n = $NF; sub(/.*\(\("/, "", n); sub(/".*/, "", n); p = $5; sub(/.*:/, "", p); if ($1 == "udp" && (p == "68" || p == "546") && n == "NetworkManager") next; print $1 "/" $5 "/" n }' | sort -u | tr '\n' ' ')" ""
 say audit.listening-local info "$(ss -H -tulnp 2> /dev/null | awk '$5 ~ /^(127\.|\[::1\])/ || $5 ~ /%lo:/ { n = $NF; sub(/.*\(\("/, "", n); sub(/".*/, "", n); print $1 "/" $5 "/" n }' | sort -u | tr '\n' ' ')"
 say audit.firewall info "default zone $(firewall-cmd --get-default-zone 2>&1); $(firewall-cmd --list-all 2>&1 | grep -E '^ +(target|services|ports|interfaces):' | tr -s ' ' | tr '\n' ';')"

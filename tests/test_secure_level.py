@@ -1190,12 +1190,12 @@ class Documents(unittest.TestCase):
         m = re.search(r"\n  [a-z][a-z-]*:\n", job)
         job = job[:m.start()] if m else job
         self.assertIn("needs: packages", job)
-        self.assertIn("continue-on-error: true", job)                       # never run yet: it cannot block the ISO or a release
+        self.assertNotIn("continue-on-error", job.split("steps:", 1)[0])    # it counts: red here is a red run (tests/test_evidence.py)
         self.assertIn("bash tests/install/hardened.sh", job)
         for uses in re.findall(r"uses: (\S+)", job):
             self.assertRegex(uses, r"@[0-9a-f]{40}$")
         release = ci.split("\n  release:\n", 1)[1]
-        self.assertNotIn("hardened-test", release.split("steps:", 1)[0])
+        self.assertIn("hardened-test", release.split("steps:", 1)[0])              # a release waits for it
 
 
 if __name__ == "__main__":

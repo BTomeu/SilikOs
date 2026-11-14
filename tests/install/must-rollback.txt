@@ -1,0 +1,74 @@
+# The checks the rollback test must say with a verdict (ok or FAIL), one name a line: rollback test (tests/install/rollback.sh, job rollback-test).
+# A check that is skipped, swallowed by the shell or lost on the way is then a FAIL of the report, not a row that is
+# simply not there (the third pass of 14/11/2026: a job was green with a third of its checks missing). These are the
+# checks that were ok in CI run 43560389589 (commit f05a4a1). A new check is added here in the commit that adds it; one that
+# depends on what the day's repositories hold is left out, with the reason:
+#   update.another-kernel, finish.unknown-kernel: only when the base's repositories hold a second kernel version that day
+layout.root-thin
+layout.home-thin
+layout.swap
+layout.reserve
+layout.pool-profile
+layout.package-snapm
+layout.package-boom-boot
+layout.trim
+layout.snapshot-status
+layout.doctor
+snapshot.create
+snapshot.snapm-list
+snapshot.lvs
+snapshot.boot-entries
+snapshot.boom-list
+snapshot.boom-profile
+prune.kept
+prune.boot-entries
+prune.kernel-copies
+prune.no-note
+update.downgraded
+update.service
+update.snapshot-first
+update.snapshot
+update.updated
+update.no-note
+update.snapshot-entry
+snapshot-boot.kernel-line
+snapshot-boot.root
+snapshot-boot.home
+snapshot-boot.packages
+snapshot-boot.nothing-updated
+snapshot-boot.packages-after
+snapshot-boot.no-snapshot-of-a-snapshot
+rollback.command
+rollback.next-start
+rollback.never-restarts
+revert-boot.kernel-line
+revert-boot.root
+revert-boot.packages
+revert-boot.merge
+finish.service-ran
+finish.service
+finish.entries-of-the-merged-snapshot
+finish.default-kernel
+finish.entries-without-a-kernel
+finish.updates-wait
+after.kernel-line
+after.kernel
+after.packages
+after.entries-of-snapshots
+after.updates-wait
+after.status-says
+after.update-by-hand
+after.wait-ended
+after.updated-again
+after.snapshot-first
+plain.snapshot-says
+plain.snapshot-exit
+plain.create-refused
+plain.create-alternative
+plain.doctor
+plain.downgraded
+plain.update
+plain.updated
+plain.no-note
+plain.rollback-packages
+plain.packages-back

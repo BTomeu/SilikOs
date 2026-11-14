@@ -126,9 +126,9 @@ RULES = [
      G % "45", "re", r"^\};\n(\n/\* ---- glass|\Z)", r"}\n\1", 2),
     # ---- logging (45) and byte arrays
     ("extension.js", "console", "45", "logError(e, text) -> console.error(text, e) (log() and logError() are console's since 45)",
-     G % "45", "re", r"logError\(e, ('silik-shell: [a-z ]+'(?: \+ id)?)\)", r"console.error(\1, e)", 2),
+     G % "45", "re", r"logError\(e, ('silik-shell: [a-z ]+'(?: \+ [a-z]+)?)\)", r"console.error(\1, e)", 3),
     ("extension.js", "textdecoder", "45", "imports.byteArray.toString(bytes) -> new TextDecoder().decode(bytes) (no `imports` object in a module)",
-     G % "45", "re", r"imports\.byteArray\.toString\(", "new TextDecoder().decode(", 2),
+     G % "45", "re", r"imports\.byteArray\.toString\(", "new TextDecoder().decode(", 3),
     # ---- GTK out of the shell (44)
     ("extension.js", "st-icontheme", "44", "Gtk.IconTheme.get_default() -> St.IconTheme (GTK is not loaded into the shell's process)",
      G % "44", "lit", "const theme = Gtk.IconTheme.get_default();", "const theme = iconTheme();", 1),
@@ -179,14 +179,14 @@ RULES = [
     # ---- Wayland: a window's class
     ("extension.js", "command-late-class", "wayland", "a Wayland window is created before its application id (its class) is known: what the extension does for the COMMAND bar's window waits for the class; and a Wayland client cannot ask to stay above the other windows (GTK's set_keep_above does nothing there: seen in the rig), so the shell does it for its own COMMAND bar",
      "docs/EL10.md", "lit",
-     "        on(global.display, 'window-created', (d, w) => {\n            if (!this._glassOn() || !isCommand(w)) return;\n",
+     "        on(global.display, 'window-created', (d, w) => {\n            if (!this._glassIs || !isCommand(w)) return;\n",
      "        on(global.display, 'window-created', (d, w) => {\n"
      "            if (w.get_wm_class()) { this._commandWindow(w); return; }\n"
      "            const id = w.connect('notify::wm-class', () => { w.disconnect(id); this._commandWindow(w); });\n"
      "        });\n"
      "        this._commandWindow = (w => {\n"
      "            if (isCommand(w) && Meta.is_wayland_compositor()) w.make_above();\n"
-     "            if (!this._glassOn() || !isCommand(w)) return;\n", 1),
+     "            if (!this._glassIs || !isCommand(w)) return;\n", 1),
     ("extension.js", "command-window", "wayland", "the COMMAND bar's window is known by its X11 class instance; a Wayland window has an application id instead (GTK 3 gives the program's name), which mutter gives as the class",
      "docs/EL10.md", "lit", "return !!w && w.get_wm_class_instance() === 'silik-command';",
      "return !!w && (w.get_wm_class_instance() === 'silik-command' || w.get_wm_class() === 'silik-command');", 1),

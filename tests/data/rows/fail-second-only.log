@@ -1,0 +1,10 @@
+
+SILIKOS-CI|a.one|ok|x
+
+SILIKOS-CI-AGAIN|1|a.one|ok|x
+
+SILIKOS-CI-AGAIN|2|a.two|FAIL|broken
+
+SILIKOS-CI-ROWS|2
+
+SILIKOS-CI|DONE

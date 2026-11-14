@@ -191,7 +191,7 @@ start() {
   # (rows.py: every check whole and counted; a line the serial port lost is a FAIL here, not a silence)
   python3 "$here/rows.py" --name "sealed.$name.rows" "$out/sealed-$name.log" | while IFS='|' read -r _ check verdict detail; do
     row "$verdict" "$check" "$detail"
-  done || true
+  done || row FAIL "sealed.$name.reader" "rows.py did not get to the end of the log: rows are missing"
   python3 - "$work/$name.json" "$name" "$expect" >> "$out/report.txt" <<'EOF'
 import json, sys
 path, name, expect = sys.argv[1:4]
@@ -263,6 +263,17 @@ fi
 rm -f "$out/sealed.qcow2"
 cp "$work/swtpm.log" "$out/swtpm.log" 2> /dev/null || true
 
+# every check of the list must be there with a verdict (tests/install/must-sealed.txt): one that was skipped, swallowed by
+# the shell or lost on the way is a FAIL of the report, not a row that is simply not there
+# (SILIK_CI_MUST_FILE: another list, for the unit tests' stand-in machines, which say a few checks only)
+mustf=${SILIK_CI_MUST_FILE:-$here/must-sealed.txt}
+if [ -f "$mustf" ]; then
+  while read -r must; do
+    case $must in ''|'#'*) continue ;; esac
+    awk -v m="$must" '($1 == "ok" || $1 == "FAIL") && $2 == m { f = 1 } END { exit !f }' "$out/report.txt" \
+      || printf '%-5s %-44s %s\n' FAIL "$must" "was not said by the installed system (it is in must-sealed.txt)" >> "$out/report.txt"
+  done < "$mustf"
+fi
 echo "SilikOS sealed test: $(basename "$iso"), $(date -u +%Y-%m-%dT%H:%MZ)"
 cat "$out/report.txt"
 grep -q '^FAIL' "$out/report.txt" && status=1
@@ -277,7 +288,7 @@ step() {   # step NAME TITLE
   first=$(grep -E "$rx" "$out/report.txt" | grep '^FAIL' | head -1 | cut -c7- | tr -s ' ' | cut -c1-240 || true)
   if [ "$fail" -gt 0 ]; then echo "::error title=sealed $1: $2::$fail of $((ok + fail)) checks failed; the first: $first"
   elif [ "$ok" -gt 0 ]; then echo "::notice title=sealed $1: $2::$ok checks ok"
-  else echo "::error title=sealed $1: $2::it did not run (see report.txt and the consoles in the artifact sealed-test)"; fi
+  else echo "::error title=sealed $1: $2::it did not run (see report.txt and the consoles in the artifact sealed-test)"; status=1; fi
 }
 step installation "an encrypted installation under UEFI"
 step first "Secure Boot on, the passphrase; silik disk; TPM2 + PIN enrolled; a recovery key"

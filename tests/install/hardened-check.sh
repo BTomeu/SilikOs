@@ -191,7 +191,7 @@ case $stage in
   is works-no-new-failed-unit "$(python3 -c 'import sys; print(" ".join(u for u in sys.argv[2].split() if u not in sys.argv[1].split()))' "$(cat $S/failed)" "$(failed)")" ""
   say works-failed-units info "before: $(cat $S/failed); now: $(failed)"
   silik doctor > /tmp/doctor.out 2>&1; rc=$?
-  if [ $rc -le 2 ]; then say works-doctor-runs ok "exit $rc: $(tail -1 /tmp/doctor.out)"; else say works-doctor-runs FAIL "exit $rc: $(tail -3 /tmp/doctor.out)"; fi
+  if [ $rc -le 2 ] && ! grep -q '^Traceback' /tmp/doctor.out && silik doctor --json 2> /dev/null | python3 -c 'import json, sys; json.load(sys.stdin)["checks"][0]' 2> /dev/null; then say works-doctor-runs ok "exit $rc: $(tail -1 /tmp/doctor.out)"; else say works-doctor-runs FAIL "exit $rc: $(tail -3 /tmp/doctor.out)"; fi
   is works-doctor-nothing-new-is-bad "$(newbad "$(cat $S/doctor)" "$(doctor)")" ""
   say works-doctor-rows info "not ok outside security, before: $(cat $S/doctor); now: $(doctor)"
   if command -v gdb > /dev/null; then
@@ -247,6 +247,9 @@ PY
   fi
   if session; then say back-session ok "gnome-shell runs for tester"; else say back-session FAIL "no gnome-shell of tester"; fi
   is back-doctor-nothing-new-is-bad "$(newbad "$(cat $S/doctor)" "$(doctor)")" ""
+  finish;;
+*)  # (a stage file that holds nothing or something else: said, never a run that ends with no check at all)
+  say stage FAIL "the stage is '$stage': not 1, 2 or 3"
   finish;;
 esac
 finish

@@ -1214,19 +1214,19 @@ class Workflow(unittest.TestCase):
         self.assertIn("\n  rollback-test:\n", ci)
         job = ci.split("\n  rollback-test:\n", 1)[1]
         job = job[:re.search(r"\n  [a-z][a-z-]*:\n", job).start()] if re.search(r"\n  [a-z][a-z-]*:\n", job) else job
-        self.assertIn("continue-on-error: true", job)                               # it cannot block the ISO or a release
+        self.assertNotIn("continue-on-error", job.split("steps:", 1)[0])           # it counts: red here is a red run (tests/test_evidence.py)
         self.assertIn("needs: packages", job)
         self.assertIn("bash tests/install/rollback.sh", job)
         self.assertIn("workflow_dispatch:", ci)
         release = ci.split("\n  release:\n", 1)[1]
-        self.assertNotIn("rollback-test", release.split("steps:", 1)[0])           # the release does not wait for it
+        self.assertIn("rollback-test", release.split("steps:", 1)[0])              # and a release waits for it
         try:
             import yaml
         except ImportError:
             self.skipTest("PyYAML is not installed: the YAML itself is not parsed here")
         y = yaml.safe_load(ci)
         j = y["jobs"]["rollback-test"]
-        self.assertEqual((j["continue-on-error"], j["needs"]), (True, "packages"))
+        self.assertEqual((j.get("continue-on-error"), j["needs"]), (None, "packages"))
         self.assertTrue(all("run" in s or "uses" in s for s in j["steps"]))
 
     def test_the_test_s_own_kickstart_lines_are_not_the_product_s(self):

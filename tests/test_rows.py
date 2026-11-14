@@ -178,7 +178,7 @@ class NothingSwallowed(unittest.TestCase):
                 for n, line in enumerate(f, 1):
                     if line.lstrip().startswith("#"):
                         continue
-                    self.assertNotRegex(line, r"\$\{[A-Za-z_0-9]+:?[-+=?][^}']*'", "%s:%d" % (rel, n))
+                    self.assertNotRegex(line, r"\$\{[^}']*'", "%s:%d" % (rel, n))         # (after :- # % / or anything else)
 
     def test_the_checks_after_the_unlock_all_run(self):
         # the lines of check.sh from the unlocked policy to the status, run by bash with stand-ins

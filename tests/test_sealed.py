@@ -230,14 +230,14 @@ class Workflow(unittest.TestCase):
         job = ci.split("\n  sealed-test:\n", 1)[1]
         m = re.search(r"\n  [a-z][a-z-]*:\n", job)
         job = job[:m.start()] if m else job
-        self.assertIn("continue-on-error: true", job)                        # it cannot block the ISO or a release
+        self.assertNotIn("continue-on-error", job.split("steps:", 1)[0])     # it counts: red here is a red run (tests/test_evidence.py)
         self.assertIn("needs: packages", job)
         self.assertIn("bash tests/install/sealed.sh build/SilikOS-*-netinstall.iso build/sealed-test", job)
         self.assertRegex(job, r"ci_apt\.sh .*\bovmf\b.*\bswtpm\b")
         self.assertIn("build/sealed-test/*.log", job)                        # the consoles are the job's artifact
         self.assertLess(ci.index("\n  rollback-test:\n"), ci.index("\n  sealed-test:\n"))
         release = ci.split("\n  release:\n", 1)[1]
-        self.assertNotIn("sealed-test", release.split("steps:", 1)[0])       # the release does not wait for it
+        self.assertIn("sealed-test", release.split("steps:", 1)[0])              # a release waits for it       # the release does not wait for it
         for use in re.findall(r"uses: (\S+)", job):
             self.assertRegex(use, r"@[0-9a-f]{40}$")
 
@@ -392,7 +392,7 @@ time.sleep(0.2)
 class Flow(unittest.TestCase):
     """sealed.sh itself, with a machine that behaves (or not)"""
 
-    def run_test(self, bug=""):
+    def run_test(self, bug="", must=()):
         d = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, d, True)
         tools = os.path.join(d, "bin")
@@ -409,8 +409,12 @@ class Flow(unittest.TestCase):
                 f.write(body)
         iso = os.path.join(d, "SilikOS-test.iso")
         open(iso, "w").close()
+        # (the list of the checks that must be said: the stand-in machine's own few, or MUST)
+        must_file = os.path.join(d, "must.txt")
+        with open(must_file, "w") as f:
+            f.write("# the stand-in machine's\n" + "".join(n + "\n" for n in must))
         env = dict(os.environ, PATH=tools + os.pathsep + os.environ["PATH"], SILIK_CI_TCG="1", SILIK_CI_BOOT_MIN="1", SILIK_CI_INSTALL_MIN="1",
-                   FAKE_BUG=bug, FAKE_PIN=PIN, FAKE_PASSPHRASE=PASSPHRASE, **fw)
+                   FAKE_BUG=bug, FAKE_PIN=PIN, FAKE_PASSPHRASE=PASSPHRASE, SILIK_CI_MUST_FILE=must_file, **fw)
         out = os.path.join(d, "out")
         r = subprocess.run(["bash", os.path.join(HERE, "sealed.sh"), iso, out], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True, env=env, timeout=300)
         rows = {}
@@ -473,6 +477,15 @@ class Flow(unittest.TestCase):
         self.assertEqual(rows["sealed.back.finished"][0], "FAIL")                     # (every start that can stand alone was tried)
         self.assertEqual(rows["sealed.locked.finished"], ("FAIL", "not started: the TPM was not locked in the start before"))
         self.assertEqual(rows["sealed.plain.finished"], ("FAIL", "not started: the TPM2 slot was not removed in the start before"))
+
+    def test_a_check_of_the_list_that_no_start_said_fails_the_test(self):
+        # the machine behaves and every start ends; one check of the list is simply never said (skipped, swallowed)
+        r, rows, _ = self.run_test(must=("sealed.first.enroll", "sealed.back.remove", "sealed.pin.never-written"))
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertEqual(rows["sealed.pin.never-written"], ("FAIL", "was not said by the installed system (it is in must-sealed.txt)"))
+        self.assertEqual(rows["sealed.first.enroll"][0], "ok")
+        r, rows, _ = self.run_test(must=("sealed.first.enroll", "sealed.back.remove"))
+        self.assertEqual(r.returncode, 0, r.stdout)
 
     def test_a_check_the_serial_port_lost_fails_the_test(self):
         # the machine does all it must, but one of its checks never arrives whole (a line of the kernel cut into it,
