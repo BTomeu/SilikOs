@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""sealed-console.py SOCKET --passphrase P [--pin ANSWER]... [--limit SECONDS]
+"""sealed-console.py SOCKET --passphrase P [--pin ANSWER]... [--pin-max N] [--limit SECONDS]
 
 The person at the keyboard of the virtual machine of tests/install/sealed.sh: reads the machine's serial console
 (a UNIX socket of QEMU's) and types what a start asks for.
@@ -7,9 +7,12 @@ The person at the keyboard of the virtual machine of tests/install/sealed.sh: re
   "... enter passphrase for disk ..."   -> the passphrase (--passphrase), each time it is asked, at most 4 times
                                            (also "passphrase or recovery key", "recovery key": systemd-cryptsetup
                                            252 words the prompt after the kinds of key slot the volume has)
-  "... enter TPM2 PIN ..."              -> the next --pin answer, in the order given ("" is Enter alone). A PIN
-                                           prompt with no answer left is not answered: a wrong PIN counts against
-                                           the TPM's lockout, and a machine that keeps asking must be seen, not fed
+  "... enter TPM2 PIN ..."              -> the next --pin answer, in the order given ("" is Enter alone); when
+                                           they are used up, the last one again, until the PIN has been asked
+                                           --pin-max times in all (default: as many as there are answers). A start
+                                           that does not open with the PIN asks for it twice and then for the
+                                           passphrase (seen, systemd 252). A PIN prompt beyond that is not answered:
+                                           a machine that keeps asking must be seen, not fed
 
 It ends when the machine closes the console (it powered off), when a prompt comes that it has no answer for, or
 at the time limit, and prints one JSON line:
@@ -33,8 +36,9 @@ PASSPHRASE_TIMES = 4
 class Person:
     """what is typed for what is read. feed(text) -> the bytes to type now (b"" for nothing)"""
 
-    def __init__(self, passphrase, pins):
+    def __init__(self, passphrase, pins, pin_max=None):
         self.passphrase, self.pins = passphrase, list(pins)
+        self.pin_max = len(self.pins) if pin_max is None or not self.pins else max(pin_max, len(self.pins))
         self.asked, self.marks, self.stuck, self.seen = [], [], "", ""
 
     def feed(self, text):
@@ -50,10 +54,11 @@ class Person:
         self.seen = self.seen[end:]              # (what follows may hold the next prompt: read on the next call)
         self.asked.append(kind)
         if kind == "pin":
-            if not self.pins:
-                self.stuck = "a TPM2 PIN was asked %d time(s) and there was an answer for %d" % (self.asked.count("pin"), self.asked.count("pin") - 1)
+            n = self.asked.count("pin")
+            if n > self.pin_max:
+                self.stuck = "a TPM2 PIN was asked %d time(s) and there was an answer for %d" % (n, self.pin_max)
                 return b""
-            return self.pins.pop(0).encode() + b"\n"
+            return self.pins[min(n, len(self.pins)) - 1].encode() + b"\n"
         if self.asked.count("passphrase") > PASSPHRASE_TIMES:
             self.stuck = "the passphrase was asked more than %d times" % PASSPHRASE_TIMES
             return b""
@@ -109,9 +114,10 @@ def main(argv=None):
     p.add_argument("socket")
     p.add_argument("--passphrase", required=True)
     p.add_argument("--pin", action="append", default=[])
+    p.add_argument("--pin-max", type=int)
     p.add_argument("--limit", type=int, default=1200)
     a = p.parse_args(argv)
-    person = Person(a.passphrase, a.pin)
+    person = Person(a.passphrase, a.pin, a.pin_max)
     try:
         sock = connect(a.socket)
     except OSError as e:

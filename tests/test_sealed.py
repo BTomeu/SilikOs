@@ -5,8 +5,9 @@
 #   - the test's kickstart, composed as sealed.sh composes it, is valid and is not the product's;
 #   - the flow of sealed.sh itself, run for real with stand-ins of QEMU, swtpm, xorriso, qemu-img and mtools: a
 #     stand-in machine that asks for the passphrase or the PIN on its console as systemd 252 words it, opens or not
-#     as the rules of the real one say (the TPM that enrolled, the Secure Boot state it was enrolled in), and says
-#     its stage's end. A machine that opens where it must not, or never stops asking, must make the test fail.
+#     as the real one does (the TPM that enrolled, the Secure Boot state it was enrolled in, the TPM's lockout; the
+#     PIN asked twice before the passphrase, as the first run on GitHub showed, run 43532259867), and says its
+#     stage's end. A machine that opens where it must not, or never stops asking, must make the test fail.
 #   python3 -m unittest discover -s tests -v
 import importlib.machinery
 import importlib.util
@@ -67,6 +68,19 @@ class Person(unittest.TestCase):
         self.assertEqual(p.feed(""), b"w\n")                                 # (the second one, on the next look)
         self.assertEqual(p.feed(""), b"")
         self.assertEqual(p.asked, ["passphrase", "pin", "passphrase"])
+
+    def test_the_last_pin_again_while_it_is_asked_up_to_a_bound(self):
+        # (a start that the PIN does not open asks for it twice, then for the passphrase: the first run on GitHub)
+        p = console.Person("w", ["2468"], 4)
+        self.assertEqual([p.feed(ASK_PIN) for _ in range(4)], [b"2468\n"] * 4)
+        self.assertEqual(p.feed(ASK_PASS), b"w\n")
+        self.assertEqual((p.asked, p.stuck), (["pin"] * 4 + ["passphrase"], ""))
+        self.assertEqual(p.feed(ASK_PIN), b"")
+        self.assertEqual(p.stuck, "a TPM2 PIN was asked 5 time(s) and there was an answer for 4")
+        q = console.Person("w", ["", "0"], 4)
+        self.assertEqual([q.feed(ASK_PIN) for _ in range(4)], [b"\n", b"0\n", b"0\n", b"0\n"])
+        self.assertEqual(console.Person("w", [], 4).feed(ASK_PIN), b"")     # (no PIN expected: none typed)
+        self.assertEqual(console.Person("w", ["1", "2", "3"], 2).pin_max, 3)
 
     def test_a_pin_prompt_without_an_answer_is_not_fed(self):
         p = console.Person("w", ["1"])
@@ -173,7 +187,8 @@ class Kickstart(unittest.TestCase):
         self.assertEqual(len([l for l in lines if l.startswith("bootloader ")]), 1)
         self.assertIn('bootloader --append="vsyscall=xonly console=ttyS0,115200 plymouth.enable=0 rd.plymouth=0 quiet"', lines)
         self.assertIn("autopart --encrypted --passphrase=%s" % PASSPHRASE, lines)
-        self.assertEqual(ks.split("%packages\n", 1)[1].split("%end", 1)[0].split(), ["@core", "silik-tools", "silikos-security", "cryptsetup", "mokutil", "efibootmgr"])
+        self.assertEqual(ks.split("%packages\n", 1)[1].split("%end", 1)[0].split(), ["@core", "silik-tools", "silikos-security", "cryptsetup", "mokutil", "efibootmgr", "tpm2-tools"])
+        self.assertIn("tpm2-tools", text("kickstart/silikos.ks").split("%packages", 1)[1].split("%end", 1)[0].split())   # (the shipped set's own)
         for gone in ("graphical", "firstboot --enable"):
             self.assertNotIn(gone, lines)
         self.assertFalse([l for l in lines if l.startswith(("services ", "xconfig "))])
@@ -200,7 +215,7 @@ class Kickstart(unittest.TestCase):
 
     def test_the_check_script_has_every_stage_the_harness_starts(self):
         starts = re.findall(r"^\s+(?:if )?start (\w+) ", SH, re.M)
-        self.assertEqual(starts, ["first", "pin", "sboff", "moved", "back", "skip", "plain"])
+        self.assertEqual(starts, ["first", "pin", "sboff", "moved", "skip", "locked", "cleared", "back", "plain"])
         check = text("tests/install/sealed-check.sh")
         for s in starts:
             self.assertRegex(check, r"(?m)^%s\)$" % s)
@@ -244,7 +259,8 @@ QEMU_IMG = "#!/bin/sh\n: > \"$5\"\n"                   # qemu-img create -q -f q
 MFORMAT = "#!/bin/sh\nexit 0\n"
 # mcopy -i IMAGE FILE ::/NAME: the file is kept beside the image, where the stand-in machine reads it
 MCOPY = '#!/bin/sh\nmkdir -p "$2.d" && cp "$3" "$2.d/${4#::/}"\n'
-# the TPM: a name of its own in its state folder (another folder is another TPM), a socket; it ends when the machine does
+# the TPM: a name of its own in its state folder (a copy of the folder is the same TPM, another folder another one),
+# its count of failed tries beside it (the stand-in machine keeps it), a socket; it ends when the machine does
 SWTPM = r'''#!/usr/bin/env python3
 import os, re, socket, sys, uuid
 a = " ".join(sys.argv[1:])
@@ -263,8 +279,10 @@ while c.recv(100):
 QEMU = r'''#!/usr/bin/env python3
 # the stand-in machine of tests/test_sealed.py. Installing: writes a disk "image" (a JSON file: no TPM slot yet).
 # Starting: asks on its console as the real one does and opens by the real one's rules:
-#   a TPM2 slot + its option in crypttab -> "Please enter TPM2 PIN:"; Enter alone asks again; the right PIN opens when
-#   this TPM is the one that enrolled and Secure Boot is as it was then; anything else falls back to the passphrase
+#   a TPM2 slot -> "Please enter TPM2 PIN:", at most twice (seen: systemd 252 asks a second time when the first
+#   answer did not open, then falls back to the passphrase); the right PIN opens when this TPM is the one that
+#   enrolled, Secure Boot is as it was then and the TPM is not locked (3 failed tries); a wrong PIN on the right
+#   machine is a failed try; Enter alone, another Secure Boot state, another TPM are not
 import json, os, re, socket, sys, time
 a = " ".join(sys.argv[1:])
 bug = os.environ.get("FAKE_BUG", "")
@@ -305,19 +323,30 @@ def line():
     say("*" * (len(buf) - 1) + "\r\n")
     return buf[:-1].decode()
 
+count_file = os.path.join(os.path.dirname(tpm_sock), "counter")
+def failed(add=None):
+    n = int(open(count_file).read()) if os.path.exists(count_file) else 0
+    if add is not None:
+        n = 0 if add == 0 else n + add
+        open(count_file, "w").write(str(n))
+    return n
+
 say("BdsDxe: starting Boot0003 \"almalinux\"\r\n")
-opened = False
+opened, tries = False, 0
 if st["token"]:
-    while not opened:
+    while not opened and (tries < 2 or bug == "asks-for-ever"):
         say("\r\n\U0001f510 Please enter TPM2 PIN: ")
         got = line()
+        tries += 1
         if got == "" or bug == "asks-for-ever":
             continue
-        fits = st["token"]["tpm"] == tpm_id and st["token"]["secure_boot"] == secure_boot
-        opened = got == os.environ["FAKE_PIN"] and (fits or bug == "opens-anywhere")
-        if not opened:
-            say("\r\nTPM2 operation failed, falling back to traditional unlocking: State not recoverable\r\n")
-            break
+        fits = st["token"]["tpm"] == tpm_id and st["token"]["secure_boot"] == secure_boot and failed() < 3
+        if got == os.environ["FAKE_PIN"] and (fits or bug == "opens-anywhere"):
+            opened = True
+        elif fits:
+            failed(1)
+    if not opened:
+        say("\r\nTPM2 operation failed, falling back to traditional unlocking: State not recoverable\r\n")
 while not opened:
     say("\r\nPlease enter %s for disk vda3 (luks-5dfb24c2): (press TAB for no echo) " % ("passphrase or recovery key" if st.get("recovery") else "passphrase"))
     opened = line() == os.environ["FAKE_PASSPHRASE"]
@@ -328,8 +357,16 @@ if stage == "first":
     st["recovery"] = True
     say("\r\nSILIKOS-CI|sealed.first.enroll|ok|exit 0\r\n")
 elif stage == "skip":
+    say("\r\nSILIKOS-CI|sealed.skip.lockout|info|TPM2_PT_LOCKOUT_COUNTER: 0x%x\r\n" % failed())
+    failed(3 - failed())
+    say("\r\nSILIKOS-CI|sealed.skip.locked-out|ok|inLockout: 1\r\n")
+elif stage == "locked":
+    say("\r\nSILIKOS-CI|sealed.locked.in-lockout|%s|counter %d\r\n" % ("ok" if failed() >= 3 else "FAIL", failed()))
+    failed(0)
+    say("\r\nSILIKOS-CI|sealed.locked.clear|ok|exit 0\r\n")
+elif stage == "back":
     st["token"] = None
-    say("\r\nSILIKOS-CI|sealed.skip.remove|ok|exit 0\r\n")
+    say("\r\nSILIKOS-CI|sealed.back.remove|ok|exit 0\r\n")
 elif stage == "sboff":
     say("\r\nSILIKOS-CI|sealed.sboff.secure-boot|%s|SecureBoot %s\r\n" % ("FAIL" if secure_boot else "ok", "enabled" if secure_boot else "disabled"))
 json.dump(st, open(disk, "w"))
@@ -375,20 +412,26 @@ class Flow(unittest.TestCase):
         r, rows, out = self.run_test()
         self.assertEqual(r.returncode, 0, r.stdout)
         self.assertEqual(rows["sealed.installation"][0], "ok")
-        want = {"first": "asked: passphrase", "pin": "asked: pin: the PIN opened the disk",
-                "sboff": "asked: pin, passphrase: the PIN did not open the disk, the passphrase did",
-                "moved": "asked: pin, passphrase: the PIN did not open the disk, the passphrase did",
-                "back": "asked: pin: the PIN opened the disk", "skip": "asked: pin, pin, passphrase", "plain": "asked: passphrase"}
+        refused = "asked: pin, pin, passphrase: the PIN did not open the disk (typed 2 time(s)), the passphrase did"
+        want = {"first": "asked: passphrase", "pin": "asked: pin: the PIN opened the disk", "sboff": refused, "moved": refused,
+                "skip": "asked: pin, pin, passphrase", "locked": refused, "cleared": "asked: pin: the PIN opened the disk",
+                "back": "asked: pin: the PIN opened the disk", "plain": "asked: passphrase"}
         for stage, console_row in want.items():
             self.assertEqual(rows["sealed.%s.console" % stage], ("info" if stage == "skip" else "ok", console_row), stage)
             self.assertEqual(rows["sealed.%s.finished" % stage][0], "ok", stage)
         self.assertEqual(rows["sealed.first.enroll"], ("ok", "exit 0"))               # (the machine's own rows are in the report)
+        self.assertEqual(rows["sealed.skip.lockout"], ("info", "TPM2_PT_LOCKOUT_COUNTER: 0x1"))     # (Enter alone: nothing; the wrong PIN: one)
+        self.assertEqual(rows["sealed.locked.in-lockout"][0], "ok")                   # (skip, locked and cleared are one TPM's story)
+        self.assertIn("::group::[sealed] the console of 'sboff'", r.stdout)           # (the job's log says what each start asked)
+        self.assertIn("Please enter TPM2 PIN:", r.stdout)
+        self.assertIn("falling back to traditional unlocking", r.stdout)
+        self.assertNotIn(PIN, r.stdout)
         self.assertEqual(rows["sealed.sboff.secure-boot"][0], "ok")
         self.assertIn("::notice title=sealed pin: the PIN opens the disk::2 checks ok", r.stdout)
         self.assertNotIn("::error", r.stdout)
         self.assertRegex(r.stdout, r"\n\d+ ok, 0 failed\n")
-        self.assertEqual(sorted(os.listdir(out)), ["report.txt", "sealed-back.log", "sealed-first.log", "sealed-install.log", "sealed-moved.log", "sealed-pin.log",
-                                                   "sealed-plain.log", "sealed-sboff.log", "sealed-skip.log", "sealed.ks"])     # (the disk image is gone)
+        self.assertEqual(sorted(os.listdir(out)), ["report.txt", "sealed-back.log", "sealed-cleared.log", "sealed-first.log", "sealed-install.log", "sealed-locked.log",
+                                                   "sealed-moved.log", "sealed-pin.log", "sealed-plain.log", "sealed-sboff.log", "sealed-skip.log", "sealed.ks"])     # (the disk image is gone)
         for f in os.listdir(out):                                           # no answer is in a console's record or in the report
             if f != "sealed.ks":
                 with open(os.path.join(out, f)) as fh:
@@ -410,8 +453,14 @@ class Flow(unittest.TestCase):
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertEqual(rows["sealed.first.finished"][0], "ok")                      # (no TPM slot yet: the passphrase)
         self.assertEqual(rows["sealed.pin.finished"][0], "FAIL")
-        self.assertIn("the console ended with 'stuck' (a TPM2 PIN was asked 2 time(s) and there was an answer for 1)", rows["sealed.pin.finished"][1])
-        self.assertIn("sealed.plain.finished", rows)                                  # (every start was tried)
+        self.assertIn("the console ended with 'stuck' (a TPM2 PIN was asked 5 time(s) and there was an answer for 4)", rows["sealed.pin.finished"][1])
+        # stuck is said as stuck: nothing is claimed about the disk of a start that did not get to its end
+        for stage in ("pin", "sboff", "moved"):
+            self.assertEqual(rows["sealed.%s.console" % stage], ("info", "asked: pin, pin, pin, pin, pin (not judged: the stage did not get to its end)"), stage)
+        self.assertNotIn("WITHOUT", " ".join(d for _, d in rows.values()))
+        self.assertEqual(rows["sealed.back.finished"][0], "FAIL")                     # (every start that can stand alone was tried)
+        self.assertEqual(rows["sealed.locked.finished"], ("FAIL", "not started: the TPM was not locked in the start before"))
+        self.assertEqual(rows["sealed.plain.finished"], ("FAIL", "not started: the TPM2 slot was not removed in the start before"))
 
     def test_an_installation_or_a_first_start_that_fails_ends_it(self):
         r, rows, _ = self.run_test("install")

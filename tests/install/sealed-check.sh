@@ -7,14 +7,16 @@
 # What was typed to open the disk at each start (the passphrase, the PIN) is seen from outside, by sealed.sh.
 #   first   Secure Boot on, an empty TPM, opened with the passphrase: what `silik disk` says of the installation;
 #           `silik disk tpm enroll` with a PIN; a recovery key
-#   pin     the same machine: the PIN must have opened it
-#   sboff   Secure Boot off: the PIN must not have opened it; enrolling is refused there
+#   pin     the same machine: the PIN must have opened it, and cost the TPM's lockout nothing
+#   sboff   Secure Boot off: the PIN must not have opened it, and cost nothing; enrolling is refused there
 #   moved   Secure Boot on, another (empty) TPM: the disk in another machine. The PIN must not have opened it
-#   back    the first machine again: the PIN opens it
-#   skip    the same machine, an empty and then a wrong PIN typed: how the passphrase is reached; `silik disk tpm remove`
+#   skip    the first machine, an empty and then a wrong PIN typed: the passphrase was reached; what it cost is said.
+#           Then failed authorisations until the TPM locks itself
+#   locked  that TPM, locked: the PIN must not have opened it; the lockout is cleared
+#   cleared that TPM: the PIN opens it again
+#   back    the first machine again: the PIN opens it; `silik disk tpm remove`
 #   plain   the passphrase again, no PIN asked; the end
-# Only in the CI's test installations. Written 13/11/2026 on a machine without KVM: this script has not run yet
-# (docs/STATUS.md).
+# Only in the CI's test installations. Its first run: sealed.sh's head (the stages locked and cleared have not run).
 out=/dev/ttyS0
 say() { printf '\r\nSILIKOS-CI|sealed.%s|%s|%s\r\n' "$1" "$2" "$(echo "$3" | tr '\n|' ' /' | cut -c1-300)" > $out; }
 is() { if [ "$2" = "$3" ]; then say "$1" ok "$2"; else say "$1" FAIL "saw '$2', wanted '$3'"; fi; }
@@ -46,7 +48,11 @@ for k in sys.argv[1].split("."):
 print(json.dumps(d) if isinstance(d, (dict, list)) else d)' "$1" 2>&1; }
 row() { python3 -c 'import json, sys
 print(next((c["state"] + ": " + c["value"] for c in json.load(sys.stdin)["checks"] if c["id"] == sys.argv[1]), "no such row"))' "$1" 2>&1; }
-journal() { journalctl -b -o cat --no-pager 2> /dev/null | grep -i "tpm2\|falling back\|passphrase" | grep -iv "audit\|silik" | tail -4 | tr '\n' ';'; }
+# what systemd-cryptsetup said of this start's unlocking (in the initramfs: its journal is kept)
+journal() { journalctl -b -o cat --no-pager -t systemd-cryptsetup 2> /dev/null | tail -6 | tr '\n' ';'; }
+# the TPM's own count of failed tries (a setting of the chip: here the software TPM's)
+lockout() { tpm2_getcap properties-variable 2>&1 | grep -i 'LOCKOUT_COUNTER\|MAX_AUTH_FAIL\|LOCKOUT_INTERVAL\|LOCKOUT_RECOVERY\|inLockout' | tr -s ' \n' ' '; }
+count() { tpm2_getcap properties-variable 2> /dev/null | sed -n 's/^TPM2_PT_LOCKOUT_COUNTER:[[:space:]]*//p'; }
 sb() { mokutil --sb-state 2>&1 | head -1; }
 
 say "$stage.start" info "stage $stage; kernel $(uname -r); $(sb); lockdown $(cat /sys/kernel/security/lockdown 2>&1); $(efibootmgr 2> /dev/null | grep -i '^BootCurrent' || echo 'no efibootmgr')"
@@ -114,7 +120,9 @@ first)
   is first.enroll "exit $rc" "exit 0"
   say first.enroll-output info "$(echo "$o" | grep -v '^   ' | tail -12 | tr '\n' ';')"
   hasnot first.enroll-pin-not-shown "$o" "$pin"
-  say first.tpm2-tools info "the program tpm2 was there before the enrolment: $had_tools; after it: $(command -v tpm2 > /dev/null && echo yes || echo no)"
+  # (the shipped package set has tpm2-tools: the enrolment needs no network on a new installation)
+  is first.tpm2-tools "the program tpm2 was there before the enrolment: $had_tools" "the program tpm2 was there before the enrolment: yes"
+  say first.lockout info "$(lockout)"
   is first.slots-after "$(slots)" "0:passphrase 1:tpm2+pin"
   has first.crypttab "$(cat /etc/crypttab)" "tpm2-device=auto"
   has first.crypttab-copy "$(ls /etc/crypttab.before-silik-disk 2>&1)" "/etc/crypttab.before-silik-disk"
@@ -139,11 +147,15 @@ first)
 pin)
   say pin.journal info "$(journal)"
   is pin.slots "$(slots)" "0:passphrase 1:tpm2+pin 2:recovery"
+  is pin.lockout-counter "$(count)" 0x0                      # the right PIN costs nothing
   silik disk > /dev/null 2>&1; is pin.disk "exit $?" "exit 0"
   end;;
 sboff)
   has sboff.secure-boot "$(sb)" "SecureBoot disabled"
   say sboff.journal info "$(journal)"
+  # (a start whose Secure Boot state is not the enrolment's: the TPM refuses on its policy, before it looks at
+  # the PIN; no try is counted. Seen with tpm2-tools on a software TPM; here with the start itself)
+  is sboff.lockout-counter "$(count)" 0x0
   j=$(silik disk --json 2> /dev/null); rc=$?
   has sboff.disk-secure-boot "$(echo "$j" | row secureboot)" "warn: off"
   has sboff.disk-unlock "$(echo "$j" | row unlock)" "warn: TPM2 + PIN, or the passphrase or the recovery key; but Secure Boot is not on"
@@ -155,24 +167,53 @@ sboff)
 moved)
   has moved.secure-boot "$(sb)" "SecureBoot enabled"
   say moved.journal info "$(journal)"
+  say moved.lockout info "$(lockout)"
   is moved.slots "$(slots)" "0:passphrase 1:tpm2+pin 2:recovery"
-  end;;
-back)
-  say back.journal info "$(journal)"
-  has back.secure-boot "$(sb)" "SecureBoot enabled"
-  silik disk > /dev/null 2>&1; is back.disk "exit $?" "exit 0"
   end;;
 skip)
   # (an empty PIN, then a wrong one, were typed: what the start did with them is in its journal, and outside)
   say skip.journal info "$(journal)"
-  say skip.lockout info "$(tpm2_getcap properties-variable 2>&1 | grep -i 'LOCKOUT_COUNTER\|MAX_AUTH_FAIL\|LOCKOUT_INTERVAL\|LOCKOUT_RECOVERY' | tr -s ' \n' ' ')"
-  o=$(silik disk tpm remove --yes 2>&1); rc=$?
-  is skip.remove "exit $rc" "exit 0"
-  say skip.remove-output info "$(echo "$o" | tail -8 | tr '\n' ';')"
-  is skip.slots "$(slots)" "0:passphrase 2:recovery"
-  hasnot skip.crypttab "$(cat /etc/crypttab)" "tpm2-device"
-  hasnot skip.initramfs-crypttab "$(lsinitrd -f etc/crypttab 2>&1)" "tpm2-device"
+  say skip.lockout info "$(lockout)"
+  # (what Enter alone and one wrong PIN cost is the row above; one such start must not lock the TPM)
+  hasnot skip.not-locked-by-one-start "$(lockout)" "inLockout: 1"
+  # failed authorisations of an object of the test's own, until the TPM locks itself (what wrong PINs at several
+  # starts, or starts cut by force, end in)
+  d=$(mktemp -d /run/sealed-lock.XXXXXX)
+  tpm2_createprimary -Q -C o -c $d/p.ctx && echo x | tpm2_create -Q -C $d/p.ctx -i - -p right -u $d/k.pub -r $d/k.priv \
+    && tpm2_load -Q -C $d/p.ctx -u $d/k.pub -r $d/k.priv -c $d/k.ctx
+  is skip.lock-object "exit $?" "exit 0"
+  for i in 1 2 3 4 5 6 7 8; do
+    case "$(lockout)" in *"inLockout: 1"*) break;; esac
+    tpm2_unseal -c $d/k.ctx -p wrong > /dev/null 2>&1
+  done
+  rm -rf $d
+  has skip.locked-out "$(lockout)" "inLockout: 1"
   cryptsetup open --test-passphrase --key-file $pass "$luks" > /dev/null 2>&1; is skip.passphrase-still-opens "exit $?" "exit 0"
+  end;;
+locked)
+  # (the PIN was typed and the TPM was locked: outside it is seen that the passphrase was needed)
+  say locked.journal info "$(journal)"
+  has locked.in-lockout "$(lockout)" "inLockout: 1"
+  say locked.disk info "$(silik disk 2>&1 | grep 'opens with')"          # (silik does not read the TPM's lockout)
+  tpm2_dictionarylockout --clear-lockout > /dev/null 2>&1; is locked.clear "exit $?" "exit 0"
+  is locked.lockout-counter-after "$(count)" 0x0
+  hasnot locked.out-of-lockout "$(lockout)" "inLockout: 1"
+  end;;
+cleared)
+  say cleared.journal info "$(journal)"
+  is cleared.lockout-counter "$(count)" 0x0
+  end;;
+back)
+  say back.journal info "$(journal)"
+  has back.secure-boot "$(sb)" "SecureBoot enabled"
+  is back.lockout-counter "$(count)" 0x0
+  o=$(silik disk tpm remove --yes 2>&1); rc=$?
+  is back.remove "exit $rc" "exit 0"
+  say back.remove-output info "$(echo "$o" | tail -8 | tr '\n' ';')"
+  is back.slots "$(slots)" "0:passphrase 2:recovery"
+  hasnot back.crypttab "$(cat /etc/crypttab)" "tpm2-device"
+  hasnot back.initramfs-crypttab "$(lsinitrd -f etc/crypttab 2>&1)" "tpm2-device"
+  cryptsetup open --test-passphrase --key-file $pass "$luks" > /dev/null 2>&1; is back.passphrase-still-opens "exit $?" "exit 0"
   end;;
 plain)
   say plain.journal info "$(journal)"
