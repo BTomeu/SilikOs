@@ -36,6 +36,12 @@ There is no ISO to download from a fixed link yet. Three ways:
 - **Build it**: on any Linux with `xorriso`, `mtools`, `cpio`, `curl` and `gpg`: `bash tools/build_iso.sh`
   (`docs/BUILD.md`).
 
+**Without an installer** (14/11/2026): the workflow **Disk image** keeps a disk image of SilikOS already
+installed (Actions → Disk image → the last green run → Artifacts → `silikos-disk-image`, 8 GB). Written to a disk
+of 40 GB or more as it is (balenaEtcher takes the `.img.xz`; **it erases that disk**), the disk starts SilikOS on
+any x86_64 computer with UEFI and its first start asks for the language, the keyboard and the user: skip sections
+1 and 2. It is not encrypted. `docs/DISK.md` says what it is and what was seen of it (virtual machines only).
+
 Copy it to the USB stick (replace `sdX` with your USB stick; **it erases the USB stick**):
 
 ```bash

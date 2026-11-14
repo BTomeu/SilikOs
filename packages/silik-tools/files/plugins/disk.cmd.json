@@ -18,5 +18,9 @@
  {"address": "disk/recovery", "argv": ["disk", "recovery"],
   "en": "Disk: add a recovery key (generated, shown once: for paper)",
   "ca": "Disc: afegeix una clau de recuperació (generada, mostrada un sol cop: per al paper)",
-  "es": "Disco: añade una clave de recuperación (generada, mostrada una sola vez: para el papel)", "terminal": true}
+  "es": "Disco: añade una clave de recuperación (generada, mostrada una sola vez: para el papel)", "terminal": true},
+ {"address": "disk/grow", "argv": ["disk", "grow"],
+  "en": "Disk: the system on the whole disk it is on (after writing a disk image onto a larger disk)",
+  "ca": "Disc: el sistema a tot el disc on és (després de gravar una imatge de disc en un disc més gran)",
+  "es": "Disco: el sistema en todo el disco donde está (tras grabar una imagen de disco en un disco mayor)", "terminal": true}
 ]

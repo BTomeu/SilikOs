@@ -82,6 +82,9 @@ repository's workflows on GitHub, and each green run keeps it for 14 days (signe
   a green tick, and at the bottom of its page, under **Artifacts**, `silikos-offline-iso`. A `.zip` comes down with
   the `.iso` inside.
 - **The network ISO (2 GB; the installation downloads 2.5 GB more)**: the same under **CI**, artifact `silikos-iso`.
+- **No installer at all: a disk image of the installed system (8 GB)**: the same under **Disk image**, artifact
+  `silikos-disk-image`. Write the `.img.xz` to a disk of 40 GB or more (it erases it) and start the computer from
+  that disk; the first start asks for the user. Not encrypted. [`docs/DISK.md`](docs/DISK.md).
 
 Write the `.iso` to a USB stick as it is, byte for byte (balenaEtcher; Rufus in "DD Image" mode; `dd`), and start the
 computer from it. [`docs/FIRST-HOUR.md`](docs/FIRST-HOUR.md) has every step, also for a system on an

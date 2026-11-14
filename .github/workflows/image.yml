@@ -5,6 +5,8 @@
 # first start asks for one), nothing of the tests in it. Two layers over the image are started, on USB with Secure
 # Boot on and on SATA, up to the first-start setup; the image itself is never started. Then it is compressed and
 # kept as an artifact for 14 days. Started by hand, and by a change of its own files.
+# Both versions, always (owner, 14/11/2026): the job image-el10 makes the same image of the SilikOS 10 lab, from the
+# lab ISO (el10/build_iso.sh) with the same script and the same checks.
 name: Disk image
 on:
   workflow_dispatch:
@@ -111,3 +113,61 @@ jobs:
             build/image/*.txt
             build/image/*.png
             build/image/*.ks
+
+  # the same image of the SilikOS 10 lab (docs/EL10.md): the lab's packages built inside EL 10, the lab ISO, and the
+  # same script with the same checks. What the lab does not have (docs/EL10.md) the image does not have either.
+  image-el10:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 200
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with: { persist-credentials: false }
+      - name: KVM for the runner's user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+      - name: Tools, the firmware, disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          bash tools/ci_apt.sh rpm createrepo-c xorriso mtools cpio isomd5sum qemu-system-x86 qemu-utils ovmf imagemagick tesseract-ocr xz-utils
+          df -h /
+      - name: Packages (built in an EL 10 container)
+        run: |
+          bash el10/box.sh -- bash -c '
+            set -e
+            dnf -y -q install rpm-build createrepo_c cpio > /dev/null
+            bash el10/build_rpms.sh'
+      - name: The lab ISO
+        run: |
+          createrepo_c --quiet build/el10/repo && ls build/el10/repo
+          bash el10/build_iso.sh
+      - name: The image installed, checked from outside, started on two computers, compressed
+        run: bash tests/install/image.sh build/el10/SilikOS-*-lab-*-netinstall.iso build/image10
+      - name: The report
+        if: always()
+        run: |
+          {
+            echo '### SilikOS 10 lab disk image'
+            echo '```'
+            cat build/image10/report.txt 2>/dev/null || echo 'no report: see the installer console (artifact image10-test)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: silikos10-disk-image
+          path: |
+            build/image10/SilikOS-*-disk.img.xz
+            build/image10/SilikOS-*-disk.img.xz.sha256
+          compression-level: 0
+          retention-days: 14
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        if: always()
+        with:
+          name: image10-test
+          path: |
+            build/image10/*.log
+            build/image10/*.txt
+            build/image10/*.png
+            build/image10/*.ks

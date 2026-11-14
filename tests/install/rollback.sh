@@ -14,6 +14,8 @@
 #   report.txt;  exit 0 when no check failed and both machines finished.
 #   SILIK_CI_APPEND, SILIK_CI_MEM, SILIK_CI_CPUS, SILIK_CI_TCG: as tests/install/run.sh.
 #   SILIK_CI_ROLLBACK_DISK (GB, default 80: the installer makes /home from 50 GiB free; the image is sparse)
+#   SILIK_CI_ROLLBACK_GROW (GB, default 420: what the thin part's disk gets after the installation, for its last
+#   stage: `silik disk grow` takes the system onto the whole disk, as after a disk image written to a larger disk)
 #   SILIK_CI_ROLLBACK_ONLY=thin|plain   one of the two parts
 # Needs qemu-system-x86_64, qemu-img, xorriso, mtools, python3.
 # In GitHub Actions each step of the plan is an annotation of the run: a notice when its checks passed, an error
@@ -25,6 +27,7 @@ iso=${1:?usage: tests/install/rollback.sh ISO [OUT_DIR]}
 out=${2:-$root/build/rollback-test}
 mem=${SILIK_CI_MEM:-4096}; cpus=${SILIK_CI_CPUS:-$(nproc)}; disk_gb=${SILIK_CI_ROLLBACK_DISK:-80}
 only=${SILIK_CI_ROLLBACK_ONLY:-}
+grow_gb=${SILIK_CI_ROLLBACK_GROW:-420}
 mkdir -p "$out"; out=$(cd "$out" && pwd); iso=$(cd "$(dirname "$iso")" && pwd)/$(basename "$iso")
 work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
 
@@ -121,6 +124,9 @@ for part in thin plain; do
     echo "FAIL  $part.installation               did not finish: $(clean "$out/$part-install.log" | grep -i "error\|\[!\]" | tail -2 | tr '\n' ' ' | cut -c1-200)" >> "$out/report.txt"
     rm -f "$out/$part.qcow2"; status=1; continue
   fi
+  # the disk made larger after the installation, as a disk is that a disk image of the installed system was written
+  # to: the last stage of the thin part grows the system onto it (silik disk grow)
+  if [ "$part" = thin ]; then qemu-img resize -q "$out/$part.qcow2" "+${grow_gb}G"; echo "[$part] the disk is now $((gb + grow_gb)) GB: ${grow_gb} GB after its last partition"; fi
   finished=1; boot "$part" "$t_boot" || finished=0
   # (rows.py: every check whole and counted; a line the serial port lost is a FAIL here, not a silence)
   python3 "$here/rows.py" --name "$part.rows" "$out/$part-boot.log" | while IFS='|' read -r _ name verdict detail; do
@@ -166,6 +172,7 @@ if [ -z "$only" ] || [ "$only" = thin ]; then
   step 5 "silik rollback, the Revert entry, finish, the default kernel has its modules" rollback revert-boot finish
   step 6 "the start after the rollback" after
   step 8 "the prune keeps five" prune
+  step 11 "the system on the whole disk after the disk grew (silik disk grow)" grow
 fi
 if [ -z "$only" ] || [ "$only" = plain ]; then
   step 10 "a disk without LVM thin: not available, the packages' way back" plain

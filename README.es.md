@@ -88,6 +88,9 @@ de GitHub iniciada):
   más nueva con la marca verde, y al final de su página, en **Artifacts**, `silikos-offline-iso`. Baja un `.zip`
   con la `.iso` dentro.
 - **La ISO de red (2 GB; la instalación descarga 2,5 GB más)**: lo mismo en **CI**, artefacto `silikos-iso`.
+- **Sin instalador: una imagen de disco del sistema ya instalado (8 GB)**: lo mismo en **Disk image**, artefacto
+  `silikos-disk-image`. Graba el `.img.xz` en un disco de 40 GB o más (lo borra) y arranca el ordenador desde ese
+  disco; el primer arranque pide el usuario. Sin cifrar. [`docs/DISK.md`](docs/DISK.md).
 
 Escribe la `.iso` en una memoria USB tal como es, byte a byte (balenaEtcher; Rufus en modo «DD Image»; `dd`), y
 arranca el ordenador desde ella. [`docs/FIRST-HOUR.md`](docs/FIRST-HOUR.md) (en inglés) tiene todos los pasos,

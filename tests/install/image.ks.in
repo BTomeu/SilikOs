@@ -12,6 +12,9 @@ autopart
 lang en_US.UTF-8
 keyboard us
 timezone UTC --utc
+# (without a name the installer takes the one the build machine's network gives it and names the volume group after
+# it: the second image made carried "silikos_ip-10-0-2-15")
+network --hostname=localhost.localdomain
 # (the installer wants a way in before it goes on; the last step below takes it away again: root is locked, with no
 # password at all, and the first start asks for the user)
 rootpw --plaintext silikos-image-installing
@@ -37,6 +40,28 @@ dracut -f --regenerate-all > /root/silikos-image-dracut.log 2>&1 || say dracut "
 img=/boot/initramfs-$k.img
 n() { lsinitrd "$img" 2> /dev/null | grep -c "/$1\.ko" | sed 's/^[1-9][0-9]*$/1/'; }
 say initramfs "$(lsinitrd "$img" 2> /dev/null | grep -c '\.ko') kernel modules: ahci $(n ahci) nvme $(n nvme) usb-storage $(n usb-storage) uas $(n uas) xhci-pci $(n xhci-pci); $(du -h "$img" | cut -f1); kernel $k"
+# the system on the whole disk at its first start: the image has the size it was made with, the disk it is written
+# to is larger. `silik disk grow` takes the last partition up to the end of the disk, then the LVM volume and the
+# file system of /; it moves and formats nothing, and does nothing on a disk of the image's size. Once: the mark
+# is written when it ended well, and a start where it did not tries again
+cat > /etc/systemd/system/silikos-image-grow.service <<'UNIT'
+[Unit]
+Description=SilikOS: the system on the whole disk it was written to (once, at the first start)
+ConditionPathExists=!/var/lib/silikos-image/grown
+After=local-fs.target
+Before=display-manager.service
+
+[Service]
+Type=oneshot
+StateDirectory=silikos-image
+ExecStart=/usr/bin/silik disk grow --yes
+ExecStartPost=/usr/bin/touch /var/lib/silikos-image/grown
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl enable silikos-image-grow.service > /dev/null 2>&1
+say grow "$(systemctl is-enabled silikos-image-grow.service 2>&1); $(/usr/bin/silik --dry-run disk grow 2>&1 | head -1)"
 # what belongs to one system and not to an image: made again at the first start
 rm -f /etc/ssh/ssh_host_* /root/anaconda-ks.cfg /root/original-ks.cfg
 : > /etc/machine-id
@@ -48,6 +73,7 @@ say args "$(grubby --info=DEFAULT 2> /dev/null | sed -n 's/^args="\(.*\)"$/\1/p'
 [ "$(lsblk -n -o FSTYPE | grep -c crypto_LUKS)" = 0 ] && say encrypted no || say encrypted "$(lsblk -n -l -o NAME,FSTYPE | grep crypto_LUKS | tr '\n' ' ')"
 c=$(ls /usr/local/sbin/silikos-ci* /etc/systemd/system/silikos-ci* 2> /dev/null | tr '\n' ' '; getent passwd tester | cut -d: -f1)
 say ci "${c:-none}"
+say names "volume group $(vgs --noheadings -o vg_name 2>&1 | tr -d ' ' | tr '\n' ' '); /etc/hostname: $(cat /etc/hostname 2>&1 | head -1)"
 say layout "$(lsblk -n -l -o NAME,TYPE,SIZE,FSTYPE,MOUNTPOINT | tr -s ' ' | tr '\n' ';' | cut -c1-600)"
 say packages "$(rpm -qa | wc -l) packages; $(rpm -q silik-tools silikos-desktop silikos-security 2>&1 | tr '\n' ' '); gnome-initial-setup: $(rpm -q gnome-initial-setup 2>&1)"
 %end

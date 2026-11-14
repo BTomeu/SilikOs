@@ -1,6 +1,6 @@
 # silik-plugin: disk
 # help: data at rest: what is encrypted (LUKS), TPM and Secure Boot, unlock with TPM2 + PIN, a recovery key. Never formats
-# words: check tpm recovery --json
+# words: check tpm recovery grow --json
 # words tpm: enroll remove
 # state: experimental: run in virtual machines (an encrypted installation started with Secure Boot and a software TPM; a system on a USB disk); no real machine yet
 """silik disk [--json]                    what is encrypted: /, /home, swap; the LUKS volume (version, cipher, key slots,
@@ -13,10 +13,15 @@ silik disk tpm enroll [DEVICE]         a TPM2 key slot with a PIN, bound to the 
 silik disk tpm remove [DEVICE] [--yes] the TPM2 slot wiped, the option out of /etc/crypttab, the initramfs made again
 silik disk recovery [DEVICE] [--yes] [--unlock-key-file FILE]
                                        one more key slot with a generated recovery key, shown once
+silik disk grow [--yes]                the system on the whole disk it is on: the last partition up to the end of
+                                       the disk, the LVM volume (its thin pool first) and the file system of / with
+                                       it. For a system written from a disk image onto a larger disk. Nothing is
+                                       moved or formatted
 silik disk notice [--again]            at a login (silik-tools' autostart entry): a disk that is not encrypted is said
                                        once, as a notification; nothing when it is encrypted
 
-Never formats, never encrypts or re-encrypts, never removes a passphrase or recovery slot. The volume is found from
+Never formats, never encrypts or re-encrypts, never removes a passphrase or recovery slot. `grow` only ever makes
+the last partition of the disk / is on larger, into space nothing uses. The volume is found from
 the running system (what / is on); a DEVICE typed must be a LUKS volume of this machine; the device is printed and
 asked about before anything is written (--yes for scripts).
 
@@ -639,6 +644,179 @@ def recovery(ctx, a):
     return 0
 
 
+# ------------------------------------------------------------------------------------------- the whole disk
+
+GROW_LEAST = 64 << 20          # bytes free after the last partition below which the partition table is left alone
+SYS_BLOCK = "/sys/class/block"
+NO_GROW = "Nothing was changed"
+# what the installer leaves free in the volume group beside a thin pool: a fifth of the group (seen in the installed
+# image: 7.7 of 38.4 GB), at least 1 GiB and at most 100 GiB [A: the two bounds are blivet's, from its code as
+# remembered, not seen here]. `grow` keeps the same share
+RESERVE_PART, RESERVE_LEAST, RESERVE_MOST = 5, 1 << 30, 100 << 30
+LVS = ["lvs", "--noheadings", "--nosuffix", "--units", "b", "--separator", "|", "-o",
+       "lv_dm_path,vg_name,lv_name,pool_lv,lv_size,vg_size,vg_free,vg_extent_size"]
+
+
+def grow_read(silik, sys_block=None):
+    """what / is on, as far as `grow` needs it: {source, fstype, kinds (the types of every device under /), thin,
+    parts and disks (each once: {path, kname, pttype}), partn, start, sectors, disk_sectors, later (partitions that
+    start after it)}, sizes in 512-byte sectors as the kernel gives them. None when it cannot be seen (a container)"""
+    sys_block = sys_block or SYS_BLOCK
+    rc, src = silik.sec_cmd(["findmnt", "-n", "-o", "SOURCE", "/"])
+    src = src.strip().split("[")[0]
+    if rc != 0 or not src.startswith("/dev/"):
+        return None
+    rc, out = silik.sec_cmd(["lsblk", "-J", "-s", "-o", "PATH,KNAME,TYPE,FSTYPE,PTTYPE", src])
+    try:
+        top = (json.loads(out).get("blockdevices") or [None])[0] if rc == 0 else None
+    except ValueError:
+        top = None
+    if not top:
+        return None
+    st = {"source": src, "fstype": top.get("fstype"), "top": top.get("type"), "kinds": [], "thin": False, "parts": [], "disks": []}
+    todo = [top]
+    while todo:
+        n = todo.pop()
+        todo.extend(n.get("children") or [])
+        kind = n.get("type")
+        if kind not in st["kinds"]:
+            st["kinds"].append(kind)
+        if kind == "lvm" and str(n.get("path") or "").endswith("-tpool"):
+            st["thin"] = True
+        for key, want in (("parts", "part"), ("disks", "disk")):
+            if kind == want and n.get("path") not in [x["path"] for x in st[key]]:
+                st[key].append({k: n.get(k) for k in ("path", "kname", "pttype")})
+    st["kinds"].sort(key=str)
+
+    def num(*path):
+        try:
+            with open(os.path.join(sys_block, *path)) as f:
+                return int(f.read().split()[0])
+        except (OSError, ValueError, IndexError):
+            return None
+
+    if len(st["parts"]) == 1 and len(st["disks"]) == 1:
+        part, disk = st["parts"][0]["kname"], st["disks"][0]["kname"]
+        st.update(partn=num(part, "partition"), start=num(part, "start"), sectors=num(part, "size"), disk_sectors=num(disk, "size"), later=[])
+        try:
+            names = sorted(os.listdir(os.path.join(sys_block, disk)))
+        except OSError:
+            names = []
+        for n in names:
+            if num(disk, n, "partition") is not None and st["start"] is not None and (num(disk, n, "start") or 0) > st["start"]:
+                st["later"].append(n)
+    return st
+
+
+def grow_plan(st):
+    """(what, text, plan): what is "refuse" (this layout is not one `grow` knows: nothing is tried), "full" (the
+    partition already ends where the disk does) or "grow"; plan: {disk, part, partn, lv, thin, free (bytes)}"""
+    if not st:
+        return "refuse", "the device / is on is not seen from here", None
+    if "crypt" in st["kinds"]:
+        return "refuse", "/ is on an encrypted volume: `silik disk grow` does not grow an encrypted system (not written yet)", None
+    if st.get("top") != "lvm" or set(st["kinds"]) - {"lvm", "part", "disk"} or len(st["parts"]) != 1 or len(st["disks"]) != 1:
+        return "refuse", "/ (%s) is on %s, %d partition(s) of %d disk(s): `silik disk grow` knows an LVM volume on one partition of " \
+            "one disk, the layout of an installation with automatic partitioning" % (
+                st["source"], "+".join(str(k) for k in st["kinds"]) or "nothing seen", len(st["parts"]), len(st["disks"])), None
+    part, disk = st["parts"][0], st["disks"][0]
+    if (disk.get("pttype") or part.get("pttype")) != "gpt":
+        return "refuse", "%s has no GPT partition table (%s)" % (disk["path"], disk.get("pttype") or "none seen"), None
+    if st.get("fstype") not in ("xfs", "ext4"):
+        return "refuse", "the file system of / is %s: only xfs and ext4 are grown" % (st.get("fstype") or "not seen"), None
+    if None in (st.get("partn"), st.get("start"), st.get("sectors"), st.get("disk_sectors")):
+        return "refuse", "the kernel does not say where %s starts and ends" % part["path"], None
+    if st.get("later"):
+        return "refuse", "%s is not the last partition of %s (after it: %s): there is nothing next to it to grow into" % (
+            part["path"], disk["path"], ", ".join(st["later"])), None
+    free = (st["disk_sectors"] - st["start"] - st["sectors"]) * 512
+    plan = {"disk": disk["path"], "part": part["path"], "partn": st["partn"], "lv": st["source"], "thin": bool(st.get("thin")),
+            "free": free, "disk_bytes": st["disk_sectors"] * 512}
+    if free < GROW_LEAST:
+        return "full", "%s already ends where %s does (%.1f GB; %d MB after it, the partition table's own copy among them)" % (
+            part["path"], disk["path"], plan["disk_bytes"] / 1e9, free >> 20), plan
+    return "grow", "%s (%.1f GB) has %.1f GB after %s that nothing uses" % (disk["path"], plan["disk_bytes"] / 1e9, free / 1e9, part["path"]), plan
+
+
+def grow_lvm(text, source):
+    """from what `lvs` says (LVS) after the physical volume grew: (commands, lines to say). None when the volume of /
+    is not among its lines. A volume of its own gets all that is free. A thin volume: its pool grows by what is free
+    less the installer's share of the group, and the volume of / by as much as its pool"""
+    rows = []
+    for line in text.splitlines():
+        f = [x.strip() for x in line.split("|")]
+        if len(f) == len(LVS[-1].split(",")) and all(x.isdigit() for x in f[4:]):
+            rows.append(dict(zip(("path", "vg", "lv", "pool", "size", "vg_size", "vg_free", "extent"), f[:4] + [int(x) for x in f[4:]])))
+    mine = next((r for r in rows if r["path"] == source), None)
+    if mine is None or not mine["extent"]:
+        return None
+    gb = lambda n: "%.1f GB" % (n / 1e9)
+    if not mine["pool"]:
+        if mine["vg_free"] < mine["extent"]:
+            return [], ["the volume group %s has nothing free: / already has all of it" % mine["vg"]]
+        return [["lvextend", "--resizefs", "--extents", "+100%FREE", source]], \
+               ["/ (%s) gets the %s that are free in the volume group %s" % (gb(mine["size"]), gb(mine["vg_free"]), mine["vg"])]
+    reserve = min(max(mine["vg_size"] // RESERVE_PART, RESERVE_LEAST), RESERVE_MOST)
+    add = (mine["vg_free"] - reserve) // mine["extent"]
+    if add * mine["extent"] < GROW_LEAST:       # (the installer's own share is not exactly a fifth: a few extents more are not a reason)
+        return [], ["the volume group %s has %s free, the share the installer leaves beside the thin pool (%s): the pool %s "
+                    "and / stay as they are" % (mine["vg"], gb(mine["vg_free"]), gb(reserve), mine["pool"])]
+    return [["lvextend", "--extents", "+%d" % add, "%s/%s" % (mine["vg"], mine["pool"])],
+            ["lvextend", "--resizefs", "--extents", "+%d" % add, source]], \
+           ["the thin pool %s/%s and / (%s) grow by %s each; %s of the volume group stay free, the share the installer "
+            "leaves beside the pool" % (mine["vg"], mine["pool"], gb(mine["size"]), gb(add * mine["extent"]), gb(mine["vg_free"] - add * mine["extent"]))]
+
+
+def grow(ctx, a):
+    silik = SILIK
+    what, text, plan = grow_plan(grow_read(silik))
+    if what == "refuse":
+        silik.die("%s. %s" % (text, NO_GROW), 2)
+    print("silik: " + text)
+    if what == "grow":
+        print("silik: the partition %s goes up to the end of %s, then the LVM volume%s and the file system of / (%s). "
+              "Nothing is moved or formatted; no other partition is touched" % (
+                  plan["part"], plan["disk"], " (its thin pool first)" if plan["thin"] else "", plan["lv"]))
+        if not (ctx.dry or a.yes):
+            if not sys.stdin.isatty():
+                silik.die("not asked at a terminal: add --yes when that is the disk", 2)
+            try:
+                ok = input("silik: go on with %s? [y/N] " % plan["disk"]).strip().lower() in ("y", "yes", "s", "si", "sí")
+            except EOFError:
+                ok = False
+            if not ok:
+                silik.die("nothing changed", 1)
+        # the partition table's second copy to the end of the disk (it sits where the image ended), then the
+        # partition up to it: sfdisk writes the table and nothing else, and the kernel learns the new size while the
+        # partition is in use (partx)
+        ctx.run(silik.as_root(["sfdisk", "--no-reread", "--no-tell-kernel", "--relocate", "gpt-bak-std", plan["disk"]]))
+        if not ctx.quiet:
+            print("    | , +", flush=True)
+        ctx.run(silik.as_root(["sfdisk", "--no-reread", "--no-tell-kernel", "-N", str(plan["partn"]), plan["disk"]]), stdin=", +\n")
+        ctx.run(silik.as_root(["partx", "--update", "--nr", str(plan["partn"]), plan["disk"]]))
+    # the steps above the partition are run each time: they do nothing when there is nothing to take, and a run
+    # that stopped after the partition is finished by the next one
+    ctx.run(silik.as_root(["pvresize", plan["part"]]))
+    rc, out = ctx.run(silik.as_root(LVS), check=False, capture=True)
+    if ctx.dry:
+        print("silik: then, from what lvs says: " + ("lvextend of the thin pool and of / by what is free, less the share the "
+              "installer leaves in the volume group" if plan["thin"] else "lvextend --resizefs --extents +100%FREE " + plan["lv"]))
+        return 0
+    steps = grow_lvm(out, plan["lv"]) if rc == 0 else None
+    if steps is None:
+        silik.die("lvs %s: the volume of / (%s) was not read; the file system was not grown" % (
+            "exited %d" % rc if rc else "did not name it", plan["lv"]), 1)
+    for line in steps[1]:
+        print("silik: " + line)
+    for argv in steps[0]:
+        ctx.run(silik.as_root(argv))
+    rc, out = silik.sec_cmd(["df", "-h", "--output=size,avail", "/"])
+    line = out.strip().splitlines()[-1].split() if rc == 0 and out.strip() else []
+    if len(line) == 2:
+        print("silik: / is %s, %s free" % (line[0], line[1]))
+    return 0
+
+
 def language(env=None):
     """en | ca | es, as the COMMAND bar reads it"""
     env = os.environ if env is None else env
@@ -707,6 +885,9 @@ def register(group, silik):
     x.add_argument("--yes", action="store_true")
     x.add_argument("--unlock-key-file", metavar="FILE", help="a file with the passphrase (away from a terminal)")
     x.set_defaults(fn=recovery)
+    x = sub.add_parser("grow", help="the system on the whole disk it is on: the last partition, the LVM volume and / grown; nothing moved or formatted")
+    x.add_argument("--yes", action="store_true", help="do not ask about the disk")
+    x.set_defaults(fn=grow)
     x = sub.add_parser("notice", help="at a login: say once, as a notification, that the disk is not encrypted")
     x.add_argument("--again", action="store_true", help="although it was said before")
     x.set_defaults(fn=notice)

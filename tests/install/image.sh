@@ -11,7 +11,9 @@
 #        - no machine id, no ssh host keys, no console on the serial port: each is made at the first start.
 #      Nothing of the tests is in it: no check script, no test user.
 #   2. the image is not started: two copy-on-write layers over it are, so that what is published has never run.
-#        usb    another computer: new firmware variables with Secure Boot on, the disk on a USB controller
+#        usb    another computer: new firmware variables with Secure Boot on, the disk on a USB controller, and
+#               24 GB larger than the image: the first start must take the system onto the whole disk (read from
+#               outside afterwards: the partition table and LVM's record; SILIK_CI_IMAGE_MORE_GB)
 #        sata   another one: the disk on SATA
 #      Each must reach the first-start setup: the screen is read (a picture, then OCR).
 #   3. the image is compressed (xz): SilikOS-VERSION-ARCH-disk.img.xz, with its sha256 and the size a disk needs.
@@ -121,7 +123,9 @@ case " $(said args) " in *console=ttyS0*) row FAIL image.no-serial-console "the 
 case "$(said initramfs)" in *"ahci 1"*"nvme 1"*"usb-storage 1"*) row ok image.initramfs-generic "the initramfs has every driver: $(said initramfs)" ;; *) row FAIL image.initramfs-generic "the initramfs: '$(said initramfs)'" ;; esac
 case "$(said encrypted)" in no) row ok image.not-encrypted "not encrypted (an image anyone can download cannot keep a passphrase)" ;; *) row FAIL image.not-encrypted "LUKS in the image: $(said encrypted)" ;; esac
 [ "$(said ci)" = none ] && row ok image.nothing-of-the-tests "no check script, service or test user of the tests in the image" || row FAIL image.nothing-of-the-tests "found: $(said ci)"
+case "$(said grow)" in enabled*) row ok image.grows-at-first-start "the service that takes the system onto the whole disk at the first start is in the image ($(said grow | cut -c1-200))" ;; *) row FAIL image.grows-at-first-start "the service: '$(said grow)'" ;; esac
 row info image.layout "$(said layout)"
+row info image.names "$(said names)"
 
 # ---------------------------------------------------------------------------------------------- 2. it starts
 picture() {   # picture FILE.ppm: the screen in letters; its last line says how much of it is not background
@@ -164,12 +168,52 @@ print("%d x %d; background %s" % (w, h, pix[:3].hex()))
 print("lit %d" % lit)
 EOF
 }
-# start NAME VARS DISK_ARGS...: a layer over the image starts in a machine with these firmware variables and this
-# disk; the screen is read every 15 s until the first-start setup is on it (its language question, or its welcome)
+# outside FILE FORMAT: what a disk says of itself, read from outside with the system stopped: "BACKUP LAST3 SEQNO ROOT
+# EXTENT" = the sector of the partition table's second copy, the last sector of the third partition, the number of
+# LVM's newest record on it, the size of the volume "root" in it (extents) and an extent's size (sectors). A dash
+# for what was not found. (The file system of / is inside a thin pool: its size is not seen from outside.)
+outside() {
+  rm -f "$work/head.bin" "$work/pv.bin"
+  qemu-img dd -f "$2" -O raw bs=1048576 count=2 "if=$1" "of=$work/head.bin" 2> /dev/null || { echo "- - - - -"; return 0; }
+  local first
+  first=$(python3 -c '
+import struct, sys
+d = open(sys.argv[1], "rb").read()
+print(struct.unpack_from("<Q", d, 1024 + 2 * 128 + 32)[0] if d[512:520] == b"EFI PART" else -1)' "$work/head.bin" 2> /dev/null) || first=-1
+  # (qemu-img dd of this version takes count before skip and then cannot skip: the disk is read from its start up
+  # to 3 MiB into the third partition, 1.6 GB, and the reader goes to the place itself)
+  [ "$first" -gt 0 ] && qemu-img dd -f "$2" -O raw bs=1048576 "count=$((first / 2048 + 4))" "if=$1" "of=$work/pv.bin" 2> /dev/null || : > "$work/pv.bin"
+  python3 - "$work/head.bin" "$work/pv.bin" "$first" <<'EOF' || echo "- - - - -"
+import re, struct, sys
+head, first = open(sys.argv[1], "rb").read(), int(sys.argv[3])
+with open(sys.argv[2], "rb") as f:
+    f.seek(max(first, 0) * 512)
+    pv = f.read(3 << 20)
+if head[512:520] != b"EFI PART":
+    print("- - - - -"); sys.exit(0)
+backup = struct.unpack_from("<Q", head, 512 + 32)[0]
+last3 = struct.unpack_from("<Q", head, 1024 + 2 * 128 + 40)[0]
+best = (-1, "")
+for chunk in pv.split(b"\x00"):                      # LVM keeps its records as text, the older ones before the newest
+    t = chunk.decode("ascii", "replace")
+    m = re.search(r"\nseqno = (\d+)", t)
+    if m and int(m.group(1)) > best[0]:
+        best = (int(m.group(1)), t)
+seq, t = best
+root = re.search(r"\n\t\troot \{\n(.*?)\n\t\t\}", t, re.S)
+ext = re.search(r"\n\textent_size = (\d+)", t)
+size = sum(int(x) for x in re.findall(r"\n\t\t\t\textent_count = (\d+)", root.group(1))) if root else None
+print(backup, last3, seq if seq >= 0 else "-", size if size else "-", ext.group(1) if ext else "-")
+EOF
+}
+# start NAME VARS MORE_GB DISK_ARGS...: a layer over the image, MORE_GB larger than it (a disk larger than the image),
+# starts in a machine with these firmware variables and this disk; the screen is read every 15 s until the
+# first-start setup is on it (its language question, or its welcome). With MORE_GB the stopped layer is then read
+# from outside: the first start must have taken the system onto the whole disk
 start() {
-  local name=$1 vars=$2 i seen=0 text fw; shift 2
+  local name=$1 vars=$2 more=$3 i seen=0 text fw was now sectors; shift 3
   rm -f "$work/$name.qcow2" "$work/mon.sock"
-  qemu-img create -q -f qcow2 -b "$img" -F raw "$work/$name.qcow2"
+  qemu-img create -q -f qcow2 -b "$img" -F raw "$work/$name.qcow2" "$((gb + more))G"
   : > "$out/start-$name.log"
   echo "[image] start '$name' (a layer over the image: the image itself is not written); the firmware's lines: $out/start-$name.log"
   qemu-system-x86_64 "${accel[@]}" "${machine[@]}" -m "$mem" -smp "$cpus" -display none -vga std \
@@ -205,16 +249,40 @@ EOF
   row info "image.$name.firmware" "${fw:-the firmware said nothing of what it started}"
   if [ $seen = 1 ]; then row ok "image.$name.first-start" "the image started there and reached its first-start setup in $((i * 15)) s: $(tr -s ' \n' ' ' < "$out/screen-$name.txt" | cut -c1-140)"
   else row FAIL "image.$name.first-start" "the first-start setup was not read on the screen in $((t_boot)) min (screen-$name.png, screen-$name.txt)"; fi
-  rm -f "$work/$name.qcow2"
+  if [ "$more" -gt 0 ]; then
+    was=$(outside "$img" raw); now=$(outside "$work/$name.qcow2" qcow2); sectors=$(( (gb + more) * 2097152 ))
+    echo "[image] '$name' from outside (table's second copy, end of partition 3, LVM record, root's extents, extent): image $was; after the start on a disk $more GB larger: $now"
+    python3 - "$sectors" "$more" "image.$name.grown" $was $now >> "$out/report.txt" <<'EOF' || row FAIL "image.$name.grown" "the disk was not read from outside: image '$was', after '$now'"
+import sys
+sectors, more = int(sys.argv[1]), int(sys.argv[2])
+was, now = sys.argv[4:9], sys.argv[9:14]
+def line(v, text): print("%-5s %-40s %s" % (v, sys.argv[3], text))
+try:
+    b0, l0, s0, r0, e0 = (int(x) for x in was)
+    b1, l1, s1, r1, e1 = (int(x) for x in now)
+except ValueError:
+    line("FAIL", "not read from outside: image %s, after %s" % (" ".join(was), " ".join(now))); sys.exit(0)
+gib = lambda extents, e: extents * e * 512 / 2.0 ** 30
+bad = []
+if b1 != sectors - 1: bad.append("the partition table's second copy is at sector %d, not at the disk's last (%d)" % (b1, sectors - 1))
+if sectors - l1 > 4096: bad.append("partition 3 ends %d sectors before the end of the disk" % (sectors - l1))
+if gib(r1 - r0, e1) < more / 2.0: bad.append("the volume of / went from %.1f to %.1f GiB: less than half of the %d GB more" % (gib(r0, e0), gib(r1, e1), more))
+if bad: line("FAIL", "; ".join(bad))
+else: line("ok", "on a disk %d GB larger than the image the first start took the system onto it: partition 3 up to the end (the image's ended at sector %d, now %d of %d), "
+           "the volume of / from %.1f to %.1f GiB in LVM's own record (number %d, was %d); the file system's size is not seen from outside" % (more, l0, l1, sectors, gib(r0, e0), gib(r1, e1), s1, s0))
+EOF
+  fi
+  rm -f "$work/$name.qcow2" "$work/pv.bin" "$work/head.bin"
 }
 cp "$vars_sb" "$work/vars-usb.fd"; cp "$vars_plain" "$work/vars-sata.fd"
-start usb "$work/vars-usb.fd" -device nec-usb-xhci,id=xhci -device usb-storage,bus=xhci.0,drive=ext,serial=SILIKIMG
-start sata "$work/vars-sata.fd" -device ide-hd,drive=ext,bus=ide.0
+start usb "$work/vars-usb.fd" "${SILIK_CI_IMAGE_MORE_GB:-24}" -device nec-usb-xhci,id=xhci -device usb-storage,bus=xhci.0,drive=ext,serial=SILIKIMG
+start sata "$work/vars-sata.fd" 0 -device ide-hd,drive=ext,bus=ide.0
 
 # ---------------------------------------------------------------------------------------------- 3. the file
 status=0
 for must in image.installed image.no-user image.root-locked image.no-machine-id image.no-serial-console image.initramfs-generic \
-            image.not-encrypted image.nothing-of-the-tests image.usb.first-start image.sata.first-start; do
+            image.not-encrypted image.nothing-of-the-tests image.grows-at-first-start image.usb.first-start image.usb.grown \
+            image.sata.first-start; do
   awk -v m="$must" '($1 == "ok" || $1 == "FAIL") && $2 == m { f = 1 } END { exit !f }' "$out/report.txt" \
     || printf '%-5s %-40s %s\n' FAIL "$must" "was not said" >> "$out/report.txt"
 done

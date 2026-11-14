@@ -249,6 +249,39 @@ case $stage in
   is after.updated-again "$(ver)" "$(cat $S/new-versions)"
   new=$(newest_auto)
   if [ -n "$new" ] && [ "$new" != "$last" ]; then say after.snapshot-first ok "$new"; else say after.snapshot-first FAIL "no new snapshot before the update by hand (newest: '$last'): $(echo "$o" | grep -i snapshot | tail -2)"; fi
+  # the system on the whole disk (silik disk grow, docs/DISK.md): after the installation the host made this disk
+  # larger, as a disk is that a disk image of the installed system was written to. The layout is the installer's
+  # (a thin pool), with the snapshots of the steps above in it
+  rsrc=$(findmnt -n -o SOURCE /)
+  gd=$(lsblk -n -l -s -o KNAME,TYPE "$rsrc" | awk '$2 == "disk" { print $1 }' | sort -u | head -1)
+  gp=$(lsblk -n -l -s -o KNAME,TYPE "$rsrc" | awk '$2 == "part" { print $1 }' | sort -u | head -1)
+  size_of() { df -B1 --output=size / | tail -1 | tr -d ' '; }
+  lvm_now() { echo "group$(vgs --noheadings -o vg_size,vg_free 2>&1 | tr -s ' '); $(lvs -a --noheadings -o lv_name,lv_size 2>&1 | tr -s ' ' | tr '\n' ';')"; }
+  gap() { echo $(( $(cat /sys/class/block/$gd/size) - $(cat /sys/class/block/$gp/start) - $(cat /sys/class/block/$gp/size) )); }
+  before=$(size_of)
+  say grow.before info "/ is $((before >> 30)) GiB; /dev/$gd $(lsblk -n -d -o SIZE /dev/$gd | tr -d ' '), $(gap) sectors after /dev/$gp; $(lvm_now)"
+  o=$(silik disk grow --yes 2>&1); rc=$?
+  if [ $rc = 0 ]; then say grow.run ok "exit 0: $(echo "$o" | grep '^silik:' | tail -3 | cut -c8- | tr '\n' ';')"
+  else say grow.run FAIL "exit $rc: $(echo "$o" | tail -6 | tr '\n' ';')"; fi
+  say grow.commands info "$(echo "$o" | grep '^[$] ' | cut -c3- | tr '\n' ';')"
+  after=$(size_of); g=$(gap)
+  if [ "$g" -ge 0 ] && [ "$g" -lt 4096 ]; then say grow.partition ok "/dev/$gp ends $g sectors before the end of /dev/$gd"
+  else say grow.partition FAIL "$g sectors after /dev/$gp on /dev/$gd"; fi
+  has grow.table "$(sfdisk --verify /dev/$gd 2>&1 | tr '\n' ';')" "No errors detected"
+  if [ $((after - before)) -ge $((300 << 30)) ]; then say grow.root ok "/ went from $((before >> 30)) GiB to $((after >> 30)) GiB"
+  else say grow.root FAIL "/ went from $((before >> 30)) GiB to $((after >> 30)) GiB: less than 300 GiB more on a disk made 420 GB larger"; fi
+  say grow.after info "$(lvm_now)"
+  say grow.pool info "$(lvs -a --noheadings -o lv_name,lv_size,data_percent,metadata_percent 2>&1 | grep -i 'pool\|tmeta' | tr -s ' ' | tr '\n' ';')"
+  # what the pool keeps its books in must be enough for the pool it now is: LVM says when it is not
+  w=$(lvs 2>&1 > /dev/null | tr '\n' ';')
+  if [ -z "$w" ]; then say grow.pool-warnings ok "lvs has nothing to warn of"; else say grow.pool-warnings FAIL "$w"; fi
+  if dd if=/dev/zero of=/var/tmp/silikos-ci-grow bs=1M count=64 conv=fsync 2> /dev/null && [ "$(stat -c %s /var/tmp/silikos-ci-grow)" = 67108864 ]; then
+    say grow.writes ok "64 MiB written and read back on the grown file system"
+  else say grow.writes FAIL "writing 64 MiB to /var/tmp failed"; fi
+  rm -f /var/tmp/silikos-ci-grow
+  o=$(silik disk grow --yes 2>&1); rc=$?
+  if [ $rc = 0 ] && [ "$(size_of)" = "$after" ] && ! echo "$o" | grep -q '^[$] .*\(sfdisk\|lvextend\)'; then say grow.again ok "a second run writes nothing: $(echo "$o" | grep '^silik:' | head -2 | cut -c8- | tr '\n' ';')"
+  else say grow.again FAIL "exit $rc, / $(( $(size_of) >> 30 )) GiB: $(echo "$o" | tail -5 | tr '\n' ';')"; fi
   finish after.end
   ;;
 *)

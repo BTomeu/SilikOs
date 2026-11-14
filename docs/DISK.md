@@ -14,6 +14,7 @@ silik disk check           # the same, and what to do: a copy of the header, a r
 silik disk tpm enroll      # a short PIN at each start instead of the passphrase: TPM2 + PIN, bound to the Secure Boot state
 silik disk tpm remove      # back to the passphrase at each start
 silik disk recovery        # one more key slot: a generated recovery key, shown once (for paper)
+silik disk grow            # the system on the whole disk it is on (after a disk image written onto a larger disk)
 ```
 
 `silik disk` never formats, never encrypts or re-encrypts, never removes a passphrase or recovery slot. It finds the
@@ -270,6 +271,41 @@ and the same disk then started on SATA.
 a USB 2 port works and is slow. The weekly trim reaches the disk only through an enclosure that passes it on. The
 computer's clock: Linux keeps the hardware clock in UTC and Windows in local time, so after a session in one the
 other may show the wrong hour until it synchronises.
+
+## A disk image: the installed system written straight onto a disk
+
+The owner, 14/11/2026: "directly install the system on the disk, without a USB stick for the installation". The
+workflow **Disk image** installs the ISO's own package set onto an empty disk image under UEFI, and keeps the
+result, compressed, for 14 days (artifact `silikos-disk-image`: `SilikOS-9.8-x86_64-disk.img.xz`, 7.9 GB to
+download). Written to a disk as it is, byte for byte (balenaEtcher takes the `.xz`; `xz -dc FILE | sudo dd of=/dev/sdX
+bs=4M`), that disk starts SilikOS on any x86_64 computer with UEFI: there is no installer to go through. **It erases
+the disk it is written to**, and that disk must hold at least 40 GB.
+
+What makes it an image for any computer and for nobody yet:
+
+- **it is not encrypted**: an image anyone can download cannot keep a passphrase. Whoever holds the disk reads it.
+  For an encrypted system on an external disk, install with the ISO (the section above);
+- the initramfs carries every driver (the base's `dracut-config-generic`), so that it starts on USB, SATA or NVMe;
+- there is no user and root is locked: the first start asks for the language, the keyboard and the user (the
+  base's first-start setup);
+- no machine id, no ssh host keys: each system makes its own at its first start;
+- the layout is the installer's automatic one (an LVM thin pool: `silik rollback` works).
+
+**The whole disk.** The image is 40 GB and the disk is larger. `silik disk grow` takes the system onto the whole
+disk: the last partition up to the end of the disk (`sfdisk` writes the partition table and nothing else), the LVM
+physical volume, the thin pool and the volume and file system of `/`, in that order, each command printed. It
+keeps free in the volume group the share the installer itself leaves beside a thin pool (a fifth). It moves and
+formats nothing, touches no other partition, and refuses a layout it does not know (an encrypted volume, a
+partition that is not the disk's last, a table that is not GPT). The image runs it by itself once, at its first
+start, before the login screen (`silikos-image-grow.service`, which is in the image only, not in the packages);
+on a disk of the image's size it does nothing.
+
+Seen (14/11/2026, workflow Disk image, run 43609501912: 11 checks ok, none failed): the image installed; no user,
+root locked, no machine id, no serial console, not encrypted, nothing of the tests in it; a copy-on-write layer
+over it started on a machine with Secure Boot on and the disk on a USB controller, and on another with the disk
+on SATA, each up to the first-start setup's welcome (the image itself is never started). **Not seen**: a real
+computer and a real disk; the first-start setup beyond its first screen; and `silik disk grow` with the first-start
+service, which were written after that run (`docs/STATUS.md` says when they have run).
 
 ## What ran, and what did not
 

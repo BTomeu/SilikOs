@@ -89,6 +89,9 @@ iniciada):
   més nova amb la marca verda, i al final de la seva pàgina, a **Artifacts**, `silikos-offline-iso`. Baixa un `.zip`
   amb la `.iso` a dins.
 - **La ISO de xarxa (2 GB; la instal·lació en baixa 2,5 GB més)**: el mateix a **CI**, artefacte `silikos-iso`.
+- **Sense instal·lador: una imatge de disc del sistema ja instal·lat (8 GB)**: el mateix a **Disk image**,
+  artefacte `silikos-disk-image`. Grava el `.img.xz` en un disc de 40 GB o més (l'esborra) i arrenca l'ordinador
+  des d'aquest disc; la primera arrencada demana l'usuari. Sense xifrar. [`docs/DISK.md`](docs/DISK.md).
 
 Escriu la `.iso` en un llapis USB tal com és, byte a byte (balenaEtcher; Rufus en mode «DD Image»; `dd`), i arrenca
 l'ordinador des del llapis. [`docs/FIRST-HOUR.md`](docs/FIRST-HOUR.md) té tots els passos, també per a un sistema

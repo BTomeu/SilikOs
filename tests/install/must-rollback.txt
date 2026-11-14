@@ -61,6 +61,13 @@ after.update-by-hand
 after.wait-ended
 after.updated-again
 after.snapshot-first
+grow.run
+grow.partition
+grow.table
+grow.root
+grow.pool-warnings
+grow.writes
+grow.again
 plain.snapshot-says
 plain.snapshot-exit
 plain.create-refused

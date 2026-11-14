@@ -797,7 +797,7 @@ class Around(unittest.TestCase):
             return subprocess.run(["bash", "-c", script, "x", str(n)] + list(words), stdout=subprocess.PIPE, universal_newlines=True, env=env).stdout.split()
 
         self.assertIn("disk", comp(1, "di"))
-        self.assertEqual(comp(2, "disk", ""), ["check", "tpm", "recovery", "--json"])
+        self.assertEqual(comp(2, "disk", ""), ["check", "tpm", "recovery", "grow", "--json"])
         self.assertEqual(comp(3, "disk", "tpm", ""), ["enroll", "remove"])
         self.assertEqual(comp(3, "disk", "tpm", "r"), ["remove"])
         self.assertEqual(comp(3, "disk", "check", ""), [])
@@ -810,6 +810,230 @@ class Around(unittest.TestCase):
         link = os.path.join(ROOT, "packages/silik-tools/files/doc/DISK.md")
         self.assertTrue(os.path.islink(link))
         self.assertTrue(os.path.samefile(link, os.path.join(ROOT, "docs/DISK.md")))
+
+
+# ---------------------------------------------------------------------------------------------------- silik disk grow
+GB = 1 << 30
+EXT = 4 << 20
+LV, PART, DISK = "/dev/mapper/silikos-root", "/dev/sda3", "/dev/sda"
+
+
+def grow_state(disk_gb=120, kinds=("disk", "lvm", "part"), top="lvm", pttype="gpt", fstype="xfs", later=(), thin=True, parts=1, disks=1):
+    """an image of 40 GB (its third partition from 1.6 GB to the image's end) on a disk of disk_gb"""
+    start = (1600 << 20) // 512
+    return {"source": LV, "fstype": fstype, "top": top, "kinds": list(kinds), "thin": thin,
+            "parts": [{"path": PART, "kname": "sda3", "pttype": pttype}] + [{"path": "/dev/sdb1", "kname": "sdb1", "pttype": "gpt"}] * (parts - 1),
+            "disks": [{"path": DISK, "kname": "sda", "pttype": pttype}] + [{"path": "/dev/sdb", "kname": "sdb", "pttype": "gpt"}] * (disks - 1),
+            "partn": 3, "start": start, "sectors": 40 * GB // 512 - start - 33, "disk_sectors": disk_gb * GB // 512, "later": list(later)}
+
+
+def lvs_text(vg_gb=118, free_gb=88, pool="pool00", root_gb=26, more=()):
+    """what `lvs` answers (disk.LVS) on the image's layout once the physical volume has grown"""
+    tail = "|%d|%d|%d" % (vg_gb * GB, free_gb * GB, EXT)
+    rows = [("/dev/mapper/silikos-root", "silikos", "root", pool, root_gb * GB), ("/dev/mapper/silikos-swap", "silikos", "swap", "", 4 * GB)]
+    if pool:
+        rows.append(("/dev/mapper/silikos-" + pool, "silikos", pool, "", root_gb * GB))
+    return "".join("  %s|%s|%s|%s|%d%s\n" % (r + (tail,)) for r in rows + list(more))
+
+
+class GrowRun:
+    """silik disk grow ARGV on a machine in this state: the command lines in order, what each was given on its
+    standard input, the output, the exit code. LVS: what lvs answers"""
+
+    def __init__(self, argv, st, lvs=None, tty=False, typed="", dry=False, rc=None):
+        self.calls, self.inputs = [], []
+        rc = dict(rc or {})
+        lvs = lvs_text() if lvs is None else lvs
+
+        def run(ctx, cmd, check=True, capture=False, env=None, stdin=None):
+            ctx.echo(cmd)
+            if ctx.dry:
+                return 0, ""
+            self.calls.append(" ".join(cmd))
+            self.inputs.append(stdin)
+            code = rc.get(cmd[0], 0)
+            if check and code:
+                silik.die("%s exited %d" % (cmd[0], code), code)
+            return code, (lvs if cmd[0] == "lvs" else "")
+
+        out, err = io.StringIO(), io.StringIO()
+        fake_in = io.StringIO(typed)
+        fake_in.isatty = lambda: tty
+        with mock.patch.object(silik, "load_plugin", lambda n: disk), mock.patch.object(disk, "grow_read", lambda s, sys_block=None: st), \
+                mock.patch.object(silik.Ctx, "run", run), mock.patch.object(silik.Ctx, "note", lambda self, argv: None), \
+                mock.patch.object(silik, "sec_cmd", lambda argv, timeout=20: (0, "Size Avail\n 115G  101G")), \
+                mock.patch("os.geteuid", lambda: 0), mock.patch("sys.stdin", fake_in), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            try:
+                self.rc = silik.main((["--dry-run"] if dry else []) + ["disk", "grow"] + argv)
+            except SystemExit as e:
+                self.rc = e.code
+        self.out, self.err = out.getvalue(), err.getvalue()
+
+
+RELOCATE = "sfdisk --no-reread --no-tell-kernel --relocate gpt-bak-std /dev/sda"
+RESIZE = "sfdisk --no-reread --no-tell-kernel -N 3 /dev/sda"
+PARTX = "partx --update --nr 3 /dev/sda"
+PV, ASK = "pvresize /dev/sda3", " ".join(disk.LVS)
+# 118 GB of group, 88 free: the installer's fifth (23.6 GB) stays, the pool and / get 64.4 GB = 16486 extents of 4 MiB
+G_POOL, G_ROOT = "lvextend --extents +16486 silikos/pool00", "lvextend --resizefs --extents +16486 " + LV
+
+
+class GrowPlan(unittest.TestCase):
+    def test_an_image_written_onto_a_larger_disk(self):
+        what, text, plan = disk.grow_plan(grow_state(120))
+        self.assertEqual(what, "grow")
+        self.assertEqual((plan["disk"], plan["part"], plan["partn"], plan["lv"], plan["thin"]), (DISK, PART, 3, LV, True))
+        self.assertEqual(plan["free"], 80 * GB + 33 * 512)
+        self.assertIn("85.9 GB after /dev/sda3 that nothing uses", text)
+
+    def test_a_disk_of_the_images_size_is_left_alone(self):
+        what, text, plan = disk.grow_plan(grow_state(40))
+        self.assertEqual(what, "full")
+        self.assertIn("already ends where /dev/sda does", text)
+        # less than 64 MB after the partition is not worth a change of the partition table
+        st = grow_state(40)
+        st["disk_sectors"] += (63 << 20) // 512
+        self.assertEqual(disk.grow_plan(st)[0], "full")
+        st["disk_sectors"] += (2 << 20) // 512
+        self.assertEqual(disk.grow_plan(st)[0], "grow")
+
+    def test_what_it_does_not_know_is_refused_and_said(self):
+        for st, word in ((grow_state(kinds=("crypt", "disk", "lvm", "part")), "encrypted"),
+                         (grow_state(kinds=("disk", "part"), top="part"), "knows an LVM volume on one partition"),
+                         (grow_state(kinds=("disk", "lvm", "part", "raid1")), "knows an LVM volume on one partition"),
+                         (grow_state(parts=2, disks=2), "2 partition(s) of 2 disk(s)"),
+                         (grow_state(pttype="dos"), "no GPT partition table (dos)"),
+                         (grow_state(fstype="btrfs"), "only xfs and ext4"),
+                         (grow_state(later=["sda4"]), "not the last partition of /dev/sda (after it: sda4)"),
+                         (dict(grow_state(), start=None), "does not say where"),
+                         (None, "not seen from here")):
+            what, text, plan = disk.grow_plan(st)
+            self.assertEqual((what, plan), ("refuse", None), text)
+            self.assertIn(word, text)
+
+    def test_the_layout_is_read_from_lsblk_and_the_kernel(self):
+        # the tree as lsblk -s gives it for a thin volume: the volume, its pool, the pool's two parts, each on the
+        # same partition of the same disk
+        leaf = [{"path": PART, "kname": "sda3", "type": "part", "fstype": "LVM2_member", "pttype": "gpt", "children": [
+            {"path": DISK, "kname": "sda", "type": "disk", "fstype": None, "pttype": "gpt"}]}]
+        tree = {"blockdevices": [{"path": LV, "kname": "dm-4", "type": "lvm", "fstype": "xfs", "pttype": None, "children": [
+            {"path": "/dev/mapper/silikos-pool00-tpool", "kname": "dm-2", "type": "lvm", "fstype": None, "pttype": None, "children": [
+                {"path": "/dev/mapper/silikos-pool00_tmeta", "kname": "dm-0", "type": "lvm", "children": copy.deepcopy(leaf)},
+                {"path": "/dev/mapper/silikos-pool00_tdata", "kname": "dm-1", "type": "lvm", "children": copy.deepcopy(leaf)}]}]}]}
+        asked = []
+
+        def cmd(argv, timeout=20):
+            asked.append(argv)
+            return (0, LV) if argv[0] == "findmnt" else (0, json.dumps(tree))
+
+        with tempfile.TemporaryDirectory() as d:
+            for name, files in (("sda", {"size": "300000"}), ("sda/sda1", {"partition": "1", "start": "10", "size": "20"}),
+                                ("sda/sda3", {"partition": "3", "start": "100", "size": "500"}), ("sda/queue", {"x": "1"}),
+                                ("sda3", {"partition": "3", "start": "100", "size": "500"})):
+                os.makedirs(os.path.join(d, name))
+                for f, v in files.items():
+                    with open(os.path.join(d, name, f), "w") as h:
+                        h.write(v + "\n")
+            with mock.patch.object(silik, "sec_cmd", cmd):
+                st = disk.grow_read(silik, d)
+                self.assertEqual((st["kinds"], st["top"], st["thin"], st["fstype"]), (["disk", "lvm", "part"], "lvm", True, "xfs"))
+                self.assertEqual(([x["path"] for x in st["parts"]], [x["path"] for x in st["disks"]]), ([PART], [DISK]))
+                self.assertEqual((st["source"], st["partn"], st["start"], st["sectors"], st["disk_sectors"], st["later"]), (LV, 3, 100, 500, 300000, []))
+                self.assertEqual(disk.grow_plan(st)[0], "grow")
+                # a partition after it is seen
+                os.makedirs(os.path.join(d, "sda/sda4"))
+                for f, v in (("partition", "4"), ("start", "700"), ("size", "100")):
+                    with open(os.path.join(d, "sda/sda4", f), "w") as h:
+                        h.write(v)
+                self.assertEqual(disk.grow_read(silik, d)["later"], ["sda4"])
+                # a volume of its own (no pool) is not thin
+                tree["blockdevices"][0]["children"] = copy.deepcopy(leaf)
+                self.assertFalse(disk.grow_read(silik, d)["thin"])
+        self.assertEqual(asked[0], ["findmnt", "-n", "-o", "SOURCE", "/"])
+        self.assertEqual(asked[1][:3], ["lsblk", "-J", "-s"])
+        # nothing seen (a container): None, never a guess
+        with mock.patch.object(silik, "sec_cmd", lambda argv, timeout=20: (1, "")):
+            self.assertIsNone(disk.grow_read(silik, "/nonexistent"))
+
+
+class GrowLvm(unittest.TestCase):
+    def test_a_thin_pool_and_its_volume_grow_by_the_same_and_the_installers_share_stays_free(self):
+        cmds, say = disk.grow_lvm(lvs_text(), LV)
+        self.assertEqual([" ".join(c) for c in cmds], [G_POOL, G_ROOT])
+        self.assertIn("grow by 69.1 GB each; 25.3 GB of the volume group stay free", say[0])
+
+    def test_the_share_is_a_fifth_between_1_and_100_gib(self):
+        for vg, free, add in ((118, 88, (88 * GB - 118 * GB // 5) // EXT), (1000, 900, 800 * GB // EXT), (3, 2, GB // EXT)):
+            cmds, _ = disk.grow_lvm(lvs_text(vg, free), LV)
+            self.assertEqual(cmds[0][2], "+%d" % add, (vg, free))
+
+    def test_a_group_with_only_the_installers_share_free_is_left_alone(self):
+        cmds, say = disk.grow_lvm(lvs_text(38, 7), LV)
+        self.assertEqual(cmds, [])
+        self.assertIn("stay as they are", say[0])
+
+    def test_a_volume_of_its_own_gets_all_that_is_free(self):
+        cmds, say = disk.grow_lvm(lvs_text(pool=""), LV)
+        self.assertEqual([" ".join(c) for c in cmds], ["lvextend --resizefs --extents +100%FREE " + LV])
+        self.assertEqual(disk.grow_lvm(lvs_text(free_gb=0, pool=""), LV)[0], [])
+
+    def test_lines_it_cannot_read_are_not_guessed(self):
+        self.assertIsNone(disk.grow_lvm("", LV))
+        self.assertIsNone(disk.grow_lvm("  WARNING: something\n", LV))
+        self.assertIsNone(disk.grow_lvm(lvs_text(), "/dev/mapper/other-root"))
+
+
+class Grow(unittest.TestCase):
+    def test_the_commands_in_order(self):
+        r = GrowRun(["--yes"], grow_state(120))
+        self.assertEqual((r.rc, r.calls), (0, [RELOCATE, RESIZE, PARTX, PV, ASK, G_POOL, G_ROOT]), r.err)
+        # the one line sfdisk reads: the partition's start as it is, its size as large as it goes; it is on the screen
+        self.assertEqual(r.inputs[1], ", +\n")
+        self.assertIn("    | , +\n", r.out)
+        self.assertIn("Nothing is moved or formatted; no other partition is touched", r.out)
+        self.assertIn("silik: / is 115G, 101G free", r.out)
+        for word in ("mkfs", "wipefs", "parted", "--force", "--delete", "pvcreate", "lvremove", "lvreduce"):
+            self.assertNotIn(word, " ".join(r.calls))
+
+    def test_not_asked_means_not_done(self):
+        r = GrowRun([], grow_state(120))
+        self.assertEqual((r.rc, r.calls), (2, []))
+        self.assertIn("add --yes when that is the disk", r.err)
+        r = GrowRun([], grow_state(120), tty=True, typed="n\n")
+        self.assertEqual((r.rc, r.calls), (1, []))
+        r = GrowRun([], grow_state(120), tty=True, typed="y\n")
+        self.assertEqual((r.rc, len(r.calls)), (0, 7))
+
+    def test_a_layout_it_does_not_know_runs_nothing(self):
+        for st in (grow_state(kinds=("crypt", "disk", "lvm", "part")), grow_state(later=["sda4"]), None):
+            r = GrowRun(["--yes"], st)
+            self.assertEqual((r.rc, r.calls), (2, []), r.err)
+            self.assertIn("Nothing was changed", r.err)
+
+    def test_on_a_disk_already_whole_the_partition_table_is_not_written(self):
+        # (a run that stopped after the partition step is finished by the next one: the steps above it are asked)
+        r = GrowRun(["--yes"], grow_state(40), lvs=lvs_text(38, 7))
+        self.assertEqual((r.rc, r.calls), (0, [PV, ASK]), r.err)
+        self.assertIn("stay as they are", r.out)
+        r = GrowRun(["--yes"], grow_state(40))
+        self.assertEqual(r.calls, [PV, ASK, G_POOL, G_ROOT])
+
+    def test_a_step_that_fails_stops_there(self):
+        r = GrowRun(["--yes"], grow_state(120), rc={"partx": 1})
+        self.assertEqual((r.rc, r.calls), (1, [RELOCATE, RESIZE, PARTX]))
+        r = GrowRun(["--yes"], grow_state(120), rc={"lvs": 5})
+        self.assertEqual((r.rc, r.calls[-1]), (1, ASK))
+        self.assertIn("the file system was not grown", r.err)
+        r = GrowRun(["--yes"], grow_state(120), lvs="")
+        self.assertEqual((r.rc, r.calls[-1]), (1, ASK))
+
+    def test_dry_run_prints_every_command_and_runs_none(self):
+        r = GrowRun([], grow_state(120), dry=True)
+        self.assertEqual((r.rc, r.calls), (0, []))
+        for line in (RELOCATE, RESIZE, PARTX, PV, ASK):
+            self.assertIn("$ " + line.replace("|", "'|'"), r.out)
+        self.assertIn("lvextend of the thin pool and of /", r.out)
 
 
 if __name__ == "__main__":

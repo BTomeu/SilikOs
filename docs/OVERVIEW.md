@@ -26,7 +26,7 @@ Counted in the repository on 14/11/2026 (first commit 09/11/2026, about 300 comm
 | Tools built from source | 26 package recipes: 16 for chip and board design (ngspice, Xschem, Magic, KLayout, Netgen, Yosys, NVC, Qucs-S, DEVSIM, KiCad and its libraries...), 8 for the bench and embedded work (OpenOCD, sigrok, SavvyCAN, SDCC, dfu-util, stm32flash...), 2 for Wine 11 | `eda/`, `dev/`, `wine/` |
 | Unit tests | 57 files, 27 795 lines, 1 749 tests; all pass as root, three known failures as a normal user on the build machine | `tests/` |
 | Tests on an installed system | 3 489 lines of scripts that install the ISO in virtual machines on GitHub and have the installed system check itself | the installation tests |
-| Workflows | 12: the installation test, the offline ISO, the external disk, the EL 10 track, the package repository, the tools, comparisons and measurements | `.github/workflows/` |
+| Workflows | 13: the installation test, the offline ISO, the external disk, the EL 10 track, the package repository, the tools, comparisons and measurements | `.github/workflows/` |
 | Documents | 34, about 9 000 lines, among them one table of what was verified and one of what was not | `docs/` |
 
 What the installed systems said in their last runs (each row is one check, said by the installed machine on its
@@ -43,6 +43,7 @@ serial port and counted on the host; a check that is missing is a failure):
 | Boot splash | an encrypted system started the graphical way: the passphrase asked at SilikOS's splash opens the disk | 19 ok, 0 failed (run 43603388840) |
 | The desktop on an external disk | the whole desktop, encrypted, on the USB disk: the passphrase at the splash, the login screen, USB protection with the system's own disk on USB | 25 ok, 0 failed (run 43603388840) |
 | The medium | the ISO as a USB stick with Secure Boot on: its menu, and the entry for an external disk starts the installer | 8 ok, 0 failed |
+| The disk image | the installed system as a file to write straight onto a disk, with no installer: not encrypted, no user yet, every driver in the initramfs; started on USB with Secure Boot on and on SATA up to the first-start setup | 11 ok, 0 failed (run 43609501912) |
 | SilikOS 10 lab | the same idea on AlmaLinux 10.2 (GNOME Shell 49, Wayland): built, installed, started | 40 ok, 0 failed (run 43592340177) |
 
 **None of this has run on a real computer yet.** The virtual machines are KVM on GitHub's runners; the firmware is
@@ -106,6 +107,7 @@ Things that, put together, are not found elsewhere:
 | The COMMAND bar, from the key to the window, kept loaded | about 50 ms instead of about 190 | `docs/STATUS.md` |
 | Disk after installation | 14 to 15 GB | the installation test |
 | The ISOs | network 2 GB (downloads 2.5 GB more), offline 4.6 GB | the workflows' artifacts |
+| The disk image | 7.9 GB to download, 40 GB on the disk | workflow Disk image, run 43609501912 |
 | Firmware rebuilt with `silik dev ccache` (an STM32G4 HAL) | 8.7 s to 2.9 s; the first build a quarter slower, so it is optional | `docs/DEV.md` |
 
 No watt was ever measured (no laptop), and nothing about speed on real hardware is claimed.
