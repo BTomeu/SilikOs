@@ -122,7 +122,9 @@ if [ $menu = 1 ]; then
     mon "dump-guest-memory $work/mem.core" 1
     for i in $(seq 1 120); do sleep 2; [ -s "$work/mem.core" ] && [ "$(stat -c %s "$work/mem.core")" -gt $((mem * 1000000)) ] && break; done
     sleep 3
-    line=$(grep -a -o -E 'BOOT_IMAGE=[[:print:]]{0,400}' "$work/mem.core" 2> /dev/null | sort | uniq -c | sort -rn | head -1 | sed 's/^ *[0-9]* //' || true)
+    # (the words alone are in memory too, in programs that look for them: run 43621177743 took those. A command
+    # line names the kernel it started)
+    line=$(grep -a -o -E 'BOOT_IMAGE=[[:print:]]{0,400}' "$work/mem.core" 2> /dev/null | grep -a 'vmlinuz' | sort | uniq -c | sort -rn | head -1 | sed 's/^ *[0-9]* //' || true)
     rm -f "$work/mem.core"
     # (two questions, each on its own: one pattern with both words asked for two spaces between them, and the first
     # run of 14/11/2026 called the right line wrong)
