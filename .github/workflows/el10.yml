@@ -84,7 +84,7 @@ jobs:
       - name: Tools and disk space
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
-          bash tools/ci_apt.sh rpm createrepo-c xorriso mtools cpio isomd5sum qemu-system-x86 qemu-utils imagemagick ovmf
+          bash tools/ci_apt.sh rpm createrepo-c xorriso mtools cpio isomd5sum qemu-system-x86 qemu-utils imagemagick ovmf tesseract-ocr
           df -h /
       # the lab's packages as the packages job built them (in EL 10, with the base's rpmbuild): the ISO carries those
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
@@ -106,6 +106,14 @@ jobs:
         run: |
           ls build/el10/SilikOS-*-lab-*-netinstall.iso > /dev/null 2>&1 || { echo "no ISO was made"; exit 0; }
           bash el10/lab/menu.sh build/el10/SilikOS-*-lab-*-netinstall.iso build/el10/lab-menu
+      # the same test the EL 9 ISO passes (tests/install/media.sh, workflow External disk): the ISO as the one disk of a
+      # USB controller, Secure Boot on, its own signed boot loader and menu; the entry for an external disk is chosen
+      # with the keyboard and must bring the installer's first screen; the kernel's command line is read from memory
+      - name: The ISO as a USB stick, Secure Boot on; its menu; the entry for an external disk starts the installer
+        if: always()
+        run: |
+          ls build/el10/SilikOS-*-lab-*-netinstall.iso > /dev/null 2>&1 || { echo "no ISO was made"; exit 1; }
+          bash tests/install/media.sh build/el10/SilikOS-*-lab-*-netinstall.iso build/el10/media-test
       - name: The report
         if: always()
         run: |
