@@ -1,10 +1,10 @@
 Name:           silikos-security
-Version:        0.4.0
+Version:        0.5.0
 Release:        1%{?dist}
 Summary:        SilikOS security defaults: firewall zone, kernel settings, automatic security updates, screen lock
 License:        LicenseRef-SilikVolt
 BuildArch:      noarch
-Requires:       silik-tools >= 0.7.0
+Requires:       silik-tools >= 0.10.0
 Requires:       firewalld
 Requires:       dnf-automatic
 # needs-restarting: whether an update waits for a restart

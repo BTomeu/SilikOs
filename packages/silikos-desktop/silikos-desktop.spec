@@ -1,5 +1,5 @@
 Name:           silikos-desktop
-Version:        0.17.1
+Version:        0.18.0
 Release:        1%{?dist}
 Summary:        The SilikOS desktop: the Silik layout and the Flow looks (bar, island), its accents, GTK and shell themes, Cascadia Mono
 License:        LicenseRef-SilikVolt AND OFL-1.1
@@ -53,6 +53,10 @@ install -Dm0644 %{_sourcedir}/60-silikos-shell.conf %{buildroot}%{_prefix}/lib/e
 # Qt 5 programs: qt5ct as their platform theme, its starting configuration (qt5ct copies it to a user's
 # ~/.config/qt5ct/ the first time), and the palette of each accent (tools/gen_accents.py: qt/<accent>.conf)
 install -Dm0644 %{_sourcedir}/61-silikos-qt.conf %{buildroot}%{_prefix}/lib/environment.d/61-silikos-qt.conf
+# an X11 login: glxinfo run once for the two files of the Qt packages that each run it (docs/SESSION.md); the X11
+# session's shell sources the files of this folder in their order, these two around those two
+install -Dm0644 %{_sourcedir}/05-silikos-glxinfo.sh %{buildroot}%{_sysconfdir}/X11/xinit/xinitrc.d/05-silikos-glxinfo.sh
+install -Dm0644 %{_sourcedir}/11-silikos-glxinfo.sh %{buildroot}%{_sysconfdir}/X11/xinit/xinitrc.d/11-silikos-glxinfo.sh
 install -Dm0644 %{_sourcedir}/qt5ct.conf %{buildroot}%{_sysconfdir}/xdg/qt5ct/qt5ct.conf
 for f in %{_sourcedir}/qt/*.conf; do install -Dm0644 "$f" %{buildroot}%{_datadir}/silikos/qt/${f##*/}; done
 install -Dm0644 %{_sourcedir}/gtk-theme.sed %{buildroot}%{_datadir}/silikos/gtk-theme.sed
@@ -176,6 +180,8 @@ dconf update >/dev/null 2>&1 || :
 %{_prefix}/lib/systemd/system/silikos-themes.service
 %{_prefix}/lib/environment.d/60-silikos-shell.conf
 %{_prefix}/lib/environment.d/61-silikos-qt.conf
+%{_sysconfdir}/X11/xinit/xinitrc.d/05-silikos-glxinfo.sh
+%{_sysconfdir}/X11/xinit/xinitrc.d/11-silikos-glxinfo.sh
 %dir %{_sysconfdir}/xdg/qt5ct
 %config(noreplace) %{_sysconfdir}/xdg/qt5ct/qt5ct.conf
 %{_datadir}/silikos/

@@ -1,10 +1,10 @@
 Name:           silik-win
-Version:        0.4.2
+Version:        0.5.0
 Release:        1%{?dist}
 Summary:        Windows programs on SilikOS: a double-click runs them with Wine in a sandbox; a Windows virtual machine for the rest
 License:        LicenseRef-SilikVolt
 BuildArch:      noarch
-Requires:       silik-tools >= 0.3.0
+Requires:       silik-tools >= 0.10.0
 # the sandbox of `silik win`: bwrap starts it, nsenter / setpriv / setsid (util-linux) and env (coreutils) enter it
 Requires:       bubblewrap
 Requires:       util-linux

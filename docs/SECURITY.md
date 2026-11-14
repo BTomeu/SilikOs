@@ -239,6 +239,15 @@ through the base's own tool, and the way back); on an installed system with a re
 not run yet. It is not GrapheneOS: the session is X11, the kernel and glibc are RHEL's, nothing verifies user
 space, and programs are not sandboxed by default.
 
+## The session's start
+
+The two files in `/etc/X11/xinit/xinitrc.d` (silikos-desktop, 14/11/2026) are root's, 0644, sourced by the user's
+own X11 session shell as the base's files in that folder are. They run `glxinfo` once as that user and define a
+shell function for the two Qt files after them, removed again by the second file. They give no privilege, write
+nothing, and change no base file. The shell's theme is loaded by silik-shell from
+`/usr/share/themes/SilikOS[-accent]` (root's files); the user-theme extension, which also looks in the user's
+`~/.themes`, is no longer enabled by default.
+
 ## The assistant (`silik ask`)
 
 `silik ask QUESTION` answers from what the system knows about itself and sends nothing anywhere; it runs no command

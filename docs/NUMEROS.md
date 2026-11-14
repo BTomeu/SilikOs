@@ -259,6 +259,8 @@ a la mateixa màquina virtual (4 CPU, 4096 MB, KVM) del mateix runner, dues arre
   i el que X11 demana a més. És el preu d'una decisió presa (X11 per a l'EDA), no una cosa nostra a arreglar. A la
   segona parella de captures la sessió s'obre al mateix moment als dos sistemes (7,55 i 7,52 s): la part del sistema
   abans de la sessió és igual.
+- On és exactament (`docs/SESSION.md` §1, dels diaris de dues execucions en runners diferents: les columnes no es poden restar): el mig segon és **abans** que comenci la unitat de la shell. Fins a l'objectiu de la sessió passen 0,84–0,88 s a X11 (run 43509961201) i 0,43–0,45 s a Wayland (run 43461175134): el servidor Xorg, els scripts d'inici de la sessió X11 (dos dels quals, dels paquets de Qt, criden `glxinfo`) i la comprovació de gràfics de `gnome-session`. Després de la shell, X11 espera `XSettings` (0,46–0,67 s) i Wayland espera igual pels seus (Keyboard, Power, Color: 0,59–0,76 s). Cap unitat de SilikOS no és a la sessió.
+- Al banc de proves (contenidor, renderitzat per programari, no és maquinari real; 14/11/2026): el que SilikOS posava dins l'arrencada de la shell eren 66,9 ms (57,6–83,8) i ara 34,6 ms (28,5–35,5), N=9; la fulla d'estil es carregava tres vegades i ara una. La primera obertura de l'Start: 29,1 → 18,6 ms de la shell (N=5). El bucle dels scripts d'inici X11: 173–198 → 101–115 ms. Cal tornar-ho a mesurar amb el workflow Compare.
 - `systemd-binfmt.service` (0,59 s) és a la cadena crítica de SilikOS i no a la de la base: el `ksh` de la base (el
   demana silik-eda-compat, pels scripts dels fabricants) porta `/etc/binfmt.d/kshcomp.conf`, i amb un sol fitxer la
   unitat ja s'engega. `sysinit.target` hi arriba 0,13 s més tard. Es deixa com està.
@@ -278,3 +280,4 @@ a la mateixa màquina virtual (4 CPU, 4096 MB, KVM) del mateix runner, dues arre
 | Debian, openSUSE; els snaps d'Ubuntu | `tools/weigh_others.sh debian` on deb.debian.org respongui |
 | El pes amb KiCad, sigrok i la resta del banc publicats | `tools/weigh.sh` amb `build/extra/` ple |
 | Qualsevol comparació de velocitat amb altres sistemes | ningú encara: cal la mateixa màquina amb cada sistema instal·lat |
+| L'arrencada de la sessió després dels canvis del 14/11 (fulla d'estil un cop, glxinfo un cop) a la màquina del CI i en maquinari real | workflow Compare; el Ryzen |

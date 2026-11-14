@@ -179,7 +179,12 @@ is desktop.gtk-theme-import "$(grep -c '^@import' /usr/share/themes/SilikOS/gtk-
 is desktop.gtk-theme-blue "$(grep -c 3584e4 /usr/share/themes/SilikOS/gtk-3.0/gtk.css 2>&1)" 0
 has desktop.shell-theme "$(grep -c '{' /usr/share/themes/SilikOS/gnome-shell/gnome-shell.css 2>&1 | sed 's/^[1-9][0-9]*$/& rules: made/')" "made"
 is desktop.shell-theme-blue "$(grep -ci '3584e4' /usr/share/themes/SilikOS/gnome-shell/gnome-shell.css 2>&1)" 0
-has desktop.user-theme "$(asuser gnome-extensions info user-theme@gnome-shell-extensions.gcampax.github.com)" "ENABLED"
+# the shell's theme: the session's own stylesheet (desktop.shell-stylesheet below) and, with an accent, silik-shell's
+# work. The user-theme extension, which loaded the same stylesheet over itself at every start, is not turned on
+case "$(asuser gnome-extensions info user-theme@gnome-shell-extensions.gcampax.github.com)" in
+  *ENABLED*) say desktop.user-theme-off FAIL "the user-theme extension is enabled";;
+  *) say desktop.user-theme-off ok "not enabled: $(asuser gsettings get org.gnome.shell enabled-extensions)";;
+esac
 is desktop.user-theme-name "$(asuser gsettings get org.gnome.shell.extensions.user-theme name)" "'SilikOS'"
 has desktop.shell-stylesheet "$(tr '\0' '\n' < /proc/$(pgrep -u tester -x gnome-shell | head -1)/environ 2> /dev/null | grep '^G_RESOURCE_OVERLAYS=' | cut -c1-90)" "/org/gnome/shell/theme/gnome-shell.css=/usr/share/themes/SilikOS"
 has desktop.super-space "$(asuser gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings)" "silik-command"
