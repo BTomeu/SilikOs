@@ -61,11 +61,15 @@ signature says "I meant this".
 
 **What it closes.** A release is a place where anything with a write token can put a file, and the package
 repository signed whatever lay there (the audit ran it: a hand-made `tzdata-9999` came out signed). Now, before
-anything is signed, `repo.yml` asks for each tool's package and each published package
-`gh attestation verify FILE --repo … --source-ref refs/heads/main`. A tool's package without it is left out. A
+anything is signed, `repo.yml` asks for each tool's package and each published package (`tools/vouched.sh`)
+`gh attestation verify FILE --repo … --source-ref refs/heads/main --signer-workflow …/WORKFLOW --deny-self-hosted-runners`,
+where WORKFLOW is the one that keeps that release: `eda.yml` for `eda-*`, `dev.yml` for `dev-tools`, `wine.yml` for
+`wine-*`, and for what is published already those three or `repo.yml`. A tool's package without it is left out. A
 published package without it stays only if it already carries a good signature of SilikOS's key (the owner signed
 it by hand), and is otherwise removed from the channel; it is never signed (`tools/build_pkgrepo.sh --unvouched`).
 SilikOS's own packages of the run need none: they are the artifact of the CI run the workflow has just checked.
+The ISO is held to the same since the second pass (below): `ci.yml` and `offline.yml` put a release's package on
+it only with that attestation.
 
 **The first run after this change** finds no attestation for the packages that are in the releases today (they
 were built before): the repository then holds SilikOS's own packages only, and says so in an annotation per
@@ -95,6 +99,7 @@ is checked and what is used. For the channels `silikos` and `silikos-next`:
 |---|---|
 | revision lower than the highest this machine has seen | **refused**: every package of that repository is taken out of the run |
 | the other channel's name, or none | **refused** |
+| made for another architecture (`silikos-arch=`), or for none | **refused**, and its revision is not remembered (the second pass) |
 | no revision | **refused** |
 | loaded with `repo_gpgcheck` off | **refused** (nothing vouches for the revision), and nothing of it is remembered |
 | older than `warn_days` (45) although the server was asked within a day | **warning**: nothing was published since, or updates are held back |
@@ -115,7 +120,10 @@ days [A]: the warning is then what says so.
 - A machine has no memory of a repository it has never asked: a new installation that is given old metadata takes
   them (the age warning is all it has). It cannot be given the other channel's.
 - The plugin is Python inside `dnf`. Programs that use `libdnf` without `dnf`'s Python (PackageKit, so GNOME
-  Software) do not load it [A: not run]. `silik update` and the daily update do.
+  Software) do not load it. Run on 14/11/2026 (PackageKit 1.2.6, its daemon started by hand in a container): with
+  the channel `next`'s tree served at `stable`'s address, `dnf` refused it and `pkcon update` installed its package.
+  On an installed system GNOME Software is there (the Workstation set) and does not start by itself (the speed
+  profile); opened from Start, its updates go around this check. `silik update` and the daily update do not.
 - root can turn it off: `dnf --disableplugin=silikos-repo …` for one run (the explicit word, as `--unsigned` is for a
   mirror), `enabled = 0` in its file for all. Removing `/var/lib/silikos/repo-revision` makes the machine forget
   (the way out if a wrong revision was ever signed and published).
@@ -231,12 +239,54 @@ bash tools/check_signed.sh --key-file packages/silikos-repos/files/RPM-GPG-KEY-S
 
 `sign_release.sh` signs with whatever key `gpg-agent` holds (gpg asks for the PIN or the touch itself), refuses a
 key from the environment, refuses a key that is not the committed public one, verifies its own result against the
-public half alone, and deletes a result that does not verify.
+public half alone, and deletes a result that does not verify. `check_signed.sh` fails a tree that holds a link (it
+would not look into it, a server would follow it) or a file its signed `SHA256SUMS` does not name; `--whole` asks
+that the tree has that signed list at its top. Without the list only the packages and the metadata are vouched
+for: the key file and `silikos.repo` that the tree offers are then anybody's (said in a note).
 
 **Not built: the workflow that publishes an owner-signed tree.** Pages is deployed by a workflow, so under (b)
 `repo.yml` needs a mode that takes `signed/` (as an artifact or a release file), runs `tools/check_signed.sh`
 against the committed key, and deploys it without ever holding a key. It is some thirty lines; it was not written
-because it only makes sense once (b) is chosen, and it could not have been run here.
+because it only makes sense once (b) is chosen, and it could not have been run here. It must ask
+`tools/check_signed.sh --whole`.
+
+## The second pass, 14/11/2026: someone tries to get through what was built
+
+A reviewer who had not written any of the above was given three goals: a package of theirs on an owner's machine,
+that machine kept on old packages, or a signature on something they chose. Four attackers, each alone: a stranger
+with a GitHub account, a stolen token that writes releases (no key, not `main`), someone between an installed
+machine and the repository who holds old, well signed files, and hostile input to the signing scripts.
+
+| What was found | How bad | Run | State |
+|---|---|---|---|
+| **The ISO took whatever lay in the releases.** `ci.yml` and `offline.yml` downloaded every package of `eda-tools`, `dev-tools` and `wine-*` and `tools/build_iso.sh` put each on the ISO and its name into the kickstart: installed as root, unsigned, on every new machine. The gate of S2 stood before the signature only. Also reached by starting *EDA tools* by hand on another branch (its packages go to the same release) | high | the workflow's step with a made-up `gh`, and `build_iso.sh`'s own lines: a stranger's package in the ISO's repository and kickstart | **fixed**: a release's package goes on an ISO only with the attestation of the workflow that keeps that release, on `main` (`tools/vouched.sh`); not run on GitHub yet |
+| **An old package under the next version's name.** An attestation is asked by a file's sha256, never its name. A package really built, attested and signed here, put back into `repo-el9-*` as `NAME-NEXTVERSION…rpm`, was "vouched", "signed" and "already published": the real new build was left out, for good, and installed systems stayed on the old one with "Nothing to do" | high | real rpm, gpg, createrepo_c, dnf: the client stayed on 1.0 while 2.0 was built | **fixed**: `tools/build_pkgrepo.sh` holds every package to the name in its own header; a release's file never takes the place of one of the CI run's own packages. Run again: 2.0 published and installed |
+| **The other architecture's metadata.** The channel's own newest aarch64 metadata at the x86_64 address: right channel, newest revision, good signature. The machine's x86_64 packages (Wine, KiCad, ngspice, OpenOCD) got no update; `silik update` ended with 0 and the doctor said ok | medium | real dnf with the plugin, `silik update`, dnf-automatic | **fixed**: refused, exit 1, `▼ bad` (run) |
+| **A tag on a commit that is not `main`'s** got an ISO built, a release, and this repository's attestation (`ci.yml`, `refs/tags/v…`): `verify_release.sh --workflow ci.yml --ref refs/tags/v…` says ok. `repo.yml` asked whether the commit is on `main`; the CI's release job did not | medium | the step with a made-up `gh`; GitHub's compare API read for a commit on `main` (0), `main` itself (0), a branch without common history (an error, not 0) | **fixed** against a token that cannot change workflow files; a token that can is stopped only by the tag ruleset (`docs/SECURITY.md`, the owner's step 1) |
+| **Any workflow of `main` vouched.** The gate asked for an attestation "of this repository, from `main`", whatever the workflow file: a workflow that attests what it is handed would vouch for anything. None does today (read: every `attest-build-provenance` step attests files of its own run) | low | read on the real repository: one package carries two attestations, `dev.yml`'s and `repo.yml`'s | **fixed**: the workflow is named |
+| A problem with one repository stopped the plugin's whole check: the ones after it were not judged, with a warning only. Not reached from outside (no content of a repository was found that raises) | low | unit tests | **fixed**: each repository by itself; a SilikOS channel that cannot be judged gives nothing to that run |
+| `check_signed.sh` passed a tree with an unsigned package or unsigned metadata behind a link, with files nobody signed beside the signed ones, and with the offered key file replaced when the list was removed | low | run | **fixed** (above) |
+| A file both put into a release and removed from it in one run (a published file of unknown origin, and the real package of that name among the new ones): the metadata then name a file that is gone | low | run | **fixed** |
+| **PackageKit / GNOME Software** go around the plugin | medium | run (above) | **open**, the owner's: the options are a libdnf plugin in C (a compiled package per architecture), or GNOME Software without its package updates |
+| **The Actions cache check can be cheated by what it checks.** A cache entry is a tar archive unpacked with absolute names allowed [A: `actions/cache`'s `tar -P`, from its source, not run on GitHub]: an entry made by a hostile build can replace `tools/cache_check.py` or the build script before either runs. Needs code running in a build job of `main` first, and such a job can also take another tool's artifact name in the same run | low | tar's behaviour, locally | **open**: closing it means a fresh job that receives only the packages; `eda.yml` and `wine.yml` were not touched for it |
+| **Old instead of new through the gate.** A token that writes releases can delete the newest packages from `repo-el9-*` and leave (or put back) older, genuine ones: the channel then offers the older version. Installed systems never go back; a machine that installs that tool for the first time gets the old one | low | follows from the name-squat run | **open**: needs the published versions remembered somewhere a release token does not reach (the Pages site) |
+| A package signed for `next` can be put into `stable`'s release and is published there (one key, and the gate cannot tell the channels apart) | low | read | **open**: closes with option (b), or two keys |
+| A refusal, a channel that is not reached and old metadata are said by `silik update` and `silik doctor` only: nothing in the status bar | low | read | **open** (a field of the status bar: the desktop's) |
+| A new installation has no memory: the oldest metadata that carry the channel's name are taken. Silent while they are younger than 45 days, a warning (never a refusal) after | low | read; the audit ran the 60-day warning | as designed, said |
+
+**What was tried and held.** A stranger's pull request reaches no token that writes, no secret and no identity:
+no `pull_request_target`, no self-hosted runner; a fork's run gets a read-only token whatever the file says. The
+only expression inside a script is `${{ matrix.tool }}`, from lists in the file; what comes from an event (a branch
+name, a run id, a typed version) reaches the shell as a variable and is compared or matched before use. `repo.yml`
+never checks out or runs anything of the CI run it publishes; it takes two artifacts of a run it has held to the
+workflow file, the event, the repository, the branch and the commit on `main`. A pull request's cache is its own
+[A: GitHub's documented scoping]. Every release file has a sha256 in GitHub's API (read: 436 of 436), and a file
+without one is built again. One channel's metadata for the other, old metadata, and metadata without the
+signature check were refused again.
+
+**Which of the owner's five steps stop what.** The tag ruleset (step 1) stops the tag on a foreign commit and a
+stranger's tag promoting `main` to `stable`; the branch ruleset stops a token that writes from changing what `main`
+builds. Neither stops a token that writes releases from doing what is open above: that is what option (b) is for.
 
 ## What was run, and what was not
 
@@ -250,6 +300,16 @@ read and the plugin's warning for an older `baseos`; the metalink claim; `tools/
 `tools/check_signed.sh` with two keys in the keyring and six ways of spoiling the result; `tools/cache_check.py`
 against this repository's real releases.
 
-Not run: every workflow change (the attestations, `gh attestation verify` in `repo.yml`, the choice of the CI run
-against GitHub's API, the schedule, the Pages check, the cache check inside a job), a hardware token, the plugin
-on an installed system (SELinux enforcing, the real timer), PackageKit. The lead's CI run shows the first group.
+Run on 14/11/2026 (the second pass, the same container, keys made there and deleted): the name squat and its
+refusal with `dnf` updating a client; the other architecture's metadata against the plugin, `silik update` and
+dnf-automatic, before and after; `check_signed.sh` against links, added files and a tree without its list;
+`build_pkgrepo.sh` on nine packages of the real release `repo-el9-next` (none misnamed); the ISO's step with a
+made-up `gh`; PackageKit beside `dnf`. Read on the real repository: the attestations of one release file, the
+compare API, the digests.
+
+Not run: every workflow change (the attestations, `gh attestation verify` in `repo.yml` and since the second pass
+through `tools/vouched.sh` in `ci.yml` and `offline.yml`, with `--signer-workflow` and `--deny-self-hosted-runners`;
+the tag check of the CI's release job; the choice of the CI run against GitHub's API, the schedule, the Pages
+check, the cache check inside a job), a hardware token, the plugin on an installed system (SELinux enforcing, the
+real timer). `gh attestation verify` cannot run on the build machine (Sigstore's root is not reachable from it):
+the lead's CI run shows the first group.
