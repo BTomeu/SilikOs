@@ -395,9 +395,11 @@ the name in its header); the channel's metadata for the other architecture passe
 machine's own packages without updates (refused); a tag on a commit outside main got a release and an attestation
 (refused, short of a token that can change workflows: the tag ruleset); the check of a signed tree passed links
 and added files. Nothing was found for a stranger: no `pull_request_target`, no self-hosted runner, fork pull
-requests get a read-only token, no event text reaches a shell unchecked. Open: PackageKit, so GNOME Software, goes
-around the replay check (run: it installed what dnf refused; SilikOS's speed profile keeps GNOME Software from
-downloading updates by itself, a person can still press the button); the Actions cache check can be replaced by
+requests get a read-only token, no event text reaches a shell unchecked. Open: PackageKit goes around the
+replay check (run: `pkcon update` installed what dnf refused). GNOME Software, its usual front, no longer manages
+updates by default (`allow-updates=false`: its updates page is hidden; updates are `silik update`'s, which checks
+the metadata and takes the snapshot); `pkcon` typed by hand, or a user who turns the setting back, still goes
+around it; the Actions cache check can be replaced by
 the entry it checks (needs code running in a build job of main); a release token can make a channel offer an older
 genuine version to a machine that installs a tool for the first time; a refusal is said by `silik update` and
 `silik doctor`, not in the status bar. `docs/SIGNING.md` has the table. The provenance checks themselves

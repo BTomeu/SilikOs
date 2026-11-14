@@ -18,3 +18,12 @@ show-in-lock-screen=false
 # A USB stick or a disc that is plugged in never starts a program by itself (GNOME's default asks; this never does).
 [org/gnome/desktop/media-handling]
 autorun-never=true
+
+# Updates go through `silik update` (and the daily automatic one): that is where SilikOS's repository is checked
+# against old metadata served again and where the snapshot for the way back is taken. GNOME Software asks
+# PackageKit, which goes around both (the second pass of 14/11/2026: it installed what dnf refused). So Software
+# does not manage updates: its updates page is hidden and it downloads none; installing an application there works
+# as before. For one user, back: gsettings set org.gnome.software allow-updates true
+[org/gnome/software]
+allow-updates=false
+download-updates=false

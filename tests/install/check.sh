@@ -543,6 +543,8 @@ say audit.unit-power-back info "tuned $(cat /etc/tuned/active_profile 2>&1); $(a
 # an account with no password is not accepted: the login files carry no `nullok` (the kickstart's authselect line)
 n=$(cat /etc/pam.d/system-auth /etc/pam.d/password-auth 2> /dev/null | grep -c nullok)
 say audit.login "$([ "$n" = 0 ] && authselect check > /dev/null 2>&1 && echo ok || echo FAIL)" "$(authselect current 2>&1 | tr '\n' ' ' | cut -c1-200); nullok in the login files: $n line(s)"
+# GNOME Software does not manage updates (PackageKit goes around the replay check and the snapshot)
+is audit.software-updates "$(asuser gsettings get org.gnome.software allow-updates 2>&1)" false
 say audit.new-settings info "notifications on the locked screen: $(asuser gsettings get org.gnome.desktop.notifications show-in-lock-screen); ip6-privacy: $(NetworkManager --print-config 2> /dev/null | grep -c 'ip6-privacy=2'); tipc: $(modprobe -n -v tipc 2>&1 | tail -1 | cut -c1-40); $(sysctl -n fs.protected_fifos fs.protected_regular fs.suid_dumpable dev.tty.ldisc_autoload net.ipv4.conf.all.secure_redirects 2>&1 | tr '\n' ' ')"
 say audit.accounts info "root: $(passwd -S root 2>&1 | awk '{print $2}'); users with a shell: $(awk -F: '$7 !~ /(nologin|false|sync|shutdown|halt)$/ { print $1 }' /etc/passwd | tr '\n' ' '); empty passwords: $(awk -F: '$2 == "" { print $1 }' /etc/shadow | tr '\n' ' '); wheel: $(getent group wheel | cut -d: -f4)"
 say audit.sudo info "$(sudo -l -U tester 2>&1 | tail -3 | tr -s ' ' | tr '\n' ';'); timestamp_timeout: $(grep -rhs timestamp_timeout /etc/sudoers /etc/sudoers.d | tr '\n' ' ')"

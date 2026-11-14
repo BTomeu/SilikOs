@@ -1,5 +1,5 @@
 Name:           silikos-security
-Version:        0.5.0
+Version:        0.5.1
 Release:        1%{?dist}
 Summary:        SilikOS security defaults: firewall zone, kernel settings, automatic security updates, screen lock
 License:        LicenseRef-SilikVolt

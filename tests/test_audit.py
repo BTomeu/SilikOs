@@ -148,6 +148,8 @@ class Defaults(unittest.TestCase):
         self.assertEqual(nm, ["[connection]", "ipv6.ip6-privacy=2"])                           # nothing about the hardware address: licences
         dconf = self.read("packages/silikos-security/files/10-silikos-security")
         self.assertIn("[org/gnome/desktop/notifications]\nshow-in-lock-screen=false", dconf)
+        # GNOME Software (PackageKit) goes around the replay check and the snapshot: it does not manage updates
+        self.assertIn("[org/gnome/software]\nallow-updates=false\ndownload-updates=false", dconf)
 
     def test_the_package_ships_them_and_scripts_touch_nothing_running(self):
         spec = self.read("packages/silikos-security/silikos-security.spec")
