@@ -192,25 +192,48 @@ the passphrases of the day it was made, so it is kept as a key, and not on the s
 ## The system on an external disk, started from the computer's boot menu
 
 The owner's way of trying SilikOS beside what a computer already has (14/11/2026): the system on an external disk,
-the computer's own disk untouched, and the firmware's boot menu to choose. **None of this has run on a real disk or a
-real firmware**: what follows was read in the installer's source (anaconda 34.25.7.14 of AlmaLinux 9.8), tested as
-far as a made-up system goes, or is marked [A].
+the computer's own disk untouched, and the firmware's boot menu to choose. **It has run in virtual machines, not on
+a real disk or a real firmware**: the CI's external-disk test (workflow External disk; runs 43585862486, commit
+fff4d24, and 43587008261, commit 27309ef, 46 checks ok and none failed; 14/11/2026) installs under UEFI onto a disk on a USB controller, beside a disk that stands for the
+computer's own, and starts the result on that machine, on another with Secure Boot on, and on a third where the
+disk is on SATA. What is said below was seen there unless it is marked [A].
 
 **The installation.** The ISO's UEFI menu has a third entry, *Install SilikOS 9.8 on an external disk (the boot
-order of this computer is kept)*: the same installation with the installer's own option `inst.leavebootorder`.
-Without it the installer removes the firmware's entries that carry its name and adds its own **first** in the
-firmware's boot order (`efibootmgr -c`); with it, it adds its entry without putting it in the order and removes none
-(`efibootmgr -C`). In *Installation Destination* only the external disk is ticked: a disk that is not ticked is not
-written [A: the installer's documented behaviour; that part was not read]. The EFI system partition is then made on
-the external disk, with the boot loader also at the path every firmware looks for on a removable disk
-(`EFI/BOOT/BOOTX64.EFI`, with its fall-back program `fbx64.efi`: both are files of the base's package shim-x64).
+order of this computer is kept)*. It is the same installation with two differences:
 
-**Starting it.** From the firmware's boot menu (F12, F9, Esc: the maker's key), the external disk. [A: from shim's
-fall-back as it is known, not read here and not run] The first start through that path makes shim write an entry
-for this system into the firmware and put it first, and on a machine with a TPM restart once; the computer then
-starts the external disk by itself whenever it is plugged in, and what it started before when it is not. To have the
-computer's own system first again: the firmware's setup, or `sudo efibootmgr` (the list) and
+- the installer's own option `inst.leavebootorder`: without it the installer removes the firmware's entries that
+  carry its name and adds its own **first** in the firmware's boot order; with it, it adds its entry without putting
+  it in the order and removes none. Seen: the order before the installation and after it the same, no entry gone,
+  one entry added (`SilikOS`) that is not in the order.
+- **the computer's own disks are not shown** (since 14/11/2026, commit 27309ef): with that entry the kickstart tells
+  the installer to ignore every disk that is not on USB, so *Installation Destination* lists the external disk
+  (and the installer's own USB stick) and nothing else: a disk of the computer cannot be ticked by mistake. It only
+  hides: the person still ticks the disk, and nothing is chosen or erased by the kickstart. An external disk that
+  is not on USB (Thunderbolt, eSATA) is hidden too: the first entry of the menu is for it. Seen (run 43587008261,
+  commit 27309ef): the kickstart told the installer `ignoredisk --drives=vda,vdb` (the two disks of the test
+  machine that are not on USB), and the test, which names no disk and clears every disk the installer shows, left
+  the computer's own disk byte for byte what it was.
+
+The EFI system partition is made on the external disk, with the boot loader also at the path every firmware looks
+for on a removable disk (`EFI/BOOT/BOOTX64.EFI`, with its fall-back program `fbx64.efi`: files of the base's package
+shim-x64). Seen: the disk that stood for the computer's own (a partition table, an EFI system partition with a file
+in it, data) was byte for byte what it had been, after the installation and after two starts from the external disk.
+
+**Starting it.** From the firmware's boot menu (F12, F9, Esc: the maker's key), the external disk. Seen with the
+virtual machine's firmware (OVMF), which found the disk by itself: the first start goes through `EFI/BOOT`, and
+the base's shim then writes an entry of its own into the firmware, **named `almalinux`** (the name is in a file of
+the base's shim package), **and puts it first**; the second start went through that entry, and nothing changed
+again. So after the first start the computer starts the external disk by itself whenever it is plugged in, and
+what it started before when it is not [A: a firmware skips an entry whose disk is absent; not seen on a real one].
+On a machine with a TPM the shim also restarts the machine once (seen in the sealed test). To have the computer's
+own system first again: the firmware's setup, or `sudo efibootmgr` (the list) and
 `sudo efibootmgr -o NUMBER,NUMBER,...` (the order) from SilikOS.
+
+**On another computer.** Seen: the disk as installed starts on another machine through USB (other firmware
+variables, Secure Boot on, another USB controller): its initramfs has what a USB start needs. It has not what a
+start from SATA or NVMe needs: the two commands `silik disk check` prints (`sudo dnf install dracut-config-generic`,
+`sudo dracut -f --regenerate-all`) made one with every driver (289 kernel modules became 686, 45 MB became 90 MB),
+and the same disk then started on SATA.
 
 **What SilikOS does differently on such a disk** (silik-tools 0.10.2, silikos-power 0.2.2):
 
@@ -218,15 +241,16 @@ computer's own system first again: the firmware's setup, or `sudo efibootmgr` (t
   the running system is lost at once); encrypt it, with a passphrase (an external disk is lost more easily than a
   computer); and its initramfs is made for the computer it was installed on (the base's default), so for other
   computers the two commands it prints (the base's own package `dracut-config-generic`, then `dracut`) make one
-  with every driver [A: not run].
+  with every driver (seen: above).
 - `silik disk tpm enroll` says that a TPM key slot opens the disk **on this computer only**: started on any other
   one, the passphrase or the recovery key. (Seen in the CI with a software TPM: another TPM, the PIN does not open
   it and the passphrase does.) A disk that travels between computers is better left with the passphrase alone.
 - The saver profile (`silik power profiles silikos`) lets idle USB devices sleep; it never does so to a disk the
   running system uses (a mounted file system, swap, a volume made on it), and `silik power check` calls it
   `a disk in use`. With the system on the external disk, a USB bridge that wakes badly would take the system with it.
-- USB protection: the disk is there when USBGuard starts, so it is allowed (`PresentDevicePolicy=allow`; seen in the
-  CI with a USB disk present from the start, which was not the system's). [A] A locked screen blocks only devices
+  Seen with the system on a USB disk: the profile applied, the disk's USB device stayed awake.
+- USB protection: the disk is there when USBGuard starts, so it is allowed (`PresentDevicePolicy=allow`; seen with
+  the system itself on the USB disk: the daemon active, the disk allowed). [A] A locked screen blocks only devices
   that arrive: a disk that stays plugged in is not asked again, also through a suspend, where the kernel keeps the
   device as it was (USB persist). A disk that really disconnects takes the running system with it, whatever
   USBGuard says: that is the cable's doing.

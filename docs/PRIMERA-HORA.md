@@ -59,31 +59,59 @@ mà i en un disc real: no.
 ### En un disc extern, per entrar-hi des del menú d'arrencada
 
 Per provar SilikOS sense tocar el disc de l'ordinador: el sistema sencer en un disc extern, i el menú d'arrencada
-de l'ordinador (F12, F9 o Esc en engegar, segons el fabricant) per triar. **Encara no s'ha fet mai en un disc ni en
-un ordinador de veritat**; el que diu aquí és llegit al codi de l'instal·lador o marcat [A]. Detall: `docs/DISK.md`.
+de l'ordinador (F12, F9 o Esc en engegar, segons el fabricant) per triar. **Provat en màquines virtuals, no encara
+en un disc ni en un ordinador de veritat** (`tests/install/external.sh`, workflow External disk: la instal·lació
+amb UEFI en un disc USB al costat d'un altre disc que fa d'«el de l'ordinador», i l'arrencada després). El que
+segueix s'ha vist allà, tret del que va marcat [A]. Detall: `docs/DISK.md`.
+
+Abans de començar:
+
+- Si Windows té BitLocker, tingues la **clau de recuperació** a mà (account.microsoft.com/devices/recoverykey)
+  abans de tocar res del firmware [A: no s'ha provat amb Windows al costat].
+- Desendolla els altres discos externs i llapis USB que no facin falta: així a la pantalla de discos només hi ha
+  el que vols.
+- El disc extern **s'esborrarà sencer**.
 
 1. Endolla el disc extern (millor un SSD en una caixa USB 3, en un port USB 3) i l'USB de l'instal·lador.
-2. Arrenca de l'USB de l'instal·lador. Al menú, la tercera entrada:
-   **Install SilikOS 9.8 on an external disk (the boot order of this computer is kept)**. Amb aquesta, l'instal·lador
-   no es posa el primer a la llista d'arrencada de l'ordinador ni en treu cap entrada.
-3. **Installation Destination**: marca **només el disc extern** i desmarca tots els altres. Mira-ho dues vegades:
-   el disc que no està marcat no es toca; el que ho està, s'esborra quan ho confirmes. Guia't per la mida i el nom.
+2. Arrenca de l'USB de l'instal·lador (menú d'arrencada del firmware). Al menú de SilikOS, la **tercera entrada**:
+   **Install SilikOS 9.8 on an external disk (the boot order of this computer is kept)**. Amb aquesta entrada:
+   - l'instal·lador no es posa el primer a la llista d'arrencada de l'ordinador ni en treu cap entrada (vist: la
+     llista, igual abans i després de la instal·lació);
+   - **els discos de l'ordinador no surten a la pantalla**: l'instal·lador només ensenya els discos que són per USB,
+     i per tant el disc intern no es pot marcar per error. Vist a la prova (execució
+     43587008261): la prova no anomena cap disc i esborra tots els que l'instal·lador ensenya; el disc «de
+     l'ordinador» en surt idèntic byte a byte. **Només les ISO fetes a partir del commit 27309ef (14/11/2026) ho
+     porten.**
+3. **Installation Destination**: hi ha d'haver el disc extern (i potser l'USB de l'instal·lador). Marca el disc
+   extern; guia't per la mida i el nom. Si no hi surt cap disc, el teu disc extern no va per USB (Thunderbolt,
+   eSATA): torna enrere i fes servir la primera entrada, mirant molt bé què marques.
+   Deixa «Automatic». [A: així és l'instal·lador de la base; no vist aquí, la prova no passa per les pantalles]
+   Si el disc ja tenia particions, l'instal·lador demana alliberar espai: «Reclaim space» → «Delete all» →
+   «Reclaim space»; només toca el disc marcat.
 4. Marca **Encrypt my data** amb una contrasenya llarga: un disc extern es perd més fàcilment que un ordinador.
-5. Quan acabi, apaga, treu l'USB de l'instal·lador i engega amb el menú d'arrencada: tria el disc extern.
+   La demanarà cada cop que engeguis (vist a cada arrencada de la prova).
+5. Crea l'usuari, comença, i quan acabi apaga, treu l'USB de l'instal·lador i engega amb el menú d'arrencada del
+   firmware: tria el disc extern.
 
-Després:
+Després (vist a la prova, tret del que va marcat):
 
 - **Apaga el sistema abans de desendollar el disc.** Si es treu mentre funciona, el sistema cau a l'instant.
-- [A] El primer cop que s'arrenca des del menú, el carregador pot afegir-se el primer a la llista de l'ordinador
-  (i reiniciar un cop). Llavors, amb el disc endollat, l'ordinador entra a SilikOS tot sol, i sense el disc, al que
-  tenia. Per tornar a posar primer el sistema de l'ordinador: la configuració del firmware, o
-  `sudo efibootmgr` (la llista) i `sudo efibootmgr -o NÚMERO,NÚMERO,...` (l'ordre).
+- **El primer cop que s'arrenca des del disc extern, el carregador de la base s'afegeix a la llista de l'ordinador
+  amb el nom `almalinux` i s'hi posa el primer** (i en una màquina amb TPM reinicia un cop). Des de llavors, amb el
+  disc endollat, l'ordinador entra a SilikOS tot sol; sense el disc, al que tenia [A: un firmware se salta
+  l'entrada d'un disc que no hi és; no vist en un de veritat]. Per tornar a posar primer el sistema de
+  l'ordinador: la configuració del firmware, o des de SilikOS `sudo efibootmgr` (la llista) i
+  `sudo efibootmgr -o NÚMERO,NÚMERO,...` (l'ordre).
+- El disc de l'ordinador no es toca: a la prova, el disc que fa d'«el de l'ordinador» és idèntic byte a byte
+  després de la instal·lació i després de dues arrencades des del disc extern.
 - `silik disk check` diu el que cal saber d'un sistema en disc extern.
 - **El TPM**: `silik disk tpm enroll` lliga el disc a *aquest* ordinador. Si el disc ha d'anar d'un ordinador a
   un altre, deixa'l amb la contrasenya i prou.
-- [A] Per engegar el mateix disc en un altre ordinador, `silik disk check` dona dues ordres (un paquet de la base
-  i `dracut`) que refan l'arrencada amb tots els controladors.
-- Si Windows té BitLocker, tingues la clau de recuperació a mà abans de tocar res del firmware.
+- **En un altre ordinador**: el disc tal com queda instal·lat arrenca en un altre ordinador per USB, també amb
+  Secure Boot activat. Perquè arrenqui també endollat per SATA o NVMe, `silik disk check` dona dues ordres (un
+  paquet de la base i `dracut`) que refan l'arrencada amb tots els controladors.
+- La protecció USB i el perfil d'estalvi deixen en pau el disc on és el sistema (USBGuard l'accepta; el perfil
+  no l'adorm).
 
 ## 3. El primer minut a l'escriptori
 
