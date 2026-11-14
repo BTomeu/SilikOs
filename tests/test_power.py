@@ -986,7 +986,7 @@ class SaverProfile(unittest.TestCase):
         if iw:
             write(os.path.join(d, "bin/iw"), "#!/bin/sh\n" + iw)
             os.chmod(os.path.join(d, "bin/iw"), 0o755)
-        env = dict(os.environ, SILIK_SYSFS=f.sys, SILIK_SAVER_STATE=os.path.join(d, "run/silikos-saver"), TUNED_FUNCTIONS=os.path.join(d, "functions"),
+        env = dict(os.environ, SILIK_SYSFS=f.sys, SILIK_PROCFS=f.proc, SILIK_SAVER_STATE=os.path.join(d, "run/silikos-saver"), TUNED_FUNCTIONS=os.path.join(d, "functions"),
                    PATH=os.path.join(d, "bin") + ":/usr/bin:/bin")
         return subprocess.run(["bash", os.path.join(self.DIR, "script.sh"), action], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
 
@@ -1054,12 +1054,56 @@ class SaverProfile(unittest.TestCase):
             self.assertEqual(self.controls(f)["1-2"], "on")
             self.assertEqual(self.script(f, "stop").returncode, 0)                      # a second stop: nothing to put back
 
+    def usb_disk(self, f, dev, host, disk, parts=(), holders=()):
+        """a USB disk of the Fake: DEV with a mass-storage interface, the block device DISK under it with PARTS; HOLDERS:
+        the names (of DISK or of a part) that carry a volume"""
+        usb = os.path.join(f.sys, "bus/usb/devices")
+        write(os.path.join(usb, dev, "idVendor"), "152d")
+        write(os.path.join(usb, dev, "idProduct"), "0583")
+        write(os.path.join(usb, dev, "power/control"), "on")
+        write(os.path.join(usb, dev, dev + ":1.0/bInterfaceClass"), "08")
+        b = os.path.join(usb, dev, dev + ":1.0", "host%d" % host, "target%d:0:0" % host, "%d:0:0:0" % host, "block", disk)
+        write(os.path.join(b, "dev"), "8:0")
+        os.makedirs(os.path.join(b, "holders"), exist_ok=True)
+        os.makedirs(os.path.join(b, "queue"), exist_ok=True)
+        for n in parts:
+            write(os.path.join(b, n, "dev"), "8:1")
+            os.makedirs(os.path.join(b, n, "holders"), exist_ok=True)
+        for n in holders:
+            os.makedirs(os.path.join(b if n == disk else os.path.join(b, n), "holders", "dm-0"), exist_ok=True)
+
+    @unittest.skipUnless(shutil.which("bash"), "no bash")
+    def test_a_disk_the_system_is_using_is_never_put_to_sleep(self):
+        # the system on an external disk (owner, 14/11/2026): its LVM on a partition of 1-6; a stick that is mounted
+        # (1-7), swap on a whole disk (1-8); an idle disk with nothing mounted (1-9) may sleep
+        with Fake() as f:
+            laptop(f, usb="auto")
+            self.usb_disk(f, "1-6", 6, "sdz", parts=("sdz1", "sdz2", "sdz3"), holders=("sdz3",))
+            self.usb_disk(f, "1-7", 7, "sdy", parts=("sdy1",))
+            self.usb_disk(f, "1-8", 8, "sdx")
+            self.usb_disk(f, "1-9", 9, "sdw", parts=("sdw1",))
+            write(os.path.join(f.proc, "self/mounts"), "/dev/mapper/vg-root / xfs rw 0 0\n/dev/sdy1 /run/media/u/STICK vfat rw 0 0\n/dev/sdw10 /mnt/other xfs rw 0 0\n")
+            write(os.path.join(f.proc, "swaps"), "Filename\t\t\t\tType\t\tSize\t\tUsed\t\tPriority\n/dev/sdx                                partition\t2097148\t\t0\t\t-2\n")
+            before = self.controls(f)
+            r = self.script(f, "start")
+            self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
+            now = self.controls(f)
+            self.assertEqual(sorted(k for k in now if now[k] != before[k] and k[0] != "0"), ["1-9"])       # (the USB ones: the PCI devices are not this test's)
+            self.assertEqual((now["1-6"], now["1-7"], now["1-8"], now["1-9"]), ("on", "on", "on", "auto"))
+            # and `silik power check` says the same of them
+            usb = {u["dev"]: u["kept"] for u in silik.power_check_probe(silik.Ctx())["usb"]}
+            self.assertEqual((usb["1-6"], usb["1-7"], usb["1-8"], usb["1-9"]), ("a disk in use", "a disk in use", "a disk in use", None))
+            self.assertEqual(self.script(f, "stop").returncode, 0)
+            self.assertEqual(self.controls(f), before)
+
     def test_what_the_script_leaves_alone_is_what_check_calls_kept(self):
         sh = text("packages/silikos-power/files/silikos-saver/script.sh")
         self.assertIn("in 01|03|07) return 0 ;;", sh)
         self.assertIn("in mei_me|nouveau|radeon) continue ;;", sh)
         src = text("packages/silik-tools/files/silik")
-        self.assertIn('"kept": "input" if "03" in classes else "audio" if "01" in classes else "printer" if "07" in classes else None', src)
+        self.assertIn('"kept": "input" if "03" in classes else "audio" if "01" in classes else "printer" if "07" in classes else\n', src)
+        self.assertIn('"a disk in use" if power_usb_disk_in_use(n) else None})', src)
+        self.assertIn('usb_disk_in_use "$d" && continue', sh)
         # nothing of the kernel's command line, no package manager, no service
         for word in ("grubby", "dnf ", "systemctl", "modprobe", "rmmod"):
             self.assertNotIn(word, sh)

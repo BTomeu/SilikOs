@@ -35,7 +35,7 @@ CRYPTTAB = "/etc/crypttab"
 SYS_TPM = "/sys/class/tpm"
 TPM2_DEVICE = "auto"          # what systemd-cryptenroll's --tpm2-device= gets
 PCRS = "7"                    # the Secure Boot state: on or off, and the keys of the firmware (PK, KEK, db, dbx)
-LSBLK = ["lsblk", "-J", "-o", "NAME,KNAME,PATH,TYPE,FSTYPE,FSVER,UUID,MOUNTPOINTS"]
+LSBLK = ["lsblk", "-J", "-o", "NAME,KNAME,PATH,TYPE,FSTYPE,FSVER,UUID,MOUNTPOINTS,TRAN"]
 TOKENS = {"systemd-tpm2": "tpm2", "systemd-recovery": "recovery", "systemd-fido2": "fido2", "systemd-pkcs11": "pkcs11"}
 KIND = {"passphrase": "passphrase", "recovery": "recovery key", "tpm2": "TPM2", "fido2": "FIDO2 token", "pkcs11": "smart card"}
 NO_COMMAND = ("no command of SilikOS encrypts a disk that is in use: it is chosen at installation "
@@ -85,7 +85,8 @@ def luks_version(fsver):
 
 
 def layout(tree, proc_swaps=""):
-    """{"mounts": {mount point: {device, encrypted, luks: [devices]}}, "swap": [{device, kind, encrypted}],
+    """{"mounts": {mount point: {device, encrypted, luks: [devices], tran: [how its disks are attached: "usb", "nvme",
+    "sata"..., as lsblk says of the outermost device]}}, "swap": [{device, kind, encrypted}],
     "luks": {device: {device, kname, uuid, version, name}}} from lsblk's tree and /proc/swaps. encrypted: a dm-crypt
     layer is under every device the file system is made on (None for zram: memory, nothing at rest)"""
     mounts, swap, luks = {}, {}, {}
@@ -107,7 +108,9 @@ def layout(tree, proc_swaps=""):
                 zram = (n.get("name") or "").startswith("zram")
                 e = swap.setdefault(n.get("path") or "", {"device": n.get("path") or "", "kind": "zram" if zram else "device", "encrypted": True})
             else:
-                e = mounts.setdefault(m, {"device": n.get("path") or "", "encrypted": True, "luks": []})
+                e = mounts.setdefault(m, {"device": n.get("path") or "", "encrypted": True, "luks": [], "tran": []})
+                if chain[0].get("tran") and chain[0]["tran"] not in e["tran"]:
+                    e["tran"].append(chain[0]["tran"])
                 for u in under:
                     if u not in e["luks"]:
                         e["luks"].append(u)
@@ -333,10 +336,27 @@ def rows(st):
     return out
 
 
+def external(st):
+    """True when the system's own disk hangs on USB (an external disk, started from the computer's boot menu)"""
+    return "usb" in ((st["mounts"].get("/") or {}).get("tran") or [])
+
+
+EXTERNAL_TPM = ("/ is on an external disk (USB): a TPM key slot opens it on this computer only. Started on any other one, "
+                "the passphrase or the recovery key opens it")
+
+
 def advice(st):
     """what `silik disk check` adds: [{id, text, commands}], commands a person runs (none is run here)"""
     out = []
     t, sb = st["tpm"], st["secure_boot"]
+    if external(st):
+        out.append({"id": "external", "text": "The system is on an external disk (USB). Shut the system down before the disk is unplugged: "
+                    "pulled out while it runs, the running system is lost at once, and what was not yet written with it. "
+                    "An external disk is lost or taken more easily than a computer: encrypt it (the installer's tick), with a passphrase. "
+                    "Its initramfs is made for the computer it was installed on (the base's default): to start the same disk on other "
+                    "computers, the base's package dracut-config-generic makes it with every driver, now and at each new kernel "
+                    "[A: not run] (docs/DISK.md)",
+                    "commands": ["sudo dnf install dracut-config-generic", "sudo dracut -f --regenerate-all"]})
     for v in st["luks"]:
         dev = v["device"]
         out.append({"id": "header", "text": "A damaged LUKS header loses the whole disk, whatever the passphrase. Keep a copy that is not on this disk "
@@ -350,7 +370,8 @@ def advice(st):
                         ": a recovery key is a second one, generated, to keep on paper away from the machine", "commands": ["silik disk recovery"]})
         if "tpm2" not in kinds and t["present"] and t["version"] == "2" and sb == "enabled":
             out.append({"id": "tpm", "text": "This machine can open the disk with its TPM and a PIN, bound to the Secure Boot state: a short PIN at each "
-                        "start, the long passphrase kept for recovery. A change of firmware keys asks the passphrase once (docs/DISK.md)",
+                        "start, the long passphrase kept for recovery. A change of firmware keys asks the passphrase once (docs/DISK.md)" +
+                        (". " + EXTERNAL_TPM if external(st) else ""),
                         "commands": ["silik disk tpm enroll"]})
     if st["luks"]:
         out.append({"id": "firmware", "text": "No command can see whether the firmware's setup has a password: without one Secure Boot is turned off, "
@@ -530,6 +551,8 @@ def tpm_enroll(ctx, a):
                   "  Turn Secure Boot on in the firmware's setup first (then the key is bound to that state), or add --even-without-secure-boot" % why, 1)
     if a.no_pin:
         print("silik: --no-pin: " + NO_PIN, file=sys.stderr)
+    if external(st):
+        print("silik: " + EXTERNAL_TPM, file=sys.stderr)
     need_tools = not shutil.which("tpm2")          # (dracut's tpm2-tss module is left out without the tpm2 program)
     pin = not a.no_pin
     agree(ctx, a, vol, "a TPM2 key slot %s, bound to PCR %s, is added to" % ("with a PIN" if pin else "WITHOUT a PIN", a.pcrs))

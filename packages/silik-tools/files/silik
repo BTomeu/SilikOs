@@ -55,7 +55,7 @@ import subprocess
 import sys
 import time
 
-VERSION = "0.10.1"
+VERSION = "0.10.2"
 BOX_PREFIX = "silik-eda-"
 STATE = os.environ.get("SILIK_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "silikos")
 WINE_ROOT = os.environ.get("SILIK_WINE_ROOT") or os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "silikos", "wine")
@@ -6958,6 +6958,32 @@ def power_profiles_cmd(ctx, a):
     return 0
 
 
+def power_usb_disk_in_use(n):
+    """the USB device N carries a disk the running system uses: a mounted file system, swap, or a volume made on it
+    (LVM, LUKS). The saver profile never puts such a disk to sleep (silikos-saver's script.sh, usb_disk_in_use): with
+    the system itself on an external disk, a bridge that wakes badly would take the system with it"""
+    import glob
+    used = set()
+    for f in ("self/mounts", "swaps"):
+        try:
+            with open(os.path.join(PROCFS, f), encoding="utf-8", errors="replace") as fh:
+                used.update(l.split(" ", 1)[0].split("\t", 1)[0] for l in fh)
+        except OSError:
+            pass
+    for b in glob.glob(os.path.join(SYSFS, "bus/usb/devices", n, "*:*", "host*", "target*", "*", "block", "*")):
+        for part in [b] + sorted(glob.glob(os.path.join(b, "*"))):
+            if not os.path.exists(os.path.join(part, "dev")):
+                continue
+            try:
+                if os.listdir(os.path.join(part, "holders")):
+                    return True
+            except OSError:
+                pass
+            if "/dev/" + os.path.basename(part) in used:
+                return True
+    return False
+
+
 # `silik power check`: what decides a laptop's consumption on this machine, read from /sys and /proc (and the
 # profile, as `silik power` reads it; the Wi-Fi's power save from `iw`, which the kernel gives no file for).
 # power_check_probe reads, power_check_rows judges what was read and runs nothing (the tests feed it made-up
@@ -7000,7 +7026,8 @@ def power_check_probe(ctx):
         classes = set(rd("bus/usb/devices", n, i, "bInterfaceClass").lower() for i in ls("bus/usb/devices", n) if ":" in i)
         usb.append({"dev": n, "id": "%s:%s" % (vid, rd("bus/usb/devices", n, "idProduct")), "name": rd("bus/usb/devices", n, "product") or None,
                     "control": rd("bus/usb/devices", n, "power/control") or None,
-                    "kept": "input" if "03" in classes else "audio" if "01" in classes else "printer" if "07" in classes else None})
+                    "kept": "input" if "03" in classes else "audio" if "01" in classes else "printer" if "07" in classes else
+                            "a disk in use" if power_usb_disk_in_use(n) else None})
     gpus = []
     for n in ls("bus/pci/devices"):
         if not rd("bus/pci/devices", n, "class").startswith("0x03"):

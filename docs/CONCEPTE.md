@@ -217,7 +217,7 @@ Tot està en un repositori de GitHub. Hi ha tres maneres de comprovar que funcio
 2. **El banc de proves**: un escriptori GNOME de veritat dins d'un contenidor, on s'instal·len els paquets i es fan
    fotos de pantalla. Totes les imatges dels colors, les icones, SavvyCAN o PulseView surten d'aquí.
 3. **La instal·lació real**: GitHub construeix la **ISO** (el disc d'instal·lació), la instal·la sola en una màquina
-   virtual, engega el sistema instal·lat, el revisa (166 comprovacions la darrera vegada) i desa fotos de pantalla.
+   virtual, engega el sistema instal·lat, el revisa (168 comprovacions la darrera vegada) i desa fotos de pantalla.
    Tres proves més fan el mateix amb el disc xifrat, el nivell endurit i el tornar enrere.
    És la prova que compta.
 
@@ -277,7 +277,7 @@ Sense adorns. Cada punt diu on s'ha vist; «vist» vol dir executat, no pensat.
 
 | Prova | Resultat | Execució |
 |---|---|---|
-| Instal·lació desatesa, escriptori, eines, Windows, USB, auditoria | 166 comprovacions bé, 0 malament | CI 43549553439 |
+| Instal·lació desatesa, escriptori, eines, Windows, USB, auditoria | 168 comprovacions bé, 0 malament | CI 43566415197 |
 | Nivell endurit: posar-lo, reiniciar, comprovar, treure'l | 96 bé, 0 malament | CI 43560389589 |
 | Disc xifrat + arrencada segura + TPM amb PIN, nou arrencades | 90 bé, 0 malament | CI 43560389589 |
 | Actualitzar i tornar enrere | 70 bé, 0 malament | CI 43560389589 |
@@ -285,7 +285,7 @@ Sense adorns. Cada punt diu on s'ha vist; «vist» vol dir executat, no pensat.
 | Al costat de l'AlmaLinux de sèrie | 160–175 MB menys de memòria; escriptori 0,08–0,71 s més tard | Compare 43560434143 |
 
 Dues comprovacions d'USB de la primera fila (`silik usb allow` i que el dimoni rebutgi un usuari sense sudo) no
-s'havien executat mai per un error de l'script de prova, trobat i arreglat el 14/11: la propera execució les dirà.
+s'havien executat mai per un error de l'script de prova, trobat i arreglat el 14/11: ara corren i passen.
 
 Les proves automàtiques són més de 1600, i passen a la CI de GitHub a x86_64 i a ARM.
 
@@ -317,6 +317,8 @@ adaptador CAN, ni un USB d'instal·lació).
   Detall: `docs/HARDWARE.md`.
 
 **Següents passos proposats:**
+- Provar-lo des d'un disc extern, entrant pel menú d'arrencada de l'ordinador, sense tocar el disc intern
+  (`docs/PRIMERA-HORA.md` §2): la ISO ja porta una entrada per a això. No s'ha fet mai en maquinari.
 - Fer-lo servir una setmana al Ryzen i en un portàtil, i apuntar on falla.
 - Publicar i signar el repositori (els passos del propietari).
 - Tancar la xarxa local a la capsa aïllada de Windows.

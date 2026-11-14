@@ -53,10 +53,33 @@ maps=()
 bios=0
 # the menus: the new label, inst.ks on the kernel lines, the SilikOS name
 edit() { sed -i -E "s#$label#$newlabel#g; s#(inst\.stage2=[^ ]+)#\1 $ks#; s/AlmaLinux 9[.0-9]*/SilikOS $ver/g; s/an AlmaLinux system/a SilikOS system/g; s/AlmaLinux/SilikOS/g" "$1"; }
+# One more entry in the UEFI menus, after the two of the base: the same installation with inst.leavebootorder, for a
+# system on an external disk that is started from the computer's own boot menu. The installer then adds its entry to
+# the firmware's list without putting it first and takes no entry away (anaconda 34.25, pyanaconda's efi.py:
+# `efibootmgr -C` in the place of `-c`, and remove_efi_boot_target not called). The default entry stays the base's.
+# (The BIOS menu has none: a BIOS has no such list.) docs/DISK.md.
+extern() { python3 - "$1" <<'EOF'
+import re, sys
+path = sys.argv[1]
+s = open(path).read()
+if "inst.leavebootorder" in s:
+    sys.exit(0)
+m = re.search(r"^menuentry 'Install (SilikOS [0-9.]+)' [^\n]*\{\n(?:[^\n]*\n)*?\}\n", s, re.M)
+t = re.search(r"^menuentry 'Test this media & install [^\n]*\{\n(?:[^\n]*\n)*?\}\n", s, re.M)
+if not m or not t:
+    sys.exit("%s: the menu of the base is not as expected: no entry for an external disk could be added" % path)
+entry = m.group(0).replace("'Install %s'" % m.group(1), "'Install %s on an external disk (the boot order of this computer is kept)'" % m.group(1), 1)
+entry, n = re.subn(r"(inst\.ks=\S+)", r"\1 inst.leavebootorder", entry, count=1)
+if n != 1:
+    sys.exit("%s: no inst.ks on the kernel line of the first entry" % path)
+open(path, "w").write(s[:t.end()] + entry + s[t.end():])
+EOF
+}
 for f in EFI/BOOT/grub.cfg boot/grub2/grub.cfg isolinux/isolinux.cfg isolinux/grub.conf; do
   p="$work/x/$(echo "$f" | tr / _)"
   if xorriso -indev "$src" -osirrox on -extract "/$f" "$p" 2>/dev/null; then
     chmod u+w "$p"; edit "$p"
+    case $f in */grub.cfg) extern "$p" ;; esac
     maps+=(-map "$p" "/$f")
     case $f in isolinux/*) bios=1 ;; esac
   fi
@@ -66,6 +89,7 @@ if xorriso -indev "$src" -osirrox on -extract /images/efiboot.img "$work/x/efibo
   chmod u+w "$work/x/efiboot.img"
   if mcopy -n -i "$work/x/efiboot.img" ::EFI/BOOT/grub.cfg "$work/x/efi_grub.cfg" 2>/dev/null; then
     edit "$work/x/efi_grub.cfg"
+    extern "$work/x/efi_grub.cfg"
     mcopy -o -i "$work/x/efiboot.img" "$work/x/efi_grub.cfg" ::EFI/BOOT/grub.cfg
     maps+=(-map "$work/x/efiboot.img" /images/efiboot.img)
   fi
@@ -110,4 +134,14 @@ xorriso -indev "$src" -outdev "$out" -boot_image any replay -volid "$newlabel" \
 # halts on a medium without one ("No checksum information available": seen 12/11/2026 booting the aarch64 ISO; the
 # x86_64 ISO is made the same way). The base's boot ISO carries one; the rebuilt image needs its own
 implantisomd5 --force "$out"
+# read back from the image itself: the menu a UEFI start shows (the one inside the EFI partition image) has the
+# entry for an external disk, and the default is still the base's second entry
+if xorriso -indev "$out" -osirrox on -extract /images/efiboot.img "$work/x/back.img" > /dev/null 2>&1 \
+   && mcopy -n -i "$work/x/back.img" ::EFI/BOOT/grub.cfg "$work/x/back.cfg" 2> /dev/null; then
+  n=$(grep -c "inst\.leavebootorder" "$work/x/back.cfg" || true)
+  [ "$n" = 1 ] && grep -q '^set default="1"' "$work/x/back.cfg" \
+    || { echo "the UEFI menu of $out: $n entries with inst.leavebootorder (wanted 1), or the default entry changed" >&2; exit 1; }
+  echo "UEFI menu: $(grep -c "^menuentry\|^[[:space:]]*menuentry" "$work/x/back.cfg") entries; for an external disk: $(sed -n "s/^menuentry '\([^']*external disk[^']*\)'.*/\1/p" "$work/x/back.cfg")"
+  rm -f "$work/x/back.img" "$work/x/back.cfg"
+fi
 ls -la "$out"

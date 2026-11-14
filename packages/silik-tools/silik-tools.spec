@@ -1,5 +1,5 @@
 Name:           silik-tools
-Version:        0.10.1
+Version:        0.10.2
 Release:        1%{?dist}
 Summary:        silik: the SilikOS system command (EDA boxes, Windows programs, hardware)
 License:        LicenseRef-SilikVolt

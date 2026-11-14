@@ -189,6 +189,53 @@ itself, once, and passes through no file or variable of `silik`. `silik disk che
 `cryptsetup luksHeaderBackup` (a damaged header loses the disk whatever the passphrase; the copy opens the disk with
 the passphrases of the day it was made, so it is kept as a key, and not on the same disk).
 
+## The system on an external disk, started from the computer's boot menu
+
+The owner's way of trying SilikOS beside what a computer already has (14/11/2026): the system on an external disk,
+the computer's own disk untouched, and the firmware's boot menu to choose. **None of this has run on a real disk or a
+real firmware**: what follows was read in the installer's source (anaconda 34.25.7.14 of AlmaLinux 9.8), tested as
+far as a made-up system goes, or is marked [A].
+
+**The installation.** The ISO's UEFI menu has a third entry, *Install SilikOS 9.8 on an external disk (the boot
+order of this computer is kept)*: the same installation with the installer's own option `inst.leavebootorder`.
+Without it the installer removes the firmware's entries that carry its name and adds its own **first** in the
+firmware's boot order (`efibootmgr -c`); with it, it adds its entry without putting it in the order and removes none
+(`efibootmgr -C`). In *Installation Destination* only the external disk is ticked: a disk that is not ticked is not
+written [A: the installer's documented behaviour; that part was not read]. The EFI system partition is then made on
+the external disk, with the boot loader also at the path every firmware looks for on a removable disk
+(`EFI/BOOT/BOOTX64.EFI`, with its fall-back program `fbx64.efi`: both are files of the base's package shim-x64).
+
+**Starting it.** From the firmware's boot menu (F12, F9, Esc: the maker's key), the external disk. [A: from shim's
+fall-back as it is known, not read here and not run] The first start through that path makes shim write an entry
+for this system into the firmware and put it first, and on a machine with a TPM restart once; the computer then
+starts the external disk by itself whenever it is plugged in, and what it started before when it is not. To have the
+computer's own system first again: the firmware's setup, or `sudo efibootmgr` (the list) and
+`sudo efibootmgr -o NUMBER,NUMBER,...` (the order) from SilikOS.
+
+**What SilikOS does differently on such a disk** (silik-tools 0.10.2, silikos-power 0.2.2):
+
+- `silik disk check` says it first: shut the system down before the disk is unplugged (pulled out while it runs,
+  the running system is lost at once); encrypt it, with a passphrase (an external disk is lost more easily than a
+  computer); and its initramfs is made for the computer it was installed on (the base's default), so for other
+  computers the two commands it prints (the base's own package `dracut-config-generic`, then `dracut`) make one
+  with every driver [A: not run].
+- `silik disk tpm enroll` says that a TPM key slot opens the disk **on this computer only**: started on any other
+  one, the passphrase or the recovery key. (Seen in the CI with a software TPM: another TPM, the PIN does not open
+  it and the passphrase does.) A disk that travels between computers is better left with the passphrase alone.
+- The saver profile (`silik power profiles silikos`) lets idle USB devices sleep; it never does so to a disk the
+  running system uses (a mounted file system, swap, a volume made on it), and `silik power check` calls it
+  `a disk in use`. With the system on the external disk, a USB bridge that wakes badly would take the system with it.
+- USB protection: the disk is there when USBGuard starts, so it is allowed (`PresentDevicePolicy=allow`; seen in the
+  CI with a USB disk present from the start, which was not the system's). [A] A locked screen blocks only devices
+  that arrive: a disk that stays plugged in is not asked again, also through a suspend, where the kernel keeps the
+  device as it was (USB persist). A disk that really disconnects takes the running system with it, whatever
+  USBGuard says: that is the cable's doing.
+
+**What to expect** [A, none measured]: a solid-state disk in a USB 3 enclosure on a USB 3 port; a spinning disk or
+a USB 2 port works and is slow. The weekly trim reaches the disk only through an enclosure that passes it on. The
+computer's clock: Linux keeps the hardware clock in UTC and Windows in local time, so after a session in one the
+other may show the wrong hour until it synchronises.
+
 ## What ran, and what did not
 
 Ran, 14/11/2026, **in a virtual machine with KVM** (GitHub's CI, job `sealed-test`, run 43532259867: OVMF with

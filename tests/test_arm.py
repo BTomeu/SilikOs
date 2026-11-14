@@ -630,7 +630,12 @@ class Kickstart(unittest.TestCase):
         s = text("tools/build_iso.sh")
         body = s[s.index("\nxorriso -indev"):]
         self.assertIn('\nimplantisomd5 --force "$out"\n', body)
-        self.assertEqual(body.split('implantisomd5 --force "$out"\n', 1)[1].strip(), 'ls -la "$out"')
+        after = body.split('implantisomd5 --force "$out"\n', 1)[1]
+        self.assertTrue(after.strip().endswith('ls -la "$out"'))
+        # (the image is read back there, for the UEFI menu's entries: read, never written again)
+        self.assertEqual(re.findall(r'^[^#\n]*"\$out"[^\n]*$', after, re.M),
+                         ['if xorriso -indev "$out" -osirrox on -extract /images/efiboot.img "$work/x/back.img" > /dev/null 2>&1 \\', 'ls -la "$out"'])
+        self.assertNotRegex(after, r"-outdev|-map |implantisomd5|-boot_image")
         ci = text(".github/workflows/ci.yml")               # every job that builds the ISO has the tool (arm, install, rollback-test, hardened-test, sealed-test...)
         self.assertEqual(len(re.findall(r"ci_apt\.sh [^\n]*xorriso[^\n]*isomd5sum", ci)), len(re.findall(r"bash tools/build_iso\.sh\n", ci)))
         self.assertGreaterEqual(len(re.findall(r"bash tools/build_iso\.sh\n", ci)), 3)

@@ -11,8 +11,11 @@ import contextlib
 import importlib.machinery
 import importlib.util
 import io
+import copy
 import json
 import os
+import shutil
+import re
 import subprocess
 import sys
 import tempfile
@@ -142,7 +145,7 @@ class Layout(unittest.TestCase):
         self.assertTrue(next(s for s in disk.layout(MIXED, home)["swap"] if s["kind"] == "file")["encrypted"])      # (/ in clear, /home not)
 
     def test_lsblk_is_asked_for_what_is_read(self):
-        self.assertEqual(disk.LSBLK, ["lsblk", "-J", "-o", "NAME,KNAME,PATH,TYPE,FSTYPE,FSVER,UUID,MOUNTPOINTS"])
+        self.assertEqual(disk.LSBLK, ["lsblk", "-J", "-o", "NAME,KNAME,PATH,TYPE,FSTYPE,FSVER,UUID,MOUNTPOINTS,TRAN"])
         with mock.patch.object(silik, "sec_cmd", lambda argv, timeout=20: (0, json.dumps({"blockdevices": PLAIN}))):
             self.assertEqual(disk.lsblk(silik), PLAIN)
         for answer in ((1, ""), (None, ""), (0, "not json")):
@@ -301,6 +304,130 @@ class Rows(unittest.TestCase):
         self.assertEqual(disk.advice(state(PLAIN)), [])
 
 
+def on_usb(tree):
+    """the same machine with its disk in a USB enclosure (lsblk's TRAN of the disk itself)"""
+    t = copy.deepcopy(tree)
+    for n in t:
+        if n.get("type") == "disk":
+            n["tran"] = "usb"
+    return t
+
+
+class External(unittest.TestCase):
+    """the system on an external disk, started from the computer's boot menu (owner, 14/11/2026)"""
+
+    def test_seen_from_how_the_disk_of_the_root_is_attached(self):
+        self.assertFalse(disk.external(state()))                              # (no TRAN in the tree: not said, not assumed)
+        self.assertEqual(disk.layout(on_usb(THIN))["mounts"]["/"]["tran"], ["usb"])
+        self.assertTrue(disk.external(state(on_usb(THIN))))
+        self.assertTrue(disk.external(state(on_usb(PLAIN))))
+        nvme = copy.deepcopy(THIN)
+        for n in nvme:
+            n["tran"] = "nvme"
+        self.assertFalse(disk.external(state(nvme)))
+        self.assertFalse(disk.external({"mounts": {}}))
+
+    def test_check_says_what_an_external_disk_asks_for(self):
+        self.assertNotIn("external", by_id(disk.advice(state())))
+        ad = by_id(disk.advice(state(on_usb(THIN))))
+        self.assertEqual(disk.advice(state(on_usb(THIN)))[0]["id"], "external")
+        for word in ("Shut the system down before the disk is unplugged", "encrypt it", "dracut-config-generic", "[A: not run]"):
+            self.assertIn(word, ad["external"]["text"])
+        self.assertEqual(ad["external"]["commands"], ["sudo dnf install dracut-config-generic", "sudo dracut -f --regenerate-all"])
+        self.assertIn("opens it on this computer only", ad["tpm"]["text"])
+        self.assertNotIn("this computer only", by_id(disk.advice(state()))["tpm"]["text"])
+        self.assertEqual([a["id"] for a in disk.advice(state(on_usb(PLAIN)))], ["external"])      # (in clear too: the first thing to know)
+        r = Run(["check"], state(on_usb(THIN)))
+        self.assertIn("The system is on an external disk (USB)", r.out)
+        self.assertEqual(r.calls, [])                                         # (said, never run)
+
+    def test_enrolling_says_the_slot_is_this_computers(self):
+        r = Run(["tpm", "enroll", "--yes", "--unlock-key-file", "/root/pass"], state(on_usb(THIN)), headers=["luksdump-passphrase.json", "luksdump-tpm2-pin-recovery.json"], stdin="2468\n")
+        self.assertEqual(r.rc, 0, r.err)
+        self.assertIn("silik: / is on an external disk (USB): a TPM key slot opens it on this computer only", r.err)
+        r = Run(["tpm", "enroll", "--yes", "--unlock-key-file", "/root/pass"], state(), headers=["luksdump-passphrase.json", "luksdump-tpm2-pin-recovery.json"], stdin="2468\n")
+        self.assertNotIn("external disk", r.err)
+
+
+class IsoMenu(unittest.TestCase):
+    """the entry of the ISO's UEFI menus for an external disk (tools/build_iso.sh, extern): the function itself, run on
+    a menu in the shape of AlmaLinux 9.8's boot ISO after the names were changed"""
+    MENU = """set default="1"
+
+set timeout=60
+search --no-floppy --set=root -l 'SilikOS-9-8-x86_64'
+
+menuentry 'Install SilikOS 9.8' --class fedora --class gnu-linux --class gnu --class os {
+\tlinuxefi /images/pxeboot/vmlinuz inst.stage2=hd:LABEL=SilikOS-9-8-x86_64 inst.ks=hd:LABEL=SilikOS-9-8-x86_64:/silikos.ks quiet
+\tinitrdefi /images/pxeboot/initrd.img
+}
+menuentry 'Test this media & install SilikOS 9.8' --class fedora --class gnu-linux --class gnu --class os {
+\tlinuxefi /images/pxeboot/vmlinuz inst.stage2=hd:LABEL=SilikOS-9-8-x86_64 inst.ks=hd:LABEL=SilikOS-9-8-x86_64:/silikos.ks rd.live.check quiet
+\tinitrdefi /images/pxeboot/initrd.img
+}
+menuentry 'Install SilikOS 9.8 in FIPS mode' --class fedora --class gnu-linux --class gnu --class os {
+\tlinuxefi /images/pxeboot/vmlinuz inst.stage2=hd:LABEL=SilikOS-9-8-x86_64 inst.ks=hd:LABEL=SilikOS-9-8-x86_64:/silikos.ks quiet fips=1
+\tinitrdefi /images/pxeboot/initrd.img
+}
+submenu 'Troubleshooting -->' {
+\tmenuentry 'Install SilikOS 9.8 in text mode' --class fedora --class gnu-linux --class gnu --class os {
+\t\tlinuxefi /images/pxeboot/vmlinuz inst.stage2=hd:LABEL=SilikOS-9-8-x86_64 inst.ks=hd:LABEL=SilikOS-9-8-x86_64:/silikos.ks inst.text quiet
+\t\tinitrdefi /images/pxeboot/initrd.img
+\t}
+}
+"""
+
+    @staticmethod
+    def build_iso():
+        with open(os.path.join(ROOT, "tools/build_iso.sh"), encoding="utf-8") as f:
+            return f.read()
+
+    def extern(self, menu):
+        sh = self.build_iso()
+        i = sh.index("extern() {")
+        fn = sh[i:sh.index("\n}\n", i) + 3]
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        path = os.path.join(d, "grub.cfg")
+        with open(path, "w") as f:
+            f.write(menu)
+        r = subprocess.run(["bash", "-c", fn + 'extern "$1"', "x", path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        with open(path) as f:
+            return r, f.read()
+
+    def test_one_entry_after_the_bases_two_with_the_installers_own_option(self):
+        r, out = self.extern(self.MENU)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        titles = re.findall(r"^\t?menuentry '([^']*)'", out, re.M)
+        self.assertEqual(titles, ["Install SilikOS 9.8", "Test this media & install SilikOS 9.8",
+                                  "Install SilikOS 9.8 on an external disk (the boot order of this computer is kept)",
+                                  "Install SilikOS 9.8 in FIPS mode", "Install SilikOS 9.8 in text mode"])
+        self.assertIn('set default="1"', out)                                 # (the base's default entry is still the second)
+        lines = [l for l in out.split("\n") if "inst.leavebootorder" in l]
+        self.assertEqual(lines, ["\tlinuxefi /images/pxeboot/vmlinuz inst.stage2=hd:LABEL=SilikOS-9-8-x86_64 inst.ks=hd:LABEL=SilikOS-9-8-x86_64:/silikos.ks inst.leavebootorder quiet"])
+        self.assertEqual(out.replace(out[out.index("menuentry 'Install SilikOS 9.8 on an external"):out.index("menuentry 'Install SilikOS 9.8 in FIPS")], ""), self.MENU)
+        self.assertEqual(out.count("{"), out.count("}"))
+        self.assertNotRegex("\n".join(titles), "['\"]")                       # (a quote in a title would end the string of the menu)
+        r2, again = self.extern(out)                                          # run twice: once in the menu
+        self.assertEqual((r2.returncode, again), (0, out))
+
+    def test_arm_s_menu_and_a_menu_that_is_not_the_bases(self):
+        arm = self.MENU.replace("linuxefi", "linux").replace("initrdefi", "initrd").replace("quiet", "ro")
+        r, out = self.extern(arm)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("/silikos.ks inst.leavebootorder ro\n", out)
+        r, out = self.extern("set default=0\nmenuentry 'Something else' {\n}\n")
+        self.assertNotEqual(r.returncode, 0)                                  # (the build stops: an ISO without the entry is not made in silence)
+        self.assertIn("no entry for an external disk could be added", r.stderr)
+        self.assertEqual(out, "set default=0\nmenuentry 'Something else' {\n}\n")
+
+    def test_the_build_calls_it_for_the_uefi_menus_only(self):
+        sh = self.build_iso()
+        self.assertIn('case $f in */grub.cfg) extern "$p" ;; esac', sh)
+        self.assertIn('extern "$work/x/efi_grub.cfg"', sh)
+        self.assertEqual(sh.count('extern "'), 2)
+
+
 class Status(unittest.TestCase):
     def test_the_table_and_its_exit_code(self):
         r = Run([], state())
@@ -322,7 +449,7 @@ class Status(unittest.TestCase):
         self.assertEqual(sorted(d), ["checks", "state", "summary"])
         self.assertEqual(d["summary"], {"ok": 7, "warn": 0, "bad": 0, "unknown": 0})
         self.assertEqual(d["state"]["luks"][0]["slots"], [{"slot": 0, "kind": "passphrase", "kdf": "argon2id"}])
-        self.assertEqual(d["state"]["mounts"]["/"], {"device": "/dev/mapper/almalinux-root", "encrypted": True, "luks": ["/dev/vda3"]})
+        self.assertEqual(d["state"]["mounts"]["/"], {"device": "/dev/mapper/almalinux-root", "encrypted": True, "luks": ["/dev/vda3"], "tran": []})
         d = json.loads(Run(["check", "--json"], state()).out)
         self.assertEqual([a["id"] for a in d["advice"]], ["header", "recovery", "tpm", "firmware", "boot"])
 
