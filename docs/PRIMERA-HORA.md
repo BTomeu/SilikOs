@@ -96,7 +96,10 @@ Abans de començar:
    Si el disc ja tenia particions, l'instal·lador demana alliberar espai: «Reclaim space» → «Delete all» →
    «Reclaim space»; només toca el disc marcat.
 4. Marca **Encrypt my data** amb una contrasenya llarga: un disc extern es perd més fàcilment que un ordinador.
-   La demanarà cada cop que engeguis (vist a cada arrencada de la prova).
+   La demanarà cada cop que engeguis, sobre la pantalla d'arrencada de SilikOS: el fons fosc, la marca, el text
+   «Please enter passphrase for disk…» i una casella (vist en una màquina virtual, execució 43602193388: la
+   contrasenya teclejada un cop obre el disc). Si mai la pantalla es quedés negra sense demanar res: al menú de
+   GRUB, tecla `e`, esborra `rhgb quiet` de la línia que comença per `linux`, Ctrl+X, i la demana en text.
 5. Crea l'usuari, comença, i quan acabi apaga, treu l'USB de l'instal·lador i engega amb el menú d'arrencada del
    firmware: tria el disc extern.
 

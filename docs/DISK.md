@@ -229,6 +229,15 @@ On a machine with a TPM the shim also restarts the machine once (seen in the sea
 own system first again: the firmware's setup, or `sudo efibootmgr` (the list) and
 `sudo efibootmgr -o NUMBER,NUMBER,...` (the order) from SilikOS.
 
+**The passphrase at the boot splash.** Seen (workflow External disk, job `splash`, run 43602193388, commit 39311fa:
+19 checks ok, none failed): an encrypted installation on the USB disk started the graphical way (`rhgb quiet`, as
+an installation made on the installer's screens has it) shows SilikOS's splash (the ink background, the mark) with
+the question `Please enter passphrase for disk ...` and its entry box, drawn through the kernel's graphics driver;
+the passphrase typed once on the keyboard opens the disk. The theme and the pictures of its dialog are in the
+initramfs. (Three runs before that one stayed black: the test's installer has a console on the serial port, the
+installer wrote it into the installed system, and the splash program then asks there, in text. A computer has no
+such console; with one, `plymouth.ignore-serial-consoles` on the kernel's command line is the base's way.)
+
 **On another computer.** Seen: the disk as installed starts on another machine through USB (other firmware
 variables, Secure Boot on, another USB controller): its initramfs has what a USB start needs. It has not what a
 start from SATA or NVMe needs: the two commands `silik disk check` prints (`sudo dnf install dracut-config-generic`,
