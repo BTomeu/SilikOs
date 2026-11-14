@@ -1,0 +1,11 @@
+# AlmaLinux release 10.2 (Lavender Lion), x86_64, 2026-11-14
+
+Checking kickstart file /tmp/tmp.d8EmNiA6hW
+
+ok   the kickstart is valid for RHEL10 (pykickstart-3.52.12-1.el10.alma.1.noarch)
+environment: workstation-product-environment; packages: epel-release kernel-modules-extra silikos-branding silikos-desktop silik-tools silik-command silik-eda-compat silik-eda-open silik-dev silikos-security silikos-power snapm boom-boot usbguard usbguard-dbus usbguard-selinux tpm2-tools
+ok   the set resolves: Install 1345 Packages, Total download size: 2.0 G, 
+     ours: silik-command-0.9.0-1.el10 silik-dev-0.5.1-1.el10 silik-eda-compat-0.2.1-1.el10 silik-eda-open-0.3.0-1.el10 silik-tools-0.10.4-1.el10 silikos-branding-0.5.0-1.el10 silikos-desktop-0.18.3-1.el10 silikos-power-0.2.2-1.el10 silikos-security-0.5.1-1.el10 
+     note: No match for group package "redhat-flatpak-preinstall-firefox"
+     note: No match for group package "redhat-flatpak-repo"
+RESOLVE-OK

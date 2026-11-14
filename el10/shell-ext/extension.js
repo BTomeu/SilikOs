@@ -39,12 +39,45 @@ import * as Flow from './flow.js';
 const RAIL_W = 152, SB_H = 22, START_W = 660, START_H = 520;
 const FLOW_W = 640, FLOW_H = 548, PIN_COLS = 4, RECENT_N = 5;      /* Start in a Flow look */
 const SCHEMA = 'com.silikvolt.silikos.shell';                      /* key "look": silik | bar | island */
+/* the shell's own stylesheet in the SilikOS look, made on the system for ink and for each accent (shell-theme) */
+const THEMES = '/usr/share/themes';
+const SHELL_CSS = '/org/gnome/shell/theme/gnome-shell.css';        /* the shell's own, in its resource bundle */
+const USER_THEME = 'user-theme@gnome-shell-extensions.gcampax.github.com';
+/* qt5ct's plugin: without it nothing reads the file `silik look --qt` writes (silik: QT5CT_PLUGIN_DIRS, the same) */
+const QT5CT_PLUGIN = '/usr/lib64/qt5/plugins/platformthemes/libqt5ct.so';
 const COMMAND_ID = 'org.silikvolt.Command.desktop';   /* the COMMAND bar is the title bar's command line, not a rail key */
 /* the power field: tuned's profile in `silik power`'s words (packages/silik-tools: POWER_WORD) */
 const TUNED_ACTIVE = '/etc/tuned/active_profile';
 const PPD_DAEMON = '/usr/libexec/power-profiles-daemon';   /* that one instead of tuned: tuned's file would be stale */
 const POWER_AUTO_LINK = '/etc/systemd/system/multi-user.target.wants/silikos-power-auto.service';
-const POWER_WORD = { 'throughput-performance': 'performance', 'balanced': 'balanced', 'balanced-battery': 'balanced', 'powersave': 'saver' };
+const POWER_WORD = { 'throughput-performance': 'performance', 'balanced': 'balanced', 'balanced-battery': 'balanced', 'powersave': 'saver',
+                     'silikos-saver': 'saver' };      /* (silikos-power's own saver: `silik power profiles silikos`) */
+
+/* the update field's other words (docs/ROLLBACK.md): the last update was made without a snapshot of / (the note of
+   silikos-security's update hook in /run/silikos), the automatic updates wait since a rollback (/etc/silikos) */
+const UPDATE_NOSNAP = '/run/silikos/no-snapshot';
+const UPDATE_HOLD = '/etc/silikos/update.hold';
+const UPDATE_TEXT = {
+    en: { nosnap: 'no snapshot', hold: 'waiting since the rollback', refused: 'repository refused' },
+    ca: { nosnap: 'sense instantània', hold: 'en espera des de la tornada enrere', refused: 'repositori rebutjat' },
+    es: { nosnap: 'sin instantánea', hold: 'en espera desde la vuelta atrás', refused: 'repositorio rechazado' },
+};
+/* and a third: the dnf plugin of silikos-repos refused the metadata of a SilikOS channel in its last run (replayed,
+   unsigned, another channel's or architecture's: docs/SIGNING.md), so nothing of SilikOS was updated: `silik update`
+   says which and why. The plugin's own notes are read (root's file, 0644). A note is renewed by every run that
+   refuses again (the daily update): one older than three days is of a channel that was turned off since */
+const UPDATE_SEEN = '/var/lib/silikos/repo-revision';
+const UPDATE_REFUSED_DAYS = 3;
+function updateRefused(text, now) {
+    try {
+        const d = JSON.parse(text || '{}');
+        for (const id of ['silikos', 'silikos-next']) {
+            const s = d && d[id] && d[id].said;
+            if (s && s.verdict === 'refuse' && now - (s.when || 0) < UPDATE_REFUSED_DAYS * 86400) return true;
+        }
+    } catch (e) { /* not the plugin's file: nothing is said from it */ }
+    return false;
+}
 
 const TEXT = {
     en: { ready: 'ready', upd: 'update', restart: 'restart to finish', ws: 'workspace', base: 'base', kernel: 'kernel', host: 'host', open: 'open', windows: 'Windows',
@@ -69,6 +102,12 @@ const TEXT = {
           cats: { all: 'Todas', fav: 'Rail', eda: 'Ingeniería', bench: 'Banco', win: 'Programas de Windows', dev: 'Desarrollo', office: 'Oficina',
                   graphics: 'Gráficos', net: 'Internet', media: 'Sonido y vídeo', tools: 'Herramientas', system: 'Sistema', other: 'Otras' } },
 };
+
+/* Programs Start does not list: a settings program of a part SilikOS sets itself. qt5ct ("Qt5 Settings") is how Qt 5
+   programs take the accent; `silik look --accent` writes its file and `silik look --qt` brings it in line, so its own
+   window would only offer to undo that. The list is ours, not a change to the program's desktop entry: it holds
+   through the program's updates. (silik-command: HIDDEN_APPS, the same; the tests hold them equal.) */
+const HIDDEN_APPS = ['qt5ct.desktop'];
 
 /* Start's categories: the freedesktop main categories an application declares; the first that matches wins */
 const CATS = [
@@ -95,6 +134,52 @@ function readText(path) {
         const [ok, bytes] = GLib.file_get_contents(path);
         return ok ? new TextDecoder().decode(bytes).trim() : '';
     } catch (e) { return ''; }
+}
+
+/* The message file ($XDG_RUNTIME_DIR/silik-last) is the user's own: any program of theirs can put anything in its
+   place. The third pass of 14/11/2026 did: a pipe that nobody writes to left the session black at its start (the
+   shell waited on it for ever), and 30 MB written again and again held the shell at a whole processor. So it is
+   never read as the other files are: only a regular file (asked without following a link and without opening it),
+   only its first LAST_MAX bytes, away from the shell's own thread, one reading at a time. The status bar shows the
+   first line and nothing else. What it says is still whatever the user's programs wrote: it is their line, not the
+   system's word (docs/SECURITY.md). */
+const LAST_MAX = 1024;
+
+/* the first line of BYTES (a Uint8Array, at most LAST_MAX of them) as text, '' when it is no text; DECODE: UTF-8
+   bytes to a string, throwing on what is not UTF-8 */
+function lastLine(bytes, decode) {
+    let n = bytes.indexOf(10);
+    if (n < 0) {
+        n = bytes.length;
+        if (n >= LAST_MAX) {                 /* cut by the limit: a character that lost its end goes */
+            let k = n;
+            while (k > 0 && (bytes[k - 1] & 0xC0) === 0x80) k--;
+            if (k > 0 && bytes[k - 1] >= 0xC0) {
+                const lead = bytes[k - 1];
+                if (n - (k - 1) < (lead < 0xE0 ? 2 : lead < 0xF0 ? 3 : 4)) n = k - 1;
+            }
+        }
+    }
+    const line = bytes.subarray(0, n);
+    if (line.indexOf(0) >= 0) return '';
+    try { return decode(line).trim(); } catch (e) { return ''; }
+}
+
+/* DONE(text) is called once, later, with the message file's first line ('' when there is none to show) */
+function readLast(file, done) {
+    let info = null;
+    try { info = file.query_info('standard::type', Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null); } catch (e) { /* no file yet */ }
+    if (!info || info.get_file_type() !== Gio.FileType.REGULAR) { done(''); return; }
+    file.read_async(GLib.PRIORITY_DEFAULT, null, (f, res) => {
+        let stream = null;
+        try { stream = f.read_finish(res); } catch (e) { done(''); return; }
+        stream.read_bytes_async(LAST_MAX, GLib.PRIORITY_DEFAULT, null, (st, r) => {
+            let text = '';
+            try { text = lastLine(st.read_bytes_finish(r).toArray(), b => new TextDecoder().decode(b)); } catch (e) { text = ''; }
+            try { st.close(null); } catch (e) { /* closed with the object */ }
+            done(text);
+        });
+    });
 }
 
 function osRelease() {
@@ -316,12 +401,12 @@ function isCommand(w) {
    window is; it goes with the window */
 const CMD_R = 6;
 
-function commandGlass(w, on) {
+function commandGlass(w, mode) {
     const a = w.get_compositor_private();
     if (!a) return;
-    if (!on) { if (a._silikGlass) a._silikGlass(); return; }
-    if (a._silikGlass) return;
-    const mica = new Flow.Mica(a, w.get_monitor(), true, CMD_R);
+    if (a._silikGlass) a._silikGlass();                      /* (another mode: its glass is made again) */
+    if (!mode) return;
+    const mica = new Flow.Mica(a, w.get_monitor(), true, CMD_R, mode);
     const place = () => { const r = w.get_buffer_rect(); mica.place(r.x, r.y, r.width, r.height); };
     const sigs = [w.connect('position-changed', place), w.connect('size-changed', place)];
     const gone = a.connect('destroy', () => { if (a._silikGlass) a._silikGlass(); });
@@ -342,18 +427,48 @@ function lookSettings() {
     } catch (e) { return null; }
 }
 
+/* is the SilikOS stylesheet already the shell's own in this session? (60-silikos-shell.conf: GLib reads the file in
+   place of the one in the shell's bundle, on the lock and login screens too.) Not while GTK's theme is HighContrast:
+   the shell then takes its high-contrast stylesheet, which is not replaced */
+function shellCssIsOurs() {
+    const want = SHELL_CSS + '=' + THEMES + '/SilikOS/gnome-shell/gnome-shell.css';
+    return (GLib.getenv('G_RESOURCE_OVERLAYS') || '').split(':').includes(want) && St.Settings.get().gtk_theme !== 'HighContrast';
+}
+
+/* a session where the user-theme extension is on (the desktop's defaults turned it on until 14/11/2026; a user's own
+   list of extensions may have it): the shell's theme is that extension's work, from the key `silik look --accent`
+   writes for it */
+function userThemeOn() {
+    try {
+        if (!global.settings.get_strv('enabled-extensions').includes(USER_THEME) ||
+            global.settings.get_strv('disabled-extensions').includes(USER_THEME)) return false;
+        /* (listed and not on the system: nobody would load the theme) */
+        return [GLib.get_user_data_dir()].concat(GLib.get_system_data_dirs())
+            .some(d => GLib.file_test(GLib.build_filenamev([d, 'gnome-shell', 'extensions', USER_THEME, 'extension.js']), GLib.FileTest.EXISTS));
+    } catch (e) { return false; }
+}
+
 export default class SilikShell extends Extension {
     enable() {
         this._settings = lookSettings();
         if (this._settings) this._lookSig = this._settings.connect('changed::look', () => this._switch());
         if (this._settings && this._settings.settings_schema.has_key('accent'))
-            this._accentSig = this._settings.connect('changed::accent', () => { this._accent(); this._qt(); });
-        if (this._settings && this._settings.settings_schema.has_key('glass'))
+            this._accentSig = this._settings.connect('changed::accent', () => { this._theme(); this._accent(); this._qt(); });
+        if (this._settings && this._settings.settings_schema.has_key('glass')) {
             this._glassSig = this._settings.connect('changed::glass', () => this._glass());
+            if (this._settings.settings_schema.has_key('glass-mode'))
+                this._glassModeSig = this._settings.connect('changed::glass-mode', () => this._glass());
+        }
+        /* (GTK's theme changes with the accent, and to and from HighContrast; the list of extensions when user-theme
+           is turned on or off: the shell's theme is looked at again, and is left alone when it is already the one) */
+        this._gtkThemeSig = St.Settings.get().connect('notify::gtk-theme', () => this._theme());
+        this._extsSig = global.settings.connect('changed::enabled-extensions', () => this._theme());
+        this._theme();
         this._accent();
-        this._qt();
         this._up();
+        this._watchSaver();
         this._glass();
+        this._qtSoon();
     }
 
     disable() {
@@ -361,19 +476,51 @@ export default class SilikShell extends Extension {
         this._down();
         this._accent(true);
         this._glass(true);
+        this._theme(true);
+        St.Settings.get().disconnect(this._gtkThemeSig);
+        global.settings.disconnect(this._extsSig);
+        this._gtkThemeSig = this._extsSig = 0;
+        if (this._qtSig) { Main.layoutManager.disconnect(this._qtSig); this._qtSig = 0; }
+        if (this._qtId) { GLib.source_remove(this._qtId); this._qtId = 0; }
         if (this._settings) {
             this._settings.disconnect(this._lookSig);
             if (this._accentSig) this._settings.disconnect(this._accentSig);
             if (this._glassSig) this._settings.disconnect(this._glassSig);
-            this._accentSig = this._glassSig = 0;
+            if (this._glassModeSig) this._settings.disconnect(this._glassModeSig);
+            if (this._saverSig) this._settings.disconnect(this._saverSig);
+            this._accentSig = this._glassSig = this._glassModeSig = this._saverSig = 0;
             this._settings = null;
         }
+        if (this._saverMon) this._saverMon.cancel();
+        this._saverMon = null;
+        this._saver = false;
+    }
+
+    /* The shell's own parts (the panel's menus, the calendar, dialogs, the windows view) in the SilikOS look: the
+       stylesheet THEMES/SilikOS[-<accent>]/gnome-shell/gnome-shell.css, put over the shell's own as its theme. In ink
+       it is not loaded where the session already has it as the shell's own stylesheet (shellCssIsOurs): the
+       user-theme extension loaded the same file over itself at every start, about 18 ms of the shell's start in
+       the rig for nothing (the file read and parsed twice more, every widget matched against its rules twice; the
+       picture is the same to the pixel: docs/SESSION.md, 14/11/2026). With an accent, and in a session without that
+       environment, it is loaded here. The lock screen, where the shell turns extensions off, has the shell's own
+       stylesheet: ink, as before. */
+    _theme(off) {
+        if (!off && userThemeOn()) { this._themeIs = null; return; }
+        let path = null;
+        if (!off) {
+            const id = this._accentSig ? this._settings.get_string('accent') : 'ink';
+            if (id !== 'ink' || !shellCssIsOurs()) path = THEMES + '/' + (id === 'ink' ? 'SilikOS' : 'SilikOS-' + id) + '/gnome-shell/gnome-shell.css';
+            if (path && !GLib.file_test(path, GLib.FileTest.EXISTS)) path = null;      /* (not made on this system: the shell's own) */
+        }
+        if (path === (this._themeIs || null)) return;
+        this._themeIs = path;
+        try { Main.setThemeStylesheet(path); Main.loadTheme(); } catch (e) { console.error('silik-shell: theme ' + path, e); }
     }
 
     /* the accent (key "accent"; `silik look --accent`): the extension's rules that take it are accent-<id>.css
        (tools/gen_accents.py), one class more specific than stylesheet.css: a stylesheet loaded later does not win at
        the same specificity. "ink" has no file. The shell's own parts and GTK take it from the themes SilikOS-<id>,
-       which `silik look --accent` chooses. A new theme of the shell (user-theme) keeps the stylesheets loaded. */
+       which `silik look --accent` chooses (the shell's: _theme). A new theme of the shell keeps the stylesheets loaded. */
     _accent(off) {
         const theme = St.ThemeContext.get_for_stage(global.stage).get_theme();
         if (this._accentFile) {
@@ -386,37 +533,72 @@ export default class SilikShell extends Extension {
         try { theme.load_stylesheet(f); this._accentFile = f; } catch (e) { console.error('silik-shell: accent ' + id, e); }
     }
 
-    /* glass (key "glass"; `silik look --glass on|off`): glass.css (tools/gen_accents.py: the panes' paper at 0.86, the
-       muted text that reads on it) and the glass under the island or the bar, Start and the COMMAND bar's window
-       (flow.js: Mica, the wallpaper under the pane, blurred once). The Silik look's title bar, rail and status bar stay
-       solid: they are the window's frame, not a pane on it. */
-    _glassOn() {
-        return !!this._glassSig && this._settings.get_boolean('glass');
+    /* glass (`silik look --glass off|on|clear|crystal|crystal-thin`): the key "glass" is the switch, the key
+       "glass-mode" says which glass while it is on (a "glass" set before there were modes keeps its meaning). A mode is
+       its stylesheet (tools/gen_accents.py: glass.css for "on", glass-MODE.css: the panes' paper at the mode's opacity,
+       the muted text that reads on it) and the glass under the island or the bar, Start and the COMMAND bar's window
+       (flow.js: Mica: the wallpaper under the pane, in the crystal modes the windows behind it too, blurred). The
+       Silik look's title bar, rail and status bar stay solid: they are the window's frame, not a pane on it. */
+    _glassMode() {
+        if (!this._glassSig || !this._settings.get_boolean('glass')) return null;
+        /* the power profile "saver": solid paper while it lasts (the key glass-saver; see _watchSaver) */
+        if (this._saver && this._saverSig && this._settings.get_boolean('glass-saver')) return null;
+        const mode = this._glassModeSig ? this._settings.get_string('glass-mode') : 'on';
+        return Flow.GLASS_MODES[mode] ? mode : 'on';
+    }
+
+    /* In the power profile "saver" (`silik power saver`, the system menu, tuned on a low battery) the panes are solid
+       paper, and come back as they were when the profile changes: at rest the glass costs nothing, but each time
+       something is drawn behind a pane it is work for the graphics card (docs/STATUS.md: the modes measured), and
+       saver is the profile that asks for the least. The key glass-saver (true by default; `silik look --glass-saver
+       off`) turns this off. The profile is tuned's, read from the file tuned writes at each change, in every look;
+       no command is run for it. (With power-profiles-daemon instead of tuned the profile is not known: the glass
+       stays.) */
+    _watchSaver() {
+        this._saver = false;
+        if (!this._settings || !this._settings.settings_schema.has_key('glass-saver')) return;
+        this._saverSig = this._settings.connect('changed::glass-saver', () => this._glass());
+        const sync = () => {
+            const p = GLib.file_test(PPD_DAEMON, GLib.FileTest.EXISTS) ? '' : readText(TUNED_ACTIVE);
+            const saver = POWER_WORD[p] === 'saver';
+            if (saver === this._saver) return;
+            this._saver = saver;
+            this._glass();
+        };
+        try {
+            this._saverMon = Gio.File.new_for_path(GLib.path_get_dirname(TUNED_ACTIVE)).monitor_directory(Gio.FileMonitorFlags.NONE, null);
+            this._saverMon.connect('changed', sync);
+        } catch (e) { /* no tuned folder: the profile read now stands */ }
+        sync();
     }
 
     _glass(off) {
         const theme = St.ThemeContext.get_for_stage(global.stage).get_theme();
-        const on = !off && this._glassOn(), f = this.dir.get_child('glass.css');
-        if (this._glassFile && !on) {
+        const mode = off ? null : this._glassMode();
+        if (mode === (this._glassIs || null)) return;
+        if (this._glassFile) {
             try { theme.unload_stylesheet(this._glassFile); } catch (e) { /* it was not loaded */ }
             this._glassFile = null;
         }
-        if (on && !this._glassFile)
-            try { theme.load_stylesheet(f); this._glassFile = f; } catch (e) { console.error('silik-shell: glass', e); }
-        this._micas(on);
+        this._glassIs = mode;
+        if (mode) {
+            const f = this.dir.get_child(mode === 'on' ? 'glass.css' : 'glass-' + mode + '.css');
+            try { theme.load_stylesheet(f); this._glassFile = f; } catch (e) { console.error('silik-shell: glass ' + mode, e); }
+        }
+        this._micas();
     }
 
-    _micas(on) {
-        if (this._flow) this._flow.glass(on);
-        if (on && !this._startMica && this._startBox) {
+    /* the panes' glass, made for the mode in use (again when the mode or the look changes) or taken away */
+    _micas() {
+        const mode = this._glassIs ? Flow.GLASS_MODES[this._glassIs] : null;
+        if (this._flow) this._flow.glass(mode);
+        if (this._startMica) { this._startMica.destroy(); this._startMica = null; }
+        if (mode && this._startBox) {
             this._startMica = new Flow.Mica(this._startBox, Main.layoutManager.primaryIndex, false,
-                                            this._flow && this._flow.kind === 'island' ? Flow.ISL_R : 0);
+                                            this._flow && this._flow.kind === 'island' ? Flow.ISL_R : 0, mode);
             this._layout();
-        } else if (!on && this._startMica) {
-            this._startMica.destroy();
-            this._startMica = null;
         }
-        for (const a of global.get_window_actors()) if (isCommand(a.meta_window)) commandGlass(a.meta_window, on);
+        for (const a of global.get_window_actors()) if (isCommand(a.meta_window)) commandGlass(a.meta_window, mode);
     }
 
     /* what of the look is on the screen: the Silik look's title bar is the shell's own panel */
@@ -487,10 +669,10 @@ export default class SilikShell extends Extension {
         });
         this._commandWindow = (w => {
             if (isCommand(w) && Meta.is_wayland_compositor()) w.make_above();
-            if (!this._glassOn() || !isCommand(w)) return;
-            if (w.get_compositor_private()) commandGlass(w, true);
+            if (!this._glassIs || !isCommand(w)) return;
+            if (w.get_compositor_private()) commandGlass(w, Flow.GLASS_MODES[this._glassIs]);
             else global.compositor.get_laters().add(Meta.LaterType.BEFORE_REDRAW, () => {
-                if (this._glassOn()) commandGlass(w, true);
+                if (this._glassIs) commandGlass(w, Flow.GLASS_MODES[this._glassIs]);
                 return GLib.SOURCE_REMOVE;
             });
         });
@@ -521,7 +703,7 @@ export default class SilikShell extends Extension {
         this._syncWs();
         this._syncMsg();
         this._warmStart();
-        if (this._glassFile) this._micas(true);              /* (a new look's panes; the stylesheet stays loaded) */
+        if (this._glassIs) this._micas();                    /* (a new look's panes; the stylesheet stays loaded) */
     }
 
     _down() {
@@ -538,7 +720,11 @@ export default class SilikShell extends Extension {
         this._startApps = null;
         this._catKeys = null;
         if (this._mon) { this._mon.cancel(); this._mon = null; }
+        this._lastGen = (this._lastGen || 0) + 1;                    /* (a reading on its way shows nothing any more) */
+        this._lastBusy = this._lastAgain = false;
         if (this._updMon) { this._updMon.cancel(); this._updMon = null; }
+        if (this._holdMon) { this._holdMon.cancel(); this._holdMon = null; }
+        if (this._seenMon) { this._seenMon.cancel(); this._seenMon = null; }
         this._upd = null;
         for (const m of this._pwMons || []) m.cancel();
         this._pwMons = null;
@@ -947,7 +1133,8 @@ export default class SilikShell extends Extension {
     _appList() {
         if (this._startApps) return this._startApps;
         const sys = Shell.AppSystem.get_default();
-        const apps = sys.get_installed().filter(i => i.should_show()).map(i => sys.lookup_app(i.get_id())).filter(a => a)
+        const apps = sys.get_installed().filter(i => i.should_show() && !HIDDEN_APPS.includes(i.get_id()))
+            .map(i => sys.lookup_app(i.get_id())).filter(a => a)
             .map(a => ({ app: a, name: a.get_name() || '', desc: a.get_description() || '', cat: category(a) }));
         apps.sort((a, b) => a.name.localeCompare(b.name));
         return this._startApps = apps;
@@ -991,8 +1178,23 @@ export default class SilikShell extends Extension {
        says it, or when qt5ct is not installed). A file seeded from the ink one, or an accent set with gsettings, is
        brought in line at login and at each change */
     _qt() {
-        if (!this._accentSig) return;
+        if (!this._accentSig || !GLib.file_test(QT5CT_PLUGIN, GLib.FileTest.EXISTS)) return;     /* (no qt5ct: nothing to bring in line) */
         try { GLib.spawn_command_line_async('silik look --qt -q'); } catch (e) { /* silik-tools older than the key */ }
+    }
+
+    /* at login it waits until the desktop is up and the shell has nothing else to do: starting a program costs the
+       shell 9-12 ms of its own time (measured in the rig, docs/SESSION.md), and the shell's unit is not started
+       until enable() returns. Nothing of the first picture needs it. */
+    _qtSoon() {
+        const idle = () => {
+            this._qtId = GLib.idle_add(GLib.PRIORITY_LOW, () => { this._qtId = 0; this._qt(); return GLib.SOURCE_REMOVE; });
+        };
+        if (!Main.layoutManager._startingUp) { idle(); return; }
+        this._qtSig = Main.layoutManager.connect('startup-complete', () => {
+            Main.layoutManager.disconnect(this._qtSig);
+            this._qtSig = 0;
+            idle();
+        });
     }
 
     _closeStart(now) {
@@ -1108,7 +1310,7 @@ export default class SilikShell extends Extension {
     /* Start's list made before it is opened, a few rows at a time while the shell has nothing else to do (after the
        session has started, and after a change of the installed applications or of the icon theme): the first
        opening then costs what the later ones do. Each slice is a few milliseconds; the rows are also styled and
-       measured then (what their first showing would do) */
+       measured then (what their first showing would do). The last slice is the pane itself (_warmPane) */
     _warmStart() {
         if (this._warmId) GLib.source_remove(this._warmId);
         const slice = () => {
@@ -1117,9 +1319,36 @@ export default class SilikShell extends Extension {
             const apps = this._appList();
             for (const b of this._rowsFor(apps, 12)) b.get_preferred_height(-1);
             if (this._list._silikRow.size < apps.length) this._warmId = GLib.idle_add(GLib.PRIORITY_LOW, slice);
+            else this._warmPane();
             return GLib.SOURCE_REMOVE;
         };
         this._warmId = GLib.timeout_add(GLib.PRIORITY_LOW, 2000, slice);
+    }
+
+    /* ...and the pane as the first opening fills it: the category keys, a Flow look's first page (the pinned
+       applications with their icons at that size; the desktop reads its list of recent files from the disk the first
+       time it is asked), then the pane put among the things on the screen once and measured there, which is where
+       its parts take their style and their text is laid out for the first time. The first opening of a session took
+       25-40 ms of the shell's time where the later ones take 7-8: 10-12 ms of it that first measure, 4-6 ms the
+       first showing (measured in the rig, docs/SESSION.md). Nothing is seen: the pane is at opacity 0, which the
+       shell does not draw, and it is hidden again before the shell draws its next picture. An opening sets all of
+       this again from what is true then. */
+    _warmPane() {
+        const b = this._startBox;
+        if (!b || this._startOpen || b.visible) return;
+        this._apps = this._appList();
+        this._favIds = AppFavorites.getAppFavorites().getFavorites().map(a => a.get_id());
+        this._cat = 'all';
+        this._sel = 0;
+        this._view = 'home';
+        this._fillCats();
+        this._fill();
+        b.remove_all_transitions();
+        b.opacity = 0;
+        b.show();
+        this._layout();
+        b.hide();
+        b.opacity = 255;
     }
 
     _move(d) {
@@ -1249,9 +1478,22 @@ export default class SilikShell extends Extension {
        status bar's field while it waits */
     _watchRestart() {
         const dir = Gio.File.new_for_path('/run/silikos');
+        const ut = UPDATE_TEXT[lang()] || UPDATE_TEXT.en;
         const sync = () => {
             const wait = dir.get_child('restart').query_exists(null);
-            if (this._upd) this._upd.visible = wait;
+            /* the same field, the same look: "update restart to finish", "update no snapshot" (an update was made
+               without a snapshot of /: `silik snapshot status` says why), "update waiting since the rollback",
+               "update repository refused" (`silik update` says which and why) */
+            const said = [];
+            if (wait) said.push(this._t.restart);
+            if (GLib.file_test(UPDATE_HOLD, GLib.FileTest.EXISTS)) said.push(ut.hold);
+            if (GLib.file_test(UPDATE_NOSNAP, GLib.FileTest.EXISTS)) said.push(ut.nosnap);
+            if (updateRefused(readText(UPDATE_SEEN), Date.now() / 1000)) said.push(ut.refused);
+            if (this._upd) {
+                const val = this._upd.get_last_child();
+                if (val) val.text = said.join(', ');
+                this._upd.visible = said.length > 0;
+            }
             if (wait && !restartSaid) {
                 restartSaid = true;
                 try { Main.notify(this._t.upd, this._t.restart); } catch (e) { /* no notification: the field says it */ }
@@ -1261,6 +1503,14 @@ export default class SilikShell extends Extension {
             this._updMon = dir.monitor_directory(Gio.FileMonitorFlags.NONE, null);
             this._updMon.connect('changed', sync);
         } catch (e) { this._updMon = null; }
+        try {       /* (the wait after a rollback begins and ends in /etc/silikos) */
+            this._holdMon = Gio.File.new_for_path(GLib.path_get_dirname(UPDATE_HOLD)).monitor_directory(Gio.FileMonitorFlags.NONE, null);
+            this._holdMon.connect('changed', sync);
+        } catch (e) { this._holdMon = null; }
+        try {       /* (the plugin's notes: replaced whole at the end of a run of dnf as root) */
+            this._seenMon = Gio.File.new_for_path(GLib.path_get_dirname(UPDATE_SEEN)).monitor_directory(Gio.FileMonitorFlags.NONE, null);
+            this._seenMon.connect('changed', sync);
+        } catch (e) { this._seenMon = null; }
         sync();
     }
 
@@ -1274,7 +1524,18 @@ export default class SilikShell extends Extension {
     }
 
     _syncMsg() {
-        const s = readText(this._last.get_path());
+        if (this._lastBusy) { this._lastAgain = true; return; }       /* one reading at a time; the newest state after it */
+        this._lastBusy = true;
+        const gen = this._lastGen = (this._lastGen || 0) + 1;
+        readLast(this._last, s => {
+            if (gen !== this._lastGen) return;                       /* the look was taken down meanwhile */
+            this._lastBusy = false;
+            this._showMsg(s);
+            if (this._lastAgain) { this._lastAgain = false; this._syncMsg(); }
+        });
+    }
+
+    _showMsg(s) {
         if (this._flow) { this._flow.syncMsg(s); return; }
         const i = s.indexOf(' ');
         if (s && i > 0) { this._msgT.text = s.slice(0, i); this._msgX.text = s.slice(i + 1).split('\n')[0]; }

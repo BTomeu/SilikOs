@@ -167,13 +167,15 @@ export class FlowLook {
         }
     }
 
-    /* the piece's glass (the key "glass"): made or taken away; layout() keeps it under the piece */
-    glass(on) {
-        if (!on === !this._mica) return;
-        if (on) {
-            this._mica = new Mica(this._piece, Main.layoutManager.primaryIndex, false, this.kind === 'island' ? ISL_R : 0);
-            this.layout();
-        } else { this._mica.destroy(); this._mica = null; }
+    /* the piece's glass (the keys "glass" and "glass-mode"): made for a mode (GLASS_MODES) or taken away (null);
+       layout() keeps it under the piece. The piece is always on the screen: in the crystal modes it shows the windows
+       that stand under the piece itself (PIECE_REACH: none of those beside it), so a window that ends above the island
+       or the bar, as a maximised one does, costs it nothing */
+    glass(mode) {
+        if (this._mica) { this._mica.destroy(); this._mica = null; }
+        if (!mode) return;
+        this._mica = new Mica(this._piece, Main.layoutManager.primaryIndex, false, this.kind === 'island' ? ISL_R : 0, mode, PIECE_REACH);
+        this.layout();
     }
 
     destroy() {
@@ -593,15 +595,29 @@ export class FlowLook {
     }
 }
 
-/* ---- glass (the key "glass"): a pane is paper at 0.86 (glass.css) over its glass, the wallpaper under it blurred.
-   Only the wallpaper, never the windows: what shows through a pane is the same whatever is open, so nothing behind it
-   can make its text unreadable, and it costs nothing at rest. The blur is the shell's own (Shell.BlurEffect) in ACTOR
-   mode: made when the glass is first painted and kept until the wallpaper or the pane's place or size change; a still
-   screen, a key that lights up or a clock that ticks paint the kept picture. (Its BACKGROUND mode, which blurs the
-   screen as it is, was tried and left: GNOME Shell 40 then blurs what is outside the part of the screen being redrawn
-   as it was in an older frame, and every small change left a lighter box on the pane; seen in the rig, 12/11/2026.)
+/* ---- glass (the keys "glass" and "glass-mode"): a pane is translucent paper (glass*.css: 0.86 in the mode "on") over
+   its glass: what is behind it, blurred. In the modes "on" and "clear" that is the wallpaper only, never the windows:
+   what shows through a pane is the same whatever is open, and it costs nothing at rest. In the crystal modes the
+   windows behind the pane are in the glass too (see Mica: the windows). The text of every mode reads at 4.5:1 with
+   black behind the paper (tools/gen_accents.py), so nothing behind a pane can make it unreadable.
+   The blur is the shell's own (Shell.BlurEffect) in ACTOR mode: made when the glass is first painted and kept until
+   what is in it or the pane's place or size change; a still screen, a key that lights up or a clock that ticks paint
+   the kept picture. (Its BACKGROUND mode, which blurs the screen as it is, was tried and left: GNOME Shell 40 then
+   blurs what is outside the part of the screen being redrawn as it was in an older frame, and every small change left
+   a lighter box on the pane; seen in the rig, 12/11/2026.)
    The glass ends where the pane's frame ends: a rounded pane's glass is cut to its corners. */
-export const GLASS_SIGMA = 16;                                /* the blur's radius in px at scale 1 */
+/* the modes: the blur's radius in px at scale 1, and whether the windows behind the pane are in the glass (the
+   paper's opacity and the text colours of each are its stylesheet's; tools/gen_accents.py: GLASS_MODES, held equal
+   by the tests) */
+export const GLASS_MODES = {
+    'on': { sigma: 16, windows: false },
+    'clear': { sigma: 16, windows: false },
+    'crystal': { sigma: 16, windows: true },
+    'crystal-thin': { sigma: 24, windows: true },
+};
+/* how far from a pane a window is still taken into its glass: null = the blurred margin (a window beside the pane
+   colours its edge, as it would through real glass); 0 = only a window under the pane itself */
+const PIECE_REACH = 0;
 
 /* The glass is blurred a margin wider than the pane, so that its edges blur what really is next to them, and a mask
    cuts it to the pane, square or with its corners. The blur also draws in the nothing beyond its picture: the glass
@@ -620,7 +636,8 @@ const ROUND_CODE = 'vec2 silik_p = cogl_tex_coord_in[0].xy * silik_tex - silik_o
     'vec2 silik_q = abs(silik_p - 0.5 * silik_size) - (0.5 * silik_size - vec2(silik_radius));\n' +
     'float silik_d = length(max(silik_q, 0.0)) + min(max(silik_q.x, silik_q.y), 0.0) - silik_radius;\n' +
     'vec3 silik_rgb = cogl_color_out.a > 0.004 ? cogl_color_out.rgb / cogl_color_out.a : vec3(0.0);\n' +
-    'cogl_color_out = vec4(silik_rgb, cogl_color_in.a * clamp(0.5 - silik_d, 0.0, 1.0));\n';
+    'float silik_a = cogl_color_in.a * clamp(0.5 - silik_d, 0.0, 1.0);\n' +
+    'cogl_color_out = vec4(silik_rgb * silik_a, silik_a);\n';
 
 const RoundMask = GObject.registerClass({ GTypeName: 'SilikRoundMask' }, class RoundMask extends Shell.GLSLEffect {
     _init(params) {
@@ -641,19 +658,44 @@ const RoundMask = GObject.registerClass({ GTypeName: 'SilikRoundMask' }, class R
     }
 });
 
-/* Mica(pane, monitor, inside, radius): the glass of PANE, on the wallpaper of that monitor. INSIDE: it is the pane's
-   own lowest child (a window); else the pane's sibling just under it, with the pane's opacity, rise and visibility.
-   RADIUS: the pane's corners in px at scale 1 (0: square). place(x, y, w, h) says where the pane is on the screen.
+/* Mica(pane, monitor, inside, radius, mode, reach): the glass of PANE, on the wallpaper of that monitor. INSIDE: it is
+   the pane's own lowest child (a window); else the pane's sibling just under it, with the pane's opacity, rise and
+   visibility. RADIUS: the pane's corners in px at scale 1 (0: square). MODE: an entry of GLASS_MODES. place(x, y, w, h)
+   says where the pane is on the screen.
    The glass is never hidden: while its pane is hidden it is at opacity 0, which the shell does not paint. A hidden
    actor that is shown again is drawn from scratch, and the blur with it (measured in the rig: 7-11 ms more at each
-   opening of Start then). */
+   opening of Start then).
+   The windows (a mode with windows: true): every window on the screen that reaches the glass has a picture of itself
+   in the glass, above the wallpaper and under the same blur and mask, where the window is on the screen and in the
+   windows' own order. A picture is a still of the window's own contents (the shell's own
+   Shell.util_get_content_for_window_actor, which the shell uses when a window changes size), not the window drawn a
+   second time: a window drawn again (a Clutter.Clone) made the glass blurred again at every frame the window drew,
+   and a terminal scrolling behind an open Start left the shell painting all the time (measured in the rig, software
+   rendering: 54 frames in 5 s where it paints 300, see docs/STATUS.md); and under the COMMAND bar, whose glass is
+   painted among the windows, it was drawn with the parts the window manager had left out of that frame.
+   The pictures follow the windows: one that moves or changes size (its own signals), opens, closes, is minimised or
+   brought back, changes place in the stack or leaves with its workspace (the display's and the window manager's
+   signals; each actor's visibility) is brought in line at that signal: a walk of the windows on the screen, nothing
+   drawn. (Put off to the next frame, a window brought back from its key was sometimes left out until something else
+   changed: the signal comes before the window is shown, and nothing asked for another frame; seen in the rig.) A
+   window that draws (a terminal that scrolls) has its picture taken again, at most once every STILL_MS for all the
+   windows of a pane: the glass is blurred again then, and that is the cost of these modes, paid only while the pane
+   is on the screen and only for windows that reach it (REACH: the blurred margin, or 0 for a window under the pane
+   itself). While the pane is hidden there are no pictures, no signals and no timer. The windows view (the overview)
+   shows the windows elsewhere: no pictures then. A window above the COMMAND bar's own is not behind it. */
+export const STILL_MS = 200;                                  /* a window that draws: its picture again, five times a second at most */
+const STILL_TRIES = 5;                               /* a window without contents yet: asked again this many times */
+
 export class Mica {
-    constructor(pane, monitor, inside, radius) {
+    constructor(pane, monitor, inside, radius, mode, reach) {
         const s = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+        mode = mode || GLASS_MODES['on'];
         this._inside = inside;
         this._mon = monitor;
         this._r = radius * s;
-        this._m = 3 * GLASS_SIGMA * s;                   /* the margin blurred beyond the pane: the blur reaches 3 sigma */
+        this._m = 3 * mode.sigma * s;                    /* the margin blurred beyond the pane: the blur reaches 3 sigma */
+        this._windows = !!mode.windows;
+        this._reach = reach === undefined || reach === null ? this._m : reach * s;
         this._at = null;
         this.actor = new St.Widget({ reactive: false });
         this._glass = new St.Widget({ clip_to_allocation: true, reactive: false });
@@ -662,14 +704,26 @@ export class Mica {
            mask's picture and the pane's edges let what is behind through (seen in the rig) */
         this._mask = new RoundMask();
         this.actor.add_effect(this._mask);
-        this._glass.add_effect(new Shell.BlurEffect({ mode: Shell.BlurMode.ACTOR, radius: 2 * GLASS_SIGMA * s, brightness: 1 }));
-        this._bg = new Background.BackgroundManager({ container: this._glass, monitorIndex: monitor, controlPosition: false });
-        this._addSig = this._glass.connect('child-added', () => this._wall());         /* (a new wallpaper's actor) */
-        if (inside) pane.insert_child_below(this.actor, null);
-        else {
+        this._glass.add_effect(new Shell.BlurEffect({ mode: Shell.BlurMode.ACTOR, radius: 2 * mode.sigma * s, brightness: 1 }));
+        /* the wallpaper in a box of its own (the shell puts a new wallpaper's actor at the bottom of its box); over it,
+           straight in the glass, the windows' pictures (in a box of their own, two pictures left the rest of the box
+           empty, the wallpaper too: a black field in the COMMAND bar's glass; seen in the rig) */
+        this._wallBox = new Clutter.Actor();
+        this._glass.add_child(this._wallBox);
+        this._bg = new Background.BackgroundManager({ container: this._wallBox, monitorIndex: monitor, controlPosition: false });
+        this._addSig = this._wallBox.connect('child-added', () => this._wall());       /* (a new wallpaper's actor) */
+        if (this._windows) {
+            this._stills = new Map();                        /* window actor -> its picture */
+            this._tracked = new Map();                       /* window actor -> [[object, signal id]...] */
+            this._drew = new Map();                          /* window actors that drew since their picture was taken (-> tries) */
+        }
+        if (inside) {
+            pane.insert_child_below(this.actor, null);
+            this._watch(true);
+        } else {
             pane.get_parent().insert_child_below(this.actor, pane);
             this._binds = [pane.bind_property('translation-y', this.actor, 'translation-y', GObject.BindingFlags.SYNC_CREATE)];
-            const seen = () => { this.actor.opacity = pane.visible ? pane.opacity : 0; };
+            const seen = () => { this.actor.opacity = pane.visible ? pane.opacity : 0; this._watch(pane.visible); };
             this._pane = pane;
             this._paneSigs = [pane.connect('notify::visible', seen), pane.connect('notify::opacity', seen)];
             seen();
@@ -687,20 +741,134 @@ export class Mica {
         this._glass.set_size(at[2] + 2 * m, at[3] + 2 * m);
         this._mask.shape(at[2] + 2 * m, at[3] + 2 * m, m, this._r);
         this._wall();
+        this._wins();
     }
 
     /* the wallpaper sits where it is on the screen, seen through the glass's rectangle */
     _wall() {
         const mon = Main.layoutManager.monitors[this._mon];
         if (!mon || !this._at) return;
-        for (const c of this._glass.get_children()) c.set_position(mon.x - this._at[0] + this._m, mon.y - this._at[1] + this._m);
+        for (const c of this._wallBox.get_children()) c.set_position(mon.x - this._at[0] + this._m, mon.y - this._at[1] + this._m);
+        this._glass.queue_redraw();                          /* (the whole glass: see _winsNow) */
+    }
+
+    /* ---- the windows: watched while the pane is on the screen */
+    _watch(on) {
+        if (!this._windows || !on === !this._winSigs) return;
+        if (on) {
+            const sync = () => this._wins();
+            const sig = (o, names) => names.map(n => [o, o.connect(n, sync)]);
+            this._winSigs = [].concat(
+                sig(global.display, ['restacked']),
+                sig(global.window_manager, ['map', 'destroy', 'minimize', 'unminimize', 'switch-workspace']),
+                sig(global.workspace_manager, ['active-workspace-changed']),
+                sig(Main.overview, ['showing', 'hidden']));
+            this._wins();
+        } else {
+            for (const [o, id] of this._winSigs) o.disconnect(id);
+            this._winSigs = null;
+            if (this._stillId) { GLib.source_remove(this._stillId); this._stillId = 0; }
+            for (const a of Array.from(this._tracked.keys())) this._untrack(a);
+            this._drew.clear();
+        }
+    }
+
+    _track(a) {
+        const sync = () => this._wins(), w = a.meta_window;
+        this._tracked.set(a, [[a, a.connect('notify::visible', sync)], [a, a.connect('destroy', () => this._untrack(a))],
+                              [a, a.connect('damaged', () => this._drawn(a))],
+                              [w, w.connect('position-changed', sync)], [w, w.connect('size-changed', () => { this._drew.set(a, 0); sync(); })]]);
+    }
+
+    _untrack(a) {
+        for (const [o, id] of this._tracked.get(a) || []) try { o.disconnect(id); } catch (e) { /* the window has gone */ }
+        this._tracked.delete(a);
+        this._drew.delete(a);
+        const c = this._stills.get(a);
+        if (c) { c.destroy(); this._stills.delete(a); }
+    }
+
+    /* a window drew: if it has a picture here, the pictures are taken again once STILL_MS have passed */
+    _drawn(a) {
+        if (!this._stills.has(a)) return;
+        this._drew.set(a, 0);
+        this._stillSoon();
+    }
+
+    _stillSoon() {
+        if (this._stillId) return;
+        this._stillId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, STILL_MS, () => {
+            this._stillId = 0;
+            this._wins();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    /* the pictures brought in line with the windows on the screen. A window is where the window manager says it is
+       (its actor is moved there a moment after the signal) */
+    _wins() {
+        if (!this._winSigs || !this._at || this._inWins) return;
+        this._inWins = true;
+        try { this._winsNow(); } finally { this._inWins = false; }
+    }
+
+    _winsNow() {
+        const [x, y, w, h] = this._at, r = this._reach, m = this._m;
+        const own = this._inside ? this.actor.get_parent() : null;
+        const here = new Set(), want = [];
+        for (const a of global.get_window_actors()) {        /* from the lowest to the topmost */
+            if (a === own) break;
+            if (!a.meta_window || a.is_destroyed()) continue;
+            here.add(a);
+            if (!this._tracked.has(a)) this._track(a);
+            if (Main.overview.visible || !a.visible || a.meta_window.minimized) continue;
+            const f = a.meta_window.get_frame_rect();
+            if (f.x < x + w + r && f.x + f.width > x - r && f.y < y + h + r && f.y + f.height > y - r) want.push([a, f]);
+        }
+        const wanted = new Set(want.map(([a]) => a));
+        let again = false, changed = false;
+        for (const a of Array.from(this._tracked.keys())) if (!here.has(a)) { changed = changed || this._stills.has(a); this._untrack(a); }
+        for (const [a, c] of Array.from(this._stills)) if (!wanted.has(a)) { c.destroy(); this._stills.delete(a); this._drew.delete(a); changed = true; }
+        want.forEach(([a, f], i) => {
+            let c = this._stills.get(a);
+            if (!c) {
+                c = new Clutter.Actor();
+                this._stills.set(a, c);
+                this._glass.add_child(c);
+                this._drew.set(a, 0);
+                changed = true;
+            }
+            if (this._drew.has(a)) {                         /* its contents as they are now */
+                let content = null;
+                try { content = Shell.util_get_content_for_window_actor(a, f); } catch (e) { /* a window with no contents yet */ }
+                if (content) { c.content = content; this._drew.delete(a); changed = true; }
+                /* (none yet, as a window just brought back from its key: asked again STILL_MS later, a few times; then
+                   at its next drawing) */
+                else if (this._drew.get(a) < STILL_TRIES) { this._drew.set(a, this._drew.get(a) + 1); again = true; }
+            }
+            const px = f.x - x + m, py = f.y - y + m;
+            if (c.x !== px || c.y !== py || c.width !== f.width || c.height !== f.height) {
+                c.set_position(px, py);
+                c.set_size(f.width, f.height);
+                changed = true;
+            }
+            if (this._glass.get_child_at_index(i + 1) !== c) { this._glass.set_child_at_index(c, i + 1); changed = true; }    /* (0: the wallpaper) */
+        });
+        /* the whole glass is drawn again, not only where a picture changed: the wallpaper's actor draws itself only
+           inside the part of the screen being redrawn, and a glass made again while only a picture's rectangle was
+           being redrawn was left without wallpaper everywhere else (a black field in the pane at its next drawing;
+           seen in the rig in the COMMAND bar) */
+        if (changed) this._glass.queue_redraw();
+        if (again) this._stillSoon();
+        else if (!this._stills.size && this._stillId) { GLib.source_remove(this._stillId); this._stillId = 0; }
     }
 
     destroy() {
+        this._watch(false);
         if (this._binds) this._binds.forEach(b => b.unbind());
         if (this._paneSigs) this._paneSigs.forEach(id => this._pane.disconnect(id));
         this._binds = this._paneSigs = null;
-        this._glass.disconnect(this._addSig);
+        this._wallBox.disconnect(this._addSig);
         if (this._bg) { this._bg.destroy(); this._bg = null; }
         this.actor.destroy();
     }

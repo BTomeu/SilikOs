@@ -47,7 +47,7 @@ class Port(unittest.TestCase):
         for name in ("extension.js", "flow.js"):
             js = read(DST, name)
             for old in (r"\bimports\.", r"\bMe\.", r"\bGtk\.", r"Meta\.later_", r"Meta\.Rectangle", r"add_actor\(", r"'actor-added'",
-                        r"\blogError\(", r"cairo_set_source_color", r"Shell\.SnippetHook", r"\bsigma:", r"^var ", r"^function init\(",
+                        r"\blogError\(", r"cairo_set_source_color", r"Shell\.SnippetHook", r"BlurEffect\(\{[^}]*\bsigma:", r"^var ", r"^function init\(",
                         r"vertical:", r"getCurrentExtension", r"^'use strict'"):
                 self.assertIsNone(re.search(old, js, re.M), "%s still has %s" % (name, old))
 

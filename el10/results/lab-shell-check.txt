@@ -1,0 +1,69 @@
+# workflow EL 10 lab, run 43587575827, job shell 132425265115, commit 47a6434: SILIK_SHELL_RUN=1 el10/shell_check.sh in the image of el10/shell_image.sh
+ok   el10/shell-ext is the port of today's EL 9 extension
+gjs-1.80.2-11.el10.x86_64 gnome-shell-49.4-9.el10_2.alma.1.x86_64
+ok   extension.js parses as an ES module (1578 lines)
+ok   flow.js parses as an ES module (876 lines)
+[island] ## the shell's version, over D-Bus: (<'49.4'>,)
+[island] ## the extension, as the shell tells it (state 1 = active; error = what enable() threw): (true, '{"state":1,"error":"","version":["49"]}')
+[island] ## picture: build/el10/out/shell-island.png
+[island] ## probes (el10/shell_probe.js), run inside the shell:
+[island]    (true, '"look: island
+[island]    pieces on the stage: 363x54@458,734
+[island]    top panel visible: false
+[island]    work area of the primary monitor: 1280x726@0,0
+[island]    keys: 1 application key(s), 7 shell menu(s) in the tray
+[island]    settings: look=island accent=ink glass=true
+[island]    icon of an application is ours: gnome-notifications-panel.desktop -> St_Icon silik-app-icon
+[island]    applications Start lists: 4
+[island]    recent files read: 0
+[island]    Start opens: true, grab seat state 3, 640x227"')
+[island] ## picture: build/el10/out/shell-island-start.png
+[island] ## the COMMAND bar's window under Wayland, as mutter has it: (true, '"class=silik-command instance=silik-command client=wayland above=true skip_taskbar=false type=0 decorated=false focus=true rect=820x364@230,181 glass=true"')
+[island] ## picture: build/el10/out/shell-island-command.png
+[island] ## Start closed, the extension turned off and on again: (true, '"off: state 2, top panel back true"')
+[island] ## and after that: (true, '"state 1, error none, look up: island"')
+[island] ## the shell's log: lines about the extension, and JS errors (19 lines in all: build/el10/out/shell.log)
+ok   look island: active before and after off/on, no JS error
+[bar] ## the shell's version, over D-Bus: (<'49.4'>,)
+[bar] ## the extension, as the shell tells it (state 1 = active; error = what enable() threw): (true, '{"state":1,"error":"","version":["49"]}')
+[bar] ## picture: build/el10/out/shell-bar.png
+[bar] ## probes (el10/shell_probe.js), run inside the shell:
+[bar]    (true, '"look: bar
+[bar]    pieces on the stage: 1280x46@0,754
+[bar]    top panel visible: false
+[bar]    work area of the primary monitor: 1280x754@0,0
+[bar]    keys: 1 application key(s), 7 shell menu(s) in the tray
+[bar]    settings: look=bar accent=ink glass=true
+[bar]    icon of an application is ours: gnome-notifications-panel.desktop -> St_Icon silik-app-icon
+[bar]    applications Start lists: 4
+[bar]    recent files read: 0
+[bar]    Start opens: true, grab seat state 3, 640x226"')
+[bar] ## picture: build/el10/out/shell-bar-start.png
+[bar] ## the COMMAND bar's window under Wayland, as mutter has it: (true, '"class=silik-command instance=silik-command client=wayland above=true skip_taskbar=false type=0 decorated=false focus=true rect=820x364@230,195 glass=true"')
+[bar] ## picture: build/el10/out/shell-bar-command.png
+[bar] ## Start closed, the extension turned off and on again: (true, '"off: state 2, top panel back true"')
+[bar] ## and after that: (true, '"state 1, error none, look up: bar"')
+[bar] ## the shell's log: lines about the extension, and JS errors (19 lines in all: build/el10/out/shell.log)
+ok   look bar: active before and after off/on, no JS error
+[silik] ## the shell's version, over D-Bus: (<'49.4'>,)
+[silik] ## the extension, as the shell tells it (state 1 = active; error = what enable() threw): (true, '{"state":1,"error":"","version":["49"]}')
+[silik] ## picture: build/el10/out/shell-silik.png
+[silik] ## probes (el10/shell_probe.js), run inside the shell:
+[silik]    (true, '"look: silik
+[silik]    pieces on the stage: 1280x34@0,0 152x744@0,34 1280x22@0,778
+[silik]    top panel visible: true
+[silik]    work area of the primary monitor: 1128x744@152,34
+[silik]    keys: 1 rail key(s); status bar fields: =ready | workspace=1/2 | base=EL 10.2 | kernel=7.0.0-1017-azure | host=47c42e44b37d | update= | power=
+[silik]    settings: look=silik accent=ink glass=true
+[silik]    icon of an application is ours: gnome-notifications-panel.desktop -> St_Icon silik-app-icon
+[silik]    applications Start lists: 4
+[silik]    recent files read: 0
+[silik]    Start opens: true, grab seat state 3, 660x520"')
+[silik] ## picture: build/el10/out/shell-silik-start.png
+[silik] ## the COMMAND bar's window under Wayland, as mutter has it: (true, '"class=silik-command instance=silik-command client=wayland above=true skip_taskbar=false type=0 decorated=false focus=true rect=820x364@306,224 glass=true"')
+[silik] ## picture: build/el10/out/shell-silik-command.png
+[silik] ## Start closed, the extension turned off and on again: (true, '"off: state 2, top panel back true"')
+[silik] ## and after that: (true, '"state 1, error none, look up: silik"')
+[silik] ## the shell's log: lines about the extension, and JS errors (19 lines in all: build/el10/out/shell.log)
+ok   look silik: active before and after off/on, no JS error
+CHECK-OK

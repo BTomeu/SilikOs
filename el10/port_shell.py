@@ -117,7 +117,7 @@ RULES = [
     ("extension.js", "extension-dir", "45", "Me.dir (ExtensionUtils.getCurrentExtension()) -> this.dir of the Extension",
      G % "45", "lit", "Me.dir.get_child(", "this.dir.get_child(", 2),
     ("flow.js", "esm-exports-var", "45", "what another module reads: `var NAME` -> `export const NAME`",
-     G % "45", "re", r"^var ((?:ISL_R|T_KEY|T_START_IN|T_LOOK_OUT|GLASS_SIGMA)\b)", r"export const \1", 5),
+     G % "45", "re", r"^var ((?:ISL_R|T_KEY|T_START_IN|T_LOOK_OUT|GLASS_MODES|STILL_MS)\b)", r"export const \1", 6),
     ("flow.js", "esm-exports-func", "45", "what another module calls: `function NAME` -> `export function NAME`",
      G % "45", "re", r"^function (animated|ease|pulse|still|cls)\(", r"export function \1(", 5),
     ("flow.js", "esm-exports-class", "45", "`var NAME = class NAME {` -> `export class NAME {`",
@@ -153,7 +153,7 @@ RULES = [
     ("extension.js", "scrollview-child", "46", "Clutter.Container is gone: St.ScrollView.add_actor(child) -> set_child(child)",
      G % "46", "lit", "this._scroll.add_actor(this._list);", "this._scroll.set_child(this._list);", 1),
     ("flow.js", "child-added", "46", "Clutter.Container is gone: the signal 'actor-added' -> 'child-added'",
-     G % "46", "lit", "this._glass.connect('actor-added',", "this._glass.connect('child-added',", 1),
+     G % "46", "lit", "this._wallBox.connect('actor-added',", "this._wallBox.connect('child-added',", 1),
     ("*", "orientation", "48", "St.BoxLayout: `vertical: true` -> `orientation: Clutter.Orientation.VERTICAL` (deprecated in 48, to be removed)",
      G % "48", "lit", "vertical: true", "orientation: Clutter.Orientation.VERTICAL", "+"),
     ("flow.js", "orientation-bar", "48", "the same, where it is a condition",
@@ -173,9 +173,13 @@ RULES = [
      G % "46", "lit", "icon_name: 'focus-windows-symbolic'", "icon_name: 'shell-focus-windows-symbolic'", 1),
     # ---- Shell (46, 48)
     ("flow.js", "blur-radius", "46", "Shell.BlurEffect: `sigma` -> `radius`, which is 2 x sigma",
-     G % "46", "lit", "sigma: GLASS_SIGMA * s, brightness: 1", "radius: 2 * GLASS_SIGMA * s, brightness: 1", 1),
+     G % "46", "lit", "sigma: mode.sigma * s, brightness: 1", "radius: 2 * mode.sigma * s, brightness: 1", 1),
     ("flow.js", "snippet-hook", "48", "Shell.SnippetHook -> Cogl.SnippetHook",
      G % "48", "lit", "Shell.SnippetHook.FRAGMENT", "Cogl.SnippetHook.FRAGMENT", 1),
+    ("flow.js", "glass-mask-premultiplied", "49", "the glass's mask (a Shell.GLSLEffect): on GNOME Shell 40 what the mask writes is blended as straight colour and alpha; on 49 the glass was not cut to its pane, and what lay outside the pane came out lighter than the wallpaper, as a colour added to it: the sign of a blend that takes the colour as already multiplied by its alpha (seen in the headless shell's pictures, 13 and 14/11/2026; the shell's source was not read for this). The mask writes its colour multiplied by its alpha",
+     "docs/EL10.md", "lit",
+     "    'cogl_color_out = vec4(silik_rgb, cogl_color_in.a * clamp(0.5 - silik_d, 0.0, 1.0));\\n';",
+     "    'float silik_a = cogl_color_in.a * clamp(0.5 - silik_d, 0.0, 1.0);\\n' +\n    'cogl_color_out = vec4(silik_rgb * silik_a, silik_a);\\n';", 1),
     # ---- Wayland: a window's class
     ("extension.js", "command-late-class", "wayland", "a Wayland window is created before its application id (its class) is known: what the extension does for the COMMAND bar's window waits for the class; and a Wayland client cannot ask to stay above the other windows (GTK's set_keep_above does nothing there: seen in the rig), so the shell does it for its own COMMAND bar",
      "docs/EL10.md", "lit",
@@ -194,7 +198,7 @@ RULES = [
 
 # text that must not be left in a ported module: each is an API that GNOME Shell 49 does not have
 LEFT = [r"\bimports\.", r"\bMe\.", r"\bGtk\.", r"\bUtil\.", r"Meta\.later_", r"Meta\.Rectangle", r"add_actor\(", r"remove_actor\(",
-        r"'actor-added'", r"'actor-removed'", r"\blogError\(", r"cairo_set_source_color", r"Shell\.SnippetHook", r"\bsigma:",
+        r"'actor-added'", r"'actor-removed'", r"\blogError\(", r"cairo_set_source_color", r"Shell\.SnippetHook", r"BlurEffect\(\{[^}]*\bsigma:",
         r"^var ", r"^function init\(", r"vertical:", r"Clutter\.Color\b", r"Clutter\.Image\b", r"get_maximized\("]
 
 
