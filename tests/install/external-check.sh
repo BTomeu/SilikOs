@@ -35,8 +35,8 @@ root_src=$(findmnt -n -o SOURCE /)
 disk=$(lsblk -s -n -l -o NAME,TYPE "$root_src" | awk '$2 == "disk" { print $1; exit }')
 tran=$(lsblk -d -n -o TRAN "/dev/$disk" 2> /dev/null | tr -d ' ')
 luks=$(lsblk -s -n -l -o NAME,FSTYPE "$root_src" | awk '$2 == "crypto_LUKS" { print $1; exit }')
-# the firmware's entries, one line: BootCurrent, BootOrder, then NUMBER=label for each
-efi() { efibootmgr 2>&1 | awk '/^BootCurrent|^BootOrder/ { printf "%s; ", $0 } /^Boot[0-9A-F]{4}/ { n = substr($1, 5, 4); sub(/\*$/, "", n); $1 = ""; sub(/^ /, ""); sub(/\t.*/, ""); printf "%s=%s; ", n, $0 }'; }
+# the firmware's entries, one line: BootCurrent, BootOrder, then NUMBER=label for each (the network ones left out)
+efi() { efibootmgr 2>&1 | awk '/^BootCurrent|^BootOrder/ { printf "%s; ", $0 } /^Boot[0-9A-F]{4}/ && !/PXEv|HTTPv/ { n = substr($1, 5, 4); sub(/\*$/, "", n); $1 = ""; sub(/^ /, ""); sub(/\t.*/, ""); printf "%s=%s; ", n, $0 }'; }
 current() { efibootmgr 2> /dev/null | awk '/^BootCurrent/ { c = $2 } /^Boot[0-9A-F]{4}/ { n = substr($1, 5, 4); l = $0; sub(/^[^ ]+ /, "", l); sub(/\t.*/, "", l); name[n] = l } END { print c ": " name[c] }'; }
 common() {     # what every start is asked
   if [ -d /sys/firmware/efi ]; then say "$stage.uefi" ok "started by UEFI firmware"; else say "$stage.uefi" FAIL "no /sys/firmware/efi: not a UEFI start"; fi
@@ -61,7 +61,8 @@ first)
   used=""
   for d in $others; do
     lsblk -n -l -o NAME,MOUNTPOINT "/dev/$d" | awk '$2 != "" { f = 1 } END { exit !f }' && used="$used $d(mounted)"
-    [ -z "$(ls /sys/block/$d/holders 2> /dev/null)$(ls /sys/block/$d/*/holders 2> /dev/null)" ] || used="$used $d(a volume on it)"
+    # (find, not ls: ls of several empty folders prints their names, and the first run of 14/11/2026 called that a volume)
+    [ -z "$(find /sys/block/$d/holders /sys/block/$d/*/holders -mindepth 1 2> /dev/null | head -1)" ] || used="$used $d(a volume on it: $(find /sys/block/$d/holders /sys/block/$d/*/holders -mindepth 1 2> /dev/null | head -2 | tr '\n' ' '))"
   done
   if [ -z "$used" ]; then say first.other-disks-unused ok "the other disks ($others) hold nothing of this system"; else say first.other-disks-unused FAIL "in use by this system:$used"; fi
   efi > $S/efi-first

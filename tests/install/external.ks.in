@@ -2,14 +2,16 @@
 # CI ONLY (tests/install/external.ks.in). NEVER PART OF THE SHIPPED KICKSTART OR OF THE ISO.
 # The installation onto an external disk (tests/install/external.sh; docs/DISK.md): the installer is started with
 # the options of the ISO's own entry "Install SilikOS on an external disk" (inst.leavebootorder), in a machine with
-# two disks: the computer's own (it must not be written) and one on USB. The shipped kickstart names no disk; a
-# person ticks the external one in the installer. Here the test does it: the one disk whose transport is USB.
+# two disks: the computer's own (it must not be written) and one on USB. With that entry the shipped kickstart hides
+# the computer's own disks from the installer; a person then ticks the external one. This test names no disk
+# either: it clears and uses every disk the installer is shown (clearpart --all, autopart). If the computer's own
+# disk were shown, it would be erased here, and the test compares it byte for byte afterwards.
 # The disk is encrypted, as the guide asks for a disk that travels. The firmware's boot entries are said before and
 # after the installation, on the installer's console.
 # ======================================================================================================================
 text
-%include /tmp/silikci-disk.ks
 zerombr
+clearpart --all --initlabel
 autopart --encrypted --passphrase=@PASSPHRASE@
 bootloader --append="vsyscall=xonly console=ttyS0,115200 plymouth.enable=0 rd.plymouth=0 quiet"
 lang en_US.UTF-8
@@ -51,13 +53,12 @@ for n in names:
 say("end")
 EFI
 }
-d=$(lsblk -d -n -o NAME,TYPE,TRAN | awk '$2 == "disk" && $3 == "usb" { print $1 }')
+d=$(lsblk -d -n -P -o NAME,TYPE,TRAN | awk -F'"' '$4 == "disk" && $6 == "usb" { print $2 }')
 n=$(echo "$d" | grep -c .)
-printf '\r\nSILIKOS-EXT|disks|%s\r\n' "$(lsblk -d -n -o NAME,TYPE,TRAN,SIZE | tr -s ' ' | tr '\n' ';')" > $con
+printf '\r\nSILIKOS-EXT|disks|%s\r\n' "$(lsblk -d -n -P -o NAME,TYPE,TRAN,SIZE | tr '\n' ';')" > $con
 printf '\r\nSILIKOS-EXT|usb-disks|%s|%s\r\n' "$n" "$(echo $d)" > $con
-# (not exactly one disk on USB: a name no disk has, so that the installer stops instead of choosing one)
-[ "$n" = 1 ] || d=silikci-no-single-usb-disk
-printf 'ignoredisk --only-use=%s\nclearpart --all --initlabel --drives=%s\n' "$d" "$d" > /tmp/silikci-disk.ks
+# what the shipped kickstart hid from the installer (its own %pre ran before this one)
+printf '\r\nSILIKOS-EXT|hidden|%s\r\n' "$(cat /tmp/silik-disks.ks 2>&1 | tr '\n' ' ')" > $con
 efi pre
 %end
 

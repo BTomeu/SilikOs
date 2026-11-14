@@ -349,6 +349,89 @@ class External(unittest.TestCase):
         self.assertNotIn("external disk", r.err)
 
 
+class ExternalEntryHidesTheComputersDisks(unittest.TestCase):
+    """kickstart/silikos.ks, its %pre: with the ISO's entry for an external disk (inst.leavebootorder on the kernel's
+    command line) the installer is told to ignore every disk that is not on USB; with any other entry, nothing. The
+    script itself is run here, with a made-up lsblk and command line. What the installer does with the line: read in
+    anaconda 34.25's source (an ignored disk is not in its device tree; a name it does not know stops it), run by
+    tests/install/external.sh."""
+    @staticmethod
+    def pairs(*disks):
+        return "".join('NAME="%s" TYPE="%s" TRAN="%s" SIZE="%s"\n' % d for d in disks)
+
+    LSBLK = (("sda", "disk", "usb", 500107862016),         # the external disk
+             ("sdb", "disk", "usb", 0),                    # a card reader without a card
+             ("sdc", "disk", "sata", 256060514304),
+             ("sdd", "disk", "sata", 0),                   # a bay with nothing in it
+             ("nvme0n1", "disk", "nvme", 512110190592),
+             ("mmcblk0", "disk", "mmc", 31914983424),
+             ("mmcblk0boot0", "disk", "mmc", 4194304),     # (parts of the eMMC: the installer knows no disk of that name)
+             ("mmcblk0boot1", "disk", "mmc", 4194304),
+             ("vda", "disk", "", 536870912),               # a virtual disk says nothing of how it is attached
+             ("zram0", "disk", "", 8589934592),
+             ("loop0", "loop", "", 1288490188),
+             ("sr0", "rom", "sata", 2045181952))
+
+    def ks(self):
+        with open(os.path.join(ROOT, "kickstart/silikos.ks"), encoding="utf-8") as f:
+            return f.read()
+
+    def pre(self, cmdline, lsblk=None):
+        ks = self.ks()
+        body = ks[ks.index("\n%pre\n") + 6:]
+        body = body[:body.index("\n%end")]
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        with open(os.path.join(d, "cmdline"), "w") as f:
+            f.write(cmdline + "\n")
+        with open(os.path.join(d, "lsblk"), "w") as f:
+            f.write("#!/bin/sh\ncat <<'EOF'\n%sEOF\n" % self.pairs(*(self.LSBLK if lsblk is None else lsblk)))
+        os.chmod(os.path.join(d, "lsblk"), 0o755)
+        out = os.path.join(d, "disks.ks")
+        self.assertEqual(body.count("/proc/cmdline"), 1)
+        self.assertEqual(body.count("/tmp/silik-disks.ks"), 2)
+        body = body.replace("/proc/cmdline", os.path.join(d, "cmdline")).replace("/tmp/silik-disks.ks", out)
+        r = subprocess.run(["bash", "-c", body], env=dict(os.environ, PATH=d + ":" + os.environ["PATH"]), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                           universal_newlines=True)
+        self.assertEqual((r.returncode, r.stdout), (0, ""))
+        with open(out) as f:
+            return f.read()
+
+    def test_with_the_external_entry_every_disk_that_is_not_on_usb_is_hidden(self):
+        base = "BOOT_IMAGE=/images/pxeboot/vmlinuz inst.stage2=hd:LABEL=SilikOS-9-8-x86_64 inst.ks=hd:LABEL=SilikOS-9-8-x86_64:/silikos.ks"
+        self.assertEqual(self.pre(base + " inst.leavebootorder quiet"), "ignoredisk --drives=sdc,nvme0n1,mmcblk0,vda\n")
+        # every other entry: nothing is hidden (the file is there, empty: the kickstart includes it)
+        self.assertEqual(self.pre(base + " quiet"), "")
+        self.assertEqual(self.pre(base + " rd.live.check quiet"), "")
+        self.assertEqual(self.pre(base + " xinst.leavebootorderx"), "")
+        # a machine whose only disks are on USB: no line at all (an empty --drives would stop the installer)
+        self.assertEqual(self.pre(base + " inst.leavebootorder", (("sda", "disk", "usb", 500107862016), ("sr0", "rom", "sata", 2045181952))), "")
+
+    def test_it_hides_and_never_chooses_or_erases(self):
+        ks = self.ks()
+        self.assertEqual(ks.count("%include /tmp/silik-disks.ks"), 1)
+        self.assertLess(ks.index("%include /tmp/silik-disks.ks"), ks.index("\n%packages"))
+        code = [l.strip() for l in ks.splitlines() if l.strip() and not l.strip().startswith("#")]
+        # the one mention of a disk command is the line the %pre writes, and it can only hide
+        self.assertEqual([l for l in code if "ignoredisk" in l], ["[ -z \"$own\" ] || printf 'ignoredisk --drives=%s\\n' \"$own\" > /tmp/silik-disks.ks"])
+        for word in ("--only-use", "clearpart", "zerombr", "autopart", "wipefs", "sgdisk", "parted", "mkfs", " dd "):
+            self.assertFalse([l for l in code if word in l], word)
+        # the entry of the menu and the option the %pre looks for are the same word
+        self.assertIn("inst.leavebootorder", IsoMenu.build_iso())
+        self.assertIn("grep -qw 'inst\\.leavebootorder' /proc/cmdline", ks)
+
+    def test_the_installation_test_names_no_disk_so_that_a_disk_shown_by_mistake_would_be_lost_and_seen(self):
+        with open(os.path.join(ROOT, "tests/install/external.ks.in"), encoding="utf-8") as f:
+            ci = f.read()
+        self.assertIn("\nclearpart --all --initlabel\n", ci)
+        self.assertNotIn("ignoredisk", ci)
+        self.assertNotIn("--drives", ci)
+        with open(os.path.join(ROOT, "tests/install/external.sh"), encoding="utf-8") as f:
+            host = f.read()
+        self.assertIn("own-disk-untouched", host)
+        self.assertIn("own-disks-hidden", host)
+
+
 class IsoMenu(unittest.TestCase):
     """the entry of the ISO's UEFI menus for an external disk (tools/build_iso.sh, extern): the function itself, run on
     a menu in the shape of AlmaLinux 9.8's boot ISO after the names were changed"""

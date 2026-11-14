@@ -7,9 +7,10 @@
 #   1. the installation: a machine with two disks, the computer's own (a small disk with a partition table, an EFI
 #      system partition and data: it must come out byte for byte as it went in) and one on a USB controller. The
 #      installer is started with the options of the ISO's own menu entry "Install SilikOS ... on an external disk"
-#      (read from the ISO: inst.leavebootorder), and installs, encrypted, onto the one disk that is on USB
-#      (external.ks.in). The firmware's boot entries are read before and after: the order must be the same and no
-#      entry gone.
+#      (read from the ISO: inst.leavebootorder). With it the shipped kickstart hides the computer's own disks
+#      from the installer; the test's lines (external.ks.in) name no disk: they clear and use, encrypted, every disk
+#      the installer is shown. The firmware's boot entries are read before and after: the order must be the same
+#      and no entry gone.
 #   2. the starts of the installed disk (external-check.sh, one stage each):
 #        first   the same computer (the firmware variables as the installer left them), both disks: the firmware
 #                finds the external disk and starts it
@@ -188,9 +189,17 @@ def row(verdict, name, detail):
 m = re.search(r"^SILIKOS-EXT\|usb-disks\|(\d+)\|(.*)$", log, re.M)
 d = re.search(r"^SILIKOS-EXT\|disks\|(.*)$", log, re.M)
 if m:
-    row("ok" if m.group(1) == "1" else "FAIL", "one-usb-disk", "the installer saw %s disk(s) on USB (%s) among: %s" % (m.group(1), m.group(2).strip() or "none", d.group(1) if d else "?"))
+    row("ok" if m.group(1) == "1" else "FAIL", "one-usb-disk", "the installer saw %s disk(s) on USB (%s) among: %s" % (m.group(1), m.group(2).strip() or "none",
+        "; ".join("%s %s %s %s" % (n, t, tr or "(no transport said)", sz) for n, t, tr, sz in re.findall(r'NAME="([^"]*)" TYPE="([^"]*)" TRAN="([^"]*)" SIZE="([^"]*)"', d.group(1) if d else "")) or "?"))
 else:
     row("FAIL", "one-usb-disk", "the installer did not say which disks it saw")
+h = re.search(r"^SILIKOS-EXT\|hidden\|(.*)$", log, re.M)
+hidden = h.group(1).strip() if h else ""
+seen = re.findall(r'NAME="([^"]*)" TYPE="([^"]*)" TRAN="([^"]*)" SIZE="([^"]*)"', d.group(1) if d else "")
+own = sorted(n for n, typ, tran, size in seen if typ == "disk" and tran != "usb" and not n.startswith("zram"))
+want = "ignoredisk --drives=" + ",".join(own)
+row("ok" if own and sorted(hidden.replace("ignoredisk --drives=", "").split(",")) == own and hidden.startswith("ignoredisk --drives=") else "FAIL", "own-disks-hidden",
+    "the shipped kickstart told the installer: '%s' (the disks that are not on USB: %s)" % (hidden or "nothing", ", ".join(own) or "none seen"))
 lay = re.search(r"^SILIKOS-EXT\|layout\|(.*)$", log, re.M)
 row("info", "layout", lay.group(1) if lay else "not said")
 def entries(when):

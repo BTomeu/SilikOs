@@ -2,7 +2,8 @@
 # copy on the ISO with the repositories' architecture changed and without the x86_64 kernel argument (vsyscall).
 # What it fixes: the package sources, the package set and the post-install setup. What it leaves to the installer's
 # screens, on purpose: language, keyboard, time zone, the disk (never chosen or erased from here: a machine may hold
-# another system), the user and the root password.
+# another system; the entry for an external disk only hides the computer's own disks: the %pre below), the user and
+# the root password.
 
 url --url=https://repo.almalinux.org/almalinux/9/BaseOS/x86_64/os/
 repo --name=AppStream --baseurl=https://repo.almalinux.org/almalinux/9/AppStream/x86_64/os/
@@ -33,6 +34,25 @@ selinux --enforcing
 firewall --enabled --remove-service=ssh
 # glibc 2.12 (EL6 userlands of `silik eda`) calls the vsyscall page: keep it callable whatever the kernel's default
 bootloader --append="vsyscall=xonly"
+
+# The ISO's menu entry "on an external disk" (tools/build_iso.sh: it gives the installer inst.leavebootorder). With it,
+# and only with it, the installer is shown the disks on USB and no others: a disk of the computer itself cannot be
+# ticked by mistake, because it is not on the screen. Nothing is chosen and nothing is erased from here: the person
+# still ticks the external disk in Installation Destination. With every other entry the file is empty and every
+# disk is shown. (An external disk that is not on USB, Thunderbolt or eSATA, is hidden too: the first entry is for it.)
+%include /tmp/silik-disks.ks
+
+%pre
+: > /tmp/silik-disks.ks
+if grep -qw 'inst\.leavebootorder' /proc/cmdline; then
+  # this computer's own disks: every disk with a size that is not on USB, by its kernel name (SATA and SCSI, NVMe,
+  # eMMC, a virtual machine's disks; never a part of one, such as an eMMC's boot areas, and never zram or a loop).
+  # A virtual disk does not say how it is attached (seen in the CI, 14/11/2026): no answer is taken as "not USB"
+  own=$(lsblk -d -n -b -P -o NAME,TYPE,TRAN,SIZE 2> /dev/null \
+        | awk -F'"' '$4 == "disk" && $6 != "usb" && $8 > 0 && $2 ~ /^(sd[a-z]+|vd[a-z]+|xvd[a-z]+|hd[a-z]+|nvme[0-9]+n[0-9]+|mmcblk[0-9]+)$/ { print $2 }' | paste -s -d, -)
+  [ -z "$own" ] || printf 'ignoredisk --drives=%s\n' "$own" > /tmp/silik-disks.ks
+fi
+%end
 
 %packages
 @^workstation-product-environment

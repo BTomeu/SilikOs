@@ -4,6 +4,7 @@
 external.install.entry
 external.install.finished
 external.install.one-usb-disk
+external.install.own-disks-hidden
 external.install.boot-order-kept
 external.install.no-entry-removed
 external.install.own-disk-untouched
