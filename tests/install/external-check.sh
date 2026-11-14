@@ -141,6 +141,24 @@ sata)
   hasnot sata.silik-disk-not-external "$o" "The system is on an external disk (USB)"
   say sata.firmware-entries info "$(efi)"
   end ;;
+splash)
+  # the graphical start alone (external.sh, SILIK_CI_EXTERNAL_MODE=splash): the small set with the boot splash and
+  # SilikOS's theme; the passphrase was typed on the keyboard at the splash (seen from outside)
+  common
+  is splash.root-on-usb "/ on $disk, attached by ${tran:-nothing}" "/ on $disk, attached by usb"
+  cmd=$(cat /proc/cmdline)
+  say splash.command-line info "$cmd"
+  has splash.graphical-start "$cmd" "rhgb"
+  hasnot splash.splash-not-off "$cmd" "plymouth.enable=0"
+  is splash.splash-theme "$(plymouth-set-default-theme 2>&1)" "silikos"
+  k=$(uname -r); img=/boot/initramfs-$k.img
+  in=$(lsinitrd "$img" 2> /dev/null | grep -o 'usr/share/plymouth/themes/silikos/[A-Za-z0-9._-]*' | sed 's#.*/##' | sort -u | tr '\n' ' ')
+  miss=""
+  for f in silikos.plymouth watermark.png lock.png entry.png bullet.png; do case " $in " in *" $f "*) ;; *) miss="$miss $f" ;; esac; done
+  if [ -z "$miss" ]; then say splash.splash-in-initramfs ok "the theme and its dialog pictures are in the initramfs ($(echo $in | wc -w) files)"
+  else say splash.splash-in-initramfs FAIL "missing in the initramfs:$miss (there: $in)"; fi
+  say splash.plymouth-log info "$(journalctl -b -u plymouth-start.service --no-pager 2> /dev/null | tail -3 | tr '\n' ' ' | cut -c1-200); $(grep -a -i 'error\|could not\|failed' /var/log/boot.log 2> /dev/null | head -3 | tr '\n' ' ' | cut -c1-200)"
+  end ;;
 desktop)
   # the whole desktop on the external disk (external.sh, SILIK_CI_EXTERNAL_MODE=desktop): the start is the graphical
   # one, and the passphrase was typed on the keyboard at the boot splash (seen from outside)

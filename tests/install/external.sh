@@ -39,10 +39,12 @@ PASSPHRASE=silikos-usb-disk-2718
 # way: the passphrase is typed on the keyboard at the boot splash, and the stage `desktop` of external-check.sh
 # says what came up. (The default, `small`: the base's core and SilikOS's tools, the console on the serial port,
 # four starts on three computers.)
+# SILIK_CI_EXTERNAL_MODE=splash: the graphical start alone, in minutes: the small set with the boot splash and
+# SilikOS's theme, the shipped boot loader line; one start, the passphrase typed at the splash (stage `splash`).
 mode=${SILIK_CI_EXTERNAL_MODE:-small}
-case $mode in small|desktop) ;; *) echo "error: SILIK_CI_EXTERNAL_MODE is small or desktop" >&2; exit 2 ;; esac
+case $mode in small|desktop|splash) ;; *) echo "error: SILIK_CI_EXTERNAL_MODE is small, desktop or splash" >&2; exit 2 ;; esac
 # (the desktop test has its own list of the checks that must be said)
-if [ "$mode" = desktop ] && [ -z "${SILIK_CI_MUST_FILE:-}" ]; then SILIK_CI_MUST_FILE=$here/must-external-desktop.txt; fi
+if [ "$mode" != small ] && [ -z "${SILIK_CI_MUST_FILE:-}" ]; then SILIK_CI_MUST_FILE=$here/must-external-$mode.txt; fi
 mkdir -p "$out"; out=$(cd "$out" && pwd); iso=$(cd "$(dirname "$iso")" && pwd)/$(basename "$iso")
 work=$(mktemp -d /tmp/silik-external.XXXXXX)
 qpid=""
@@ -106,6 +108,13 @@ if mode == "desktop":
     # the shipped package set, services and boot loader line stay; the test's own boot loader line (the console on
     # the serial port, no splash) is left out: this installation starts as a person's does
     extra = "\n".join(l for l in extra.splitlines() if not l.startswith("bootloader ")) + "\n"
+elif mode == "splash":
+    # the small set with the boot splash and SilikOS's theme; the shipped boot loader line stays, the test's goes
+    extra = "\n".join(l for l in extra.splitlines() if not l.startswith("bootloader ")) + "\n"
+    small = ["@core", "silik-tools", "silikos-security", "silikos-branding", "plymouth", "plymouth-scripts", "plymouth-theme-spinner",
+             "cryptsetup", "mokutil", "efibootmgr"]
+    ks = re.sub(r"(?ms)^%packages.*?^%end\n", "%packages\n" + "\n".join(small) + "\n%end\n", ks, count=1)
+    ks = "\n".join(l for l in ks.splitlines() if not l.startswith(("services ", "xconfig "))) + "\n"
 else:
     shipped_set = re.search(r"(?ms)^%packages.*?^%end\n", ks).group(0).split()
     small = ["@core", "silik-tools", "silikos-security", "cryptsetup", "mokutil", "efibootmgr"] + [p for p in ("silikos-power", "usbguard") if p in shipped_set]
@@ -299,23 +308,65 @@ EOF
   grep -q "^ok    external\.$name\.finished " "$out/report.txt"
 }
 
-# start_desktop MINUTES DISK_ARGS...: the installed desktop starts the graphical way. Nothing of the start is on the
-# serial port (the shipped boot loader line): the passphrase is typed on the keyboard, blind, once the firmware has
-# started the disk and the splash has had time to ask, and again at intervals while the stage has not ended (a
-# passphrase typed at the login screen later does nothing). The screen before the first typing is kept
-# (splash.png) and printed as a coarse picture in letters.
-start_desktop() {
-  local limit=$1 i typed=0 t0 now; shift
+# start_graphical STAGE MINUTES DISK_ARGS...: the installed system starts the graphical way (the modes desktop and
+# splash). Nothing of that start is on the serial port (the shipped boot loader line): the screen is looked at every
+# ten seconds, and the passphrase is typed on the keyboard when something is on it (the boot splash and its
+# question), or 90 s after the firmware started the disk whatever it shows; again every 40 s while the stage has not
+# ended, six times at most (a passphrase typed at the login screen later does nothing). The screen before each
+# typing, five minutes in and at the end is kept (screen-*.png), read (OCR, when tesseract is here) and printed as
+# a coarse picture in letters: a start that does not arrive must be seen, not guessed.
+picture() {   # picture FILE.ppm: the screen in letters; its last line says how much of it is not background
+  python3 - "$1" <<'EOF' || true
+import sys
+try:
+    data = open(sys.argv[1], "rb").read()
+    tok, pos = [], 0
+    while len(tok) < 4:                               # P6, width, height, maxval
+        while data[pos:pos + 1].isspace(): pos += 1
+        if data[pos:pos + 1] == b"#":
+            pos = data.index(b"\n", pos) + 1; continue
+        end = pos
+        while not data[end:end + 1].isspace(): end += 1
+        tok.append(data[pos:end]); pos = end
+    w, h = int(tok[1]), int(tok[2]); pix = data[pos + 1:]
+except (OSError, ValueError, IndexError):
+    print("no picture of the screen"); print("lit 0"); sys.exit(0)
+cols, rows, ramp = 100, 34, " .:-=+*#%@"
+bg = pix[0] + pix[1] + pix[2]
+lit, out = 0, []
+for r in range(rows):
+    line = ""
+    for c in range(cols):
+        x0, x1, y0, y1 = c * w // cols, (c + 1) * w // cols, r * h // rows, (r + 1) * h // rows
+        m = 0
+        for y in range(y0, y1, 2):
+            base = (y * w + x0) * 3
+            row = pix[base:base + (x1 - x0) * 3]
+            for i in range(0, len(row) - 2, 6):
+                d = abs(row[i] + row[i + 1] + row[i + 2] - bg)
+                if d > m: m = d
+        line += ramp[min(9, m * 10 // 766)]
+        lit += m > 60
+    out.append(line.rstrip())
+while out and not out[-1]: out.pop()
+while out and not out[0]: out.pop(0)
+print("\n".join(out))
+print("%d x %d; background %s" % (w, h, pix[:3].hex()))
+print("lit %d" % lit)
+EOF
+}
+start_graphical() {
+  local stage=$1 limit=$2 i typed=0 t0 now last=-100 lit shots=0 five=0; shift 2
   dd if=/dev/zero of="$work/stage.img" bs=1M count=4 status=none
   mformat -i "$work/stage.img" -v SILIKCI ::
-  echo desktop > "$work/stage"; mcopy -i "$work/stage.img" "$work/stage" ::/stage
+  echo "$stage" > "$work/stage"; mcopy -i "$work/stage.img" "$work/stage" ::/stage
   rm -f "$work/mon.sock"
-  : > "$out/external-desktop.log"
-  echo "[external] start 'desktop': the graphical way; the firmware's lines and the checks: $out/external-desktop.log"
+  : > "$out/external-$stage.log"
+  echo "[external] start '$stage': the graphical way; the firmware's lines and the checks: $out/external-$stage.log"
   qemu-system-x86_64 "${accel[@]}" "${machine[@]}" -m "$mem" -smp "$cpus" -display none -vga std \
     -drive "if=pflash,format=raw,unit=0,readonly=on,file=$code" -drive "if=pflash,format=raw,unit=1,file=$work/vars-a.fd" \
     "$@" -drive "file=$work/stage.img,if=virtio,format=raw,readonly=on" \
-    -nic user,model=virtio-net-pci -monitor "unix:$work/mon.sock,server,nowait" -serial "file:$out/external-desktop.log" &
+    -nic user,model=virtio-net-pci -monitor "unix:$work/mon.sock,server,nowait" -serial "file:$out/external-$stage.log" &
   qpid=$!
   for i in $(seq 1 50); do [ -S "$work/mon.sock" ] && break; sleep 0.2; done
   monitor() { python3 - "$work/mon.sock" "$@" 2> /dev/null <<'EOF' || true
@@ -330,70 +381,50 @@ else:
     s.send((sys.argv[2] + "\n").encode()); time.sleep(float(sys.argv[3]) if len(sys.argv) > 3 else 0.5)
 EOF
   }
+  # look NAME WHY: the screen now, kept as screen-NAME.png, read and printed
+  look() {
+    rm -f "$work/screen.ppm"
+    monitor "screendump $work/screen.ppm" 2.5
+    echo "::group::[external] the screen, $2"
+    picture "$work/screen.ppm" | grep -v '^lit ' || true
+    if command -v convert > /dev/null && [ -s "$work/screen.ppm" ]; then
+      convert "$work/screen.ppm" "$out/screen-$1.png" 2> /dev/null || true
+      if command -v tesseract > /dev/null; then
+        convert "$work/screen.ppm" -colorspace Gray -resize 200% "$work/ocr.png" 2> /dev/null && tesseract "$work/ocr.png" "$work/ocr" --psm 6 > /dev/null 2>&1 \
+          && { echo "--- read from it:"; grep -v '^[[:space:]]*$' "$work/ocr.txt" | head -30 | cut -c1-160; cp "$work/ocr.txt" "$out/screen-$1.txt"; } || true
+      fi
+    fi
+    echo "::endgroup::"
+  }
   t0=$(date +%s)
   for i in $(seq 1 $((limit * 6))); do
     sleep 10
     kill -0 $qpid 2> /dev/null || break
-    tr -d '\r' < "$out/external-desktop.log" | grep -a -q '^SILIKOS-CI|END|desktop' && break
+    tr -d '\r' < "$out/external-$stage.log" | grep -a -q "^SILIKOS-CI|END|$stage" && break
     now=$(( $(date +%s) - t0 ))
-    # 40 s after the machine was started, then every 45 s, four times at most
-    if [ $typed -lt 4 ] && [ $now -ge $((40 + typed * 45)) ] && grep -a -q 'BdsDxe: starting' "$out/external-desktop.log"; then
-      if [ $typed = 0 ]; then
-        monitor "screendump $work/splash.ppm" 2.5
-        if command -v convert > /dev/null && [ -s "$work/splash.ppm" ]; then convert "$work/splash.ppm" "$out/splash.png" 2> /dev/null || true; fi
-      fi
+    if [ $five = 0 ] && [ $now -ge 300 ]; then five=1; look five "five minutes after the start"; fi
+    [ $typed -lt 6 ] && [ $((now - last)) -ge 40 ] && grep -a -q 'BdsDxe: starting' "$out/external-$stage.log" || continue
+    rm -f "$work/peek.ppm"; monitor "screendump $work/peek.ppm" 2
+    lit=$(picture "$work/peek.ppm" | sed -n 's/^lit //p' | tail -1)
+    if [ "${lit:-0}" -gt 0 ] && [ $now -ge 25 ] || [ $now -ge 90 ]; then
+      typed=$((typed + 1)); last=$now
+      look "typing-$typed" "$now s after the start, before the passphrase is typed ($typed)"
       monitor type "$PASSPHRASE"
-      typed=$((typed + 1))
       echo "  ... the passphrase typed on the keyboard ($typed), $now s after the start"
     fi
   done
+  if kill -0 $qpid 2> /dev/null; then look last "at the end ($(( $(date +%s) - t0 )) s after the start)"; fi
   for i in $(seq 1 30); do kill -0 $qpid 2> /dev/null || break; sleep 2; done
   kill $qpid 2> /dev/null || true; wait $qpid 2> /dev/null || true; qpid=""
-  echo "::group::[external] the screen before the passphrase was typed (the boot splash), as a coarse picture"
-  python3 - "$work/splash.ppm" <<'EOF' || true
-import sys
-try:
-    data = open(sys.argv[1], "rb").read()
-except OSError:
-    print("no picture of the screen"); sys.exit(0)
-tok, pos = [], 0
-while len(tok) < 4:                               # P6, width, height, maxval
-    while data[pos:pos + 1].isspace(): pos += 1
-    if data[pos:pos + 1] == b"#":
-        pos = data.index(b"\n", pos) + 1; continue
-    end = pos
-    while not data[end:end + 1].isspace(): end += 1
-    tok.append(data[pos:end]); pos = end
-w, h = int(tok[1]), int(tok[2]); pix = data[pos + 1:]
-cols, rows, ramp = 100, 34, " .:-=+*#%@"
-bg = pix[0] + pix[1] + pix[2]
-lit = 0
-for r in range(rows):
-    line = ""
-    for c in range(cols):
-        x0, x1, y0, y1 = c * w // cols, (c + 1) * w // cols, r * h // rows, (r + 1) * h // rows
-        m = 0
-        for y in range(y0, y1, 2):
-            base = (y * w + x0) * 3
-            row = pix[base:base + (x1 - x0) * 3]
-            for i in range(0, len(row) - 2, 6):
-                d = abs(row[i] + row[i + 1] + row[i + 2] - bg)
-                if d > m: m = d
-        line += ramp[min(9, m * 10 // 766)]
-        lit += m > 60
-    print(line.rstrip())
-print("%d x %d; background %s; cells that differ from the background: %d of %d" % (w, h, pix[:3].hex(), lit, cols * rows))
-EOF
+  echo "::group::[external] the console of '$stage': what the firmware started"
+  clean "$out/external-$stage.log" | grep -a -i 'BdsDxe\|SILIKOS-CI|END' | cut -c1-220 | tail -12 || true
   echo "::endgroup::"
-  echo "::group::[external] the console of 'desktop': what the firmware started"
-  clean "$out/external-desktop.log" | grep -a -i 'BdsDxe\|SILIKOS-CI|END' | cut -c1-220 | tail -12 || true
-  echo "::endgroup::"
-  rows_of desktop
-  if tr -d '\r' < "$out/external-desktop.log" | grep -a -q '^SILIKOS-CI|END|desktop'; then
-    row ok external.desktop.passphrase-at-the-splash "the passphrase typed on the keyboard at the graphical start opened the disk (typed $typed time(s); splash.png is the screen before the first)"
-    row ok external.desktop.finished "the desktop started from the USB disk, the stage ran and the machine powered off"
+  rows_of "$stage"
+  if tr -d '\r' < "$out/external-$stage.log" | grep -a -q "^SILIKOS-CI|END|$stage"; then
+    row ok "external.$stage.passphrase-at-the-splash" "the passphrase typed on the keyboard at the graphical start opened the disk (typed $typed time(s); screen-typing-N.png are the screens before each)"
+    row ok "external.$stage.finished" "the system started from the USB disk the graphical way, the stage ran and the machine powered off"
   else
-    row FAIL external.desktop.finished "the graphical start did not get to the stage's end in $limit min (the passphrase was typed $typed time(s))"
+    row FAIL "external.$stage.finished" "the graphical start did not get to the stage's end in $limit min (the passphrase was typed $typed time(s); the screens are in the log)"
     return 1
   fi
 }
@@ -403,13 +434,13 @@ usb_a=(-device qemu-xhci,id=xhci -drive "if=none,id=ext,file=$out/external.qcow2
 usb_b=(-device nec-usb-xhci,id=xhci -drive "if=none,id=ext,file=$out/external.qcow2,format=qcow2,discard=unmap" -device usb-storage,bus=xhci.0,drive=ext,serial=SILIKEXT)
 sata=(-drive "if=none,id=ext,file=$out/external.qcow2,format=qcow2,discard=unmap" -device ide-hd,drive=ext,bus=ide.0)
 own=(-drive "file=$internal,if=virtio,format=raw")
-if [ "$mode" = desktop ]; then
+if [ "$mode" != small ]; then
   if install; then
-    row ok external.install.finished "an encrypted installation of the whole desktop onto the USB disk finished under UEFI"
+    row ok external.install.finished "an encrypted installation ($mode) onto the USB disk finished under UEFI"
     judge_install
     same_internal external.install.own-disk-untouched "after the installation"
-    start_desktop $((t_boot * 2)) "${own[@]}" "${usb_a[@]}" || status=1
-    same_internal external.desktop.own-disk-untouched "after the desktop's start from the external disk"
+    start_graphical "$mode" $((t_boot * 2)) "${own[@]}" "${usb_a[@]}" || status=1
+    same_internal "external.$mode.own-disk-untouched" "after the graphical start from the external disk"
   else
     row FAIL external.install.finished "did not finish: $(clean "$out/external-install.log" | grep -i "error\|\[!\]" | tail -2 | tr '\n' ' ' | cut -c1-200)"
     status=1
@@ -449,7 +480,7 @@ if [ -f "$mustf" ]; then
   while read -r must; do
     case $must in ''|'#'*) continue ;; esac
     awk -v m="$must" '($1 == "ok" || $1 == "FAIL") && $2 == m { f = 1 } END { exit !f }' "$out/report.txt" \
-      || printf '%-5s %-44s %s\n' FAIL "$must" "was not said (it is in must-external.txt)" >> "$out/report.txt"
+      || printf '%-5s %-44s %s\n' FAIL "$must" "was not said (it is in $(basename "$mustf"))" >> "$out/report.txt"
   done < "$mustf"
 fi
 echo "SilikOS external disk test: $(basename "$iso"), $(date -u +%Y-%m-%dT%H:%MZ)"
@@ -471,6 +502,8 @@ step() {   # step NAME TITLE
 step install "installed onto the USB disk; the boot order and the computer's own disk kept"
 if [ "$mode" = desktop ]; then
   step desktop "the whole desktop on the USB disk: the passphrase at the boot splash, the login screen"
+elif [ "$mode" = splash ]; then
+  step splash "the graphical start alone: the passphrase at the boot splash"
 else
   step first "the same computer starts the external disk"
   step again "the same computer again: nothing changes again"

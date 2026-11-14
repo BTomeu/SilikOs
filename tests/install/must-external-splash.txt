@@ -1,0 +1,17 @@
+# The checks the external-disk test must say with a verdict in its splash mode (SILIK_CI_EXTERNAL_MODE=splash: the
+# small set with the boot splash, started the graphical way). tests/install/external.sh adds a FAIL row for each
+# one that is not in its report.
+external.install.entry
+external.install.finished
+external.install.own-disks-hidden
+external.install.own-disk-untouched
+external.splash.uefi
+external.splash.encrypted
+external.splash.root-on-usb
+external.splash.graphical-start
+external.splash.splash-not-off
+external.splash.splash-theme
+external.splash.splash-in-initramfs
+external.splash.passphrase-at-the-splash
+external.splash.finished
+external.splash.own-disk-untouched
