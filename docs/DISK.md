@@ -276,8 +276,8 @@ other may show the wrong hour until it synchronises.
 
 The owner, 14/11/2026: "directly install the system on the disk, without a USB stick for the installation". The
 workflow **Disk image** installs the ISO's own package set onto an empty disk image under UEFI, and keeps the
-result, compressed, for 14 days (artifact `silikos-disk-image`: `SilikOS-9.8-x86_64-disk.img.xz`, 7.9 GB to
-download). Written to a disk as it is, byte for byte (balenaEtcher takes the `.xz`; `xz -dc FILE | sudo dd of=/dev/sdX
+result, compressed, for 14 days (artifact `silikos-disk-image`: `SilikOS-9.8-x86_64-disk.img.xz`, 7.8 GB to
+download; `silikos10-disk-image` is the same image of the SilikOS 10 lab, 5.8 GB). Written to a disk as it is, byte for byte (balenaEtcher takes the `.xz`; `xz -dc FILE | sudo dd of=/dev/sdX
 bs=4M`), that disk starts SilikOS on any x86_64 computer with UEFI: there is no installer to go through. **It erases
 the disk it is written to**, and that disk must hold at least 40 GB.
 
@@ -300,12 +300,17 @@ partition that is not the disk's last, a table that is neither GPT nor MBR). The
 start, before the login screen (`silikos-image-grow.service`, which is in the image only, not in the packages);
 on a disk of the image's size it does nothing.
 
-Seen (14/11/2026, workflow Disk image, run 43609501912: 11 checks ok, none failed): the image installed; no user,
-root locked, no machine id, no serial console, not encrypted, nothing of the tests in it; a copy-on-write layer
-over it started on a machine with Secure Boot on and the disk on a USB controller, and on another with the disk
-on SATA, each up to the first-start setup's welcome (the image itself is never started). **Not seen**: a real
-computer and a real disk; the first-start setup beyond its first screen; and `silik disk grow` with the first-start
-service, which were written after that run (`docs/STATUS.md` says when they have run).
+Seen (14/11/2026, workflow Disk image, run 43617065747: 13 checks ok, none failed, for SilikOS 9.8 and for the
+SilikOS 10 lab): the image installed; no user, root locked, no machine id, no serial console, not encrypted,
+nothing of the tests in it; a copy-on-write layer over it started on a machine with Secure Boot on and the disk on
+a USB controller, and on another with the disk on SATA, each up to the first-start setup's welcome (the image
+itself is never started). The USB disk was 24 GB larger than the image: after that first start, read from outside
+with the machine stopped, the partition table's second copy is at the disk's last sector, the third partition
+ends there, and the volume of `/` is 45.9 GiB in LVM's record (26.7 in the image). Inside an installed system
+(the rollback test, run 43617065807) the same command took `/` from 39 to 375 GiB on a disk made 420 GB larger,
+with snapshots in the pool, and a second run wrote nothing. **Not seen**: a real computer and a real disk; the
+first-start setup beyond its first screen; an encrypted system (the command refuses it); the file system's size
+on a GPT disk from inside (`docs/STATUS.md`).
 
 ## What ran, and what did not
 

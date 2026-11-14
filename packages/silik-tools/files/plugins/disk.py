@@ -662,7 +662,7 @@ def grow_read(silik, sys_block=None, resolve=os.path.realpath):
     device under it), thin, parts and disks (each once: {path, kname, pttype}), partn, start, sectors, disk_sectors,
     later (partitions that start after it)}, sizes in 512-byte sectors as the kernel gives them. None when it cannot
     be seen (a container). Read from the kernel's own tree (/sys/class/block/*/slaves): what each device is made on.
-    (lsblk's inverse tree was the first way; for a thin volume it did not give that chain: run 43613312067.)"""
+    (lsblk -s -J was the first way: it gives a flat list that starts at the disk, not a tree: run 43613312067.)"""
     sys_block = sys_block or SYS_BLOCK
     rc, src = silik.sec_cmd(["findmnt", "-n", "-o", "SOURCE", "/"])
     src = src.strip().split("[")[0]

@@ -43,7 +43,7 @@ serial port and counted on the host; a check that is missing is a failure):
 | Boot splash | an encrypted system started the graphical way: the passphrase asked at SilikOS's splash opens the disk | 19 ok, 0 failed (run 43603388840) |
 | The desktop on an external disk | the whole desktop, encrypted, on the USB disk: the passphrase at the splash, the login screen, USB protection with the system's own disk on USB | 25 ok, 0 failed (run 43603388840) |
 | The medium | the ISO as a USB stick with Secure Boot on: its menu, and the entry for an external disk starts the installer | 8 ok, 0 failed |
-| The disk image | the installed system as a file to write straight onto a disk, with no installer: not encrypted, no user yet, every driver in the initramfs; started on USB with Secure Boot on and on SATA up to the first-start setup | 11 ok, 0 failed (run 43609501912) |
+| The disk image | the installed system as a file to write straight onto a disk, with no installer: not encrypted, no user yet, every driver in the initramfs; started on USB with Secure Boot on and on SATA up to the first-start setup; at that first start it takes the whole disk (`silik disk grow`); the same for the SilikOS 10 lab | 13 ok, 0 failed, each version (run 43617065747) |
 | SilikOS 10 lab | the same idea on AlmaLinux 10.2 (GNOME Shell 49, Wayland): built, installed, started | 40 ok, 0 failed (run 43592340177) |
 
 **None of this has run on a real computer yet.** The virtual machines are KVM on GitHub's runners; the firmware is
@@ -107,7 +107,7 @@ Things that, put together, are not found elsewhere:
 | The COMMAND bar, from the key to the window, kept loaded | about 50 ms instead of about 190 | `docs/STATUS.md` |
 | Disk after installation | 14 to 15 GB | the installation test |
 | The ISOs | network 2 GB (downloads 2.5 GB more), offline 4.6 GB | the workflows' artifacts |
-| The disk image | 7.9 GB to download, 40 GB on the disk | workflow Disk image, run 43609501912 |
+| The disk image | 7.8 GB to download (SilikOS 10 lab: 5.8 GB), 40 GB on the disk, then the whole disk | workflow Disk image, run 43617065747 |
 | Firmware rebuilt with `silik dev ccache` (an STM32G4 HAL) | 8.7 s to 2.9 s; the first build a quarter slower, so it is optional | `docs/DEV.md` |
 
 No watt was ever measured (no laptop), and nothing about speed on real hardware is claimed.
