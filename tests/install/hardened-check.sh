@@ -62,6 +62,9 @@ kernel_refused() { case "$1" in *"Key was rejected by service"*|*"Required key n
 unsigned() {
   src=$(modinfo -n vcan 2> /dev/null || modinfo -n dummy 2> /dev/null); [ -n "$src" ] || { echo "neither vcan nor dummy is a module of this kernel"; return 1; } >&2
   rmmod vcan dummy 2> /dev/null
+  # what the module needs from other modules is loaded first, the base's own signed ones: insmod, unlike modprobe,
+  # loads the one file only (the run of 14/11/2026: "Unknown symbol in module" for vcan without can-dev)
+  for d in $(modinfo -F depends "$src" 2> /dev/null | tr ',' ' '); do modprobe "$d" 2> /dev/null; done
   mkdir -p "$(dirname "$UNSIGNED")"
   python3 - "$src" "$UNSIGNED" <<'PY' || return 1
 import lzma, struct, sys

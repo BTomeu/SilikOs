@@ -158,8 +158,9 @@ for example `/etc/sysctl.d/90-local.conf` with `kernel.yama.ptrace_scope = 0`.
   No command of ours encrypts a disk in use. `silik disk tpm enroll` adds a TPM2 key slot with a PIN bound to the
   Secure Boot state (PCR 7) and never removes the passphrase slot; without a PIN only when `--no-pin` is typed.
   `silik disk recovery` adds a recovery key. Not covered: the initramfs and the kernel's arguments (not signed, not
-  in PCR 7), a running or suspended machine, the firmware. Run on a LUKS2 header in a file with a software TPM; an
-  installation and a start: the CI job `sealed-test`, not run yet.
+  in PCR 7), a running or suspended machine, the firmware. Run on an installed system in the CI (an encrypted
+  installation under Secure Boot with a software TPM, nine starts, 90 checks: the PIN opens the disk; with Secure
+  Boot off or another TPM it does not, and the passphrase does); not on real firmware or a real TPM.
 - **Secure Boot.** [A: the whole item; nothing of it was run] Works with the base's signed kernel. The NVIDIA driver
   is built on the machine (DKMS) and its module is signed with a key made on the machine, which the firmware must be
   told to trust once: `sudo mokutil --import /var/lib/dkms/mok.pub`, choose a one-time
