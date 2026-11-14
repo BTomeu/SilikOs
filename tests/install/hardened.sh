@@ -98,13 +98,14 @@ for i in $(seq 1 $((t_boot * 6))); do
   sleep 10
   kill -0 $qpid 2> /dev/null || break
   grep -q 'SILIKOS-CI|DONE' "$out/boot.log" && { sleep 20; break; }
-  [ $((i % 12)) = 0 ] && echo "  ... $(tr -d '\r' < "$out/boot.log" | grep -c '^SILIKOS-CI|' || true) checks so far; the last: $(tr -d '\r' < "$out/boot.log" | grep '^SILIKOS-CI|' | tail -1 | cut -d'|' -f2,3 || true)"
+  [ $((i % 12)) = 0 ] && echo "  ... $(tr -d '\r' < "$out/boot.log" | grep -a -c '^SILIKOS-CI|' || true) checks so far; the last: $(tr -d '\r' < "$out/boot.log" | grep -a '^SILIKOS-CI|' | tail -1 | cut -d'|' -f2,3 || true)"
 done
 if kill -0 $qpid 2> /dev/null; then kill $qpid 2> /dev/null || true; fi
 wait $qpid 2> /dev/null || true
 rm -f "$out/disk.qcow2"
 
-tr -d '\r' < "$out/boot.log" | grep '^SILIKOS-CI|' | grep -v 'DONE$' | while IFS='|' read -r _ name verdict detail; do
+# (rows.py: every check whole and counted; a line the serial port lost is a FAIL here, not a silence)
+python3 "$here/rows.py" --name hardened.rows "$out/boot.log" | while IFS='|' read -r _ name verdict detail; do
   printf '%-5s %-44s %s\n' "$verdict" "$name" "$detail"
 done >> "$out/report.txt" || true
 if ! grep -q 'SILIKOS-CI|DONE' "$out/boot.log"; then

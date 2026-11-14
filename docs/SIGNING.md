@@ -307,9 +307,13 @@ dnf-automatic, before and after; `check_signed.sh` against links, added files an
 made-up `gh`; PackageKit beside `dnf`. Read on the real repository: the attestations of one release file, the
 compare API, the digests.
 
-Not run: every workflow change (the attestations, `gh attestation verify` in `repo.yml` and since the second pass
-through `tools/vouched.sh` in `ci.yml` and `offline.yml`, with `--signer-workflow` and `--deny-self-hosted-runners`;
-the tag check of the CI's release job; the choice of the CI run against GitHub's API, the schedule, the Pages
-check, the cache check inside a job), a hardware token, the plugin on an installed system (SELinux enforcing, the
-real timer). `gh attestation verify` cannot run on the build machine (Sigstore's root is not reachable from it):
-the lead's CI run shows the first group.
+Run on GitHub on 14/11/2026: `tools/vouched.sh` in `ci.yml` (run 43549553439: the ISO's 27 tool packages, each
+`gh attestation verify` with `--source-ref refs/heads/main --signer-workflow … --deny-self-hosted-runners`, none
+left out) and in `repo.yml` (run 43556210168: it took the CI run of main, left out 2 packages without an
+attestation, made one attestation for 18 files, put the packages in the release, skipped the deploy because Pages
+is off, and said the tree is not signed). The plugin is loaded by dnf as root on an installed system under SELinux
+(row `update.replay-check`).
+
+Not run: the tag check and the attestation step of the CI's release job (they need a tag), `offline.yml`'s gate,
+the schedule, the cache check inside a job, signing (no key), a hardware token, the plugin refusing a real replay
+on an installed system, the real timer.

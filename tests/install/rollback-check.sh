@@ -16,10 +16,15 @@
 # has not run yet (docs/STATUS.md).
 out=/dev/ttyS0
 # (each line starts on a line of its own: the kernel and systemd write to the same port)
-say() { printf '\r\nSILIKOS-CI|%s|%s|%s\r\n' "$1" "$2" "$(echo "$3" | tr '\n|' ' /' | cut -c1-300)" > $out; }
+# every line is also kept for this start (/run), and said once more at its end, numbered, when nothing else writes
+# to the port, with their count: a line that one of the kernel's cut on the way is whole the second time, and the
+# host knows how many there were (tests/install/rows.py). again: before every end and every restart.
+rows=/run/silikci-rows; touch $rows
+say() { local l; l=$(printf '%s|%s|%s' "$1" "$2" "$(echo "$3" | tr '\n|' ' /' | cut -c1-300)"); printf '%s\n' "$l" >> $rows; printf '\r\nSILIKOS-CI|%s\r\n' "$l" > $out; }
+again() { local n=0 l; sleep 2; while IFS= read -r l; do n=$((n + 1)); printf '\r\nSILIKOS-CI-AGAIN|%s|%s\r\n' "$n" "$l" > $out; done < $rows; printf '\r\nSILIKOS-CI-ROWS|%s\r\n' "$n" > $out; : > $rows; }
 is() { if [ "$2" = "$3" ]; then say "$1" ok "$2"; else say "$1" FAIL "saw '$2', wanted '$3'"; fi; }
 has() { case "$2" in *"$3"*) say "$1" ok "$3";; *) say "$1" FAIL "no '$3' in: $2";; esac; }
-finish() { say "$1" info "the test ends here"; printf '\r\nSILIKOS-CI|DONE\r\n' > $out; sync; sleep 3; systemctl poweroff; exit 0; }
+finish() { say "$1" info "the test ends here"; again; printf '\r\nSILIKOS-CI|DONE\r\n' > $out; sync; sleep 3; systemctl poweroff; exit 0; }
 
 PKGS="tzdata expat libxml2 sqlite-libs"     # small, with older versions in the base's repositories (seen 13/11/2026)
 ver() { rpm -q --qf '%{NAME}-%{VERSION}-%{RELEASE} ' $PKGS 2>&1; }
@@ -158,7 +163,7 @@ case $stage in
   say update.snapshot-entry ok "$e"
   grub2-reboot "$e"
   echo 2 > $S/stage; sync
-  systemctl reboot
+  again; systemctl reboot
   ;;
 2)
   # step 4: started from the snapshot
@@ -189,7 +194,7 @@ case $stage in
     *) say rollback.never-restarts ok "silik rollback returned and nothing restarts by itself (the test restarts now)";;
   esac
   echo 3 > $S/stage; sync
-  systemctl reboot
+  again; systemctl reboot
   ;;
 3)
   # step 5, after the restart: started from the Revert entry
@@ -222,7 +227,7 @@ case $stage in
   is finish.entries-without-a-kernel "$miss" 0
   if [ -e /etc/silikos/update.hold ]; then say finish.updates-wait ok "/etc/silikos/update.hold: $(cat /etc/silikos/update.hold)"; else say finish.updates-wait FAIL "no /etc/silikos/update.hold: the automatic update would undo the rollback"; fi
   echo 4 > $S/stage; sync
-  systemctl reboot
+  again; systemctl reboot
   ;;
 4)
   # step 6: the start after the rollback, from the default entry

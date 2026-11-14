@@ -183,15 +183,17 @@ Run, in an AlmaLinux 9.8 container (13/11/2026; no systemd, no boot loader, anot
 - Both states of authselect (1.2.6): no profile selected (`authselect select sssd with-faillock --force`, then
   `disable-feature` on the way back, the profile staying), and a profile with features (they stayed).
 
-Not run anywhere yet, and what will run it:
+Run on an installed system (CI job `hardened-test`, run 43551142981, 14/11/2026: 96 checks ok, 0 failed; a virtual
+machine without Secure Boot or encryption, so the level reads `hardened, except`): `grubby` on the real boot
+entries, a restart, the arguments in `/proc/cmdline`, `/sys/kernel/security/lockdown` saying `[integrity]`,
+**an unsigned module refused by the kernel** ("Key was rejected by service"; it loads before the level and again
+after `level default`), the kernel settings in effect, the desktop session starting, `silik doctor`, then
+`level default`, a restart and the command line as before.
 
-- **The kernel's part**: `grubby` on real boot entries, a restart, `/proc/cmdline`, `/sys/kernel/security/lockdown`
-  saying `[integrity]`, an unsigned module refused, the kernel settings in effect, the desktop session starting,
-  `silik doctor`, then `level default`, a restart and the command line as before: the CI job `hardened-test` (the
-  repository's test of an installed system), on a virtual machine without Secure Boot or encryption (so it expects
-  `hardened, except`).
-- **GDM without the user list, faillock locking an account, the dconf locks seen from Settings**: the same test
-  reads the settings; nobody has looked at the screens.
+Not run anywhere yet:
+
+- **GDM without the user list, faillock locking an account, the dconf locks seen from Settings**: the test reads
+  the settings; nobody has looked at the screens or locked an account out.
 - **Thunderbolt** (`thunderbolt`): no such hardware here or in the CI. The item is [A] as a whole: bolt 0.9.10 has no
   switch for "never enrol by itself" (its default policy is read-only; GNOME Shell enrols a new device while the
   session is unlocked), so the level turns bolt's authorisation off, which is the switch Settings calls Direct Access.

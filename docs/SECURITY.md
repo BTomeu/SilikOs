@@ -224,9 +224,9 @@ SELinux policy (`pasta_t`), may not open the box's process folder (it is now sta
 it, and writes where its policy lets it: no rule of ours was added); the first isolated opening of a file in a new
 prefix refused itself (the prefix's set-up started the box without the file); and on a session whose display is
 :0 the nested server took the number 0 and replaced the session's socket file (no breach: the box saw its own
-server; but the session lost its file. The number is now 100 or more, checked free). The fixes ran in the EL 9
-container and with a real Wine; under SELinux they have not run: until the CI's `win.isolated.*` rows are green,
-isolation is a container result.
+server; but the session lost its file. The number is now 100 or more, checked free). The fixes then ran on an
+installed system under SELinux enforcing (CI run 43549553439, 14/11/2026): every `win.isolated.*` row is ok, with
+no rule added for pasta. One test program was run in the box there; a real installer isolated was not.
 
 ## USB devices and what listens
 
@@ -311,7 +311,7 @@ signing key or a signed package; a secret in the repository or its history.
 | Id | What was found | How bad | State |
 |---|---|---|---|
 | S1 | `silik mirror use`: the mirror's own manifest said which repositories dnf checks, and the unsigned repository of SilikOS's packages could replace any package. Run: a hand-made mirror installed an unsigned `tzdata-9999` as root | high | **fixed**: this machine's table decides; the own repository is off without the mirror's key (or `--unsigned`, said) and brings only SilikOS's own names. The attack run again: refused |
-| S2 | The releases are where built packages wait, and whatever lies there is signed and put on the ISO: anything that can write a release (a stolen token, a compromised action in a writing job) gets a signed package onto every machine. Run with a stand-in key | high | **fixed in the workflows, not run on GitHub yet**: every kept or released package gets a build provenance attestation, and the package repository signs a tool's or an already published package only with an attestation of this repository's workflows on main; what has none is left out, never signed (`docs/SIGNING.md`) |
+| S2 | The releases are where built packages wait, and whatever lies there is signed and put on the ISO: anything that can write a release (a stolen token, a compromised action in a writing job) gets a signed package onto every machine. Run with a stand-in key | high | **fixed in the workflows; the gates ran on GitHub 14/11/2026** (CI 43549553439: each of the ISO's 27 tool packages verified; *Package repository* 43556210168: 2 packages without an attestation left out, 18 files attested; signing itself has not run: there is no key): every kept or released package gets a build provenance attestation, and the package repository signs a tool's or an already published package only with an attestation of this repository's workflows on main; what has none is left out, never signed (`docs/SIGNING.md`) |
 | S3 | `main` is not protected, and the signing step runs `main`'s scripts with the private key | high | **open, the owner's**: GitHub settings (below) |
 | S4 | A network installation trusts TLS alone for its 1570 packages (the installer checks no signature) | medium | said here and in `docs/OFFLINE.md`; the offline ISO checks every package before installing |
 | S5 | Actions named by tag in the jobs that hold the write token and the key; the key stayed in the environment of what parsed foreign packages | medium | **fixed**: every action by its commit (99 references; a test holds it); the key leaves the environment once imported. The signing step's container image by its digest |
@@ -326,7 +326,7 @@ signing key or a signed package; a secret in the repository or its history.
 | P5 | A plugin file writable by a group was loaded | low | **fixed** |
 | B4 | A command line typed after `$` in the bar, secrets and all, went to the session log; the log's mode followed the umask | low | **fixed**: the line is not kept; 0700 / 0600 always |
 | B5 | `silik dev install` runs ST's installer as root, chosen by its file name | low | **fixed**: the command, whose rights it gets, the file and its SHA-256 are shown, then it asks (`--yes` for scripts) |
-| S7 | A fork's pull request could start hours of CI here by naming its branch `main` | low | **fixed** in the CI's jobs; the repository workflow checks the run through the API (the workflow file, green, this repository, main or a tag on main): not run on GitHub yet |
+| S7 | A fork's pull request could start hours of CI here by naming its branch `main` | low | **fixed** in the CI's jobs; the repository workflow checks the run through the API (the workflow file, green, this repository, main or a tag on main): it took the run of main on GitHub (run 43556210168); a refusal was not seen there |
 | S8 | Released packages restored from the build cache without a check | low | **fixed, not run on GitHub yet**: a build the cache gives back is used only when it is byte for byte a release's own file (`tools/cache_check.py`, run against the real releases) |
 | S9 | The ISO release had no checksum | low | **fixed**: `SHA256SUMS` in the release (not signed: no key yet) |
 | S10 | NVIDIA's repository key and the old CentOS images are trusted on first use | low | partly: the signing image by digest; the table of every download and how it is checked is in `docs/SIGNING.md`; NVIDIA's key (not readable from here) and the EDA boxes' images still on first use |
@@ -413,7 +413,9 @@ around it; the Actions cache check can be replaced by
 the entry it checks (needs code running in a build job of main); a release token can make a channel offer an older
 genuine version to a machine that installs a tool for the first time; a refusal is said by `silik update` and
 `silik doctor`, not in the status bar. `docs/SIGNING.md` has the table. The provenance checks themselves
-(`gh attestation verify`) have not run on GitHub yet.
+(`gh attestation verify`) ran on GitHub on 14/11/2026: in the CI's install job (27 tool packages, all vouched for)
+and in the package repository's workflow (2 without an attestation left out). The tag check and the offline ISO's
+gate have not run.
 
 ## What SilikOS does not do
 
@@ -451,5 +453,6 @@ Not run, and why:
 - **The Wine sandbox** (bubblewrap): `status` only says whether bubblewrap is there.
 - **SilikOS's own repository on an installed system**: the channel turned on by the kickstart, the daily timer
   taking SilikOS's packages from it, a real `sudo`. Run in a container: `silik update channel`, `silik update` and
-  the update service's command against a repository served there, with throw-away keys. The published repository
-  itself (GitHub Pages, the releases, the signing workflow) has not run, and the real key does not exist.
+  the update service's command against a repository served there, with throw-away keys. The repository's
+  workflow ran on GitHub (run 43556210168: packages chosen, attested, put in the release) but published nothing an
+  installed system accepts: Pages is off and the real key does not exist.

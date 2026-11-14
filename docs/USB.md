@@ -129,12 +129,16 @@ it; polkitd loads the rule file without an error; a user without a session is re
 drop-in; `silik usb` against that daemon. The polkit rule's decisions were run in node with made-up subjects
 (`tests/test_usb.py`). The host side of the CI's hot-plug was run against QEMU 8.2.2 with the machine stopped.
 
-Not verified (no KVM, no USB bus, no GNOME session, no SELinux on the build machine): everything with a device. The
+With devices (the build machine has no KVM, USB bus, GNOME session or SELinux): the
 installed-system test of the CI does it (its `run.sh` and `check.sh`, rows `usb.*`): an xHCI controller
 with a disk from the start, then a keyboard and a disk plugged in through QEMU's monitor with the session unlocked
 (must be allowed), the session locked with `loginctl lock-session` (`InsertedDevicePolicy` must read `block`), a
 disk plugged in (must be blocked), a keyboard (must be allowed), unlocked again (must read `apply-policy`, the
-disk still blocked), `silik usb allow all-present` (allowed). Also not seen: SELinux letting the daemon read
+disk still blocked), `silik usb allow all-present` (allowed). Seen there (runs 43537343489 and 43549553439,
+14/11/2026): every step up to the disk still blocked after unlocking, under SELinux enforcing with SilikOS's
+configuration file. Not seen: `silik usb allow all-present` and the daemon refusing a user without sudo (their two
+rows did not reach the report: the serial port lost them; they are said twice and counted from the next run on).
+Also not seen: SELinux letting the daemon read
 `silikos-daemon.conf` (its path carries the type `usbguard_conf_t` by the policy's own pattern
 `/etc/usbguard(/.*)?`) [A]; polkit finding the session of a program that runs under `systemd --user` [A: the
 base's own bolt rule relies on the same]; a real dock, a real laptop's sleep.

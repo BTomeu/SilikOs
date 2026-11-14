@@ -17,11 +17,16 @@
 # run. Its first run (14/11/2026, CI run 43532259867): 88 ok, 2 failed, both the test's own fault (see unsigned()).
 out=/dev/ttyS0
 # (each line starts on a line of its own: the kernel and systemd write to the same port)
-say() { printf '\r\nSILIKOS-CI|hardened.%s|%s|%s\r\n' "$1" "$2" "$(echo "$3" | tr '\n|' ' /' | cut -c1-300)" > $out; }
+# every line is also kept for this start (/run), and said once more at its end, numbered, when nothing else writes
+# to the port, with their count: a line that one of the kernel's cut on the way is whole the second time, and the
+# host knows how many there were (tests/install/rows.py). again: before every end and every restart.
+rows=/run/silikci-rows; touch $rows
+say() { local l; l=$(printf '%s|%s|%s' "hardened.$1" "$2" "$(echo "$3" | tr '\n|' ' /' | cut -c1-300)"); printf '%s\n' "$l" >> $rows; printf '\r\nSILIKOS-CI|%s\r\n' "$l" > $out; }
+again() { local n=0 l; sleep 2; while IFS= read -r l; do n=$((n + 1)); printf '\r\nSILIKOS-CI-AGAIN|%s|%s\r\n' "$n" "$l" > $out; done < $rows; printf '\r\nSILIKOS-CI-ROWS|%s\r\n' "$n" > $out; : > $rows; }
 is() { if [ "$2" = "$3" ]; then say "$1" ok "$2"; else say "$1" FAIL "saw '$2', wanted '$3'"; fi; }
 has() { case "$2" in *"$3"*) say "$1" ok "$3";; *) say "$1" FAIL "no '$3' in: $2";; esac; }
 hasnot() { case "$2" in *"$3"*) say "$1" FAIL "'$3' in: $2";; *) say "$1" ok "no $3";; esac; }
-finish() { printf '\r\nSILIKOS-CI|DONE\r\n' > $out; sync; sleep 3; systemctl poweroff; exit 0; }
+finish() { again; printf '\r\nSILIKOS-CI|DONE\r\n' > $out; sync; sleep 3; systemctl poweroff; exit 0; }
 uid=$(id -u tester)
 asuser() { runuser -u tester -- env XDG_RUNTIME_DIR=/run/user/$uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus DISPLAY=:0 "$@" 2>&1; }
 
@@ -144,7 +149,7 @@ case $stage in
   o=$(silik secure level hardened 2>&1); rc=$?
   is set-again "exit $rc, $(echo "$o" | grep -c '^\$ ') commands" "exit 0, 0 commands"
   has set-again-says "$o" "nothing to change"
-  echo 2 > $S/stage; sync; systemctl reboot; exit 0;;
+  echo 2 > $S/stage; again; sync; systemctl reboot; exit 0;;
 2)
   # each item, on the restarted system
   for a in $ARGS; do has "held-cmdline-${a%%=*}" "$(cat /proc/cmdline)" "$a"; done
@@ -221,7 +226,7 @@ PY
   is back-lock-is-the-user-s-again "$(asuser gsettings writable org.gnome.desktop.session idle-delay)" true
   o=$(silik secure level default 2>&1)
   has back-again "$o" "nothing to put back"
-  echo 3 > $S/stage; sync; systemctl reboot; exit 0;;
+  echo 3 > $S/stage; again; sync; systemctl reboot; exit 0;;
 3)
   is back-cmdline "$(cmdline)" "$(cat $S/cmdline)"
   has back-lockdown "$(cat /sys/kernel/security/lockdown 2>&1)" "[none]"

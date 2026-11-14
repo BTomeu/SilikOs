@@ -258,8 +258,9 @@ display :0; the code before the round above) showed four more things, each then 
   to watch for the namespace's end; and it may write files in the runtime folder (`user_tmp_t`), not in `/tmp`. So:
   `--no-netns-quit` (and `silik` ends pasta itself: the process that holds the box does, `silik win stop` does, the
   prefix's next start does), `--pid` and pasta's own words in the prefix's runtime folder (`pasta.log`; they are
-  said when pasta fails). No rule was added to SilikOS's own SELinux module. [A] until the next run on an
-  installed system: the policy was read (`sesearch`), not enforced here.
+  said when pasta fails). No rule was added to SilikOS's own SELinux module. Seen on an
+  installed system (CI run 43549553439, enforcing): pasta runs as `pasta_t`, the box has its network interface,
+  pasta says nothing and the check lists no denial of pasta, Xephyr or bwrap from the audit log.
 - **The first isolated open of a file refused itself** (exit 75, "a running sandbox is not changed"): the set-up of
   the new prefix had started its sandbox without the file, and Wine's services were still there 5 s later. The
   set-up's sandbox now shows what the program that follows needs.
@@ -428,9 +429,9 @@ Run on 13/11/2026 for `--isolated`, the question and the keyring:
 - The kernel's keyring: before, a key of the session's keyring was read in both boxes; after, the box's session
   keyring is empty and that key is refused; the user keyring is still linked by number and read.
 
-Not run for these: an installed SilikOS (SELinux enforcing: pasta, Xephyr and the box together; the checks
-`win.isolated.*` and `win.question.*` of the CI's installed-system test are for that), the real shell around the box's
-window, a GPU, HiDPI, a Wayland session, sound in an isolated box, Firefox's attributes on a downloaded file, a
+Run on an installed SilikOS, SELinux enforcing (CI run 43549553439, the checks `win.isolated.*` and
+`win.question.*`, all ok): pasta, Xephyr and the box together, with one test program. Not run for these: the real
+shell around the box's window seen by a person, a GPU, HiDPI, a Wayland session, sound in an isolated box, Firefox's attributes on a downloaded file, a
 real third-party installer isolated, Wine 11 isolated.
 
 Not run: the rail and the applications list of the real shell with a Wine window; sound, a GPU, NVIDIA devices, a

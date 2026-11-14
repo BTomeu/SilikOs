@@ -18,7 +18,12 @@
 #   plain   the passphrase again, no PIN asked; the end
 # Only in the CI's test installations. Its first run: sealed.sh's head (the stages locked and cleared have not run).
 out=/dev/ttyS0
-say() { printf '\r\nSILIKOS-CI|sealed.%s|%s|%s\r\n' "$1" "$2" "$(echo "$3" | tr '\n|' ' /' | cut -c1-300)" > $out; }
+# every line is also kept for this start (/run), and said once more at its end, numbered, when nothing else writes
+# to the port, with their count: a line that one of the kernel's cut on the way is whole the second time, and the
+# host knows how many there were (tests/install/rows.py). again: before every end and every restart.
+rows=/run/silikci-rows; touch $rows
+say() { local l; l=$(printf '%s|%s|%s' "sealed.$1" "$2" "$(echo "$3" | tr '\n|' ' /' | cut -c1-300)"); printf '%s\n' "$l" >> $rows; printf '\r\nSILIKOS-CI|%s\r\n' "$l" > $out; }
+again() { local n=0 l; sleep 2; while IFS= read -r l; do n=$((n + 1)); printf '\r\nSILIKOS-CI-AGAIN|%s|%s\r\n' "$n" "$l" > $out; done < $rows; printf '\r\nSILIKOS-CI-ROWS|%s\r\n' "$n" > $out; : > $rows; }
 is() { if [ "$2" = "$3" ]; then say "$1" ok "$2"; else say "$1" FAIL "saw '$2', wanted '$3'"; fi; }
 has() { case "$2" in *"$3"*) say "$1" ok "$3";; *) say "$1" FAIL "no '$3' in: $2";; esac; }
 hasnot() { case "$2" in *"$3"*) say "$1" FAIL "'$3' in: $2";; *) say "$1" ok "no '$3'";; esac; }
@@ -27,7 +32,7 @@ mkdir -p $S /run/silikci
 mount -o ro LABEL=SILIKCI /run/silikci 2> /dev/null
 stage=$(cat /run/silikci/stage 2> /dev/null); umount /run/silikci 2> /dev/null
 # the end of a stage: said, and the machine powers off (sealed.sh chooses the firmware and the TPM of the next start)
-end() { sync; printf '\r\nSILIKOS-CI|END|%s\r\n' "$stage" > $out; [ "$stage" != plain ] || printf '\r\nSILIKOS-CI|DONE\r\n' > $out; sync; sleep 3; systemctl poweroff; exit 0; }
+end() { again; sync; printf '\r\nSILIKOS-CI|END|%s\r\n' "$stage" > $out; [ "$stage" != plain ] || printf '\r\nSILIKOS-CI|DONE\r\n' > $out; sync; sleep 3; systemctl poweroff; exit 0; }
 [ -n "$stage" ] || { stage=none; say none.stage FAIL "no stage on the disk labelled SILIKCI"; end; }
 
 pass=/root/sealed-pass                       # the passphrase the test's kickstart gave the installer (no newline)
@@ -67,7 +72,7 @@ first)
     *[Aa]lma[Ll]inux*|*SilikOS*) say first.boot-entry ok "$label";;
     *) if [ ! -e $S/restarted ]; then
          touch $S/restarted; say first.boot-entry info "started through '$label': restarting once, to start through the system's own entry"
-         sync; systemctl reboot; exit 0
+         again; sync; systemctl reboot; exit 0
        fi
        say first.boot-entry info "still started through '$label' after a restart";;
   esac

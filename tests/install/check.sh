@@ -9,7 +9,12 @@ phase=$(cat /run/silikci-phase/phase 2> /dev/null); umount /run/silikci-phase 2>
 [ -z "$phase" ] || exit 0
 out=/dev/ttyS0
 # (each line starts on a line of its own: the kernel and systemd write to the same port)
-say() { printf '\r\nSILIKOS-CI|%s|%s|%s\r\n' "$1" "$2" "$(echo "$3" | tr '\n|' ' /' | cut -c1-300)" > $out; }
+# every line is also kept for this start (/run), and said once more at its end, numbered, when nothing else writes
+# to the port, with their count: a line that one of the kernel's cut on the way is whole the second time, and the
+# host knows how many there were (tests/install/rows.py). again: before every end and every restart.
+rows=/run/silikci-rows; touch $rows
+say() { local l; l=$(printf '%s|%s|%s' "$1" "$2" "$(echo "$3" | tr '\n|' ' /' | cut -c1-300)"); printf '%s\n' "$l" >> $rows; printf '\r\nSILIKOS-CI|%s\r\n' "$l" > $out; }
+again() { local n=0 l; sleep 2; while IFS= read -r l; do n=$((n + 1)); printf '\r\nSILIKOS-CI-AGAIN|%s|%s\r\n' "$n" "$l" > $out; done < $rows; printf '\r\nSILIKOS-CI-ROWS|%s\r\n' "$n" > $out; : > $rows; }
 is() { if [ "$2" = "$3" ]; then say "$1" ok "$2"; else say "$1" FAIL "saw '$2', wanted '$3'"; fi; }
 has() { case "$2" in *"$3"*) say "$1" ok "$3";; *) say "$1" FAIL "no '$3' in: $2";; esac; }
 uid=$(id -u tester)
@@ -580,4 +585,5 @@ say audit.repos info "$(for f in /etc/yum.repos.d/*.repo; do awk -v f="$(basenam
 # pictures that follow are taken after the password)
 act=$(asuser gdbus call --session --dest org.gnome.ScreenSaver --object-path /org/gnome/ScreenSaver --method org.gnome.ScreenSaver.GetActive 2>&1 | head -1)
 say session.locked info "$act after $(( SECONDS / 60 )) min of checks without a key"
+again
 printf '\r\nSILIKOS-CI|DONE\r\n' > $out

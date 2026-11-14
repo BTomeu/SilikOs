@@ -188,7 +188,8 @@ start() {
   fi
   echo "::endgroup::"
   # the checks the system said on its console, then what the console asked
-  tr -d '\r' < "$out/sealed-$name.log" | grep '^SILIKOS-CI|sealed\.' | while IFS='|' read -r _ check verdict detail; do
+  # (rows.py: every check whole and counted; a line the serial port lost is a FAIL here, not a silence)
+  python3 "$here/rows.py" --name "sealed.$name.rows" "$out/sealed-$name.log" | while IFS='|' read -r _ check verdict detail; do
     row "$verdict" "$check" "$detail"
   done || true
   python3 - "$work/$name.json" "$name" "$expect" >> "$out/report.txt" <<'EOF'

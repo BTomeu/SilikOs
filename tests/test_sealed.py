@@ -310,7 +310,14 @@ srv.settimeout(30)
 c, _ = srv.accept()
 logf = open(log, "w")
 
+said = []
+
 def say(t):
+    m = re.match(r"\r\nSILIKOS-CI\|(sealed\..*)\r\n$", t)
+    if m:
+        said.append(m.group(1))
+        if bug == "loses-a-check" and ".start|" in t:      # (a line of the kernel cut into it: it starts no line)
+            t = "\r\n[   12.345678] usb 2-4: authorized to connect" + t[2:]
     logf.write(t); logf.flush(); c.sendall(t.encode())
 
 def line():
@@ -371,6 +378,11 @@ elif stage == "sboff":
     say("\r\nSILIKOS-CI|sealed.sboff.secure-boot|%s|SecureBoot %s\r\n" % ("FAIL" if secure_boot else "ok", "enabled" if secure_boot else "disabled"))
 json.dump(st, open(disk, "w"))
 if bug != "no-end":
+    # (as sealed-check.sh ends a start: its checks once more, numbered, then their count: tests/install/rows.py)
+    kept = [k for k in said if bug != "loses-a-check" or ".start|" not in k]
+    for n, k in enumerate(kept, 1):
+        say("\r\nSILIKOS-CI-AGAIN|%d|%s\r\n" % (n, k))
+    say("\r\nSILIKOS-CI-ROWS|%d\r\n" % len(said))
     say("\r\nSILIKOS-CI|END|%s\r\n" % stage)
 time.sleep(0.2)
 '''
@@ -461,6 +473,18 @@ class Flow(unittest.TestCase):
         self.assertEqual(rows["sealed.back.finished"][0], "FAIL")                     # (every start that can stand alone was tried)
         self.assertEqual(rows["sealed.locked.finished"], ("FAIL", "not started: the TPM was not locked in the start before"))
         self.assertEqual(rows["sealed.plain.finished"], ("FAIL", "not started: the TPM2 slot was not removed in the start before"))
+
+    def test_a_check_the_serial_port_lost_fails_the_test(self):
+        # the machine does all it must, but one of its checks never arrives whole (a line of the kernel cut into it,
+        # both times): which check it was is not known, so it may be a FAIL (tests/install/rows.py)
+        r, rows, _ = self.run_test("loses-a-check")
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertEqual(rows["sealed.first.rows"][0], "FAIL")
+        self.assertIn("said 2 checks in this start and 1 arrived whole", rows["sealed.first.rows"][1])
+        self.assertEqual(rows["sealed.first.enroll"], ("ok", "exit 0"))               # (what did arrive is in the report)
+        self.assertNotIn("sealed.first.start", rows)
+        self.assertEqual(rows["sealed.first.finished"][0], "ok")
+        self.assertIn("[rows] sealed-first.log: cut: [   12.345678] usb 2-4: authorized to connectSILIKOS-CI|sealed.first.start", r.stdout)
 
     def test_an_installation_or_a_first_start_that_fails_ends_it(self):
         r, rows, _ = self.run_test("install")

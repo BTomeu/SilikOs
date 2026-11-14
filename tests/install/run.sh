@@ -258,7 +258,8 @@ fi
 rm -f "$out/disk.qcow2" "$out/ks.img"
 
 # the report
-tr -d '\r' < "$out/boot.log" | grep '^SILIKOS-CI|' | grep -v 'DONE$' > "$work/lines" || true
+# (rows.py: every check whole and counted; a line the serial port lost is a FAIL here, not a silence)
+python3 "$here/rows.py" "$out/boot.log" > "$work/lines" || true
 fail=0
 { echo "SilikOS installation test: $(basename "$iso"), $(date -u +%Y-%m-%dT%H:%MZ), disk after installation $used"
   while IFS='|' read -r _ name verdict detail; do
