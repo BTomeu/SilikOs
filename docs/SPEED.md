@@ -161,7 +161,10 @@ Its first run (43446488850, 13/11/2026): SilikOS uses 151 to 166 MB less memory 
 reaches the desktop 0.65 to 0.85 s later (11.26-11.41 against 10.56-10.61 s): its session is X11 (for the EDA
 tools), the base's is Wayland, and both machines log in automatically. The second run (43461175134) records how each
 session came up: GNOME Shell's own unit takes 1.74 s with SilikOS's extension and theme and 1.78-1.81 s stock; the
-half second is the X11 session outside the shell. The tables and what they do not show: `docs/NUMEROS.md` §9.
+half second is the X11 session outside the shell. The third run (43560434143, 14/11/2026, with round 7's session
+changes): 160 to 175 MB less memory, the desktop 0.08 to 0.71 s later (the base's own two starts differ by 0.41 s),
+the shell's unit 1.39-1.45 s against 1.43-1.49 s stock. What the rig gained (30-90 ms) cannot be told from this
+measure's noise. The tables and what they do not show: `docs/NUMEROS.md` §9.
 
 What these measures are not: a virtual machine has no firmware or boot-loader time, a virtual disk, software
 rendering and 4 GB of memory; a runner is a shared machine. They compare two states of one system on one machine in
