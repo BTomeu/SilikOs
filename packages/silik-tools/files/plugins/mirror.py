@@ -41,7 +41,7 @@ SOURCES = (
 )
 SET = ("@^workstation-product-environment", "epel-release", "kernel-modules-extra", "silikos-branding", "silikos-desktop",
        "silik-tools", "silik-command", "silik-eda-compat", "silik-eda-open", "silik-dev", "silik-win", "silikos-security",
-       "silikos-power", "snapm", "boom-boot", "silikos-repos")
+       "silikos-power", "snapm", "boom-boot", "silikos-repos", "usbguard", "usbguard-dbus", "usbguard-selinux", "tpm2-tools")
 # What the installer adds by itself to a kickstart's set, depending on the machine and on the answers of its screens
 # (a mirror must hold all of them: there is nowhere else to take one from). The boot loader's packages are read in
 # anaconda 34.25's pyanaconda/modules/storage/bootloader (efi.py, grub2.py); the rest is what its screens can ask

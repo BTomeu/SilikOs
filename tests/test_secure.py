@@ -533,7 +533,11 @@ class Cli(unittest.TestCase):
         reads = [["systemctl", "is-enabled"], ["systemctl", "is-active"], ["systemd-detect-virt"], ["firewall-cmd", "--state"],
                  ["firewall-cmd", "--get-default-zone"], ["firewall-cmd", "--get-zones"], ["firewall-cmd", "--get-active-zones"],
                  ["firewall-cmd", "--list-all"], ["findmnt"], ["lsblk"], ["mokutil", "--sb-state"], ["gsettings", "get"],
-                 ["runuser", "-l"], ["bwrap", "--version"], ["lspci"]]
+                 ["runuser", "-l"], ["bwrap", "--version"], ["lspci"],
+                 # the plugins' part (listen, usb): the units' states, the sockets, USBGuard's own answers, one property
+                 # of the session's gsd-usb-protection
+                 ["systemctl", "list-unit-files"], ["ss", "-H", "-tulnp"], ["usbguard", "get-parameter"], ["usbguard", "list-devices"],
+                 ["gdbus", "call", "--session", "--dest", "org.gnome.SettingsDaemon.UsbProtection"], ["runuser", "-u"]]
 
         def spy(argv, **kw):
             asked.append(list(argv))

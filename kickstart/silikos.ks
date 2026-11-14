@@ -55,6 +55,14 @@ silikos-power
 snapm
 boom-boot
 silikos-repos
+# USB devices plugged in while the screen is locked are refused (docs/USB.md): the base's USBGuard, its D-Bus service
+# (what GNOME's USB protection talks to) and its SELinux policy (AppStream); silikos-security carries the configuration
+usbguard
+usbguard-dbus
+usbguard-selinux
+# the TPM's tools: what the start-up needs to open an encrypted disk with the TPM and a PIN (`silik disk tpm enroll`,
+# docs/DISK.md), so that enrolling does not need the network
+tpm2-tools
 %end
 
 %post --log=/root/silikos-post.log
@@ -76,6 +84,19 @@ else authselect select sssd without-nullok --force || :; fi
 # the firewall's default zone is the SilikOS one (package silikos-security): incoming dropped, outgoing free.
 # The offline command also leaves a copy of the zone in /etc, which would hide the package's file on updates.
 firewall-offline-cmd --set-default-zone=silikos && rm -f /etc/firewalld/zones/silikos.xml || :
+# nothing listens beyond this machine (docs/SECURITY.md): the base's port mapper of NFS v3 (port 111; an NFS v3 mount
+# starts it by itself), mDNS (UDP 5353, which also announces the machine's name) and the discovery of network
+# printers are off. One at a time: a unit the set does not bring is not an error. On the installed system
+# `silik listen` shows them and `silik listen on NAME` is the way back
+for u in rpcbind.socket rpcbind.service avahi-daemon.socket avahi-daemon.service cups-browsed.service; do
+  systemctl disable "$u" || :
+done
+# USBGuard, with the configuration of silikos-security (what is plugged in at the start, at the login screen or
+# while the screen is unlocked is accepted; GNOME's USB protection refuses new devices while it is locked). Never with
+# the base's own configuration, which refuses every device no rule names, a keyboard included
+if [ -f /etc/usbguard/silikos-daemon.conf ] && [ -f /usr/lib/systemd/system/usbguard.service.d/10-silikos.conf ]; then
+  systemctl enable usbguard.service usbguard-dbus.service || :
+fi
 # the speed profile (docs/SPEED.md): what the base starts and an engineer's workstation does not need is off from the
 # first start (kdump's arming, ModemManager, the storage-array daemon, multipathd and the wait for udev it brings,
 # rpcbind until asked, the hourly metadata download, the daily updatedb, the file indexer, GNOME Software in the

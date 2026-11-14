@@ -22,6 +22,15 @@ Requires:       dconf
 # them those commands say what to install and the rest of `silik evidence` is written
 Recommends:     openscap-scanner
 Recommends:     scap-security-guide
+# USB devices plugged in while the screen is locked are refused (docs/USB.md): the base's USBGuard, its D-Bus
+# service (what GNOME's own USB protection talks to) and its SELinux policy (AppStream). Weak: a container, a server
+# or a virtual machine without USB ports has no use for a daemon and a policy module (they bring protobuf, libqb and
+# policycoreutils-python-utils); the kickstart names the three, so a new installation has them whatever dnf does
+# with weak dependencies. Without them `silik secure status` says what to install. Nothing here starts the daemon:
+# the kickstart turns it on for a new installation, `silik secure apply` on a running one
+Recommends:     usbguard
+Recommends:     usbguard-dbus
+Recommends:     usbguard-selinux
 Requires(post): dconf
 Requires(post): systemd
 Requires(preun): systemd
@@ -42,6 +51,10 @@ pre-update-snapshot; /etc/silikos/snapshot.conf says how many are kept); `silik 
 silikos-rollback-finish.service puts the boot menu in step on the start that follows. The LVM metadata profile
 silikos-thin makes the thin pool grow by itself; it is applied to the pool by the kickstart or `silik snapshot setup`,
 never by this package's scripts.
+The network services of the base that listen and that a workstation rarely needs (the NFS v3 port mapper, mDNS,
+printer discovery) stay off when their package is installed (a systemd preset; `silik listen`). For USBGuard: a
+configuration of its own that the base's unit reads through a drop-in, the rule GNOME's USB protection looks for
+and the polkit rule that lets the desktop switch the daemon when the screen locks (`silik usb`; docs/USB.md).
 SELinux stays as the base has it (enforcing). Disk encryption and Secure Boot are chosen by the owner.
 
 %install
@@ -71,6 +84,18 @@ ln -s ../silikos-rollback-finish.service %{buildroot}%{_prefix}/lib/systemd/syst
 # an LVM metadata profile: a file LVM reads only for a pool it was attached to (lvchange --metadataprofile, by the
 # kickstart or `silik snapshot setup`); /etc/lvm/lvm.conf is not touched
 install -Dm0644 %{_sourcedir}/silikos-thin.profile %{buildroot}%{_sysconfdir}/lvm/profile/silikos-thin.profile
+# nothing listens beyond this machine unless asked: the units stay off when their package is installed later (a
+# preset read before the base's 90-default.preset); what `silik listen on NAME` turned back on is named in listen.conf
+install -Dm0644 %{_sourcedir}/85-silikos-security.preset %{buildroot}%{_prefix}/lib/systemd/system-preset/85-silikos-security.preset
+install -Dm0644 %{_sourcedir}/listen.conf %{buildroot}%{_sysconfdir}/silikos/listen.conf
+# USBGuard (docs/USB.md). The base's /etc/usbguard/usbguard-daemon.conf and rules.conf are not shipped and not
+# edited: the daemon reads silikos-daemon.conf instead (the drop-in), in the base's own folder so that it carries the
+# SELinux type the daemon may read (usbguard_conf_t; the rule file usbguard_rules_t). Mode 0600: the daemon refuses
+# to start with a configuration or a rule file that others can read
+install -Dm0600 %{_sourcedir}/silikos-daemon.conf %{buildroot}%{_sysconfdir}/usbguard/silikos-daemon.conf
+install -Dm0600 %{_sourcedir}/90-silikos-gnome.conf %{buildroot}%{_sysconfdir}/usbguard/rules.d/90-silikos-gnome.conf
+install -Dm0644 %{_sourcedir}/10-silikos-usbguard.conf %{buildroot}%{_prefix}/lib/systemd/system/usbguard.service.d/10-silikos.conf
+install -Dm0644 %{_sourcedir}/70-silikos-usbguard.rules %{buildroot}%{_datadir}/polkit-1/rules.d/70-silikos-usbguard.rules
 
 %post
 dconf update >/dev/null 2>&1 || :
@@ -84,6 +109,8 @@ fi
 # The firewall's default zone, the running kernel's settings and sshd are not changed from a package script (it
 # could close the connection the package is being installed over): the kickstart does it for a new installation,
 # `silik secure apply` on a running system.
+# Nor is USBGuard turned on or a listening service turned off here: on a running system a package script changes
+# no service (the kickstart for a new installation, `silik secure apply` when the owner asks).
 # Nor is anything of LVM: the thin pool's profile is attached by the kickstart or by `silik snapshot setup`. Removing
 # this package leaves the snapshots that exist (LVM volumes and their boot entries: `snapm snapset list`) and the
 # profile's name on the pool (`lvchange --detachprofile VG/POOL`): docs/ROLLBACK.md.
@@ -117,3 +144,10 @@ systemctl daemon-reload >/dev/null 2>&1 || :
 %dir %{_sysconfdir}/silikos
 %config(noreplace) %{_sysconfdir}/silikos/security-update.conf
 %config(noreplace) %{_sysconfdir}/dconf/db/local.d/10-silikos-security
+%{_prefix}/lib/systemd/system-preset/85-silikos-security.preset
+%config(noreplace) %{_sysconfdir}/silikos/listen.conf
+%attr(0600,root,root) %config(noreplace) %{_sysconfdir}/usbguard/silikos-daemon.conf
+%attr(0600,root,root) %config(noreplace) %{_sysconfdir}/usbguard/rules.d/90-silikos-gnome.conf
+%dir %{_prefix}/lib/systemd/system/usbguard.service.d
+%{_prefix}/lib/systemd/system/usbguard.service.d/10-silikos.conf
+%{_datadir}/polkit-1/rules.d/70-silikos-usbguard.rules

@@ -124,16 +124,57 @@ for c in sys.argv[2]:
     k = names.get(c, c.lower()); s.send(("sendkey %s\n" % ("shift-" + k if c.isupper() else k)).encode()); time.sleep(0.25)
 EOF
 }
-: > "$out/boot.log"
+# USB (docs/USB.md; the usb.* checks of check.sh): the machine has an xHCI controller with one disk plugged in from
+# the start (an empty 8 MB image: nothing to mount), and two more disks and two keyboards that are plugged in while
+# it runs, when check.sh asks for one by a word on the serial port (a line SILIKOS-CI|usb.host|info|WORD): once with
+# the session unlocked, once locked. Only the words below do anything; each is done once, in the order asked.
+# A keyboard is taken out again after its check: QEMU hands its typed keys (the pictures below) to the newest one.
+# (Eight ports on the controller: with one port left free QEMU puts a hub there by itself.)
+for n in 0 1 2; do truncate -s 8M "$work/stick$n.img"; done
+usb_args=(-device qemu-xhci,id=xhci,p2=8,p3=8 -drive "if=none,id=silikstick0,format=raw,file=$work/stick0.img"
+          -device usb-storage,bus=xhci.0,drive=silikstick0,serial=SILIKBOOT
+          -drive "if=none,id=silikstick1,format=raw,file=$work/stick1.img" -drive "if=none,id=silikstick2,format=raw,file=$work/stick2.img")
+monlog() { python3 - "$work/mon.sock" "$1" <<'EOF' >> "$out/usb-monitor.log" 2>&1   # monlog COMMAND: to QEMU's monitor, its answer kept
+import socket, sys, time
+s = socket.socket(socket.AF_UNIX); s.settimeout(5); s.connect(sys.argv[1]); time.sleep(0.3); s.recv(65536)
+s.send((sys.argv[2] + "\n").encode()); time.sleep(1.5)
+try:      # (the first line is the monitor's echo of the command, a key at a time: left out)
+    said = s.recv(65536).decode("ascii", "replace").replace("\r", "").split("\n")[1:]
+except socket.timeout:
+    said = ["(no answer)"]
+print(time.strftime("%H:%M:%S"), sys.argv[2], "->", " / ".join(l.strip() for l in said if l.strip() and l.strip() != "(qemu)") or "done")
+EOF
+}
+usb_done=0
+usb_host() {   # the words check.sh asked for since the last look
+  local w n=0
+  for w in $(tr -d '\r' < "$out/boot.log" | sed -n 's/^SILIKOS-CI|usb\.host|info|\([a-z0-9-]*\) *$/\1/p'); do
+    n=$((n + 1)); [ "$n" -gt "$usb_done" ] || continue
+    usb_done=$n
+    case $w in
+      kbd-in-1)  monlog "device_add usb-kbd,bus=xhci.0,id=silikkbd1,serial=SILIKKBD1";;
+      kbd-out-1) monlog "device_del silikkbd1";;
+      disk-in-1) monlog "device_add usb-storage,bus=xhci.0,id=silikdisk1,drive=silikstick1,serial=SILIKDISK1";;
+      disk-in-2) monlog "device_add usb-storage,bus=xhci.0,id=silikdisk2,drive=silikstick2,serial=SILIKDISK2";;
+      kbd-in-2)  monlog "device_add usb-kbd,bus=xhci.0,id=silikkbd2,serial=SILIKKBD2";;
+      kbd-out-2) monlog "device_del silikkbd2";;
+      *) echo "usb: a word that is not in the list: $w" >> "$out/usb-monitor.log";;
+    esac
+    echo "  usb: $w (asked by the installed system's checks)"
+  done
+}
+: > "$out/boot.log"; : > "$out/usb-monitor.log"
 qemu-system-x86_64 "${accel[@]}" -machine q35 -m "$mem" -smp "$cpus" -display none -vga std \
   -drive "file=$out/disk.qcow2,if=virtio,format=qcow2" -drive "file=$out/ks.img,if=virtio,format=raw,readonly=on" \
+  "${usb_args[@]}" \
   -nic user,model=virtio-net-pci -serial "file:$out/boot.log" -monitor "unix:$work/mon.sock,server,nowait" &
 qpid=$!
 done_=0
-for i in $(seq 1 $((t_boot * 6))); do
-  sleep 10
+for i in $(seq 1 $((t_boot * 12))); do
+  sleep 5
   kill -0 $qpid 2> /dev/null || break
-  [ "$i" = 4 ] && shot boot-early || true
+  usb_host || true
+  [ "$i" = 8 ] && shot boot-early || true
   if grep -q 'SILIKOS-CI|DONE' "$out/boot.log"; then done_=1; break; fi
 done
 if kill -0 $qpid 2> /dev/null; then

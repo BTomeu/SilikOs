@@ -1,0 +1,13 @@
+# SilikOS (package silikos-security; docs/SECURITY.md): nothing listens beyond this machine unless asked.
+# The base's 90-default.preset turns these on when their package is installed; a preset file with a lower number
+# is read first. A preset is what a package's own script applies when it is installed, nothing more: a unit that
+# is already on stays on (`silik secure apply` turns it off, `silik listen on NAME` back on).
+# The port mapper of NFS v3 and NIS (port 111, TCP and UDP). An NFS v3 mount starts it by itself: rpc-statd.service
+# requires rpcbind.socket.
+disable rpcbind.service
+disable rpcbind.socket
+# mDNS / DNS-SD (UDP 5353): it announces the machine's name on every network it joins.
+disable avahi-daemon.service
+disable avahi-daemon.socket
+# Printers found on the network are added by themselves (the base leaves it off too; said here so that it stays).
+disable cups-browsed.service

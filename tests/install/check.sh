@@ -22,6 +22,80 @@ insession() { asuser systemd-run --quiet --user --wait --pipe --collect -p Worki
 for i in $(seq 1 60); do pgrep -u tester -x gnome-shell > /dev/null && break; sleep 3; done
 sleep 25
 
+# ---- USB (docs/USB.md), with real devices. tests/install/run.sh gives this machine an xHCI controller with a disk
+# plugged in from the start, and plugs a device in when a line "usb.host" asks for one by a word of its list: first
+# with the session unlocked, then locked. These run first: the session locks by itself after five minutes without
+# a key. A device is told by its serial number (the host sets it); what USBGuard says of it is the evidence.
+ug() { usbguard "$@" 2>&1; }
+udev() { ug list-devices | grep -F "serial \"$1\"" | tail -1; }
+uline() { echo "$1" | sed -E 's/ hash "[^"]*"//; s/ parent-hash "[^"]*"//' | cut -c1-210; }
+# plug WORD SERIAL: asks the host, waits up to 90 s for the device, then 4 s more (the desktop may still accept it:
+# a keyboard while locked); prints USBGuard's line for it, nothing when it never came
+plug() { local i l; [ "$usbup" = 1 ] || return 0; say usb.host info "$1"; for i in $(seq 1 45); do l=$(udev "$2"); if [ -n "$l" ]; then sleep 4; udev "$2"; return; fi; sleep 2; done; }
+saver() { asuser gdbus call --session --dest org.gnome.ScreenSaver --object-path /org/gnome/ScreenSaver --method org.gnome.ScreenSaver.GetActive | head -1; }
+never="never appeared in USBGuard's list within 90 s (the host's side: usb-monitor.log; the list: $(ug list-devices | grep -c .) devices)"
+d="$(systemctl is-active usbguard.service 2>&1) $(systemctl is-active usbguard-dbus.service 2>&1)"
+usbup=1
+if [ "$d" = "active active" ]; then say usb.daemon ok "usbguard and usbguard-dbus run ($(rpm -q usbguard 2>&1))"
+else usbup=0; never="was not plugged in: USBGuard does not run (usb.daemon)"   # (no device is asked for: each would be 90 s of waiting)
+     say usb.daemon FAIL "usbguard, usbguard-dbus: $d; $(systemctl status usbguard.service usbguard-dbus.service --no-pager 2>&1 | grep -iE 'Active:|error|denied|permission' | tail -4 | tr '\n' ';') AVC denials naming usbguard: $(ausearch -m avc -ts boot 2> /dev/null | grep -c usbguard)"; fi
+is usb.config "$(systemctl show usbguard.service -p ExecStart --value 2>&1 | grep -o -- '-c [^ ;]*' | head -1) $(ug get-parameter ImplicitPolicyTarget) $(ug get-parameter InsertedDevicePolicy)" "-c /etc/usbguard/silikos-daemon.conf allow apply-policy"
+# the desktop's own word on whether it reaches USBGuard (gsd-usb-protection), and the rules: the one rule the
+# package ships, which the desktop looks for; it must not have tried to add its own
+for i in $(seq 1 20); do
+  av=$(asuser gdbus call --session --dest org.gnome.SettingsDaemon.UsbProtection --object-path /org/gnome/SettingsDaemon/UsbProtection --method org.freedesktop.DBus.Properties.Get org.gnome.SettingsDaemon.UsbProtection Available | head -1)
+  case "$av" in *true*) break;; esac; sleep 3
+done
+has usb.desktop "$av" "true"
+is usb.rules "$(ug list-rules | sed 's/^[0-9]*: //')" 'allow id *:* label "GNOME_SETTINGS_DAEMON_RULE"'
+all=$(ug list-devices); boot=$(udev SILIKBOOT)
+case "$boot" in
+  *": allow "*) if echo "$all" | grep -qvE '^[0-9]+: allow '; then say usb.present-allowed FAIL "not allowed: $(uline "$(echo "$all" | grep -vE '^[0-9]+: allow ' | head -1)")"
+                else say usb.present-allowed ok "$(echo "$all" | grep -c .) devices, all allowed; the disk plugged in from the start: $(uline "$boot")"; fi;;
+  "") say usb.present-allowed FAIL "the disk plugged in from the start is not in USBGuard's list: $(echo "$all" | head -3 | cut -c1-200)";;
+  *) say usb.present-allowed FAIL "$(uline "$boot")";;
+esac
+# unlocked: a keyboard and a disk are accepted without a question
+act=$(saver); k=$(plug kbd-in-1 SILIKKBD1); s=$(plug disk-in-1 SILIKDISK1)
+case "$act|$k" in "(false,)|"*": allow "*) case "$s" in
+    *": allow "*) say usb.unlocked-accepts ok "session unlocked; keyboard: $(uline "$k" | cut -c1-90); disk: $(uline "$s" | cut -c1-90)";;
+    *) say usb.unlocked-accepts FAIL "session unlocked, the keyboard was accepted; the disk: ${s:-$never}";; esac;;
+  *) say usb.unlocked-accepts FAIL "the session was $([ "$act" = "(false,)" ] && echo unlocked || echo "not unlocked (screen saver active: $act)"); the keyboard: ${k:-$never}; the disk: ${s:-$never}";;
+esac
+say usb.host info kbd-out-1
+# locked (logind's lock, what Super+L and the idle lock end in): the desktop tells USBGuard to refuse new devices;
+# a disk plugged in now is blocked, a keyboard is still accepted (GNOME's rule: nobody is locked out)
+usid=$(loginctl list-sessions --no-legend | awk '$3 == "tester" { print $1; exit }')
+loginctl lock-session "$usid"
+for i in $(seq 1 15); do [ "$(saver)" = "(true,)" ] && break; sleep 2; done
+sleep 3
+is usb.locked-policy "$(saver) $(ug get-parameter InsertedDevicePolicy)" "(true,) block"
+s=$(plug disk-in-2 SILIKDISK2)
+case "$s" in
+  *": block "*) say usb.locked-blocks ok "screen locked; $(uline "$s")";;
+  "") say usb.locked-blocks FAIL "the disk $never";;
+  *) say usb.locked-blocks FAIL "accepted while the screen was locked: $(uline "$s")";;
+esac
+k=$(plug kbd-in-2 SILIKKBD2)
+case "$k" in
+  *": allow "*) say usb.locked-keyboard ok "screen locked; $(uline "$k")";;
+  "") say usb.locked-keyboard FAIL "the keyboard $never";;
+  *) say usb.locked-keyboard FAIL "a keyboard plugged in while locked was not accepted: $(uline "$k")";;
+esac
+say usb.host info kbd-out-2
+# unlocked again (logind's unlock): new devices are accepted again; what was refused stays refused until it is
+# plugged in again, or `silik usb allow all-present`, run here as the user (an administrator: no sudo)
+loginctl unlock-session "$usid"
+for i in $(seq 1 15); do [ "$(saver)" = "(false,)" ] && break; sleep 2; done
+sleep 3
+is usb.unlocked-policy "$(saver) $(ug get-parameter InsertedDevicePolicy)" "(false,) apply-policy"
+s=$(udev SILIKDISK2)
+case "$s" in *": block "*) say usb.stays-blocked ok "after unlocking, still: $(uline "$s" | cut -c1-120)";; *) say usb.stays-blocked FAIL "after unlocking, the disk that was plugged in while locked: $(uline "${s:-not in USBGuard's list}")";; esac
+o=$(asuser silik usb allow all-present | tr '\n' ';'); s=$(udev SILIKDISK2)
+case "$s" in *": allow "*) say usb.allow-present ok "$o";; *) say usb.allow-present FAIL "silik usb allow all-present said: $o the disk: $(uline "${s:-not in USBGuard's list}")";; esac
+say usb.status info "$(asuser silik usb | head -8 | tr -s ' ' | tr '\n' ';')"
+is usb.desktop-errors "$(journalctl -b --no-pager -o cat 2> /dev/null | grep -cE 'USBGuard DBus|appending USBGuard rule|Failed to (contact|fetch) USBGuard')" 0
+
 . /etc/os-release
 has name.pretty "$PRETTY_NAME" "SilikOS"
 is name.id "$ID" almalinux
@@ -57,7 +131,12 @@ say speed.items info "$(echo "$sp" | python3 -c 'import json, sys; print(" ".joi
 # (list-unit-files names the installed ones only: a unit the set does not bring is not a failure of the profile)
 is speed.units "$(systemctl list-unit-files --no-legend --no-pager kdump.service ModemManager.service libstoragemgmt.service multipathd.service multipathd.socket dnf-makecache.timer mlocate-updatedb.timer 2>&1 | awk '{print $2}' | sort -u | tr '\n' ' ')" "disabled "
 is speed.not-running "$(systemctl is-active kdump.service ModemManager.service libstoragemgmt.service multipathd.service 2>&1 | grep -c '^active')" 0
-is speed.rpcbind-on-demand "$(systemctl list-unit-files --no-legend --no-pager rpcbind.service rpcbind.socket 2>&1 | awk '{print $1 "=" $2}' | sort | tr '\n' ' ')" "rpcbind.service=disabled rpcbind.socket=enabled "
+# (rpcbind's socket is off too since the security defaults: an NFS v3 mount starts it, rpc-statd.service requires it)
+is speed.rpcbind-on-demand "$(systemctl list-unit-files --no-legend --no-pager rpcbind.service rpcbind.socket 2>&1 | awk '{print $1 "=" $2}' | sort | tr '\n' ' ')" "rpcbind.service=disabled rpcbind.socket=disabled "
+# nothing listens beyond this machine: the base's port mapper, mDNS and printer discovery are off and do not run
+is listen.units "$(systemctl list-unit-files --no-legend --no-pager rpcbind.socket rpcbind.service avahi-daemon.socket avahi-daemon.service cups-browsed.service 2>&1 | awk '{print $2}' | sort -u | tr '\n' ' ')" "disabled "
+is listen.not-running "$(systemctl is-active rpcbind.socket rpcbind.service avahi-daemon.socket avahi-daemon.service cups-browsed.service 2>&1 | grep -c '^active')" 0
+say listen.silik info "$(silik listen 2>&1 | tr -s ' ' | tr '\n' ';')"
 is speed.software-not-started "$(pgrep -u tester -x gnome-software > /dev/null && echo runs || echo no)" no
 has speed.state "$(cat /var/lib/silikos/speed.json 2>&1 | tr -d ' \n' | cut -c1-200)" '"kdump":{"units":{"kdump.service"'
 has speed.doctor "$(silik doctor system 2>&1 | grep 'speed profile')" "ok"
@@ -75,6 +154,11 @@ say hw.check "$([ $rc -le 1 ] && echo ok || echo FAIL)" "exit $rc: $(echo "$s" |
 s=$(silik secure status 2>&1); rc=$?
 say secure.status "$([ $rc = 0 ] && echo ok || echo info)" "exit $rc: $(echo "$s" | tail -1)"
 echo "$s" | grep -E '^(▼|◆|\?)' | while read -r line; do say secure.row info "$line"; done
+# the two rows a user's own session can judge (root has no desktop to ask): USB devices and what listens
+u=$(asuser silik secure status --offline)
+is secure.usb "$(echo "$u" | awk '$3 == "USB" && $4 == "devices" { print $2 }') $(echo "$u" | grep -c 'USB devices')" "ok 1"
+is secure.listening "$(echo "$u" | awk '$3 == "listening" { print $2 }')" ok
+echo "$u" | awk '($3 == "USB" && $4 == "devices") || $3 == "listening"' | while read -r line; do say secure.row-user info "$line"; done
 is desktop.gdm "$(systemctl is-active gdm 2>&1)" active
 if pgrep -u tester -x gnome-shell > /dev/null; then say desktop.shell ok "gnome-shell runs for tester"; else say desktop.shell FAIL "no gnome-shell of tester"; fi
 sid=$(loginctl list-sessions --no-legend | awk '$3 == "tester" { print $1; exit }')
@@ -358,7 +442,9 @@ say system.packages info "$(rpm -qa | wc -l) packages, $(df -h / | awk 'NR==2 {p
 # system, most of them `info` rows that docs/SECURITY.md reads; the three that are SilikOS's own promise are checks:
 # nothing of ours is setuid or writable by everyone, and nothing listens beyond this machine that the base did not put.
 ours="silik-tools silik-command silikos-branding silikos-desktop silikos-security silikos-power silikos-repos silik-eda-compat silik-eda-open silik-dev silik-win"
-say audit.listening info "$(ss -H -tulnp 2> /dev/null | awk '$5 !~ /^(127\.|\[::1\]|\[::ffff:127\.)/ && $5 !~ /%lo:/ { n = $NF; sub(/.*\(\("/, "", n); sub(/".*/, "", n); print $1 "/" $5 "/" n }' | sort -u | tr '\n' ' ')"
+# nothing may listen beyond this machine. The one exception: NetworkManager's own DHCP clients (UDP 68, and UDP 546 for
+# DHCPv6, which the zone opens), which take the answers to this machine's own requests
+is audit.listening "$(ss -H -tulnp 2> /dev/null | awk '$5 !~ /^(127\.|\[::1\]|\[::ffff:127\.)/ && $5 !~ /%lo:/ { n = $NF; sub(/.*\(\("/, "", n); sub(/".*/, "", n); p = $5; sub(/.*:/, "", p); if ($1 == "udp" && (p == "68" || p == "546") && n == "NetworkManager") next; print $1 "/" $5 "/" n }' | sort -u | tr '\n' ' ')" ""
 say audit.listening-local info "$(ss -H -tulnp 2> /dev/null | awk '$5 ~ /^(127\.|\[::1\])/ || $5 ~ /%lo:/ { n = $NF; sub(/.*\(\("/, "", n); sub(/".*/, "", n); print $1 "/" $5 "/" n }' | sort -u | tr '\n' ' ')"
 say audit.firewall info "default zone $(firewall-cmd --get-default-zone 2>&1); $(firewall-cmd --list-all 2>&1 | grep -E '^ +(target|services|ports|interfaces):' | tr -s ' ' | tr '\n' ';')"
 o=$(for pk in $ours; do rpm -ql $pk 2> /dev/null; done | while read -r f; do [ -f "$f" ] && [ ! -L "$f" ] && [ -n "$(find "$f" -maxdepth 0 -perm /6000 2> /dev/null)" ] && echo "$f"; done | tr '\n' ' ')

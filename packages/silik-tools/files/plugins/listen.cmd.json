@@ -1,0 +1,14 @@
+[
+ {"address": "listen/status", "argv": ["listen"],
+  "en": "What listens for other machines here, and the base's network services (NFS port mapper, mDNS, printer discovery)",
+  "ca": "Què escolta altres màquines aquí, i els serveis de xarxa de la base (mapador de ports NFS, mDNS, descoberta d'impressores)",
+  "es": "Qué escucha a otras máquinas aquí, y los servicios de red de la base (mapeador de puertos NFS, mDNS, descubrimiento de impresoras)", "terminal": true},
+ {"address": "listen/off", "argv": ["listen", "off"],
+  "en": "Turn off the base's network services that listen: NFS port mapper, mDNS, printer discovery",
+  "ca": "Atura els serveis de xarxa de la base que escolten: mapador de ports NFS, mDNS, descoberta d'impressores",
+  "es": "Detiene los servicios de red de la base que escuchan: mapeador de puertos NFS, mDNS, descubrimiento de impresoras", "terminal": true},
+ {"address": "listen/on-mdns", "argv": ["listen", "on", "mdns"],
+  "en": "mDNS (Avahi) back on: find printers and .local names on the network",
+  "ca": "Torna a engegar mDNS (Avahi): troba impressores i noms .local a la xarxa",
+  "es": "Vuelve a activar mDNS (Avahi): encuentra impresoras y nombres .local en la red", "terminal": true}
+]

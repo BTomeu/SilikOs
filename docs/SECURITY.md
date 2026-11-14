@@ -29,7 +29,7 @@ files, design data (often under an NDA: PDKs, schematics, layouts), keys and pas
 | An untrusted Windows `.exe` | A Windows virtual machine (`silik win vm`) is a real boundary: it sees the shared folder `~/Windows` and the clipboard, nothing else of the home folder; its RDP port listens on 127.0.0.1 only. Under Wine a program runs as the user: `kernel.yama.ptrace_scope = 1` stops it reading other programs' memory, the sandbox (bubblewrap, `silik win`) limits the files it sees | Wine itself is not a sandbox: outside the sandbox, a program under Wine can read and write everything the user can. **Under X11 (the desktop's session) the sandbox does not protect the files either**: X11 does not separate its clients, so a sandboxed program can send keys to another window (a terminal) or read what is typed, which is as much as `--no-sandbox` (audit 12/11/2026). For a program that is not trusted: the Windows VM |
 | Known flaws in the base's packages | Security advisories installed every day | A new kernel is used only after a restart |
 | A changed package or a false update server for SilikOS's own packages | Every package and the repository's metadata carry a signature of SilikOS's key, and `dnf` checks both (`gpgcheck=1`, `repo_gpgcheck=1`): one changed byte of either is refused (run, with a throw-away key). No key on the system, no channel | Whoever holds the key, or the GitHub account that signs with it; old, well signed metadata served again hide an update [A] |
-| A USB stick left to be plugged in | Nothing on it starts by itself | A device that pretends to be a keyboard (USBGuard is not set up) |
+| A USB stick left to be plugged in | Nothing on it starts by itself; a device plugged in while the screen is locked is refused (USBGuard, `docs/USB.md`; not seen with a device yet) | A device plugged in while the session is unlocked or present at the start; a pure keyboard plugged in while locked (it reaches the password prompt only) |
 | Vendor tools and their installers | Nothing: they run as the user (some installers as root), unconfined, as on RHEL | — |
 
 Not in scope: an attacker with repeated physical access (Secure Boot and disk encryption together help; neither is
@@ -184,6 +184,28 @@ for example `/etc/sysctl.d/90-local.conf` with `kernel.yama.ptrace_scope = 0`.
   [A] AlmaLinux 9 gives no updates to an old minor release: when 9.x+1 is out, the security updates are its packages.
 - **Remote access.** `--keep-ssh`; use keys, not passwords.
 
+## USB devices and what listens
+
+**USB devices.** A device plugged in while the screen is locked is refused (the base's USBGuard, switched by
+GNOME's own USB protection at its level "lockscreen"; `silik usb`, `docs/USB.md`). What is plugged in when the
+machine starts, at the login screen or while the session is unlocked is accepted without a question, and a
+keyboard, a mouse or a hub is accepted even while locked (GNOME's rule, so that nobody is locked out). What was
+refused stays refused after unlocking: plug it in again, or `silik usb allow all-present`. `silik usb level always`
+refuses every new device but a keyboard; `silik usb level off` turns it off. It does not protect against a device
+that is there at the start, a program running as the user, Thunderbolt / PCIe, or what an accepted device does.
+Found while building it: GNOME 40's own way of adding its rule is refused by EL 9's USBGuard ("Invalid parent
+ID"), so with the base's configuration alone every device plugged in later would be refused, a keyboard included;
+SilikOS ships the rule and a permissive configuration of its own instead (the base's file is not touched). Any
+active local session may switch the two settings GNOME needs (a polkit rule), not only an administrator's. Built
+and checked with the real daemon in a container; not yet seen with a device (the CI's `usb.*` rows).
+
+**Listening services.** On a new installation nothing of the base listens beyond the machine: the NFS v3 port
+mapper (rpcbind, port 111), mDNS (avahi, UDP 5353, which also announced the machine's name) and printer discovery
+(cups-browsed) are off, and stay off when their package is installed later (a systemd preset); `silik secure apply`
+turns them off on a running system. CUPS listens on this machine only. An NFS v3 mount starts the port mapper by
+itself [A: read in the unit, not mounted]; `silik listen on nfs | mdns | printers` is the way back, and `silik
+listen` shows what listens.
+
 ## The hardened level
 
 `silik secure level hardened` sets, on the owner's command, what a laptop that travels can afford and a bench
@@ -280,12 +302,13 @@ What a system like GrapheneOS has and SilikOS does not, and why:
 | Disk always encrypted | always | a tick in the installer; `silik secure status` and `silik disk` say bad without it, and the first login says it once. Ticked by the kickstart: not possible without the installer taking every disk (read) |
 | A hardened memory allocator | yes | no: none is packaged for EL 9, and changing glibc would end the binary identity with RHEL that the EDA tools need |
 | Every program in its own box, with its own permissions | yes | no: what the user starts runs as the user, on X11, where programs see each other's keys and windows. Wine has bubblewrap; an untrusted program belongs in `silik win vm` |
-| USB refused while locked | yes | not yet: the base ships USBGuard and GNOME 40 knows how to use it, and nothing here installs or configures it. First on the list, after a run with a real device |
+| USB refused while locked | yes | built: the base's USBGuard with SilikOS's configuration, switched by GNOME's own USB protection (`silik usb`, `docs/USB.md`); checked with the real daemon in a container, not yet seen with a device (the CI's `usb.*` rows) |
 | Fast patches | frequent releases, installed in the background and in effect at the next restart | daily, automatic, with a snapshot to go back to; a kernel fix protects after a restart the owner does (the base has no live patches) |
 
-**The hardened level** exists (`silik secure level hardened`, below and `docs/HARDENED.md`). TPM unlock with a
-PIN exists (`silik disk tpm enroll`, `docs/DISK.md`). **Proposed and not done yet**: USBGuard at GNOME's "locked
-screen" level; nothing listening beyond this machine (`rpcbind.socket` and avahi are the base's, and listen).
+**The hardened level** exists (`silik secure level hardened`, below and `docs/HARDENED.md`), TPM unlock with a
+PIN exists (`silik disk tpm enroll`, `docs/DISK.md`), USB devices are refused while the screen is locked and nothing
+of the base listens beyond the machine on a new installation (`docs/USB.md`, below). None of the four has been
+seen on an installed system yet: the CI's jobs `hardened-test`, `sealed-test` and the rows `usb.*`, `listen.*`.
 
 Seen on an installed system (CI run 43509961201): the only things listening beyond the machine are the base's
 `rpcbind.socket` (port 111) and avahi (mDNS, which also announces the machine's name on every network it joins); the
@@ -298,7 +321,7 @@ are made of them); `noexec` on `/tmp` (vendor installers); kernel lockdown at "c
 
 ## What SilikOS does not do
 
-No antivirus, no USBGuard, no FIPS mode or CIS / STIG profile, no encryption of a disk in use, no confinement of the
+No antivirus, no FIPS mode or CIS / STIG profile, no encryption of a disk in use, no confinement of the
 vendor tools; at the default level no audit rules and no kernel lockdown beyond the base's (the hardened level
 sets both). `silik secure` reads and sets what is listed above.
 `silik audit` evaluates the system against a CIS, ANSSI or STIG profile of the base's own content and changes nothing;
