@@ -118,8 +118,12 @@ has security.nullok "$(authselect current 2>&1 | tr '\n' ' ')" "without-nullok"
 say security.usbguard info "usbguard $(systemctl is-active usbguard.service 2>&1), usbguard-dbus $(systemctl is-active usbguard-dbus.service 2>&1)"
 
 # ---- nothing failed to start
+# (one is the base's own and not SilikOS's to judge, as in the EL 9 test: mcelog cannot start in a virtual machine
+# whose host is an AMD processor; run 43631479505 was on one. It is said apart, with its reason)
 f=$(systemctl --failed --no-legend --plain 2>&1 | awk '{ print $1 }' | tr '\n' ' ')
-if [ -z "$f" ]; then say units.failed ok "systemctl --failed: none"; else say units.failed FAIL "$f"; fi
+ours=$(echo "$f" | tr ' ' '\n' | grep -v '^mcelog\.service$' | tr '\n' ' ' | sed 's/ *$//')
+if [ -z "$ours" ]; then say units.failed ok "systemctl --failed: none of SilikOS's to judge"; else say units.failed FAIL "$ours"; fi
+case "$f" in *mcelog.service*) say units.failed-mcelog info "mcelog.service failed (the base's): $(journalctl -b -u mcelog.service -o cat --no-pager 2>&1 | tail -2 | tr '\n' ' ' | cut -c1-200)";; esac
 say units.user-failed info "the user's: $(asuser systemctl --user --failed --no-legend --plain | awk '{ print $1 }' | tr '\n' ' ')"
 say boot.time info "$(systemd-analyze 2>&1 | head -1)"
 say memory info "$(free -m | awk '/^Mem:/ { print "used " $3 " MB of " $2 " MB" }')"
