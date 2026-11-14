@@ -89,15 +89,16 @@ check `speed.software-not-started` is the test]. If it does not hold there, the 
 | `lvm2-monitor.service`, `smartd.service`, `irqbalance.service`, `mcelog.service`, `raid-check.timer`, `logrotate.timer`, `unbound-anchor.timer` | storage and hardware health, housekeeping | kept (`mcelog` fails in a virtual machine: the base's, seen in the CI) |
 | `gnome-initial-setup-*`, `orca-autostart`, `geoclue-demo-agent`, `spice-vdagent`, `vmware-user`, `sealertauto` | autostart entries with a condition (first login only, a setting, not in GNOME, a guest) or SELinux's own alerts | kept |
 
-GNOME Shell: the system's dconf default enables two extensions, `user-theme` and `silik-shell`
-(`packages/silikos-desktop/files/00-silikos`); the six others the base installs stay off. At `enable()` ours builds
-its pieces, connects to settings and file monitors, starts `silik look --qt -q` once (Qt's palette) and, two seconds
-later and in idle slices, the rows of Start. It has no repeating timer (read 13/11/2026; its idle CPU was measured
-in the rig on 12/11/2026: `docs/STATUS.md`). Compiling its two files, as the shell does when it loads them (the top
-level parsed, the functions' bodies left for their first call, nothing run), took 1.2 to 2.3 ms for `extension.js`
-and 0.5 to 1.0 ms for `flow.js` (medians of 15, three runs; gjs 1.68.6 in an AlmaLinux 9.8 container on the build
-machine, a shared 2.1 GHz Xeon, 13/11/2026): reading the extension is not where a session's start goes. What
-`enable()` costs in the shell (building its pieces) is **not measured**.
+GNOME Shell: the system's dconf default enables one extension, `silik-shell`
+(`packages/silikos-desktop/files/00-silikos`); the seven others the base installs stay off, `user-theme` among them
+since 13/11/2026: the session already has the SilikOS stylesheet as the shell's own (`60-silikos-shell.conf`), and
+`user-theme` loaded the same file over it at every start. With an accent, `silik-shell` loads the accent's
+stylesheet itself. At `enable()` ours builds its pieces and connects to settings and file monitors; once the desktop
+is up it starts `silik look --qt -q` (Qt's palette; not at all without qt5ct) and, two seconds after `enable()` and
+in idle slices, makes the rows of Start and then the pane itself ready for its first opening. It has no repeating
+timer (read 13/11/2026). What `enable()` costs the shell, piece by piece, the first opening of Start, the shell at
+rest with and without it, and where the X11 session's half second goes: **`docs/SESSION.md`** (measured in the test
+rig on 13/11/2026, software rendering, not real hardware).
 
 ## Left to the owner
 
