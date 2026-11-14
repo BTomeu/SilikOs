@@ -78,10 +78,23 @@ en un disco LVM real (`docs/ROLLBACK.md`). Al lado del AlmaLinux 9 Workstation d
 más tarde: su sesión es X11, por las herramientas EDA, y la de la base es Wayland. No arranca más rápido que su base.
 La insignia de arriba es el estado de la CI.
 
-## Construirlo y probarlo
+## Descargarlo y probarlo
 
-Todavía no hay ninguna ISO para descargar. Para probar SilikOS, construye el instalador y úsalo primero en una
-máquina virtual:
+Todavía no hay ninguna versión con un enlace fijo. La ISO la hacen, la instalan en una máquina virtual y la
+comprueban los workflows de este repositorio en GitHub, y cada ejecución en verde la guarda 14 días (con la sesión
+de GitHub iniciada):
+
+- **La ISO que no necesita red (4,6 GB)**: la pestaña **Actions**, a la izquierda **Offline ISO**, la ejecución
+  más nueva con la marca verde, y al final de su página, en **Artifacts**, `silikos-offline-iso`. Baja un `.zip`
+  con la `.iso` dentro.
+- **La ISO de red (2 GB; la instalación descarga 2,5 GB más)**: lo mismo en **CI**, artefacto `silikos-iso`.
+
+Escribe la `.iso` en una memoria USB tal como es, byte a byte (balenaEtcher; Rufus en modo «DD Image»; `dd`), y
+arranca el ordenador desde ella. [`docs/PRIMERA-HORA.md`](docs/PRIMERA-HORA.md) (en catalán) tiene todos los pasos,
+también para un sistema en un disco externo que deja en paz el disco del ordenador. Nada se ha ejecutado todavía en
+un ordenador de verdad: `docs/STATUS.md`.
+
+Para construirla tú mismo (cualquier Linux con `rpmbuild`, `createrepo_c`, `xorriso`, `mtools`, `cpio`, `curl`, `gpg`):
 
 ```bash
 bash tools/build_rpms.sh          # todos los paquetes de packages/ + los metadatos del repositorio en build/repo (rpmbuild, createrepo_c)

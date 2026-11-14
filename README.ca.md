@@ -79,10 +79,23 @@ Compare, execució 43446488850) va fer servir de 151 a 166 MB menys de memòria 
 0,85 s més tard: la seva sessió és X11, per les eines EDA, i la de la base és Wayland. No arrenca més ràpid que la
 seva base. La insígnia de dalt és l'estat de la CI.
 
-## Construir-lo i provar-lo
+## Baixar-lo i provar-lo
 
-Encara no hi ha cap ISO per baixar. Per provar SilikOS, construeix l'instal·lador i fes-lo servir primer en una
-màquina virtual:
+Encara no hi ha cap versió amb un enllaç fix. La ISO la fan, la instal·len en una màquina virtual i la comproven
+els workflows d'aquest repositori a GitHub, i cada execució en verd la guarda 14 dies (amb la sessió de GitHub
+iniciada):
+
+- **La ISO que no necessita xarxa (4,6 GB)**: la pestanya **Actions**, a l'esquerra **Offline ISO**, l'execució
+  més nova amb la marca verda, i al final de la seva pàgina, a **Artifacts**, `silikos-offline-iso`. Baixa un `.zip`
+  amb la `.iso` a dins.
+- **La ISO de xarxa (2 GB; la instal·lació en baixa 2,5 GB més)**: el mateix a **CI**, artefacte `silikos-iso`.
+
+Escriu la `.iso` en un llapis USB tal com és, byte a byte (balenaEtcher; Rufus en mode «DD Image»; `dd`), i arrenca
+l'ordinador des del llapis. [`docs/PRIMERA-HORA.md`](docs/PRIMERA-HORA.md) té tots els passos, també per a un sistema
+en un disc extern que deixa en pau el disc de l'ordinador. Res s'ha executat encara en un ordinador de veritat:
+`docs/STATUS.md`.
+
+Per construir-la tu mateix (qualsevol Linux amb `rpmbuild`, `createrepo_c`, `xorriso`, `mtools`, `cpio`, `curl`, `gpg`):
 
 ```bash
 bash tools/build_rpms.sh          # tots els paquets de packages/ + les metadades del repositori a build/repo (rpmbuild, createrepo_c)

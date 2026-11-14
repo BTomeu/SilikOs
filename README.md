@@ -73,9 +73,21 @@ to 12.0 s (9.3 s in the run before: it depends on the runner) with about 985 MB 
 43446488850) it used 151 to 166 MB less memory and reached the desktop 0.65 to 0.85 s later: its session is X11, for
 the EDA tools, the base's is Wayland. It is not faster to start than its base. The badge above is the CI's state.
 
-## Build and try
+## Download and try
 
-There is no ISO to download yet. To try SilikOS, build the installer and use it in a virtual machine first:
+There is no release with a fixed link yet. The ISO is made, installed in a virtual machine and checked by this
+repository's workflows on GitHub, and each green run keeps it for 14 days (signed in to GitHub):
+
+- **The ISO that needs no network (4.6 GB)**: the tab **Actions**, on the left **Offline ISO**, the newest run with
+  a green tick, and at the bottom of its page, under **Artifacts**, `silikos-offline-iso`. A `.zip` comes down with
+  the `.iso` inside.
+- **The network ISO (2 GB; the installation downloads 2.5 GB more)**: the same under **CI**, artifact `silikos-iso`.
+
+Write the `.iso` to a USB stick as it is, byte for byte (balenaEtcher; Rufus in "DD Image" mode; `dd`), and start the
+computer from it. [`docs/PRIMERA-HORA.md`](docs/PRIMERA-HORA.md) (in Catalan) has every step, also for a system on an
+external disk that leaves the computer's own disk alone. Nothing has run on a real computer yet: `docs/STATUS.md`.
+
+To build it yourself instead (any Linux with `rpmbuild`, `createrepo_c`, `xorriso`, `mtools`, `cpio`, `curl`, `gpg`):
 
 ```bash
 bash tools/build_rpms.sh          # every package of packages/ + repository metadata in build/repo (rpmbuild, createrepo_c)
