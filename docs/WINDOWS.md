@@ -68,7 +68,8 @@ silik: setup-tool-1.2.exe has not been run here before
   delete a line to be asked again). The same file opens the same way from then on without a question; a changed
   file is a new file.
 - No question: `--yes` (scripts; not kept as an answer); `--isolated`, or a prefix marked isolated (the careful
-  way is already chosen); `--no-sandbox` (typed, and said in capitals); a file inside a prefix (installed there).
+  way is already chosen); `--no-sandbox` (typed, and said in capitals); a file inside a prefix (installed there);
+  a program of the system (`/usr`, and the folder of a Wine installed under `/opt`: Wine Mono's compiler is there).
 - With no terminal and no window to ask in, the file does not run (exit code 2). When the program cannot run
   isolated here (no Xephyr, no display), the question says why, offers the normal box and Cancel, and Cancel is
   the default.
@@ -201,11 +202,11 @@ passes that display. `--isolated` does not:
 The lines, as printed:
 
 ```
-$ setpriv --pdeathsig TERM Xephyr -displayfd 3 -auth $XDG_RUNTIME_DIR/silik-win/isolated/Xauthority -nolisten tcp -nolisten local -noreset -no-host-grab -screen 1280x800 -title 'SilikOS: isolated Windows programs (isolated)' -name silik-win-isolated 3>…/display &
-$ env XAUTHORITY=…/Xauthority setxkbmap -display :1 -rules evdev -model pc105 -layout es -variant cat
-$ env -i /usr/bin/bwrap --unshare-user --unshare-pid --unshare-ipc --unshare-uts --unshare-cgroup-try --unshare-net --new-session --cap-drop ALL --die-with-parent --info-fd 4 --seccomp 5 … --ro-bind /tmp/.X11-unix/X1 /tmp/.X11-unix/X1 --ro-bind …/Xauthority …/Xauthority … --bind ~/Windows/isolated ~/Windows/isolated … -- env … DISPLAY=:1 … wineserver --foreground 4>…/session.json 5<…/seccomp.bpf &
-$ pasta --quiet --config-net -t none -u none -T none -U none --no-map-gw --outbound-if4 enp3s0 --userns /proc/16971/ns/user --netns /proc/16971/ns/net
-$ env -i nsenter --preserve-credentials -t 16971 -U -m -p -i -u -n -C -- setpriv --no-new-privs --pdeathsig KILL setsid --wait env -C … DISPLAY=:1 … wine explorer /desktop=silik,1280x800 ~/Downloads/setup.exe
+$ setpriv --pdeathsig TERM Xephyr -displayfd 3 -auth $XDG_RUNTIME_DIR/silik-win/isolated/Xauthority -nolisten tcp -nolisten local -noreset -no-host-grab -screen 1280x800 -title 'SilikOS: isolated Windows programs (isolated)' -name silik-win-isolated -extension RECORD -extension XTEST -extension SECURITY -extension DOUBLE-BUFFER -extension XVideo -extension X-Resource -extension MIT-SCREEN-SAVER :153 3>…/display &
+$ env XAUTHORITY=…/Xauthority setxkbmap -display :153 -rules evdev -model pc105 -layout es -variant cat
+$ env -i /usr/bin/bwrap --unshare-user --unshare-pid --unshare-ipc --unshare-uts --unshare-cgroup-try --unshare-net --new-session --cap-drop ALL --die-with-parent --info-fd 4 --seccomp 5 … --ro-bind /tmp/.X11-unix/X153 /tmp/.X11-unix/X153 --ro-bind …/Xauthority …/Xauthority … --bind ~/Windows/isolated ~/Windows/isolated … -- env … DISPLAY=:153 … wineserver --foreground 4>…/session.json 5<…/seccomp.bpf &
+$ pasta --quiet --config-net -t none -u none -T none -U none --no-map-gw --outbound-if4 enp3s0 --no-netns-quit --pid …/pasta.pid --userns /proc/16971/ns/user --netns /proc/16971/ns/net >…/pasta.log 2>&1
+$ env -i nsenter --preserve-credentials -t 16971 -U -m -p -i -u -n -C -- setpriv --no-new-privs --pdeathsig KILL setsid --wait env -C … DISPLAY=:153 … wine explorer /desktop=silik,1280x800 ~/Downloads/setup.exe
 ```
 
 **What isolated does not do** (for a program that is hostile and capable, the Windows VM is still the answer):
@@ -225,7 +226,6 @@ $ env -i nsenter --preserve-credentials -t 16971 -U -m -p -i -u -n -C -- setpriv
   title bar, "SilikOS: isolated Windows programs (PREFIX)", is what says where a question comes from: SilikOS
   never asks for a password inside that window. Its entry in the applications list ends with "(isolated)".
 - It can change its window's size among the sizes Xephyr offers (RandR), not leave the window or cover the screen.
-- The names of the kernel's keys of this user (not their contents) can be read in `/proc/keys`.
 - The kernel, `/etc` and `/sys` read-only: as for the normal box, below.
 
 **The round of 14/11/2026** (a second agent, told to get out of the isolated box or to make the owner run
@@ -244,6 +244,33 @@ something un-isolated; EL 9 container, a hostile program standing in for Wine; e
 | a link in `~/Windows` to a program elsewhere in the home: opening it showed that folder to the box | such a link is not followed |
 | an entry named Firefox, with its icon, in the applications list | "Firefox (isolated)" |
 
+**The first run on an installed system** (CI, 14/11/2026: EL 9's kernel, SELinux enforcing, a GNOME session on
+display :0; the code before the round above) showed four more things, each then reproduced in the container:
+
+- **The box's server took the session's display number.** Left to choose (`-displayfd`), with no abstract socket
+  (`-nolisten local`) and its lock taken only afterwards, Xephyr made the first free socket *file* its own: it
+  removed the session's `/tmp/.X11-unix/X0`, bound its own there, and took the file away when it ended. The session
+  kept working through its abstract socket; the box never reached the session's server (asked from inside, the
+  socket did not carry the session's mark). `silik` now gives the number: 100 or more, with no socket, lock or
+  abstract listener (`Xephyr … :153`).
+- **pasta is confined on EL 9** (SELinux domain `pasta_t`, package passt-selinux). It may search `/proc/PID` of a
+  program of the session and open the namespace files there, but not open the folder `/proc/PID/ns`, which it does
+  to watch for the namespace's end; and it may write files in the runtime folder (`user_tmp_t`), not in `/tmp`. So:
+  `--no-netns-quit` (and `silik` ends pasta itself: the process that holds the box does, `silik win stop` does, the
+  prefix's next start does), `--pid` and pasta's own words in the prefix's runtime folder (`pasta.log`; they are
+  said when pasta fails). No rule was added to SilikOS's own SELinux module. [A] until the next run on an
+  installed system: the policy was read (`sesearch`), not enforced here.
+- **The first isolated open of a file refused itself** (exit 75, "a running sandbox is not changed"): the set-up of
+  the new prefix had started its sandbox without the file, and Wine's services were still there 5 s later. The
+  set-up's sandbox now shows what the program that follows needs.
+- **A question nobody could answer**: `silik win run PREFIX -- /opt/silik-wine/…/mcs.exe` (Wine Mono's compiler)
+  asked about a file of Wine's own folder; the window's GLib lines (`G_RESOURCE_OVERLAYS`, set for the shell) were
+  all the command's output showed. Wine's folder is the system's; the question window and the notification run
+  without that variable, and the window's standard error is shown only when it fails.
+
+Also since then: the nested server offers fewer extensions (`-extension RECORD`, `XTEST`, `SECURITY`,
+`DOUBLE-BUFFER`, `XVideo`, `X-Resource`, `MIT-SCREEN-SAVER`: each is code that reads what the box sends).
+
 What it tried and did not get: the marks file and the answers file (not in the box), `~/.config/autostart`,
 `~/.bashrc`, `~/.local/bin`, the applications folder; the session's display, clipboard, keyboard and pointer through
 its own server (grabs, pointer warp, selections, an override-redirect window, XTEST: all stay inside); the
@@ -261,7 +288,7 @@ session's sockets; `localhost`; the processes of the session (its own process na
 - The kernel's keyrings: a sandbox starts with an empty session keyring, and the calls that reach the others
   (`keyctl`, `add_key`, `request_key`) are refused by the filter. Before the filter (14/11/2026) a program linked
   the user keyring by its number, read a key in it and added one; EL 9's default Kerberos cache is such a keyring.
-  The names of the keys still show in `/proc/keys`.
+  The list of this user's keys, `/proc/keys` and `/proc/key-users`, is covered in both boxes (it showed their names).
 - The programs of one prefix are not protected from each other (they can read each other's memory through the
   wineserver). For a program that must not reach the others, or must have no network at all: a prefix of its own.
 - The kernel: the filter refuses a short list of calls (above) and allows the rest: a kernel fault in a call that

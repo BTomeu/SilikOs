@@ -356,7 +356,9 @@ if command -v wine > /dev/null; then
       chown tester:tester /home/tester/Windows/hello.cs
       insession timeout 300 silik -q win run default -- "$mcs" '/out:W:\hello_net.exe' 'W:\hello.cs' > /tmp/ci-net.out 2>&1
       insession timeout 300 silik -q win run default -- 'W:\hello_net.exe' 'W:\silikos-ci-net.txt' >> /tmp/ci-net.out 2>&1
-      has win.dotnet "$(cat /home/tester/Windows/silikos-ci-net.txt 2> /dev/null; echo; tail -3 /tmp/ci-net.out | tr '\n' ' ')" "a .NET program ran"
+      # (the compiler is a file of Wine's own folder: no question is asked about it; GLib's lines are not the program's)
+      has win.dotnet "$(cat /home/tester/Windows/silikos-ci-net.txt 2> /dev/null; echo; grep -v '^GLib' /tmp/ci-net.out | tail -3 | tr '\n' ' ')" "a .NET program ran"
+      say win.dotnet.chatter info "$(grep -c '^GLib' /tmp/ci-net.out) lines of GLib in the output of the two commands"
     else
       say win.dotnet info "no Wine Mono on the ISO (the release wine-* has silik-wine-mono once the workflow Wine has made it)"
     fi
@@ -367,7 +369,11 @@ if command -v wine > /dev/null; then
     has win.question.no-answer-no-run "$(echo "$o" | tr '\n' ' ')" "nowhere to ask"
     has win.question.exit "$o" "silik-exit 2"
     # an isolated program: a display of its own (Xephyr), its own network namespace, pasta for its network
-    say win.isolated.parts info "$(rpm -q xorg-x11-server-Xephyr passt 2>&1 | tr '\n' ' '); the session's access list: $(asuser xhost 2>&1 | tr '\n' ' ')"
+    say win.isolated.parts info "$(rpm -q xorg-x11-server-Xephyr passt passt-selinux 2>&1 | tr '\n' ' '); the session's access list: $(asuser xhost 2>&1 | tr '\n' ' ')"
+    # the session's own server, told apart from the box's: a mark on its root window, and its socket's file as it is now
+    insession xprop -root -f SILIK_CI_SESSION 8s -set SILIK_CI_SESSION session > /dev/null 2>&1
+    x0=$(stat -c %i /tmp/.X11-unix/X0 2> /dev/null)
+    say win.isolated.session-mark info "$(insession xprop -root SILIK_CI_SESSION 2>&1 | head -1); the session's socket file: inode ${x0:-none}"
     # (an isolated prefix's drive W: is its own folder, ~/Windows/PREFIX: not the normal box's ~/Windows)
     rm -f /home/tester/Windows/isolated/silikos-ci-iso.txt /home/tester/Windows/silikos-ci-iso.txt
     insession timeout 300 silik -q win open --isolated --yes /home/tester/Downloads/hello.exe 'Z:\home\tester\.ssh\id_test' 'W:\silikos-ci-iso.txt' > /tmp/ci-iso.out 2>&1
@@ -402,7 +408,16 @@ except OSError as e: print("failed:", e.strerror)'
         has win.isolated.own-display "$(inbox python3 -c "$try" /tmp/.X11-unix/X$disp)" CONNECTED
         # the session's X server from inside: by its socket's file, and by its abstract socket (reachable from any
         # process that shares the network namespace, with no file to hide)
-        has win.isolated.session-socket "$(inbox python3 -c "$try" /tmp/.X11-unix/X0)" "failed"
+        # the session's X server by a socket's file: every socket the box sees is asked for the session's mark, with
+        # the box's key and with none (EL 9's login lets every program of the user in without one). The first
+        # installed system said CONNECTED here: the box's own server had taken the session's number, 0, and its
+        # socket's file; this row could not tell the two servers apart
+        seen=""; for sk in $(inbox ls /tmp/.X11-unix 2> /dev/null); do
+          seen="$seen $sk:$(inbox env DISPLAY=:${sk#X} XAUTHORITY=$s/Xauthority xprop -root SILIK_CI_SESSION 2>&1 | grep -c '"session"')$(inbox env DISPLAY=:${sk#X} xprop -root SILIK_CI_SESSION 2>&1 | grep -c '"session"')"
+        done
+        case "$seen" in *:1*|*:01*) say win.isolated.session-socket FAIL "the session's server answers inside the box:$seen";; *) say win.isolated.session-socket ok "no socket of the box is the session's server:$seen";; esac
+        if [ "$disp" = 0 ]; then say win.isolated.display-number FAIL "the box's server took the session's display number 0"; else say win.isolated.display-number ok ":$disp"; fi
+        is win.isolated.session-socket-file "$(stat -c %i /tmp/.X11-unix/X0 2> /dev/null)" "$x0"
         has win.isolated.session-abstract "$(inbox python3 -c "$try" @/tmp/.X11-unix/X0)" "failed"
         has win.isolated.session-bus "$(inbox python3 -c "$try" /run/user/$uid/bus)" "failed"
         is win.isolated.runtime-folder "$(inbox ls -A /run/user/$uid | tr '\n' ' ')" "silik-win "
@@ -416,17 +431,24 @@ except OSError as e: print("failed:", e.strerror)'
         if ! ip route 2> /dev/null | grep -q '^default'; then say win.isolated.network info "this machine has no default route: pasta has nothing to carry ($net)"
         else case "$net" in "lo ") say win.isolated.network FAIL "only lo: pasta did not give the box a network ($(pgrep -u tester -c pasta) pasta; $(tail -3 /tmp/ci-iso.out | tr '\n' ' '))";; *) say win.isolated.network ok "$net";; esac; fi
         say win.isolated.selinux info "Xephyr $(ps -o label= -C Xephyr 2>&1 | head -1) pasta $(ps -o label= -C pasta,pasta.avx2 2>&1 | head -1)"
+        # what pasta itself said, where it was told to write, and what the box's first process is to SELinux
+        say win.isolated.pasta-said info "$(tail -5 $s/pasta.log 2>&1 | tr '\n' ' ')"
+        say win.isolated.pasta-files info "$(ls -Z $s/pasta.log $s/pasta.pid 2>&1 | tr '\n' ' '); the folder: $(ls -Zd $s 2>&1); the box: $(ps -o label= -p $pid 2>&1); its namespace file: $(ls -Z /proc/$pid/ns/net 2>&1)"
       else
         say win.isolated.box FAIL "no running sandbox of the prefix isolated: $(ls $s 2>&1 | tr '\n' ' ')"
       fi
       insession silik win stop isolated > /dev/null 2>&1
       sleep 4
       is win.isolated.ends "$(pgrep -u tester -x Xephyr | wc -l) $(pgrep -u tester -x bwrap | wc -l) $(pgrep -u tester pasta | wc -l)" "0 0 0"
+      # the session's socket file is still the session's after the box and its server have gone
+      is win.isolated.session-socket-after "$(stat -c %i /tmp/.X11-unix/X0 2> /dev/null)" "$x0"
     fi
     # the SELinux domain a Windows program runs in, read by a Windows program (cmd) from the sandbox
     insession timeout 120 silik -q win run default -- cmd /c "type Z:\\proc\\self\\attr\\current > W:\\silikos-ci-domain.txt" > /dev/null 2>&1
     say win.selinux-domain info "$(tr -d '\0' < /home/tester/Windows/silikos-ci-domain.txt 2> /dev/null)"
     say win.user-namespaces info "max_user_namespaces $(cat /proc/sys/user/max_user_namespaces 2> /dev/null)"
+    # every denial of the box's parts in full (the summary below cuts them): pasta's domain decides how it is called
+    ausearch -m AVC -ts boot 2> /dev/null | grep denied | grep -E 'comm="(pasta|Xephyr|bwrap|nsenter|setpriv|silik)' | sed -E 's/^type=AVC msg=audit\([^)]*\): //' | sort | uniq -c | head -12 | while read -r line; do say win.isolated.avc info "$line"; done
     ausearch -m AVC -ts boot 2> /dev/null | grep denied | sed -E 's/.*denied +(\{[^}]*\}).*comm="([^"]*)".*scontext=([^ ]*) tcontext=([^ ]*) tclass=([^ ]*).*/\1 comm=\2 \3 -> \4 \5/' | sort | uniq -c | head -6 | while read -r line; do say win.selinux-denial info "$line"; done
   else
     say win.open info "no test program on the test disk"

@@ -217,10 +217,15 @@ trusts; nothing verifies an Authenticode signature; isolated means software grap
 program the Windows VM is still the answer.
 
 Run in an EL 9 container with an attack program standing in for Wine, and with a real Wine on the build machine.
-**On an installed system (the CI of 14/11/2026, SELinux enforcing) the isolated box did not work yet**: `pasta`,
-confined by the base's own SELinux policy, was refused when joining the box (no network), and the first isolated
-opening of a file refused itself; that the session's display stays out of reach there is therefore not shown yet.
-Being fixed; until the CI's `win.isolated.*` rows are green, isolation is a container result.
+**On an installed system (the CI of 14/11/2026, SELinux enforcing) the isolated box did not work at its first
+run**, and the run showed three faults, each reproduced and fixed afterwards: `pasta`, confined by the base's own
+SELinux policy (`pasta_t`), may not open the box's process folder (it is now started without the option that needs
+it, and writes where its policy lets it: no rule of ours was added); the first isolated opening of a file in a new
+prefix refused itself (the prefix's set-up started the box without the file); and on a session whose display is
+:0 the nested server took the number 0 and replaced the session's socket file (no breach: the box saw its own
+server; but the session lost its file. The number is now 100 or more, checked free). The fixes ran in the EL 9
+container and with a real Wine; under SELinux they have not run: until the CI's `win.isolated.*` rows are green,
+isolation is a container result.
 
 ## USB devices and what listens
 

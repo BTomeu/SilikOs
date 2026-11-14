@@ -159,8 +159,10 @@ class Isolated(Case):
         exe = self.file("Downloads/setup.exe")
         rc, l, e, x, box, enter = self.plan("win", "open", "--isolated", exe)
         p = [i for i in l if i.startswith("$ /usr/bin/pasta ")]
+        rt = "%s/silik-win/isolated" % self.rt
         self.assertEqual(p[-1], "$ /usr/bin/pasta --quiet --config-net -t none -u none -T none -U none --no-map-gw "
-                                "--userns /proc/PID/ns/user --netns /proc/PID/ns/net")
+                                "--no-netns-quit --pid %s/pasta.pid --userns /proc/PID/ns/user --netns /proc/PID/ns/net "
+                                ">%s/pasta.log 2>&1" % (rt, rt))
         last = lambda x: len(l) - 1 - l[::-1].index(x)      # (the plan has the prefix's set-up first: the same lines)
         self.assertLess(last(box[-1]), last(p[-1]))
         self.assertLess(last(p[-1]), last(enter[-1]))

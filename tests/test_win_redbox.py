@@ -437,20 +437,200 @@ class Net(Box):
         self.assertEqual(silik.win_pasta("7")[-4:], ["--userns", "/proc/7/ns/user", "--netns", "/proc/7/ns/net"])
         self.assertNotIn("--outbound-if4", silik.win_pasta("7"))
         a = silik.win_pasta("7", ("enp3s0", "wlan0"))
-        self.assertEqual(a[a.index("--no-map-gw") + 1:a.index("--userns")], ["--outbound-if4", "enp3s0", "--outbound-if6", "wlan0"])
+        self.assertEqual(a[a.index("--no-map-gw") + 1:a.index("--no-netns-quit")], ["--outbound-if4", "enp3s0", "--outbound-if6", "wlan0"])
         routes = {"-4": '[{"dst":"default","gateway":"192.0.2.1","dev":"enp3s0","flags":[]}]', "-6": "[]"}
         q0 = silik.Ctx.query
         silik.Ctx.query = lambda self_, argv, any_rc=False: routes[argv[2]] if argv[:2] == ["ip", "-j"] else q0(self_, argv, any_rc)
         try:
             self.assertEqual(silik.win_route_out(silik.Ctx(True, True)), ("enp3s0", ""))
             rc, l, e, x, box, enter = self.plan("win", "open", "--isolated", self.file("Downloads/setup.exe"))
-            self.assertTrue(any(" --no-map-gw --outbound-if4 enp3s0 --userns /proc/PID/ns/user " in x_ for x_ in l), l)
+            self.assertTrue(any(" --no-map-gw --outbound-if4 enp3s0 --no-netns-quit " in x_ for x_ in l), l)
             routes["-4"] = '[{"dst":"default","dev":"eth0; rm -rf ~"}]'           # not a name: not passed
             self.assertEqual(silik.win_route_out(silik.Ctx(True, True)), ("", ""))
             routes["-4"] = "not json"
             self.assertEqual(silik.win_route_out(silik.Ctx(True, True)), ("", ""))
         finally:
             silik.Ctx.query = q0
+
+
+class Installed(Box):
+    """what the first run on an installed system showed (CI run 43537343489: EL 9's kernel, SELinux enforcing, a
+    GNOME session whose display is :0)"""
+
+    def test_pasta_is_called_the_way_its_selinux_domain_allows(self):
+        """seen: denied { open } comm=pasta.avx2 pasta_t -> unconfined_t dir; denied { write } pasta_t -> tmp_t file"""
+        rt = os.path.join(self.rt, "silik-win", "isolated")
+        a = silik.win_pasta("7", ("", ""), rt)
+        self.assertIn("--no-netns-quit", a)                   # it does not open /proc/PID/ns to watch it
+        self.assertEqual(a[a.index("--pid") + 1], rt + "/pasta.pid")
+        self.assertEqual(a[-4:], ["--userns", "/proc/7/ns/user", "--netns", "/proc/7/ns/net"])
+        os.makedirs(rt)
+        fake = self.file("bin/pasta-says", "#!/bin/sh\necho 'what pasta said' >&2; echo out; exit 1\n")
+        os.chmod(fake, 0o755)
+        os.environ["SILIK_PASTA"] = fake
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()) as out:
+            ok = silik.win_pasta_run(silik.Ctx(False, False), "isolated", 7, rt)
+        self.assertFalse(ok)
+        # its own words are kept in the runtime folder and said, not sent to this command's streams
+        with open(os.path.join(rt, "pasta.log")) as fh:
+            self.assertEqual(fh.read().split("\n")[:2], ["what pasta said", "out"])
+        self.assertIn("silik: pasta exited 1 (what pasta said out): the programs of prefix isolated have no network", err.getvalue())
+        self.assertTrue(out.getvalue().rstrip().endswith(">%s/pasta.log 2>&1" % rt))
+
+    def test_silik_ends_the_pasta_it_started_and_no_other_process(self):
+        rt = os.path.join(self.rt, "silik-win", "isolated")
+        os.makedirs(rt)
+        pasta = self.file("bin/pasta.avx2", "")
+        with open("/bin/sleep", "rb") as src, open(pasta, "wb") as dst:
+            dst.write(src.read())
+        os.chmod(pasta, 0o755)
+        ours, other = subprocess.Popen([pasta, "60"]), subprocess.Popen(["sleep", "60"])
+        try:
+            time.sleep(0.2)
+            for p, ends in ((other, False), (ours, True)):
+                with open(os.path.join(rt, "pasta.pid"), "w") as fh:
+                    fh.write("%d\n" % p.pid)
+                said = []
+                silik.win_pasta_end(rt, said.append)
+                self.assertFalse(os.path.exists(os.path.join(rt, "pasta.pid")))
+                if ends:
+                    self.assertEqual(p.wait(timeout=5), -signal.SIGTERM)
+                    self.assertEqual(said, [["kill", str(p.pid)]])
+                else:
+                    time.sleep(0.2)
+                    self.assertIsNone(p.poll())               # a number that is not a pasta's: left alone
+                    self.assertEqual(said, [])
+            silik.win_pasta_end(rt)                           # no file: nothing
+            with open(os.path.join(rt, "pasta.pid"), "w") as fh:
+                fh.write("not a number")
+            silik.win_pasta_end(rt)
+        finally:
+            for p in (ours, other):
+                if p.poll() is None:
+                    p.kill()
+                p.wait()
+        with open(SILIK, encoding="utf-8") as fh:
+            src = fh.read()
+        body = src[src.index("def win_isolated_start"):src.index("def win_runtime_make")]
+        self.assertLess(body.index("os.waitpid(other.pid, 0)"), body.index("win_pasta_end(rt)"))      # the holder of the box ends it
+
+    def test_the_first_open_of_a_new_prefix_shows_the_file_from_the_start(self):
+        """seen: first use + a file outside the shared folder in one command ended with "a running sandbox is not
+        changed" (exit 75): the set-up had started the sandbox without the file"""
+        exe = self.file("Downloads/hello.exe")
+        rc, l, e, x, box, enter = self.plan("win", "open", "--isolated", exe)
+        self.assertGreaterEqual(len(box), 2)                  # the set-up's line and the program's
+        for line in box:
+            self.assertIn(" --ro-bind %s %s " % (exe, exe), line)
+        self.assertTrue(any(x_.endswith("wineboot --init") for x_ in enter))
+        sub = self.file("Documents/tool/setup.exe")           # the normal box: a folder that is not always shown
+        rc, l, e, x, box, enter = self.plan("win", "open", "--yes", "--prefix", "fresh", sub)
+        for line in box:
+            self.assertIn(" --ro-bind %s %s " % (os.path.dirname(sub), os.path.dirname(sub)), line)
+
+    def test_the_boxs_server_never_takes_the_sessions_display_number(self):
+        """seen: the session's display was :0; Xephyr, left to choose, removed the session's /tmp/.X11-unix/X0,
+        put its own socket there and took it away when it ended"""
+        n = silik.win_free_display("isolated")
+        self.assertTrue(100 <= n < 600)
+        self.assertFalse(os.path.lexists("/tmp/.X11-unix/X%d" % n) or os.path.lexists("/tmp/.X%d-lock" % n))
+        self.assertNotEqual(silik.win_free_display("isolated", tried=[n]), n)
+        self.assertNotEqual(silik.win_free_display("lab"), silik.win_free_display("isolated"))     # (their first numbers differ)
+        import socket
+        s = socket.socket(socket.AF_UNIX)                     # a server on that number's abstract socket: not that one
+        try:
+            s.bind("\0/tmp/.X11-unix/X%d" % n)
+            s.listen(1)
+            self.assertNotEqual(silik.win_free_display("isolated"), n)
+        finally:
+            s.close()
+        a = silik.win_xephyr("isolated", "/rt", 5, n)
+        self.assertEqual(a[-1], ":%d" % n)                    # the number is given, not left to the server
+        self.assertEqual(a[a.index("-displayfd") + 1], "5")
+        rc, l, e, x, box, enter = self.plan("win", "open", "--isolated", self.file("Downloads/setup.exe"))
+        self.assertIn(" :N 3>", x[-1])
+
+    def test_the_boxs_server_offers_less(self):
+        a = silik.win_xephyr("isolated", "/rt", 5, 123)
+        off = [a[i + 1] for i, w in enumerate(a) if w == "-extension"]
+        self.assertEqual(off, list(silik.WIN_X_OFF))
+        for e in ("RECORD", "XTEST", "SECURITY", "DOUBLE-BUFFER", "XVideo", "X-Resource", "MIT-SCREEN-SAVER"):
+            self.assertIn(e, off)
+        for e in ("GLX", "RANDR", "RENDER", "XInputExtension", "XKEYBOARD", "MIT-SHM", "XFIXES", "SHAPE", "Composite"):
+            self.assertNotIn(e, off)                          # what Wine draws and reads keys with stays
+
+    def test_the_kernels_key_list_is_not_shown(self):
+        for sw in ("--isolated", "--yes"):
+            rc, l, e, x, box, enter = self.plan("win", "open", sw, self.file("Downloads/setup.exe"))
+            for p in ("/proc/keys", "/proc/key-users"):
+                if os.path.exists(p):
+                    self.assertIn(" --proc /proc --ro-bind /dev/null /proc/keys ", box[-1])
+                    self.assertIn(" --ro-bind /dev/null %s " % p, box[-1])
+            self.assertLess(box[-1].index("--proc /proc"), box[-1].index("--tmpfs /dev"))
+
+    def test_wines_own_programs_are_not_asked_about(self):
+        """seen: `silik win run default -- /opt/silik-wine/.../mcs.exe` opened the question window, which nobody
+        answered; all its output showed was GLib's lines about G_RESOURCE_OVERLAYS"""
+        os.makedirs(os.path.join(self.prefix("default"), "dosdevices"))
+        opt0, asked = silik.wine_opt, []
+        ask0 = silik.win_ask_window
+        silik.wine_opt = lambda: "/opt/silik-wine"
+        silik.win_ask_window = lambda q, lang: asked.append(q) or None
+        silik.win_tty = lambda: False
+        try:
+            a = args()
+            for f in ("/opt/silik-wine/share/wine/mono/wine-mono-10.4.1/lib/mono/4.5/mcs.exe", "/usr/lib64/wine/notepad.exe"):
+                isfile0 = os.path.isfile
+                os.path.isfile = lambda p, f=f: p == f or isfile0(p)
+                try:
+                    silik.win_gate(silik.Ctx(False, True), a, f, "default")
+                finally:
+                    os.path.isfile = isfile0
+            self.assertEqual(asked, [])
+            self.assertFalse(a.isolated)
+            # a file of the home is still asked about
+            code, said = quiet(silik.win_gate, silik.Ctx(False, True), args(), self.file("Downloads/new.exe"), "default")
+            self.assertEqual(len(asked), 1)
+        finally:
+            silik.wine_opt, silik.win_ask_window = opt0, ask0
+
+    def test_the_helpers_chatter_stays_out(self):
+        os.environ["G_RESOURCE_OVERLAYS"] = "/org/gnome/shell/theme/x.svg=/usr/share/themes/SilikOS/gnome-shell/x.svg"
+        try:
+            env = silik.win_helper_env()
+            self.assertNotIn("G_RESOURCE_OVERLAYS", env)
+            self.assertEqual(env["HOME"], self.home)
+            # the question window's standard error is not this command's, unless the window failed
+            helper = self.file("bin/ask", "#!/bin/sh\necho \"GLib-GIO-Message: overlay ${G_RESOURCE_OVERLAYS:-none}\" >&2\ncat > /dev/null\necho ${ANSWER:-box}\nexit ${RC:-0}\n")
+            os.chmod(helper, 0o755)
+            os.environ["SILIK_WIN_ASK"] = helper
+            q = silik.win_question(self.file("Downloads/new.exe"), "0" * 64, "en")
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                self.assertEqual(silik.win_ask_window(q, "en"), "box")
+            self.assertEqual(err.getvalue(), "")
+            os.environ["RC"] = "3"
+            real = os.dup(2)
+            try:
+                with open(os.path.join(self.tmp, "err"), "w+") as fh:
+                    os.dup2(fh.fileno(), 2)
+                    with contextlib.redirect_stderr(err):
+                        self.assertIsNone(silik.win_ask_window(q, "en"))
+                    fh.seek(0)
+                    self.assertEqual(fh.read(), "")           # nothing went straight to the descriptor
+            finally:
+                os.dup2(real, 2)
+                os.close(real)
+                os.environ.pop("RC", None)
+            self.assertIn("GLib-GIO-Message: overlay none", err.getvalue())      # its failure is said, and the variable was not passed
+        finally:
+            os.environ.pop("G_RESOURCE_OVERLAYS", None)
+        with open(SILIK, encoding="utf-8") as fh:
+            src = fh.read()
+        die = src[src.index("def win_die"):src.index("def win_echo")]
+        for part in ("timeout=5", "env=win_helper_env()", "stderr=subprocess.DEVNULL"):
+            self.assertIn(part, die)
 
 
 if __name__ == "__main__":
