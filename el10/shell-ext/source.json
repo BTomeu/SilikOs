@@ -35,6 +35,7 @@
    "esm-exports-func": 5,
    "esm-exports-var": 6,
    "esm-imports": 1,
+   "glass-mask-premultiplied": 1,
    "icon-name": 1,
    "laters-add": 1,
    "laters-remove": 1,

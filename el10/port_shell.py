@@ -176,6 +176,10 @@ RULES = [
      G % "46", "lit", "sigma: mode.sigma * s, brightness: 1", "radius: 2 * mode.sigma * s, brightness: 1", 1),
     ("flow.js", "snippet-hook", "48", "Shell.SnippetHook -> Cogl.SnippetHook",
      G % "48", "lit", "Shell.SnippetHook.FRAGMENT", "Cogl.SnippetHook.FRAGMENT", 1),
+    ("flow.js", "glass-mask-premultiplied", "49", "the glass's mask (a Shell.GLSLEffect): on GNOME Shell 40 what the mask writes is blended as straight colour and alpha; on 49 the glass was not cut to its pane, and what lay outside the pane came out lighter than the wallpaper, as a colour added to it: the sign of a blend that takes the colour as already multiplied by its alpha (seen in the headless shell's pictures, 13 and 14/11/2026; the shell's source was not read for this). The mask writes its colour multiplied by its alpha",
+     "docs/EL10.md", "lit",
+     "    'cogl_color_out = vec4(silik_rgb, cogl_color_in.a * clamp(0.5 - silik_d, 0.0, 1.0));\\n';",
+     "    'float silik_a = cogl_color_in.a * clamp(0.5 - silik_d, 0.0, 1.0);\\n' +\n    'cogl_color_out = vec4(silik_rgb * silik_a, silik_a);\\n';", 1),
     # ---- Wayland: a window's class
     ("extension.js", "command-late-class", "wayland", "a Wayland window is created before its application id (its class) is known: what the extension does for the COMMAND bar's window waits for the class; and a Wayland client cannot ask to stay above the other windows (GTK's set_keep_above does nothing there: seen in the rig), so the shell does it for its own COMMAND bar",
      "docs/EL10.md", "lit",

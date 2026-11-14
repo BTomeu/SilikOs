@@ -37,4 +37,4 @@ want=$(sed -n "s/^SHA256 ($(basename "$src" | sed 's/[.]/[.]/g')) = \([0-9a-f]\{
 [ -n "$want" ] || { echo "error: AlmaLinux's signed CHECKSUM has no $(basename "$src") (keep upstream's file name; an older release: SILIK_ISO_CHECKSUM)" >&2; exit 1; }
 echo "$want  $src" | sha256sum -c --quiet - || { echo "error: $src is not AlmaLinux's $(basename "$src") (sha256 $want)" >&2; exit 1; }
 echo "base: $(basename "$src")  sha256 $want, in AlmaLinux's CHECKSUM signed by $ALMA_KEY_FPR"
-bash "$root/el10/remake_iso.sh" "$src" "$root/build"
+bash "$root/el10/remake_iso.sh" "$src" "$root/build/el10"

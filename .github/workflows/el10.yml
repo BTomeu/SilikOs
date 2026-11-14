@@ -84,7 +84,7 @@ jobs:
       - name: Tools and disk space
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
-          bash tools/ci_apt.sh rpm createrepo-c xorriso mtools cpio isomd5sum qemu-system-x86 qemu-utils imagemagick
+          bash tools/ci_apt.sh rpm createrepo-c xorriso mtools cpio isomd5sum qemu-system-x86 qemu-utils imagemagick ovmf
           df -h /
       # the lab's packages as the packages job built them (in EL 10, with the base's rpmbuild): the ISO carries those
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
@@ -97,6 +97,15 @@ jobs:
         env:
           SILIK_LAB_PICS: 1
         run: bash el10/lab/run.sh build/el10/SilikOS-*-lab-*-netinstall.iso build/el10/lab-test
+      # the ISO started from its own boot menus (UEFI as a USB disk and as a CD, BIOS as a disk), and the installer's
+      # first graphical screen: pictures only, looked at; no verdict (el10/lab/menu.sh)
+      - name: The ISO's boot menus and the installer's first screen, as pictures
+        if: always()
+        env:
+          SILIK_LAB_PICS: 1
+        run: |
+          ls build/el10/SilikOS-*-lab-*-netinstall.iso > /dev/null 2>&1 || { echo "no ISO was made"; exit 0; }
+          bash el10/lab/menu.sh build/el10/SilikOS-*-lab-*-netinstall.iso build/el10/lab-menu
       - name: The report
         if: always()
         run: |
@@ -116,6 +125,8 @@ jobs:
             build/el10/lab-test/*.txt
             build/el10/lab-test/*.png
             build/el10/lab-test/ci.ks
+            build/el10/lab-menu/*.png
+            build/el10/lab-menu/*.log
       # The lab ISO this job has just installed and checked, to download (Actions, this run, Artifacts). A lab
       # system, not the product: docs/EL10.md says what of it has run and what has not.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4

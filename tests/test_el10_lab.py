@@ -173,7 +173,7 @@ class Packages(unittest.TestCase):
 
 
 class Scripts(unittest.TestCase):
-    SHELL = ["el10/build_rpms.sh", "el10/build_iso.sh", "el10/remake_iso.sh", "el10/lab_resolve.sh", "el10/lab/run.sh", "el10/lab/check.sh", "el10/lab/ci.ks.in"]
+    SHELL = ["el10/build_rpms.sh", "el10/build_iso.sh", "el10/remake_iso.sh", "el10/lab_resolve.sh", "el10/lab/run.sh", "el10/lab/menu.sh", "el10/lab/check.sh", "el10/lab/ci.ks.in"]
 
     def test_they_parse(self):
         for rel in self.SHELL:
@@ -210,6 +210,8 @@ class Scripts(unittest.TestCase):
         self.assertLess(s.index("gpgv --status-fd 1"), check)
         self.assertLess(check, remake)
         self.assertEqual(s.count("remake_iso.sh"), 1)
+        # the lab's ISO is made in build/el10, where the workflow looks for it; build/ is the product's ISO's
+        self.assertIn('bash "$root/el10/remake_iso.sh" "$src" "$root/build/el10"\n', s)
         # the remake itself fetches nothing
         r = read("el10", "remake_iso.sh")
         for word in ("curl", "wget", "https://"):

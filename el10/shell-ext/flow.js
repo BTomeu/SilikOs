@@ -636,7 +636,8 @@ const ROUND_CODE = 'vec2 silik_p = cogl_tex_coord_in[0].xy * silik_tex - silik_o
     'vec2 silik_q = abs(silik_p - 0.5 * silik_size) - (0.5 * silik_size - vec2(silik_radius));\n' +
     'float silik_d = length(max(silik_q, 0.0)) + min(max(silik_q.x, silik_q.y), 0.0) - silik_radius;\n' +
     'vec3 silik_rgb = cogl_color_out.a > 0.004 ? cogl_color_out.rgb / cogl_color_out.a : vec3(0.0);\n' +
-    'cogl_color_out = vec4(silik_rgb, cogl_color_in.a * clamp(0.5 - silik_d, 0.0, 1.0));\n';
+    'float silik_a = cogl_color_in.a * clamp(0.5 - silik_d, 0.0, 1.0);\n' +
+    'cogl_color_out = vec4(silik_rgb * silik_a, silik_a);\n';
 
 const RoundMask = GObject.registerClass({ GTypeName: 'SilikRoundMask' }, class RoundMask extends Shell.GLSLEffect {
     _init(params) {

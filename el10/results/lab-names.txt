@@ -1,0 +1,22 @@
+# AlmaLinux release 10.2 (Lavender Lion), 2026-11-14; sources: appstream baseos crb epel extras 
+## x86-64-v3: the flags packages are built with here
+-march=x86-64-v3
+## names, by repository (whatprovides): none = no package of any source provides it
+webkit2gtk4.1                        webkit2gtk4.1-2.50.4-2.el10_2.x86_64 [epel] 
+webkitgtk6.0                         webkitgtk6.0-2.50.4-2.el10_2.x86_64 [epel] 
+webkit2gtk3                          none
+libwebkit2gtk-4.1.so.0()(64bit)      webkit2gtk4.1-2.50.4-2.el10_2.x86_64 [epel] 
+libwebkitgtk-6.0.so.4()(64bit)       webkitgtk6.0-2.50.4-2.el10_2.x86_64 [epel] 
+wine                                 none
+kicad                                none
+openocd                              none
+stlink                               none
+xorg-x11-server-Xorg                 none
+xorg-x11-server-Xephyr               none
+gnome-session-xsession               none
+xorg-x11-server-Xwayland             xorg-x11-server-Xwayland-24.1.9-4.el10_2.4.x86_64 [appstream] 
+gnome-terminal                       none
+dnf-utils                            yum-utils-4.7.0-10.el10.noarch [baseos] 
+glibc(x86-32)                        none
+## WebKitGTK in the base alone (BaseOS, AppStream, CRB, extras)
+(end)
