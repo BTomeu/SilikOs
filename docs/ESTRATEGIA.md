@@ -67,6 +67,30 @@ Avui és un **prototip excel·lent verificat en VM**, no encara un producte.
 7. **Una ISO sense xarxa i un primer arrencada mínim.** Que pregunti el perfil (xips / embedded / banc), NVIDIA sí o no,
    i el disc preparat per tornar enrere.
 
+### Quatre línies de producte (propietari, 14/11/2026)
+
+El propietari les ordena així, i comença per la primera «perquè és l'única que converteix SilikOS i SilikStudio en
+un producte que no es copia en un cap de setmana»:
+
+1. **Pont entre el SIL i el bus real.** Un ECU de veritat a la taula, per `can0`, parlant amb la resta del cotxe
+   emulat a SilikSIL. Necessita les dues peces alhora: els adaptadors del sistema i els ECU virtuals.
+   - **Començat el 14/11/2026**: `svsil bench --bridge BUS=IFACE --real NODE` a SilikStudio i `silik sil bridge` aquí,
+     amb una sola ordre (també amb dos adaptadors, per a un ECU que és a dos busos com el VCU). Provat sobre
+     interfícies SocketCAN de veritat (`vcan0`, `vcan1`) amb el kernel d'EL 9 en una màquina virtual; no amb un
+     adaptador ni amb un ECU (`docs/DEV.md`, `docs/STATUS.md`).
+   - **El límit que s'ha mesurat**: només val en temps real, i l'emulació és un intèrpret. A la màquina de
+     construcció (un fil d'un Xeon compartit a 2,1 GHz), el cotxe d'ecoRacing amb el VCU real i els altres set ECU
+     emulats amb el seu firmware aguanta el temps real (x1,000; al pitjor moment 3,1, 6,3 i 69,7 ms de retard en
+     tres execucions, per la planificació d'una màquina compartida). Amb el VCU emulat no: tot el cotxe va a x0,41
+     (el VCU sol és el 76 % del cost). El que ho mouria [PROPOSTA, no començat]: un fil per MCU dins de cada
+     quàntum i prioritat de temps real per a l'execució. No mesurat fora de la màquina de construcció.
+2. **Banc d'electrònica de potència** [PROPOSTA, no començat]. Control d'instruments per SCPI i anàlisi
+   automàtica: del doble pols a Eon, Eoff i Qrr, i de les corbes I-V i C-V als valors de full de dades.
+3. **Banc remot** [PROPOSTA, no començat]. Compartir un lector CAN, un port sèrie o un analitzador lògic per
+   xarxa, amb una ordre i xifrat.
+4. **Flux de xips obert que funciona a la primera** [PROPOSTA, no començat]. Els PDK oberts (sky130, gf180, IHP)
+   instal·lats, i una prova d'esquema a layout, DRC, LVS i extracció (el punt 5 de la llista de dalt).
+
 ## 3. Què no fer
 
 - **Més looks i accents.** Tres looks i sis accents n'hi ha prou; a partir d'ara, polir i no afegir-ne.

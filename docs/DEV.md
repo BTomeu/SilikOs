@@ -134,6 +134,46 @@ A board on the bench tested automatically (flash, power, CAN with the cyclic tim
 console, measurements; a JUnit file and a traceability matrix; a simulated ECU for a first run without hardware):
 `silik hil`, `docs/HIL.md`.
 
+## A real ECU with the rest of its network emulated: `silik sil bridge`
+
+The ECU on the table, on a CAN adapter of this machine, talking to the other ECUs of its network, which are not
+there: SilikStudio's SIL (`svsil`) runs each of them with its real firmware on an emulated MCU, and the sources and
+inverters of the project send their frames. One command:
+
+```bash
+silik sil                                                        # is SilikSIL here; the CAN interfaces
+silik sil bridge car.json --on can0 --bitrate 500k --real vcu    # until Ctrl-C; results in sil-bridge/car-DATE-TIME
+silik --dry-run sil bridge car.json --on can0 --bitrate 500k --real vcu     # the two commands it would run
+# an ECU that is on two buses takes an adapter for each (the ecoRacing VCU: the car's bus and the inverters'):
+silik sil bridge car_network.json --on can_car=can0 --on can_inv=can1 --bitrate 500k --bitrate 1M --real vcu
+```
+
+`car.json` is a SilikSIL bench project (the whole network); `--real` names the node that is the ECU on the table,
+which is then not emulated; `--on` is the system's CAN interface. An interface that is down is brought up with
+`silik dev can up` when `--bitrate` is given (one for all, or one per `--on` in their order). With several buses
+each `--on` says its bus (`BUS=IFACE`); when the real ECU is wired, in the project, to a bus that no interface
+carries, the command says so before it starts: there the real ECU is absent. Then `svsil bench car.json --bridge can1=can0 --real vcu --forever`
+runs in the foreground and prints, at the end, how many frames crossed each way and **how the bench held against
+the wall clock**.
+
+That last line is the one to read. The emulation is an interpreter: a bench that runs slower than the hardware it
+emulates cannot be paced, the real ECU then sees its network's frames late, and svsil says `NOT in real time`.
+Measured on the build machine (one thread of a shared Xeon at 2.1 GHz, a cloud virtual machine; each case three
+times; SilikStudio's `modules/sil/docs/sil.md` 6h has the table): the ecoRacing car's network with the VCU real and
+its seven other ECUs emulated with their firmware holds x1.000 of real time, at its worst 3.1, 6.3 and 69.7 ms
+behind in the three runs (a shared machine's scheduling; `svsil` says NOT in real time above 5 ms); the same car with
+all eight emulated runs at x0.41 and cannot be paced. The cost is each node's firmware, not their number: the VCU
+alone is 76 % of that car. A machine of the owner's was not measured.
+The two buses are joined frame by frame, not bit by bit: arbitration and error frames do not cross.
+
+Run: SilikStudio's own tests of the bridge on a socket pair that carries the kernel's CAN frames (classic, 29-bit,
+CAN FD; a node marked real does not run; two buses on two wires), and **on real SocketCAN interfaces**: `svsil
+bench --bridge can1=vcan0 --real b` in a virtual machine with the EL 9 kernel (5.14.0-687.66.2.el9_8, SilikOS's),
+`vcan0` with CAN FD and `vcan1` classic, a process on the interface in the place of the ECU (SilikStudio's
+`tools/sil_canvm.sh`, 14 checks, none failed). `silik sil` itself ran here with a made-up list of interfaces and the
+real `svsil` (which then stops at this machine's kernel: it has no CAN). **Not run: a CAN adapter, a real ECU, the
+command on an installed SilikOS.** `docs/STATUS.md`.
+
 ## The vendors' IDEs
 
 **STM32CubeIDE (ST) and Code Composer Studio (TI) are not part of SilikOS**: they are their vendors' programs under

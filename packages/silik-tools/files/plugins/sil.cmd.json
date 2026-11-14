@@ -1,0 +1,6 @@
+[
+ {"address": "sil/status", "argv": ["sil"],
+  "en": "SilikStudio's SIL: is it here, and the CAN interfaces of this system (a real ECU with the rest of its network emulated: silik sil bridge)",
+  "ca": "El SIL de SilikStudio: si hi és, i les interfícies CAN d'aquest sistema (un ECU real amb la resta de la xarxa emulada: silik sil bridge)",
+  "es": "El SIL de SilikStudio: si está, y las interfaces CAN de este sistema (un ECU real con el resto de la red emulada: silik sil bridge)", "terminal": true}
+]
