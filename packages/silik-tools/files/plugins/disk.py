@@ -657,46 +657,68 @@ LVS = ["lvs", "--noheadings", "--nosuffix", "--units", "b", "--separator", "|", 
        "lv_dm_path,vg_name,lv_name,pool_lv,lv_size,vg_size,vg_free,vg_extent_size"]
 
 
-def grow_read(silik, sys_block=None):
-    """what / is on, as far as `grow` needs it: {source, fstype, kinds (the types of every device under /), thin,
-    parts and disks (each once: {path, kname, pttype}), partn, start, sectors, disk_sectors, later (partitions that
-    start after it)}, sizes in 512-byte sectors as the kernel gives them. None when it cannot be seen (a container)"""
+def grow_read(silik, sys_block=None, resolve=os.path.realpath):
+    """what / is on, as far as `grow` needs it: {source, fstype, top (the kind of the device of /), kinds (of every
+    device under it), thin, parts and disks (each once: {path, kname, pttype}), partn, start, sectors, disk_sectors,
+    later (partitions that start after it)}, sizes in 512-byte sectors as the kernel gives them. None when it cannot
+    be seen (a container). Read from the kernel's own tree (/sys/class/block/*/slaves): what each device is made on.
+    (lsblk's inverse tree was the first way; for a thin volume it did not give that chain: run 43613312067.)"""
     sys_block = sys_block or SYS_BLOCK
     rc, src = silik.sec_cmd(["findmnt", "-n", "-o", "SOURCE", "/"])
     src = src.strip().split("[")[0]
     if rc != 0 or not src.startswith("/dev/"):
         return None
-    rc, out = silik.sec_cmd(["lsblk", "-J", "-s", "-o", "PATH,KNAME,TYPE,FSTYPE,PTTYPE", src])
-    try:
-        top = (json.loads(out).get("blockdevices") or [None])[0] if rc == 0 else None
-    except ValueError:
-        top = None
-    if not top:
+    top = os.path.basename(resolve(src))
+    if not os.path.isdir(os.path.join(sys_block, top)):
         return None
-    st = {"source": src, "fstype": top.get("fstype"), "top": top.get("type"), "kinds": [], "thin": False, "parts": [], "disks": []}
-    todo = [top]
-    while todo:
-        n = todo.pop()
-        todo.extend(n.get("children") or [])
-        kind = n.get("type")
-        if kind not in st["kinds"]:
-            st["kinds"].append(kind)
-        if kind == "lvm" and str(n.get("path") or "").endswith("-tpool"):
-            st["thin"] = True
-        for key, want in (("parts", "part"), ("disks", "disk")):
-            if kind == want and n.get("path") not in [x["path"] for x in st[key]]:
-                st[key].append({k: n.get(k) for k in ("path", "kname", "pttype")})
-    st["kinds"].sort(key=str)
+    rc, fstype = silik.sec_cmd(["findmnt", "-n", "-o", "FSTYPE", "/"])
 
-    def num(*path):
+    def text(*path):
         try:
             with open(os.path.join(sys_block, *path)) as f:
-                return int(f.read().split()[0])
-        except (OSError, ValueError, IndexError):
+                return f.read().strip()
+        except OSError:
             return None
 
+    def num(*path):
+        t = text(*path)
+        return int(t.split()[0]) if t and t.split()[0].isdigit() else None
+
+    def kind(k):
+        if text(k, "partition") is not None:
+            return "part"
+        if k.startswith("dm-"):                 # the owner of a device-mapper device is the start of its UUID: LVM-, CRYPT-...
+            return (text(k, "dm", "uuid") or "").split("-")[0].lower() or "dm"
+        return "raid" if k.startswith("md") else "loop" if k.startswith("loop") else "disk"
+
+    st = {"source": src, "fstype": fstype.strip() if rc == 0 and fstype.strip() else None, "top": kind(top), "kinds": [], "thin": False,
+          "parts": [], "disks": []}
+    todo, seen = [top], set()
+    while todo:
+        k = todo.pop()
+        if k in seen:
+            continue
+        seen.add(k)
+        what = kind(k)
+        if what not in st["kinds"]:
+            st["kinds"].append(what)
+        if what == "lvm" and (text(k, "dm", "name") or "").endswith("-tpool"):
+            st["thin"] = True
+        if what == "part":
+            st["parts"].append({"path": "/dev/" + k, "kname": k})
+            todo.append(os.path.basename(os.path.dirname(resolve(os.path.join(sys_block, k)))))     # the disk it is a partition of
+        elif what == "disk":
+            st["disks"].append({"path": "/dev/" + k, "kname": k})
+        else:
+            try:
+                todo.extend(sorted(os.listdir(os.path.join(sys_block, k, "slaves"))))
+            except OSError:
+                pass
+    st["kinds"].sort()
     if len(st["parts"]) == 1 and len(st["disks"]) == 1:
         part, disk = st["parts"][0]["kname"], st["disks"][0]["kname"]
+        rc, pt = silik.sec_cmd(["lsblk", "-n", "-d", "-o", "PTTYPE", "/dev/" + disk])
+        st["disks"][0]["pttype"] = pt.strip() if rc == 0 and pt.strip() else None
         st.update(partn=num(part, "partition"), start=num(part, "start"), sectors=num(part, "size"), disk_sectors=num(disk, "size"), later=[])
         try:
             names = sorted(os.listdir(os.path.join(sys_block, disk)))
@@ -720,8 +742,10 @@ def grow_plan(st):
             "one disk, the layout of an installation with automatic partitioning" % (
                 st["source"], "+".join(str(k) for k in st["kinds"]) or "nothing seen", len(st["parts"]), len(st["disks"])), None
     part, disk = st["parts"][0], st["disks"][0]
-    if (disk.get("pttype") or part.get("pttype")) != "gpt":
-        return "refuse", "%s has no GPT partition table (%s)" % (disk["path"], disk.get("pttype") or "none seen"), None
+    if disk.get("pttype") not in ("gpt", "dos"):
+        return "refuse", "the partition table of %s is neither GPT nor MBR (%s)" % (disk["path"], disk.get("pttype") or "none seen"), None
+    if disk["pttype"] == "dos" and (st.get("partn") or 5) > 4:
+        return "refuse", "%s is a logical partition of an MBR table: only a primary one is grown" % part["path"], None
     if st.get("fstype") not in ("xfs", "ext4"):
         return "refuse", "the file system of / is %s: only xfs and ext4 are grown" % (st.get("fstype") or "not seen"), None
     if None in (st.get("partn"), st.get("start"), st.get("sectors"), st.get("disk_sectors")):
@@ -730,7 +754,7 @@ def grow_plan(st):
         return "refuse", "%s is not the last partition of %s (after it: %s): there is nothing next to it to grow into" % (
             part["path"], disk["path"], ", ".join(st["later"])), None
     free = (st["disk_sectors"] - st["start"] - st["sectors"]) * 512
-    plan = {"disk": disk["path"], "part": part["path"], "partn": st["partn"], "lv": st["source"], "thin": bool(st.get("thin")),
+    plan = {"disk": disk["path"], "part": part["path"], "partn": st["partn"], "lv": st["source"], "thin": bool(st.get("thin")), "table": disk["pttype"],
             "free": free, "disk_bytes": st["disk_sectors"] * 512}
     if free < GROW_LEAST:
         return "full", "%s already ends where %s does (%.1f GB; %d MB after it, the partition table's own copy among them)" % (
@@ -754,7 +778,7 @@ def grow_lvm(text, source):
     if not mine["pool"]:
         if mine["vg_free"] < mine["extent"]:
             return [], ["the volume group %s has nothing free: / already has all of it" % mine["vg"]]
-        return [["lvextend", "--resizefs", "--extents", "+100%FREE", source]], \
+        return [["lvextend", "--resizefs", "--extents", "+100%FREE", "%s/%s" % (mine["vg"], mine["lv"])]], \
                ["/ (%s) gets the %s that are free in the volume group %s" % (gb(mine["size"]), gb(mine["vg_free"]), mine["vg"])]
     reserve = min(max(mine["vg_size"] // RESERVE_PART, RESERVE_LEAST), RESERVE_MOST)
     add = (mine["vg_free"] - reserve) // mine["extent"]
@@ -762,7 +786,7 @@ def grow_lvm(text, source):
         return [], ["the volume group %s has %s free, the share the installer leaves beside the thin pool (%s): the pool %s "
                     "and / stay as they are" % (mine["vg"], gb(mine["vg_free"]), gb(reserve), mine["pool"])]
     return [["lvextend", "--extents", "+%d" % add, "%s/%s" % (mine["vg"], mine["pool"])],
-            ["lvextend", "--resizefs", "--extents", "+%d" % add, source]], \
+            ["lvextend", "--resizefs", "--extents", "+%d" % add, "%s/%s" % (mine["vg"], mine["lv"])]], \
            ["the thin pool %s/%s and / (%s) grow by %s each; %s of the volume group stay free, the share the installer "
             "leaves beside the pool" % (mine["vg"], mine["pool"], gb(mine["size"]), gb(add * mine["extent"]), gb(mine["vg_free"] - add * mine["extent"]))]
 
@@ -789,7 +813,9 @@ def grow(ctx, a):
         # the partition table's second copy to the end of the disk (it sits where the image ended), then the
         # partition up to it: sfdisk writes the table and nothing else, and the kernel learns the new size while the
         # partition is in use (partx)
-        ctx.run(silik.as_root(["sfdisk", "--no-reread", "--no-tell-kernel", "--relocate", "gpt-bak-std", plan["disk"]]))
+        # (an MBR table has no second copy)
+        if plan["table"] == "gpt":
+            ctx.run(silik.as_root(["sfdisk", "--no-reread", "--no-tell-kernel", "--relocate", "gpt-bak-std", plan["disk"]]))
         if not ctx.quiet:
             print("    | , +", flush=True)
         ctx.run(silik.as_root(["sfdisk", "--no-reread", "--no-tell-kernel", "-N", str(plan["partn"]), plan["disk"]]), stdin=", +\n")
@@ -800,7 +826,7 @@ def grow(ctx, a):
     rc, out = ctx.run(silik.as_root(LVS), check=False, capture=True)
     if ctx.dry:
         print("silik: then, from what lvs says: " + ("lvextend of the thin pool and of / by what is free, less the share the "
-              "installer leaves in the volume group" if plan["thin"] else "lvextend --resizefs --extents +100%FREE " + plan["lv"]))
+              "installer leaves in the volume group" if plan["thin"] else "lvextend --resizefs --extents +100%FREE of the volume of /"))
         return 0
     steps = grow_lvm(out, plan["lv"]) if rc == 0 else None
     if steps is None:

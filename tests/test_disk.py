@@ -822,7 +822,7 @@ def grow_state(disk_gb=120, kinds=("disk", "lvm", "part"), top="lvm", pttype="gp
     """an image of 40 GB (its third partition from 1.6 GB to the image's end) on a disk of disk_gb"""
     start = (1600 << 20) // 512
     return {"source": LV, "fstype": fstype, "top": top, "kinds": list(kinds), "thin": thin,
-            "parts": [{"path": PART, "kname": "sda3", "pttype": pttype}] + [{"path": "/dev/sdb1", "kname": "sdb1", "pttype": "gpt"}] * (parts - 1),
+            "parts": [{"path": PART, "kname": "sda3"}] + [{"path": "/dev/sdb1", "kname": "sdb1"}] * (parts - 1),
             "disks": [{"path": DISK, "kname": "sda", "pttype": pttype}] + [{"path": "/dev/sdb", "kname": "sdb", "pttype": "gpt"}] * (disks - 1),
             "partn": 3, "start": start, "sectors": 40 * GB // 512 - start - 33, "disk_sectors": disk_gb * GB // 512, "later": list(later)}
 
@@ -876,7 +876,7 @@ RESIZE = "sfdisk --no-reread --no-tell-kernel -N 3 /dev/sda"
 PARTX = "partx --update --nr 3 /dev/sda"
 PV, ASK = "pvresize /dev/sda3", " ".join(disk.LVS)
 # 118 GB of group, 88 free: the installer's fifth (23.6 GB) stays, the pool and / get 64.4 GB = 16486 extents of 4 MiB
-G_POOL, G_ROOT = "lvextend --extents +16486 silikos/pool00", "lvextend --resizefs --extents +16486 " + LV
+G_POOL, G_ROOT = "lvextend --extents +16486 silikos/pool00", "lvextend --resizefs --extents +16486 silikos/root"
 
 
 class GrowPlan(unittest.TestCase):
@@ -903,7 +903,8 @@ class GrowPlan(unittest.TestCase):
                          (grow_state(kinds=("disk", "part"), top="part"), "knows an LVM volume on one partition"),
                          (grow_state(kinds=("disk", "lvm", "part", "raid1")), "knows an LVM volume on one partition"),
                          (grow_state(parts=2, disks=2), "2 partition(s) of 2 disk(s)"),
-                         (grow_state(pttype="dos"), "no GPT partition table (dos)"),
+                         (grow_state(pttype="atari"), "neither GPT nor MBR (atari)"),
+                         (dict(grow_state(pttype="dos"), partn=5), "logical partition of an MBR table"),
                          (grow_state(fstype="btrfs"), "only xfs and ext4"),
                          (grow_state(later=["sda4"]), "not the last partition of /dev/sda (after it: sda4)"),
                          (dict(grow_state(), start=None), "does not say where"),
@@ -912,48 +913,61 @@ class GrowPlan(unittest.TestCase):
             self.assertEqual((what, plan), ("refuse", None), text)
             self.assertIn(word, text)
 
-    def test_the_layout_is_read_from_lsblk_and_the_kernel(self):
-        # the tree as lsblk -s gives it for a thin volume: the volume, its pool, the pool's two parts, each on the
-        # same partition of the same disk
-        leaf = [{"path": PART, "kname": "sda3", "type": "part", "fstype": "LVM2_member", "pttype": "gpt", "children": [
-            {"path": DISK, "kname": "sda", "type": "disk", "fstype": None, "pttype": "gpt"}]}]
-        tree = {"blockdevices": [{"path": LV, "kname": "dm-4", "type": "lvm", "fstype": "xfs", "pttype": None, "children": [
-            {"path": "/dev/mapper/silikos-pool00-tpool", "kname": "dm-2", "type": "lvm", "fstype": None, "pttype": None, "children": [
-                {"path": "/dev/mapper/silikos-pool00_tmeta", "kname": "dm-0", "type": "lvm", "children": copy.deepcopy(leaf)},
-                {"path": "/dev/mapper/silikos-pool00_tdata", "kname": "dm-1", "type": "lvm", "children": copy.deepcopy(leaf)}]}]}]}
+    def test_the_layout_is_read_from_the_kernels_own_tree(self):
+        # /sys/class/block as it is for a thin volume: the volume (dm-4) on its pool (dm-2), the pool on its two
+        # parts (dm-0, dm-1), each on the same partition of the same disk
         asked = []
 
         def cmd(argv, timeout=20):
             asked.append(argv)
-            return (0, LV) if argv[0] == "findmnt" else (0, json.dumps(tree))
+            return (0, {"SOURCE": LV, "FSTYPE": "xfs", "PTTYPE": "gpt"}[argv[argv.index("-o") + 1]])
 
         with tempfile.TemporaryDirectory() as d:
-            for name, files in (("sda", {"size": "300000"}), ("sda/sda1", {"partition": "1", "start": "10", "size": "20"}),
-                                ("sda/sda3", {"partition": "3", "start": "100", "size": "500"}), ("sda/queue", {"x": "1"}),
-                                ("sda3", {"partition": "3", "start": "100", "size": "500"})):
-                os.makedirs(os.path.join(d, name))
+            real = os.path.join(d, "devices"); cls = os.path.join(d, "class")
+            os.makedirs(cls)
+
+            def dev(name, files, slaves=(), under=None):
+                home = os.path.join(real, under or "", name)
+                os.makedirs(os.path.join(home, "slaves"))
                 for f, v in files.items():
-                    with open(os.path.join(d, name, f), "w") as h:
+                    os.makedirs(os.path.dirname(os.path.join(home, f)), exist_ok=True)
+                    with open(os.path.join(home, f), "w") as h:
                         h.write(v + "\n")
+                for x in slaves:
+                    os.symlink(os.path.join(cls, x), os.path.join(home, "slaves", x))
+                os.symlink(home, os.path.join(cls, name))
+
+            dev("sda", {"size": "300000"})
+            dev("sda1", {"partition": "1", "start": "10", "size": "20"}, under="sda")
+            dev("sda3", {"partition": "3", "start": "100", "size": "500"}, under="sda")
+            dev("dm-0", {"dm/uuid": "LVM-abc-tmeta", "dm/name": "silikos-pool00_tmeta"}, ["sda3"])
+            dev("dm-1", {"dm/uuid": "LVM-abc-tdata", "dm/name": "silikos-pool00_tdata"}, ["sda3"])
+            dev("dm-2", {"dm/uuid": "LVM-abc-tpool", "dm/name": "silikos-pool00-tpool"}, ["dm-0", "dm-1"])
+            dev("dm-4", {"dm/uuid": "LVM-abcroot", "dm/name": "silikos-root"}, ["dm-2"])
+            where = lambda p: os.path.join(cls, "dm-4") if p == LV else os.path.realpath(p)
             with mock.patch.object(silik, "sec_cmd", cmd):
-                st = disk.grow_read(silik, d)
+                st = disk.grow_read(silik, cls, where)
                 self.assertEqual((st["kinds"], st["top"], st["thin"], st["fstype"]), (["disk", "lvm", "part"], "lvm", True, "xfs"))
-                self.assertEqual(([x["path"] for x in st["parts"]], [x["path"] for x in st["disks"]]), ([PART], [DISK]))
+                self.assertEqual(([x["path"] for x in st["parts"]], [x["path"] for x in st["disks"]]), (["/dev/sda3"], ["/dev/sda"]))
                 self.assertEqual((st["source"], st["partn"], st["start"], st["sectors"], st["disk_sectors"], st["later"]), (LV, 3, 100, 500, 300000, []))
                 self.assertEqual(disk.grow_plan(st)[0], "grow")
                 # a partition after it is seen
-                os.makedirs(os.path.join(d, "sda/sda4"))
-                for f, v in (("partition", "4"), ("start", "700"), ("size", "100")):
-                    with open(os.path.join(d, "sda/sda4", f), "w") as h:
-                        h.write(v)
-                self.assertEqual(disk.grow_read(silik, d)["later"], ["sda4"])
-                # a volume of its own (no pool) is not thin
-                tree["blockdevices"][0]["children"] = copy.deepcopy(leaf)
-                self.assertFalse(disk.grow_read(silik, d)["thin"])
+                dev("sda4", {"partition": "4", "start": "700", "size": "100"}, under="sda")
+                self.assertEqual(disk.grow_read(silik, cls, where)["later"], ["sda4"])
+                # a volume of its own (no pool) is not thin; an encrypted one is seen as such
+                dev("dm-5", {"dm/uuid": "LVM-abcplain", "dm/name": "silikos-plain"}, ["sda3"])
+                self.assertFalse(disk.grow_read(silik, cls, lambda p: os.path.join(cls, "dm-5") if p == LV else os.path.realpath(p))["thin"])
+                dev("dm-6", {"dm/uuid": "CRYPT-LUKS2-abc", "dm/name": "luks-abc"}, ["sda3"])
+                dev("dm-7", {"dm/uuid": "LVM-abcsealed", "dm/name": "silikos-sealed"}, ["dm-6"])
+                st = disk.grow_read(silik, cls, lambda p: os.path.join(cls, "dm-7") if p == LV else os.path.realpath(p))
+                self.assertEqual(st["kinds"], ["crypt", "disk", "lvm", "part"])
+                self.assertIn("encrypted", disk.grow_plan(st)[1])
         self.assertEqual(asked[0], ["findmnt", "-n", "-o", "SOURCE", "/"])
-        self.assertEqual(asked[1][:3], ["lsblk", "-J", "-s"])
+        self.assertIn(["lsblk", "-n", "-d", "-o", "PTTYPE", "/dev/sda"], asked)
         # nothing seen (a container): None, never a guess
         with mock.patch.object(silik, "sec_cmd", lambda argv, timeout=20: (1, "")):
+            self.assertIsNone(disk.grow_read(silik, "/nonexistent"))
+        with mock.patch.object(silik, "sec_cmd", lambda argv, timeout=20: (0, "/dev/mapper/none")):
             self.assertIsNone(disk.grow_read(silik, "/nonexistent"))
 
 
@@ -975,7 +989,7 @@ class GrowLvm(unittest.TestCase):
 
     def test_a_volume_of_its_own_gets_all_that_is_free(self):
         cmds, say = disk.grow_lvm(lvs_text(pool=""), LV)
-        self.assertEqual([" ".join(c) for c in cmds], ["lvextend --resizefs --extents +100%FREE " + LV])
+        self.assertEqual([" ".join(c) for c in cmds], ["lvextend --resizefs --extents +100%FREE silikos/root"])
         self.assertEqual(disk.grow_lvm(lvs_text(free_gb=0, pool=""), LV)[0], [])
 
     def test_lines_it_cannot_read_are_not_guessed(self):
@@ -995,6 +1009,10 @@ class Grow(unittest.TestCase):
         self.assertIn("silik: / is 115G, 101G free", r.out)
         for word in ("mkfs", "wipefs", "parted", "--force", "--delete", "pvcreate", "lvremove", "lvreduce"):
             self.assertNotIn(word, " ".join(r.calls))
+
+    def test_an_mbr_table_has_no_second_copy_to_move(self):
+        r = GrowRun(["--yes"], dict(grow_state(120, pttype="dos"), partn=2))
+        self.assertEqual((r.rc, r.calls), (0, [RESIZE.replace("-N 3", "-N 2"), PARTX.replace("--nr 3", "--nr 2"), PV, ASK, G_POOL, G_ROOT]), r.err)
 
     def test_not_asked_means_not_done(self):
         r = GrowRun([], grow_state(120))

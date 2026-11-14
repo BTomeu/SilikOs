@@ -296,7 +296,7 @@ disk: the last partition up to the end of the disk (`sfdisk` writes the partitio
 physical volume, the thin pool and the volume and file system of `/`, in that order, each command printed. It
 keeps free in the volume group the share the installer itself leaves beside a thin pool (a fifth). It moves and
 formats nothing, touches no other partition, and refuses a layout it does not know (an encrypted volume, a
-partition that is not the disk's last, a table that is not GPT). The image runs it by itself once, at its first
+partition that is not the disk's last, a table that is neither GPT nor MBR). The image runs it by itself once, at its first
 start, before the login screen (`silikos-image-grow.service`, which is in the image only, not in the packages);
 on a disk of the image's size it does nothing.
 

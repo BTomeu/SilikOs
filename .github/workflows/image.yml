@@ -139,6 +139,8 @@ jobs:
             set -e
             dnf -y -q install rpm-build createrepo_c cpio > /dev/null
             bash el10/build_rpms.sh'
+          # (the container wrote build/ as root: the steps after it are the runner's user)
+          sudo chown -R "$(id -u):$(id -g)" build
       - name: The lab ISO
         run: |
           createrepo_c --quiet build/el10/repo && ls build/el10/repo

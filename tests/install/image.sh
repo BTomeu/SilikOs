@@ -123,7 +123,9 @@ case " $(said args) " in *console=ttyS0*) row FAIL image.no-serial-console "the 
 case "$(said initramfs)" in *"ahci 1"*"nvme 1"*"usb-storage 1"*) row ok image.initramfs-generic "the initramfs has every driver: $(said initramfs)" ;; *) row FAIL image.initramfs-generic "the initramfs: '$(said initramfs)'" ;; esac
 case "$(said encrypted)" in no) row ok image.not-encrypted "not encrypted (an image anyone can download cannot keep a passphrase)" ;; *) row FAIL image.not-encrypted "LUKS in the image: $(said encrypted)" ;; esac
 [ "$(said ci)" = none ] && row ok image.nothing-of-the-tests "no check script, service or test user of the tests in the image" || row FAIL image.nothing-of-the-tests "found: $(said ci)"
-case "$(said grow)" in enabled*) row ok image.grows-at-first-start "the service that takes the system onto the whole disk at the first start is in the image ($(said grow | cut -c1-200))" ;; *) row FAIL image.grows-at-first-start "the service: '$(said grow)'" ;; esac
+# (the service enabled, and the command, run without writing in the installed system, reads the layout: on the image itself there is nothing to take)
+case "$(said grow)" in enabled*"already ends where"*) row ok image.grows-at-first-start "the service that takes the system onto the whole disk at the first start is in the image, and the command reads the layout ($(said grow | cut -c1-200))" ;; *) row FAIL image.grows-at-first-start "the service, and what the command said of the layout: '$(said grow | cut -c1-300)'" ;; esac
+row info image.lsblk-inverse "$(said grow-tree)"
 row info image.layout "$(said layout)"
 row info image.names "$(said names)"
 
@@ -195,14 +197,14 @@ backup = struct.unpack_from("<Q", head, 512 + 32)[0]
 last3 = struct.unpack_from("<Q", head, 1024 + 2 * 128 + 40)[0]
 best = (-1, "")
 for chunk in pv.split(b"\x00"):                      # LVM keeps its records as text, the older ones before the newest
-    t = chunk.decode("ascii", "replace")
+    t = "\n".join(l.strip() for l in chunk.decode("ascii", "replace").split("\n"))    # (on the disk the lines are not indented)
     m = re.search(r"\nseqno = (\d+)", t)
     if m and int(m.group(1)) > best[0]:
         best = (int(m.group(1)), t)
 seq, t = best
-root = re.search(r"\n\t\troot \{\n(.*?)\n\t\t\}", t, re.S)
-ext = re.search(r"\n\textent_size = (\d+)", t)
-size = sum(int(x) for x in re.findall(r"\n\t\t\t\textent_count = (\d+)", root.group(1))) if root else None
+root = re.search(r"\nroot \{\n(.*?)\n\}\n\}", t, re.S)          # the volume "root": up to the end of its last segment
+ext = re.search(r"\nextent_size = (\d+)", t)
+size = sum(int(x) for x in re.findall(r"\nextent_count = (\d+)", root.group(1))) if root else None
 print(backup, last3, seq if seq >= 0 else "-", size if size else "-", ext.group(1) if ext else "-")
 EOF
 }

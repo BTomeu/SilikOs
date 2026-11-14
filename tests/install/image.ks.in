@@ -12,13 +12,17 @@ autopart
 lang en_US.UTF-8
 keyboard us
 timezone UTC --utc
-# (without a name the installer takes the one the build machine's network gives it and names the volume group after
-# it: the second image made carried "silikos_ip-10-0-2-15")
-network --hostname=localhost.localdomain
 # (the installer wants a way in before it goes on; the last step below takes it away again: root is locked, with no
 # password at all, and the first start asks for the user)
 rootpw --plaintext silikos-image-installing
 poweroff
+
+# the installer names the volume group after the name its own network gave the machine it runs on (the second and
+# third images made carried "silikos_ip-10-0-2-15", the first "silikos"; a host name in the kickstart did not change
+# it: run 43613312067). Before the disk is laid out the build machine has no name of its own
+%pre
+hostname localhost.localdomain
+%end
 
 %post --log=/root/silikos-image-post.log
 con=/dev/ttyS0
@@ -61,7 +65,9 @@ ExecStartPost=/usr/bin/touch /var/lib/silikos-image/grown
 WantedBy=multi-user.target
 UNIT
 systemctl enable silikos-image-grow.service > /dev/null 2>&1
+# (here the disk is the image itself: the command must read the layout and find nothing to take)
 say grow "$(systemctl is-enabled silikos-image-grow.service 2>&1); $(/usr/bin/silik --dry-run disk grow 2>&1 | head -1)"
+say grow-tree "$(lsblk -J -s -o PATH,KNAME,TYPE "$(findmnt -n -o SOURCE /)" 2>&1 | tr -d ' \n"' | cut -c1-600)"
 # what belongs to one system and not to an image: made again at the first start
 rm -f /etc/ssh/ssh_host_* /root/anaconda-ks.cfg /root/original-ks.cfg
 : > /etc/machine-id
