@@ -1,5 +1,6 @@
-# SilikOS 10 lab (docs/EL10.md): the EL 10 track, on its own branch. SilikOS 9 is the product and its CI is ci.yml;
-# nothing here builds, tests or publishes the product. What this does:
+# SilikOS 10 lab (docs/EL10.md): the EL 10 track. SilikOS 9 is the product and its CI is ci.yml; nothing here builds,
+# tests or publishes the product. It runs at every change of main, so that both versions are always there (owner,
+# 14/11/2026), for its own branch and by hand. What this does:
 #   packages  the lab's packages built inside EL 10 (el10/build_rpms.sh: the product's, with what EL 10 forces), the
 #             whole set of the lab's kickstart resolved against AlmaLinux 10 and EPEL (el10/lab_resolve.sh)
 #   shell     the port of the shell extension in a headless GNOME Shell 49 of AlmaLinux 10, the three looks
@@ -10,8 +11,11 @@
 # No job writes anything to the repository, a release or a package repository.
 name: EL 10 lab
 on:
+  # both versions, always (owner, 14/11/2026: "we must always have the two versions, EL 9 and EL 10"): every change
+  # of main builds, installs and checks the EL 10 system too, beside the CI of the EL 9 one
   push:
-    branches: [el10-lab]
+    branches: [main, el10-lab]
+    paths-ignore: ['docs/**', 'README.md', 'README.ca.md', 'README.es.md']
   workflow_dispatch:
 concurrency:
   group: el10-${{ github.ref }}

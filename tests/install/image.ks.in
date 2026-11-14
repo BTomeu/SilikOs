@@ -1,0 +1,53 @@
+# ======================================================================================================================
+# THE DISK IMAGE ONLY (tests/install/image.ks.in). NEVER PART OF THE SHIPPED KICKSTART OR OF THE ISO.
+# tests/install/image.sh installs with the ISO's own kickstart and these lines onto an empty raw image, which is
+# then handed out to be written straight onto a disk: it must suit any computer and belong to nobody yet.
+# The one disk it names is the empty image of the virtual machine it runs in.
+# ======================================================================================================================
+text
+ignoredisk --only-use=sda
+zerombr
+clearpart --all --initlabel --drives=sda
+autopart
+lang en_US.UTF-8
+keyboard us
+timezone UTC --utc
+# (the installer wants a way in before it goes on; the last step below takes it away again: root is locked, with no
+# password at all, and the first start asks for the user)
+rootpw --plaintext silikos-image-installing
+poweroff
+
+%post --log=/root/silikos-image-post.log
+con=/dev/ttyS0
+say() { printf '\r\nSILIKOS-IMG|%s|%s\r\n' "$1" "$(echo "$2" | tr '\n' ' ' | cut -c1-700)" > $con; }
+# nobody can sign in until the first start has made a user: root locked, and no password behind the lock
+usermod -p '!!' root
+# the kernel's command line of a computer: no console on the serial port (the installer copies its own), the
+# graphical start as an installation made on the installer's screens has it
+grubby --update-kernel=ALL --remove-args="console=ttyS0,115200" || :
+grubby --update-kernel=ALL --args="rhgb quiet" || :
+sed -i 's/ *console=ttyS0,115200//' /etc/default/grub /etc/kernel/cmdline 2> /dev/null || :
+grep -q 'rhgb' /etc/default/grub || sed -i 's/^GRUB_CMDLINE_LINUX="\(.*\)"/GRUB_CMDLINE_LINUX="\1 rhgb quiet"/' /etc/default/grub
+# LVM's list of this machine's disks names the virtual disk the image was made on: without the list LVM looks at
+# every disk, which is what an image written to another disk needs (the base's own advice for images)
+rm -f /etc/lvm/devices/system.devices
+# the initramfs with every driver (dracut-config-generic is in the package set of the image)
+k=$(ls /lib/modules | sort -V | tail -1)
+dracut -f --regenerate-all > /root/silikos-image-dracut.log 2>&1 || say dracut "FAILED: $(tail -3 /root/silikos-image-dracut.log)"
+img=/boot/initramfs-$k.img
+n() { lsinitrd "$img" 2> /dev/null | grep -c "/$1\.ko" | sed 's/^[1-9][0-9]*$/1/'; }
+say initramfs "$(lsinitrd "$img" 2> /dev/null | grep -c '\.ko') kernel modules: ahci $(n ahci) nvme $(n nvme) usb-storage $(n usb-storage) uas $(n uas) xhci-pci $(n xhci-pci); $(du -h "$img" | cut -f1); kernel $k"
+# what belongs to one system and not to an image: made again at the first start
+rm -f /etc/ssh/ssh_host_* /root/anaconda-ks.cfg /root/original-ks.cfg
+: > /etc/machine-id
+u=$(awk -F: '$3 >= 1000 && $3 < 60000 { print $1 }' /etc/passwd | tr '\n' ' ')
+say users "${u:-none}"
+say root "$(passwd -S root | awk '{ print $2 }')"
+[ -s /etc/machine-id ] && say machine-id "$(cat /etc/machine-id)" || say machine-id empty
+say args "$(grubby --info=DEFAULT 2> /dev/null | sed -n 's/^args="\(.*\)"$/\1/p')"
+[ "$(lsblk -n -o FSTYPE | grep -c crypto_LUKS)" = 0 ] && say encrypted no || say encrypted "$(lsblk -n -l -o NAME,FSTYPE | grep crypto_LUKS | tr '\n' ' ')"
+c=$(ls /usr/local/sbin/silikos-ci* /etc/systemd/system/silikos-ci* 2> /dev/null | tr '\n' ' '; getent passwd tester | cut -d: -f1)
+say ci "${c:-none}"
+say layout "$(lsblk -n -l -o NAME,TYPE,SIZE,FSTYPE,MOUNTPOINT | tr -s ' ' | tr '\n' ';' | cut -c1-600)"
+say packages "$(rpm -qa | wc -l) packages; $(rpm -q silik-tools silikos-desktop silikos-security 2>&1 | tr '\n' ' '); gnome-initial-setup: $(rpm -q gnome-initial-setup 2>&1)"
+%end

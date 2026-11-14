@@ -293,9 +293,11 @@ class Workflow(unittest.TestCase):
         self.s = read(".github", "workflows", "el10.yml")
         self.head = self.s.split("\njobs:\n", 1)[0]
 
-    def test_it_runs_for_its_own_branch_and_by_hand_only(self):
-        self.assertRegex(self.head, r"\non:\n  push:\n    branches: \[el10-lab\]\n  workflow_dispatch:\n")
-        for word in ("pull_request", "workflow_run", "schedule", "tags:", "main"):
+    def test_it_runs_at_every_change_of_main_for_its_own_branch_and_by_hand(self):
+        # both versions, always (owner, 14/11/2026): the EL 10 system is built, installed and checked at every
+        # change of main, beside the CI of the EL 9 one; never for a stranger's pull request, never for a tag
+        self.assertRegex(self.head, r"\n  push:\n    branches: \[main, el10-lab\]\n    paths-ignore: \[[^\n]*\]\n  workflow_dispatch:\n")
+        for word in ("pull_request", "workflow_run", "schedule", "tags:"):
             self.assertNotIn(word, self.head.split("\non:\n", 1)[1], word)
 
     def test_it_writes_nothing(self):

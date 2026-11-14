@@ -19,6 +19,10 @@ Read `docs/PLAN.md` and `docs/STATUS.md` first.
   (SilikStudio's `desktop/linux`, RPM by its `tools/package_rpm.sh`, built ON EL 9: the Ubuntu-built package does not
   start on glibc 2.34). The RPM is a build product of the other repository: `build/extra/`, never committed here.
   Speed claims are measured or not made.
+- **Both versions, always** (owner, 14/11/2026: "we must always have the two versions, EL 9 and EL 10"): SilikOS 9
+  (AlmaLinux 9, the product) and SilikOS 10 (AlmaLinux 10, `el10/`, made from the product by rules) are built,
+  installed and checked at every change (workflows CI and EL 10 lab). What is added to one is added to the other,
+  or `docs/STATUS.md` says, in "not verified", that the other does not have it yet.
 - **Commits are not made as Claude** (owner, 14/11/2026: "no facis commits com a Claude"): the author is the owner
   (`BTomeu`, the account's GitHub no-reply address, as the repository's git configuration has it); no
   `Co-Authored-By` line, no session link, no model's name anywhere in a commit.

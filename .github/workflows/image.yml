@@ -1,0 +1,113 @@
+# A disk image of SilikOS already installed (tests/install/image.sh): to write straight onto a disk, an external
+# one for instance, and start from it, with no installer and no USB stick (the owner, 14/11/2026). The same ISO the
+# CI installs (with Wine and the open tools, when their workflows have made them) is installed onto a raw image
+# that suits any computer and belongs to nobody yet: not encrypted, the initramfs with every driver, no user (the
+# first start asks for one), nothing of the tests in it. Two layers over the image are started, on USB with Secure
+# Boot on and on SATA, up to the first-start setup; the image itself is never started. Then it is compressed and
+# kept as an artifact for 14 days. Started by hand, and by a change of its own files.
+name: Disk image
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['tests/install/image.sh', 'tests/install/image.ks.in', '.github/workflows/image.yml']
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 200
+    permissions:
+      contents: read
+      attestations: read     # (where a release's package was made, asked before it goes on the ISO)
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with: { persist-credentials: false }
+      - name: KVM for the runner's user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+      - name: Tools, the firmware, disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          bash tools/ci_apt.sh rpm createrepo-c xorriso mtools cpio isomd5sum qemu-system-x86 qemu-utils ovmf imagemagick tesseract-ocr xz-utils
+          df -h /
+      - name: Wine and the open EDA tools for the ISO, when their workflows have made them (releases wine-*, eda-tools)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p build/extra
+          # get RELEASE PATTERN WHAT WORKFLOW: its packages into build/extra. A release that does not exist yet is said
+          # (the ISO is then without WHAT); any other failure (the API, a download cut short) stops the job: an ISO
+          # quietly missing a release's packages would make a green run of a system without them.
+          # Each package goes on the ISO only with the build provenance attestation of WORKFLOW, the one that keeps
+          # that release, on main (tools/vouched.sh). A release is a place anything with a token that writes can put a
+          # file, and the installer installs every package of the ISO by its name, as root, without a signature: the
+          # package repository asked this before it signs (the audit's S2), the ISO did not (the second pass,
+          # 14/11/2026). What nothing vouches for is left out and named; the installation test then says what is missing
+          get() {
+            if out=$(gh release view "$1" --repo "$GITHUB_REPOSITORY" --json tagName 2>&1); then
+              rm -rf build/from; mkdir -p build/from
+              gh release download "$1" --repo "$GITHUB_REPOSITORY" --pattern "$2" --dir build/from --clobber \
+                || { echo "::error title=release $1::the download of its packages failed"; exit 1; }
+              # (the source packages stay in the release; the ARM builds: the ISO here is x86_64)
+              rm -f build/from/*.src.rpm build/from/*.aarch64.rpm
+              bash tools/vouched.sh --repo "$GITHUB_REPOSITORY" --ref refs/heads/main --workflow "$4" --drop build/from/*.rpm
+              for f in build/from/*.rpm; do [ ! -f "$f" ] || mv -n "$f" build/extra/; done
+              rm -rf build/from
+            elif echo "$out" | grep -qi 'not found'; then
+              echo "::notice title=$1::no such release yet: the ISO of this run has no $3"
+            else
+              echo "::error title=release $1::$out"; exit 1
+            fi
+          }
+          tags=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 50 --json tagName -q '.[].tagName') || { echo "::error title=releases::cannot list them"; exit 1; }
+          wine=$(echo "$tags" | grep '^wine-' | head -1 || true)
+          if [ -n "$wine" ]; then get "$wine" 'silik-wine-*.rpm' Wine wine.yml; else echo "::notice title=Wine::no wine-* release yet: the ISO of this run has no Wine"; fi
+          get eda-tools '*.rpm' "the open EDA tools" eda.yml        # (workflow EDA tools)
+          get dev-tools '*.rpm' "OpenOCD or dfu-util" dev.yml       # (workflow Dev tools)
+          rm -f build/extra/*.src.rpm      # (the releases' source packages: kept there, not on the ISO)
+          rm -f build/extra/*.aarch64.rpm                           # (the ARM builds: the ISO here is x86_64)
+          ls -la build/extra
+      # our packages as the packages job built them (in EL 9, with the base's rpmbuild): the ISO carries those
+      - name: Packages
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src almalinux:9 bash -c 'dnf -y -q install rpm-build createrepo_c > /dev/null && bash tools/build_rpms.sh'
+          sudo chown -R "$(id -u):$(id -g)" build
+      - name: The ISO
+        run: |
+          createrepo_c --quiet build/repo && ls build/repo
+          bash tools/build_iso.sh
+      - name: The image installed, checked from outside, started on two computers, compressed
+        run: bash tests/install/image.sh build/SilikOS-*-netinstall.iso build/image
+      - name: The report
+        if: always()
+        run: |
+          {
+            echo '### SilikOS disk image'
+            echo '```'
+            cat build/image/report.txt 2>/dev/null || echo 'no report: see the installer console (artifact image-test)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: silikos-disk-image
+          path: |
+            build/image/SilikOS-*-disk.img.xz
+            build/image/SilikOS-*-disk.img.xz.sha256
+          compression-level: 0
+          retention-days: 14
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        if: always()
+        with:
+          name: image-test
+          path: |
+            build/image/*.log
+            build/image/*.txt
+            build/image/*.png
+            build/image/*.ks
