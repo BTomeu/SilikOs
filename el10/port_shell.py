@@ -117,7 +117,7 @@ RULES = [
     ("extension.js", "extension-dir", "45", "Me.dir (ExtensionUtils.getCurrentExtension()) -> this.dir of the Extension",
      G % "45", "lit", "Me.dir.get_child(", "this.dir.get_child(", 2),
     ("flow.js", "esm-exports-var", "45", "what another module reads: `var NAME` -> `export const NAME`",
-     G % "45", "re", r"^var ((?:ISL_R|T_KEY|T_START_IN|T_LOOK_OUT|GLASS_SIGMA)\b)", r"export const \1", 5),
+     G % "45", "re", r"^var ((?:ISL_R|T_KEY|T_START_IN|T_LOOK_OUT|GLASS_MODES|STILL_MS)\b)", r"export const \1", 6),
     ("flow.js", "esm-exports-func", "45", "what another module calls: `function NAME` -> `export function NAME`",
      G % "45", "re", r"^function (animated|ease|pulse|still|cls)\(", r"export function \1(", 5),
     ("flow.js", "esm-exports-class", "45", "`var NAME = class NAME {` -> `export class NAME {`",
@@ -153,7 +153,7 @@ RULES = [
     ("extension.js", "scrollview-child", "46", "Clutter.Container is gone: St.ScrollView.add_actor(child) -> set_child(child)",
      G % "46", "lit", "this._scroll.add_actor(this._list);", "this._scroll.set_child(this._list);", 1),
     ("flow.js", "child-added", "46", "Clutter.Container is gone: the signal 'actor-added' -> 'child-added'",
-     G % "46", "lit", "this._glass.connect('actor-added',", "this._glass.connect('child-added',", 1),
+     G % "46", "lit", "this._wallBox.connect('actor-added',", "this._wallBox.connect('child-added',", 1),
     ("*", "orientation", "48", "St.BoxLayout: `vertical: true` -> `orientation: Clutter.Orientation.VERTICAL` (deprecated in 48, to be removed)",
      G % "48", "lit", "vertical: true", "orientation: Clutter.Orientation.VERTICAL", "+"),
     ("flow.js", "orientation-bar", "48", "the same, where it is a condition",
@@ -173,7 +173,7 @@ RULES = [
      G % "46", "lit", "icon_name: 'focus-windows-symbolic'", "icon_name: 'shell-focus-windows-symbolic'", 1),
     # ---- Shell (46, 48)
     ("flow.js", "blur-radius", "46", "Shell.BlurEffect: `sigma` -> `radius`, which is 2 x sigma",
-     G % "46", "lit", "sigma: GLASS_SIGMA * s, brightness: 1", "radius: 2 * GLASS_SIGMA * s, brightness: 1", 1),
+     G % "46", "lit", "sigma: mode.sigma * s, brightness: 1", "radius: 2 * mode.sigma * s, brightness: 1", 1),
     ("flow.js", "snippet-hook", "48", "Shell.SnippetHook -> Cogl.SnippetHook",
      G % "48", "lit", "Shell.SnippetHook.FRAGMENT", "Cogl.SnippetHook.FRAGMENT", 1),
     # ---- Wayland: a window's class
@@ -194,7 +194,7 @@ RULES = [
 
 # text that must not be left in a ported module: each is an API that GNOME Shell 49 does not have
 LEFT = [r"\bimports\.", r"\bMe\.", r"\bGtk\.", r"\bUtil\.", r"Meta\.later_", r"Meta\.Rectangle", r"add_actor\(", r"remove_actor\(",
-        r"'actor-added'", r"'actor-removed'", r"\blogError\(", r"cairo_set_source_color", r"Shell\.SnippetHook", r"\bsigma:",
+        r"'actor-added'", r"'actor-removed'", r"\blogError\(", r"cairo_set_source_color", r"Shell\.SnippetHook", r"BlurEffect\(\{[^}]*\bsigma:",
         r"^var ", r"^function init\(", r"vertical:", r"Clutter\.Color\b", r"Clutter\.Image\b", r"get_maximized\("]
 
 

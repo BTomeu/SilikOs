@@ -1,14 +1,14 @@
 {
  "made_from": {
-  "extension.js": "b84191119ec11b83cc8f52eaf30d6a0a43ca94c5cbfd4d389393eaba1b0ad206",
-  "flow.js": "d53cd03a1c94e83a0ad924cea09edc9805e096337721b8b0577fa0c23b0eeea1"
+  "extension.js": "ab2ef70ce1334b21f5ca82261c2cfbc0d7a5f67947aa25cd66c21f640f0df447",
+  "flow.js": "c52af599101a2bd607ee5f8ca942803ab0807e44edc366e9b0f6205ab40b9949"
  },
  "rules": {
   "extension.js": {
    "cairo-color": 2,
    "command-late-class": 1,
    "command-window": 1,
-   "console": 2,
+   "console": 3,
    "esm-imports": 1,
    "extension-class": 1,
    "extension-dir": 2,
@@ -25,7 +25,7 @@
    "scroll-util": 1,
    "scrollview-child": 1,
    "st-icontheme": 1,
-   "textdecoder": 2
+   "textdecoder": 3
   },
   "flow.js": {
    "blur-radius": 1,
@@ -33,7 +33,7 @@
    "esm-exports-class": 2,
    "esm-exports-class-end": 2,
    "esm-exports-func": 5,
-   "esm-exports-var": 5,
+   "esm-exports-var": 6,
    "esm-imports": 1,
    "icon-name": 1,
    "laters-add": 1,
