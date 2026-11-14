@@ -1,0 +1,27 @@
+# The checks the external-disk test must say with a verdict in its desktop mode (SILIK_CI_EXTERNAL_MODE=desktop: the
+# whole desktop on the USB disk, started the graphical way). tests/install/external.sh adds a FAIL row for each one
+# that is not in its report.
+external.install.entry
+external.install.finished
+external.install.one-usb-disk
+external.install.own-disks-hidden
+external.install.boot-order-kept
+external.install.no-entry-removed
+external.install.own-disk-untouched
+external.desktop.uefi
+external.desktop.encrypted
+external.desktop.silik-status
+external.desktop.root-on-usb
+external.desktop.graphical-start
+external.desktop.splash-not-off
+external.desktop.splash-theme
+external.desktop.splash-in-initramfs
+external.desktop.graphical-target
+external.desktop.gdm
+external.desktop.greeter
+external.desktop.silik-disk-says-external
+external.desktop.usbguard-allows-the-disk
+external.desktop.failed-units
+external.desktop.passphrase-at-the-splash
+external.desktop.finished
+external.desktop.own-disk-untouched

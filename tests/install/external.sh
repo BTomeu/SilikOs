@@ -28,9 +28,21 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd); root=$(cd "$here/../.." && pwd)
 iso=${1:?usage: tests/install/external.sh ISO [OUT_DIR]}
 out=${2:-$root/build/external-test}
-mem=${SILIK_CI_MEM:-4096}; cpus=${SILIK_CI_CPUS:-$(nproc)}; disk_gb=${SILIK_CI_EXTERNAL_DISK:-40}
+mem=${SILIK_CI_MEM:-4096}; cpus=${SILIK_CI_CPUS:-$(nproc)}; disk_gb=${SILIK_CI_EXTERNAL_DISK:-80}
 t_install=${SILIK_CI_INSTALL_MIN:-80}; t_boot=${SILIK_CI_BOOT_MIN:-12}
-PASSPHRASE=silikos-ci-external-disk       # the test's own: it protects a disk image that is deleted at the end
+# the test's own: it protects a disk image that is deleted at the end. No letter that is a key of the boot menu
+# (c: its command line, e: its editor): in the desktop mode it is typed blind, and a start slower than expected must
+# not land it there
+PASSPHRASE=silikos-usb-disk-2718
+# SILIK_CI_EXTERNAL_MODE=desktop: another test with the same installation steps. The whole desktop (the shipped
+# package set and boot loader line) goes onto the USB disk; the installed disk is started once, the graphical
+# way: the passphrase is typed on the keyboard at the boot splash, and the stage `desktop` of external-check.sh
+# says what came up. (The default, `small`: the base's core and SilikOS's tools, the console on the serial port,
+# four starts on three computers.)
+mode=${SILIK_CI_EXTERNAL_MODE:-small}
+case $mode in small|desktop) ;; *) echo "error: SILIK_CI_EXTERNAL_MODE is small or desktop" >&2; exit 2 ;; esac
+# (the desktop test has its own list of the checks that must be said)
+if [ "$mode" = desktop ] && [ -z "${SILIK_CI_MUST_FILE:-}" ]; then SILIK_CI_MUST_FILE=$here/must-external-desktop.txt; fi
 mkdir -p "$out"; out=$(cd "$out" && pwd); iso=$(cd "$(dirname "$iso")" && pwd)/$(basename "$iso")
 work=$(mktemp -d /tmp/silik-external.XXXXXX)
 qpid=""
@@ -85,15 +97,21 @@ esac
 
 # the kickstart of the test: the ISO's own (its screen-mode lines, its boot loader line and its desktop taken out:
 # the base's core and the SilikOS packages this test is about) + the CI-only lines of external.ks.in
-python3 - "$work/shipped.ks" "$here/external.ks.in" "$here/external-check.sh" "$PASSPHRASE" > "$work/external.ks" <<'EOF'
+python3 - "$work/shipped.ks" "$here/external.ks.in" "$here/external-check.sh" "$PASSPHRASE" "$mode" > "$work/external.ks" <<'EOF'
 import re, sys
-shipped, extra, check, passphrase = sys.argv[1:5]
+shipped, extra, check, passphrase, mode = sys.argv[1:6]
 ks = "\n".join(l for l in open(shipped).read().splitlines() if l not in ("graphical", "firstboot --enable")) + "\n"
-shipped_set = re.search(r"(?ms)^%packages.*?^%end\n", ks).group(0).split()
-small = ["@core", "silik-tools", "silikos-security", "cryptsetup", "mokutil", "efibootmgr"] + [p for p in ("silikos-power", "usbguard") if p in shipped_set]
-ks = re.sub(r"(?ms)^%packages.*?^%end\n", "%packages\n" + "\n".join(small) + "\n%end\n", ks, count=1)
-ks = "\n".join(l for l in ks.splitlines() if not l.startswith(("services ", "xconfig ", "bootloader "))) + "\n"
-print(ks + open(extra).read().replace("@PASSPHRASE@", passphrase).replace("@CHECK@", open(check).read().rstrip("\n")))
+extra = open(extra).read()
+if mode == "desktop":
+    # the shipped package set, services and boot loader line stay; the test's own boot loader line (the console on
+    # the serial port, no splash) is left out: this installation starts as a person's does
+    extra = "\n".join(l for l in extra.splitlines() if not l.startswith("bootloader ")) + "\n"
+else:
+    shipped_set = re.search(r"(?ms)^%packages.*?^%end\n", ks).group(0).split()
+    small = ["@core", "silik-tools", "silikos-security", "cryptsetup", "mokutil", "efibootmgr"] + [p for p in ("silikos-power", "usbguard") if p in shipped_set]
+    ks = re.sub(r"(?ms)^%packages.*?^%end\n", "%packages\n" + "\n".join(small) + "\n%end\n", ks, count=1)
+    ks = "\n".join(l for l in ks.splitlines() if not l.startswith(("services ", "xconfig ", "bootloader "))) + "\n"
+print(ks + extra.replace("@PASSPHRASE@", passphrase).replace("@CHECK@", open(check).read().rstrip("\n")))
 EOF
 cp "$work/external.ks" "$out/external.ks"
 dd if=/dev/zero of="$work/ks.img" bs=1M count=8 status=none
@@ -222,6 +240,14 @@ else:
 EOF
 }
 
+# rows_of NAME: the checks the system said on the console of the start NAME, as rows of the report
+# (rows.py: every check whole and counted; a line the serial port lost is a FAIL here, not a silence)
+rows_of() {
+  python3 "$here/rows.py" --name "external.$1.rows" "$out/external-$1.log" | while IFS='|' read -r _ check verdict detail; do
+    row "$verdict" "$check" "$detail"
+  done || row FAIL "external.$1.reader" "rows.py did not get to the end of the log: rows are missing"
+}
+
 # ---------------------------------------------------------------------------------------------- 2. the starts
 # start NAME VARS_FILE MINUTES DISK_ARGS...: the installed disk starts once in a machine with these firmware
 # variables and these disks; external-check.sh runs its stage NAME there and powers off. The passphrase is typed
@@ -253,9 +279,7 @@ start() {
   # what the firmware started (its own lines on the console), for the report
   fw=$(clean "$out/external-$name.log" | grep -a 'BdsDxe: starting' | sed 's/BdsDxe: starting //' | cut -c1-110 | tr '\n' ';' | cut -c1-330) || fw="the firmware said nothing of what it started"
   row info "external.$name.firmware" "$fw"
-  python3 "$here/rows.py" --name "external.$name.rows" "$out/external-$name.log" | while IFS='|' read -r _ check verdict detail; do
-    row "$verdict" "$check" "$detail"
-  done || row FAIL "external.$name.reader" "rows.py did not get to the end of the log: rows are missing"
+  rows_of "$name"
   python3 - "$work/$name.json" "$name" >> "$out/report.txt" <<'EOF'
 import json, sys
 path, name = sys.argv[1:3]
@@ -275,12 +299,122 @@ EOF
   grep -q "^ok    external\.$name\.finished " "$out/report.txt"
 }
 
+# start_desktop MINUTES DISK_ARGS...: the installed desktop starts the graphical way. Nothing of the start is on the
+# serial port (the shipped boot loader line): the passphrase is typed on the keyboard, blind, once the firmware has
+# started the disk and the splash has had time to ask, and again at intervals while the stage has not ended (a
+# passphrase typed at the login screen later does nothing). The screen before the first typing is kept
+# (splash.png) and printed as a coarse picture in letters.
+start_desktop() {
+  local limit=$1 i typed=0 t0 now; shift
+  dd if=/dev/zero of="$work/stage.img" bs=1M count=4 status=none
+  mformat -i "$work/stage.img" -v SILIKCI ::
+  echo desktop > "$work/stage"; mcopy -i "$work/stage.img" "$work/stage" ::/stage
+  rm -f "$work/mon.sock"
+  : > "$out/external-desktop.log"
+  echo "[external] start 'desktop': the graphical way; the firmware's lines and the checks: $out/external-desktop.log"
+  qemu-system-x86_64 "${accel[@]}" "${machine[@]}" -m "$mem" -smp "$cpus" -display none -vga std \
+    -drive "if=pflash,format=raw,unit=0,readonly=on,file=$code" -drive "if=pflash,format=raw,unit=1,file=$work/vars-a.fd" \
+    "$@" -drive "file=$work/stage.img,if=virtio,format=raw,readonly=on" \
+    -nic user,model=virtio-net-pci -monitor "unix:$work/mon.sock,server,nowait" -serial "file:$out/external-desktop.log" &
+  qpid=$!
+  for i in $(seq 1 50); do [ -S "$work/mon.sock" ] && break; sleep 0.2; done
+  monitor() { python3 - "$work/mon.sock" "$@" 2> /dev/null <<'EOF' || true
+import socket, sys, time
+s = socket.socket(socket.AF_UNIX); s.connect(sys.argv[1]); time.sleep(0.3); s.recv(65536)
+names = {"-": "minus", " ": "spc", ".": "dot", "/": "slash"}
+if sys.argv[2] == "type":
+    for c in sys.argv[3]:
+        k = names.get(c, c.lower()); s.send(("sendkey %s\n" % ("shift-" + k if c.isupper() else k)).encode()); time.sleep(0.15)
+    s.send(b"sendkey ret\n"); time.sleep(0.5)
+else:
+    s.send((sys.argv[2] + "\n").encode()); time.sleep(float(sys.argv[3]) if len(sys.argv) > 3 else 0.5)
+EOF
+  }
+  t0=$(date +%s)
+  for i in $(seq 1 $((limit * 6))); do
+    sleep 10
+    kill -0 $qpid 2> /dev/null || break
+    tr -d '\r' < "$out/external-desktop.log" | grep -a -q '^SILIKOS-CI|END|desktop' && break
+    now=$(( $(date +%s) - t0 ))
+    # 40 s after the machine was started, then every 45 s, four times at most
+    if [ $typed -lt 4 ] && [ $now -ge $((40 + typed * 45)) ] && grep -a -q 'BdsDxe: starting' "$out/external-desktop.log"; then
+      if [ $typed = 0 ]; then
+        monitor "screendump $work/splash.ppm" 2.5
+        if command -v convert > /dev/null && [ -s "$work/splash.ppm" ]; then convert "$work/splash.ppm" "$out/splash.png" 2> /dev/null || true; fi
+      fi
+      monitor type "$PASSPHRASE"
+      typed=$((typed + 1))
+      echo "  ... the passphrase typed on the keyboard ($typed), $now s after the start"
+    fi
+  done
+  for i in $(seq 1 30); do kill -0 $qpid 2> /dev/null || break; sleep 2; done
+  kill $qpid 2> /dev/null || true; wait $qpid 2> /dev/null || true; qpid=""
+  echo "::group::[external] the screen before the passphrase was typed (the boot splash), as a coarse picture"
+  python3 - "$work/splash.ppm" <<'EOF' || true
+import sys
+try:
+    data = open(sys.argv[1], "rb").read()
+except OSError:
+    print("no picture of the screen"); sys.exit(0)
+tok, pos = [], 0
+while len(tok) < 4:                               # P6, width, height, maxval
+    while data[pos:pos + 1].isspace(): pos += 1
+    if data[pos:pos + 1] == b"#":
+        pos = data.index(b"\n", pos) + 1; continue
+    end = pos
+    while not data[end:end + 1].isspace(): end += 1
+    tok.append(data[pos:end]); pos = end
+w, h = int(tok[1]), int(tok[2]); pix = data[pos + 1:]
+cols, rows, ramp = 100, 34, " .:-=+*#%@"
+bg = pix[0] + pix[1] + pix[2]
+lit = 0
+for r in range(rows):
+    line = ""
+    for c in range(cols):
+        x0, x1, y0, y1 = c * w // cols, (c + 1) * w // cols, r * h // rows, (r + 1) * h // rows
+        m = 0
+        for y in range(y0, y1, 2):
+            base = (y * w + x0) * 3
+            row = pix[base:base + (x1 - x0) * 3]
+            for i in range(0, len(row) - 2, 6):
+                d = abs(row[i] + row[i + 1] + row[i + 2] - bg)
+                if d > m: m = d
+        line += ramp[min(9, m * 10 // 766)]
+        lit += m > 60
+    print(line.rstrip())
+print("%d x %d; background %s; cells that differ from the background: %d of %d" % (w, h, pix[:3].hex(), lit, cols * rows))
+EOF
+  echo "::endgroup::"
+  echo "::group::[external] the console of 'desktop': what the firmware started"
+  clean "$out/external-desktop.log" | grep -a -i 'BdsDxe\|SILIKOS-CI|END' | cut -c1-220 | tail -12 || true
+  echo "::endgroup::"
+  rows_of desktop
+  if tr -d '\r' < "$out/external-desktop.log" | grep -a -q '^SILIKOS-CI|END|desktop'; then
+    row ok external.desktop.passphrase-at-the-splash "the passphrase typed on the keyboard at the graphical start opened the disk (typed $typed time(s); splash.png is the screen before the first)"
+    row ok external.desktop.finished "the desktop started from the USB disk, the stage ran and the machine powered off"
+  else
+    row FAIL external.desktop.finished "the graphical start did not get to the stage's end in $limit min (the passphrase was typed $typed time(s))"
+    return 1
+  fi
+}
+
 status=0
 usb_a=(-device qemu-xhci,id=xhci -drive "if=none,id=ext,file=$out/external.qcow2,format=qcow2,discard=unmap" -device usb-storage,bus=xhci.0,drive=ext,serial=SILIKEXT)
 usb_b=(-device nec-usb-xhci,id=xhci -drive "if=none,id=ext,file=$out/external.qcow2,format=qcow2,discard=unmap" -device usb-storage,bus=xhci.0,drive=ext,serial=SILIKEXT)
 sata=(-drive "if=none,id=ext,file=$out/external.qcow2,format=qcow2,discard=unmap" -device ide-hd,drive=ext,bus=ide.0)
 own=(-drive "file=$internal,if=virtio,format=raw")
-if install; then
+if [ "$mode" = desktop ]; then
+  if install; then
+    row ok external.install.finished "an encrypted installation of the whole desktop onto the USB disk finished under UEFI"
+    judge_install
+    same_internal external.install.own-disk-untouched "after the installation"
+    start_desktop $((t_boot * 2)) "${own[@]}" "${usb_a[@]}" || status=1
+    same_internal external.desktop.own-disk-untouched "after the desktop's start from the external disk"
+  else
+    row FAIL external.install.finished "did not finish: $(clean "$out/external-install.log" | grep -i "error\|\[!\]" | tail -2 | tr '\n' ' ' | cut -c1-200)"
+    status=1
+  fi
+elif install; then
   row ok external.install.finished "an encrypted installation onto the USB disk finished under UEFI"
   judge_install
   same_internal external.install.own-disk-untouched "after the installation"
@@ -335,10 +469,14 @@ step() {   # step NAME TITLE
   else echo "::error title=external $1: $2::it did not run (see report.txt and the consoles in the artifact external-test)"; status=1; fi
 }
 step install "installed onto the USB disk; the boot order and the computer's own disk kept"
-step first "the same computer starts the external disk"
-step again "the same computer again: nothing changes again"
-step other "another computer, Secure Boot on; the initramfs with every driver"
-step sata "a third computer, the disk on SATA"
+if [ "$mode" = desktop ]; then
+  step desktop "the whole desktop on the USB disk: the passphrase at the boot splash, the login screen"
+else
+  step first "the same computer starts the external disk"
+  step again "the same computer again: nothing changes again"
+  step other "another computer, Secure Boot on; the initramfs with every driver"
+  step sata "a third computer, the disk on SATA"
+fi
 # for the documents: the informative rows (what the firmware started, its entries after each start)
 echo "::group::[external] the informative rows"
 grep '^info' "$out/report.txt" | cut -c1-420 || true

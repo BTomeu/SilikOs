@@ -64,6 +64,58 @@ jobs:
             build/external-test/*.txt
             build/external-test/*.ks
 
+  # The whole desktop on the USB disk (tests/install/external.sh, SILIK_CI_EXTERNAL_MODE=desktop): the installation the
+  # owner does, with the shipped package set, encrypted; then the graphical start: the passphrase is typed on the
+  # keyboard at the boot splash (SilikOS's theme), and the installed system says what came up (the theme and its
+  # dialog pictures in the initramfs, the login screen, USBGuard and the disk it is on).
+  desktop:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 170
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with: { persist-credentials: false }
+      - name: KVM for the runner's user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+      - name: Tools, the firmware, disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          bash tools/ci_apt.sh rpm createrepo-c xorriso mtools cpio isomd5sum qemu-system-x86 qemu-utils ovmf imagemagick
+          df -h /
+      - name: Packages
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src almalinux:9 bash -c 'dnf -y -q install rpm-build createrepo_c > /dev/null && bash tools/build_rpms.sh'
+          sudo chown -R "$(id -u):$(id -g)" build
+      - name: The ISO (the system alone)
+        run: |
+          createrepo_c --quiet build/repo && ls build/repo
+          bash tools/build_iso.sh
+      - name: The whole desktop installed onto the USB disk, encrypted; the graphical start, the passphrase at the splash
+        env:
+          SILIK_CI_EXTERNAL_MODE: desktop
+        run: bash tests/install/external.sh build/SilikOS-*-netinstall.iso build/external-desktop-test
+      - name: The report
+        if: always()
+        run: |
+          {
+            echo '### The SilikOS desktop on an external disk'
+            echo '```'
+            cat build/external-desktop-test/report.txt 2>/dev/null || echo 'no report: see the consoles (artifact external-desktop-test)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        if: always()
+        with:
+          name: external-desktop-test
+          path: |
+            build/external-desktop-test/*.log
+            build/external-desktop-test/*.txt
+            build/external-desktop-test/*.ks
+            build/external-desktop-test/*.png
+
   # The ISO as a person starts it (tests/install/media.sh): the one disk of a USB controller, UEFI firmware with
   # Secure Boot on, its own signed boot loader and its own menu; the entry for an external disk is chosen with the
   # keyboard and must start the installer. The screen is read (a picture, then OCR), and the machine's memory is

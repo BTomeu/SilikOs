@@ -13,6 +13,8 @@
 #           from USB as it is; then the two commands `silik disk check` gives for a disk that travels
 #           (dracut-config-generic, dracut) are run
 #   sata    a third computer where the same disk is on SATA: only an initramfs with every driver starts there
+#   desktop (another installation: the whole desktop on the USB disk) the graphical start, the passphrase typed at
+#           the boot splash, the theme and its dialog pictures in the initramfs, the login screen
 # Only in the CI's test installations.
 out=/dev/ttyS0
 # every line is also kept for this start (/run), and said once more at its end, numbered, when nothing else writes
@@ -138,6 +140,43 @@ sata)
   o=$(silik -q disk check 2>&1)
   hasnot sata.silik-disk-not-external "$o" "The system is on an external disk (USB)"
   say sata.firmware-entries info "$(efi)"
+  end ;;
+desktop)
+  # the whole desktop on the external disk (external.sh, SILIK_CI_EXTERNAL_MODE=desktop): the start is the graphical
+  # one, and the passphrase was typed on the keyboard at the boot splash (seen from outside)
+  common
+  is desktop.root-on-usb "/ on $disk, attached by ${tran:-nothing}" "/ on $disk, attached by usb"
+  cmd=$(cat /proc/cmdline)
+  has desktop.graphical-start "$cmd" "rhgb"
+  hasnot desktop.splash-not-off "$cmd" "plymouth.enable=0"
+  is desktop.splash-theme "$(plymouth-set-default-theme 2>&1)" "silikos"
+  # the theme inside the initramfs, with the pictures its passphrase dialog is drawn with
+  k=$(uname -r); img=/boot/initramfs-$k.img
+  in=$(lsinitrd "$img" 2> /dev/null | grep -o 'usr/share/plymouth/themes/silikos/[A-Za-z0-9._-]*' | sed 's#.*/##' | sort -u | tr '\n' ' ')
+  miss=""
+  for f in silikos.plymouth watermark.png lock.png entry.png bullet.png; do case " $in " in *" $f "*) ;; *) miss="$miss $f" ;; esac; done
+  if [ -z "$miss" ]; then say desktop.splash-in-initramfs ok "the theme and its dialog pictures are in the initramfs ($(echo $in | wc -w) files)"
+  else say desktop.splash-in-initramfs FAIL "missing in the initramfs:$miss (there: $in)"; fi
+  # the desktop came up behind it
+  for i in $(seq 1 60); do systemctl is-active -q gdm && break; sleep 2; done
+  is desktop.graphical-target "$(systemctl is-active graphical.target 2>&1)" "active"
+  is desktop.gdm "$(systemctl is-active gdm 2>&1)" "active"
+  for i in $(seq 1 45); do loginctl list-sessions --no-legend 2> /dev/null | grep -q gdm && break; sleep 2; done
+  s=$(loginctl list-sessions --no-legend 2> /dev/null | awk '$3 == "gdm" { print $1; exit }')
+  if [ -n "$s" ]; then say desktop.greeter ok "the login screen's session is there ($(loginctl show-session "$s" -p Type -p State 2> /dev/null | tr '\n' ' '))"
+  else say desktop.greeter FAIL "no session of the login screen: $(loginctl list-sessions --no-legend 2>&1 | tr '\n' ';')"; fi
+  say desktop.look info "silik look, asked by root: $(silik -q look --json 2> /dev/null | python3 -c 'import json, sys; print(json.load(sys.stdin).get("look"))' 2>&1)"
+  o=$(silik -q disk check 2>&1)
+  has desktop.silik-disk-says-external "$o" "The system is on an external disk (USB)"
+  if systemctl is-active -q usbguard; then
+    st=$(usbguard list-devices 2>&1 | grep -i 'with-interface.*08:' | awk '{ print $2 }' | sort -u | tr '\n' ' ')
+    is desktop.usbguard-allows-the-disk "USBGuard active, the mass-storage device: ${st:-not listed}" "USBGuard active, the mass-storage device: allow "
+  else
+    say desktop.usbguard-allows-the-disk FAIL "USBGuard is not active on the desktop installation: $(systemctl is-active usbguard 2>&1)"
+  fi
+  f=$(systemctl list-units --state=failed --no-legend --plain 2> /dev/null | awk '{ print $1 }' | grep -v '^mcelog\.service$' | tr '\n' ' ')
+  if [ -z "$f" ]; then say desktop.failed-units ok "no unit failed"; else say desktop.failed-units FAIL "failed: $f"; fi
+  say desktop.size info "$(df -h --output=used / /boot /boot/efi 2> /dev/null | tr -s ' \n' ' ')"
   end ;;
 *)
   say "$stage.stage" FAIL "a stage this script does not know: $stage"
