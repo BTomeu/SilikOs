@@ -39,7 +39,11 @@ Copia-la a l'USB (canvia `sdX` pel teu USB; **esborra l'USB**):
 sudo dd if=SilikOS-9.8-x86_64-netinstall.iso of=/dev/sdX bs=4M status=progress oflag=sync
 ```
 
-Provat: la ISO es construeix i s'instal·la a cada execució del CI. Des d'un USB en una màquina real: no.
+Des de Windows [A: no provat aquí]: un programa que escrigui la imatge tal com és, byte a byte (balenaEtcher; o
+Rufus, triant «DD Image» quan pregunta el mode). Un llapis fet amb Ventoy o copiant-hi els fitxers a mà no val:
+el menú busca l'instal·lador i el seu kickstart per l'etiqueta del volum de la ISO.
+
+Provat: la ISO es construeix i s'instal·la a cada execució del CI. @MEDIA@ Des d'un USB en una màquina real: no.
 
 ## 2. Instal·lar
 
@@ -195,6 +199,13 @@ El pla és un fitxer de text: quines trames s'envien, què s'espera i en quant d
 
 ## 9. Si alguna cosa falla
 
+- **L'USB de l'instal·lador no surt al menú d'arrencada del firmware**: torna'l a escriure (a dalt, secció 1) i
+  prova un altre port. [A]
+- **La pantalla es queda negra en arrencar l'instal·lador o el sistema** (portàtils amb gràfics NVIDIA) [A: no
+  vist; és el remei habitual de la base]: al menú, tecla `e` sobre l'entrada, afegeix `nomodeset` al final de la
+  línia que comença per `linux`, i Ctrl+X. Amb el sistema instal·lat: `silik hw nvidia` diu què hi ha i què fer.
+- **L'instal·lador no troba xarxa** (la ISO de xarxa baixa els paquets): cable, o el mòbil per USB, o el Wi-Fi a
+  «Network & Host Name» i després torna a obrir «Installation Source». O fes servir la ISO sense xarxa.
 - Una actualització ha trencat alguna cosa: `silik rollback` (torna a com estava abans de l'última actualització) i
   reinicia.
 - Per explicar-ho, envia aquestes dues sortides:

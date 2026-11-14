@@ -124,10 +124,13 @@ if [ $menu = 1 ]; then
     sleep 3
     line=$(grep -a -o -E 'BOOT_IMAGE=[[:print:]]{0,400}' "$work/mem.core" 2> /dev/null | sort | uniq -c | sort -rn | head -1 | sed 's/^ *[0-9]* //' || true)
     rm -f "$work/mem.core"
-    case " $line " in
-      *"/silikos.ks "*" inst.leavebootorder "*|*" inst.leavebootorder "*"/silikos.ks "*) row ok media.entry-is-the-external-one "the kernel's command line: $line" ;;
-      *) row FAIL media.entry-is-the-external-one "the kernel's command line is not the external entry's: '${line:-not found in the machine memory}'" ;;
-    esac
+    # (two questions, each on its own: one pattern with both words asked for two spaces between them, and the first
+    # run of 14/11/2026 called the right line wrong)
+    is_ext=0; has_ks=0
+    case " $line " in *" inst.leavebootorder "*) is_ext=1 ;; esac
+    case " $line " in *":/silikos.ks "*) has_ks=1 ;; esac
+    if [ $is_ext = 1 ] && [ $has_ks = 1 ]; then row ok media.entry-is-the-external-one "the kernel's command line: $line"
+    else row FAIL media.entry-is-the-external-one "the kernel's command line is not the external entry's: '${line:-not found in the machine memory}'"; fi
   else
     row FAIL media.entry-is-the-external-one "the machine was gone before its memory could be read"
   fi
