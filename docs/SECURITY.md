@@ -29,7 +29,7 @@ files, design data (often under an NDA: PDKs, schematics, layouts), keys and pas
 | An untrusted Windows `.exe` | A Windows virtual machine (`silik win vm`) is a real boundary: it sees the shared folder `~/Windows` and the clipboard, nothing else of the home folder; its RDP port listens on 127.0.0.1 only. Under Wine a program runs as the user: `kernel.yama.ptrace_scope = 1` stops it reading other programs' memory, the sandbox (bubblewrap, `silik win`) limits the files it sees | Wine itself is not a sandbox: outside the sandbox, a program under Wine can read and write everything the user can. **Under X11 (the desktop's session) the sandbox does not protect the files either**: X11 does not separate its clients, so a sandboxed program can send keys to another window (a terminal) or read what is typed, which is as much as `--no-sandbox` (audit 12/11/2026). For a program that is not trusted: the Windows VM |
 | Known flaws in the base's packages | Security advisories installed every day | A new kernel is used only after a restart |
 | A changed package or a false update server for SilikOS's own packages | Every package and the repository's metadata carry a signature of SilikOS's key, and `dnf` checks both (`gpgcheck=1`, `repo_gpgcheck=1`): one changed byte of either is refused (run, with a throw-away key). No key on the system, no channel | Whoever holds the key, or the GitHub account that signs with it; old, well signed metadata served again hide an update [A] |
-| A USB stick left to be plugged in | Nothing on it starts by itself; a device plugged in while the screen is locked is refused (USBGuard, `docs/USB.md`; not seen with a device yet) | A device plugged in while the session is unlocked or present at the start; a pure keyboard plugged in while locked (it reaches the password prompt only) |
+| A USB stick left to be plugged in | Nothing on it starts by itself; a device plugged in while the screen is locked is refused (USBGuard, `docs/USB.md`; seen in the CI's virtual machine) | A device plugged in while the session is unlocked or present at the start; a pure keyboard plugged in while locked (it reaches the password prompt only) |
 | Vendor tools and their installers | Nothing: they run as the user (some installers as root), unconfined, as on RHEL | — |
 
 Not in scope: an attacker with repeated physical access (Secure Boot and disk encryption together help; neither is
@@ -244,8 +244,9 @@ active local session may make the two calls GNOME needs without a password (a po
 administrator's: through them a program in that session can also accept a device for good or switch the protection
 off until the desktop next switches it (polkit cannot tell the calls apart). The daemon's own socket answers root
 alone (the base's file also lets the group `wheel` in): a program that merely runs as the owner, outside the
-active session, reaches nothing without `sudo`. Built
-and checked with the real daemon in a container; not yet seen with a device (the CI's `usb.*` rows).
+active session, reaches nothing without `sudo`. Seen on
+an installed system in the CI (14/11/2026): devices plugged into the running virtual machine, unlocked accepted,
+locked a disk blocked and a keyboard accepted, the disk still blocked after unlocking. Not seen with a real dock.
 
 **Listening services.** On a new installation nothing of the base listens beyond the machine: the NFS v3 port
 mapper (rpcbind, port 111), mDNS (avahi, UDP 5353, which also announced the machine's name) and printer discovery
@@ -265,9 +266,11 @@ Boot and an encrypted `/` and cannot give them: without them it says `hardened, 
 status` shows those rows as bad. Preconditions are checked and said, never forced: an unsigned kernel module in use
 (NVIDIA through DKMS before its MOK step, VirtualBox, a vendor's dongle driver) leaves the lockdown out and the rest
 is done. `silik secure level default` puts back exactly what was changed; an argument the owner had before is never
-taken off. `silik secure level` says where the system is. Run so far in an EL 9 container only (the files, each
-through the base's own tool, and the way back); on an installed system with a restart: CI job `hardened-test`,
-not run yet. It is not GrapheneOS: the session is X11, the kernel and glibc are RHEL's, nothing verifies user
+taken off. `silik secure level` says where the system is. Run on an installed system in the CI (14/11/2026): the arguments
+and settings hold after a restart, the kernel refuses an unsigned module ("Loading of unsigned module is
+rejected"), the session and the tools still work, and `level default` with a restart leaves the command line and
+the files as before; that an unsigned module loads again after going back is the one check still open (the test's
+own fault twice). It is not GrapheneOS: the session is X11, the kernel and glibc are RHEL's, nothing verifies user
 space, and programs are not sandboxed by default.
 
 ## The session's start
@@ -359,13 +362,14 @@ What a system like GrapheneOS has and SilikOS does not, and why:
 | Disk always encrypted | always | a tick in the installer; `silik secure status` and `silik disk` say bad without it, and the first login says it once. Ticked by the kickstart: not possible without the installer taking every disk (read) |
 | A hardened memory allocator | yes | no: none is packaged for EL 9, and changing glibc would end the binary identity with RHEL that the EDA tools need |
 | Every program in its own box, with its own permissions | yes | no: what the user starts runs as the user, on X11, where programs see each other's keys and windows. Wine has bubblewrap; an untrusted Windows program runs isolated (`silik win open --isolated`: a display, a network and a keyring of its own), or in `silik win vm` |
-| USB refused while locked | yes | built: the base's USBGuard with SilikOS's configuration, switched by GNOME's own USB protection (`silik usb`, `docs/USB.md`); checked with the real daemon in a container, not yet seen with a device (the CI's `usb.*` rows) |
+| USB refused while locked | yes | built: the base's USBGuard with SilikOS's configuration, switched by GNOME's own USB protection (`silik usb`, `docs/USB.md`); seen on an installed system in the CI with devices plugged into the running virtual machine (a disk blocked while locked, a keyboard accepted, the disk still blocked after unlocking); not with a real dock or laptop |
 | Fast patches | frequent releases, installed in the background and in effect at the next restart | daily, automatic, with a snapshot to go back to; a kernel fix protects after a restart the owner does (the base has no live patches) |
 
 **The hardened level** exists (`silik secure level hardened`, below and `docs/HARDENED.md`), TPM unlock with a
 PIN exists (`silik disk tpm enroll`, `docs/DISK.md`), USB devices are refused while the screen is locked and nothing
-of the base listens beyond the machine on a new installation (`docs/USB.md`, below). None of the four has been
-seen on an installed system yet: the CI's jobs `hardened-test`, `sealed-test` and the rows `usb.*`, `listen.*`.
+of the base listens beyond the machine on a new installation (`docs/USB.md`, below). All four have
+now run on an installed system in the CI's virtual machines (14/11/2026; `docs/STATUS.md` has each run): none on
+real hardware.
 
 Seen on an installed system (CI run 43509961201): the only things listening beyond the machine are the base's
 `rpcbind.socket` (port 111) and avahi (mDNS, which also announces the machine's name on every network it joins); the
