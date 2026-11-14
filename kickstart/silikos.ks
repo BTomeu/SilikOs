@@ -48,7 +48,7 @@ if grep -qw 'inst\.leavebootorder' /proc/cmdline; then
   # this computer's own disks: every disk with a size that is not on USB, by its kernel name (SATA and SCSI, NVMe,
   # eMMC, a virtual machine's disks; never a part of one, such as an eMMC's boot areas, and never zram or a loop).
   # A virtual disk does not say how it is attached (seen in the CI, 14/11/2026): no answer is taken as "not USB"
-  own=$(lsblk -d -n -b -P -o NAME,TYPE,TRAN,SIZE 2> /dev/null \
+  own=$(lsblk -d -n -b -P -o NAME,TYPE,TRAN,SIZE \
         | awk -F'"' '$4 == "disk" && $6 != "usb" && $8 > 0 && $2 ~ /^(sd[a-z]+|vd[a-z]+|xvd[a-z]+|hd[a-z]+|nvme[0-9]+n[0-9]+|mmcblk[0-9]+)$/ { print $2 }' | paste -s -d, -)
   [ -z "$own" ] || printf 'ignoredisk --drives=%s\n' "$own" > /tmp/silik-disks.ks
 fi

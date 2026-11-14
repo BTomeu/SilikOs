@@ -43,7 +43,10 @@ Des de Windows [A: no provat aquí]: un programa que escrigui la imatge tal com 
 Rufus, triant «DD Image» quan pregunta el mode). Un llapis fet amb Ventoy o copiant-hi els fitxers a mà no val:
 el menú busca l'instal·lador i el seu kickstart per l'etiqueta del volum de la ISO.
 
-Provat: la ISO es construeix i s'instal·la a cada execució del CI. @MEDIA@ Des d'un USB en una màquina real: no.
+Provat: la ISO es construeix i s'instal·la a cada execució del CI. Com a llapis USB, amb UEFI i Secure Boot activat, en una
+màquina virtual (workflow External disk, feina `medium`, execució 43589350760 del 14/11/2026): el firmware
+l'arrenca, el menú ensenya l'entrada del disc extern, i aquesta entrada engega l'instal·lador fins a la seva
+primera pantalla («WELCOME TO SILIKOS 9.8»). Des d'un USB en una màquina real: no.
 
 ## 2. Instal·lar
 
