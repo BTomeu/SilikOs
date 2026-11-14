@@ -4,8 +4,8 @@ What a stolen or briefly unattended SilikOS laptop gives away, what stops it, an
 `silik disk` (13/11/2026). Like the rest of `docs/SECURITY.md`: the base's own mechanisms (LUKS2, the TPM, Secure
 Boot, the signed shim, GRUB and kernel of AlmaLinux), nothing of ours in the boot path.
 
-**Nothing here has started a machine yet.** What ran, and where, is in the last section; [A] marks what is assumed
-from the base's documentation or source and has not been seen.
+**No real machine has run any of this.** A virtual machine has (GitHub's CI, 14/11/2026): what ran, and where, is
+in the last section; [A] marks what is assumed from the base's documentation or source and has not been seen.
 
 ```bash
 silik disk                 # what is encrypted (/, /home, swap), the LUKS volume, the TPM, Secure Boot, what opens the disk
@@ -144,10 +144,45 @@ the PIN is not optional; guess the PIN at the TPM's own pace until it locks; att
 What they **cannot**: get the TPM's key without the PIN, or with the PIN in another machine or under another
 Secure Boot state; guess the PIN offline.
 
-When the PIN does not work (forgotten, the TPM replaced with the mainboard, the firmware's keys changed): the
-passphrase or the recovery key still opens the disk. How the start gets from the PIN prompt to the passphrase prompt
-(a wrong PIN, which costs the TPM's lockout one count; Enter alone is asked again) is [A: read in systemd 252's
-source]: the CI's test types exactly that and reports what happens.
+When the PIN does not work (forgotten, the TPM replaced with the mainboard, the firmware's keys changed, the TPM
+locked): the passphrase or the recovery key still opens the disk. At a start that the PIN does not open, the PIN is
+asked a second time, then "TPM2 operation failed, falling back to traditional unlocking" and the passphrase is
+asked. Seen in the CI's virtual machine with Enter alone and then a wrong PIN; with the right PIN under another
+Secure Boot state or in another machine the second question was seen, the passphrase after it not yet (the test
+stopped there by its own fault; mended, to run again).
+
+## The TPM's count of failed tries
+
+The TPM counts failed tries by itself and locks when they reach its limit; systemd does not set or read it. What
+counts, measured on the software TPM (swtpm 0.8.0, with an object sealed as systemd-cryptenroll seals its own: PCR 7
+and the PIN) and consistent with the counter the CI's machine showed:
+
+| What happened | Counted |
+|---|---|
+| The right PIN | no (and it does not take earlier failed tries back) |
+| A wrong PIN | one |
+| Enter alone at the PIN prompt | no [A: from the CI machine's counter, not measured alone] |
+| Any PIN, right or wrong, under another Secure Boot state (PCR 7 changed) | no: the TPM refuses on the state before it looks at the PIN |
+| The disk in another machine | nothing in the first machine's TPM |
+| **The machine switched off by force** (no shutdown) in a session in which the PIN was used, even the right one | **one**, at the next start |
+
+At the limit the TPM refuses the right PIN too, also after switching off and on (measured with the tools; a start in
+that state is the CI test's `locked` start, not run yet). The passphrase always opens the disk: its key slot does
+not go through the TPM. The ways out:
+
+1. **The passphrase** (or the recovery key), at every start, for as long as it takes.
+2. **Wait.** The TPM forgives one failed try each time its own interval passes while it is powered [A: the TPM 2.0
+   rule; not measured]. The software TPM: 3 tries, 1000 s. A laptop's chip has its own numbers:
+   `sudo tpm2_getcap properties-variable` (`TPM2_PT_MAX_AUTH_FAIL`, `TPM2_PT_LOCKOUT_INTERVAL` in seconds,
+   `TPM2_PT_LOCKOUT_COUNTER`, `inLockout`).
+3. **`sudo tpm2_dictionarylockout --clear-lockout`** puts the count back to zero at once and the PIN works again
+   (measured on the software TPM, whose lockout authorisation is empty). Where the firmware or another system has
+   set that authorisation it is refused [A], and a refused clear locks that command itself for the TPM's recovery
+   time [A]: then wait, with the passphrase.
+
+`silik disk` does not read the count (it would need root and the tools at every call): the passphrase being asked
+after the PIN is the sign. So: do not hold the power button at or after the PIN prompt, and a PIN typed wrong twice
+in a row is two tries.
 
 `silik disk recovery` runs `systemd-cryptenroll --recovery-key DEVICE`: the key is printed by systemd-cryptenroll
 itself, once, and passes through no file or variable of `silik`. `silik disk check` prints, and does not run,
@@ -155,6 +190,30 @@ itself, once, and passes through no file or variable of `silik`. `silik disk che
 the passphrases of the day it was made, so it is kept as a key, and not on the same disk).
 
 ## What ran, and what did not
+
+Ran, 14/11/2026, **in a virtual machine with KVM** (GitHub's CI, job `sealed-test`, run 43532259867: OVMF with
+Secure Boot and Microsoft's keys, a software TPM, the ISO installed unattended with `autopart --encrypted` and
+nothing else named; 63 checks ok):
+
+- the installation makes LUKS2 with argon2id (aes-xts-plain64) under an LVM thin pool; the system starts with
+  Secure Boot enabled, the kernel locked down, a TPM 2.0 with PCR 7 measured;
+- `silik disk` there: `/`, `/home` and swap encrypted, the key slots, the TPM, Secure Boot (7 rows ok); as a user the
+  key slots are `unknown` with `sudo silik disk`;
+- `silik disk tpm enroll` with a PIN on the standard input (the PIN not shown), the crypttab option (the installer's
+  own options on that line kept), `dracut -f` (the initramfs has the TPM support and the option), `silik disk
+  recovery` (the key shown opens a key slot);
+- **at the next start the PIN is asked and opens the disk**, with no passphrase (twice: two different starts);
+- Enter alone and then a wrong PIN: the passphrase is asked and opens the disk;
+- `silik disk tpm remove`, and after it the passphrase is asked, no PIN.
+
+Not shown by that run, because the test itself was wrong (it had one PIN answer for a start that asks twice, and
+stopped the machine): **that the PIN does not open the disk with Secure Boot off, or with another TPM, and that the
+passphrase then does.** The PIN was asked a second time in both, which is what a refused PIN gives; nothing more is
+known. The test is mended and has two more starts (the TPM locked, and cleared); they have not run.
+
+Ran, 14/11/2026, in an `almalinux:9` container: what the software TPM counts as a failed try and what clears a
+lockout (the section above), with tpm2-tools 5.2 and swtpm 0.8.0; not through systemd's own unlocking, which finds
+its TPM only as a device of the kernel.
 
 Ran, 13/11/2026, in an `almalinux:9` container (AlmaLinux 9.8; no loop device, no device-mapper, not privileged):
 
@@ -177,8 +236,7 @@ Ran, 13/11/2026, in an `almalinux:9` container (AlmaLinux 9.8; no loop device, n
   variables that have Secure Boot off. The kernel handed to the firmware by QEMU, as the installation does, starts
   as an EFI system. No system was started beyond GRUB or the kernel's first seconds.
 
-Not run (the CI job `sealed-test` does, on a runner with KVM): an installation with "Encrypt my data"; a start with
-Secure Boot; a real or emulated TPM under a real firmware (PCR 7 with values); the PIN prompt at a start; that the PIN
-opens the disk; that it does not with Secure Boot off or in another machine; `dracut -f` and the initramfs it makes;
-`lsblk` on an encrypted installation (the tests' trees are written by hand in its shape); the notification at the
-first login. On real hardware: nothing.
+Not run: the two refusals above and the TPM's lockout at a start (the CI job `sealed-test`, at its next run); the
+installer's screens with a person ("Encrypt my data" ticked by hand); the notification at the first login; a kernel
+update with the TPM slot enrolled; `silik disk tpm enroll` typed at a terminal by a user. On real hardware:
+nothing.
