@@ -3,13 +3,15 @@
 | Route | For | Commands |
 |---|---|---|
 | Wine, in a sandbox | programs Wine runs (many utilities, older tools) | a double-click, or `silik win open FILE`; `silik win run PREFIX -- prog.exe`, `silik win install PREFIX setup.exe` |
+| Wine, isolated | the same programs, when you do not trust one with your session: a display of its own | the first answer of the question a new file gets; `silik win open --isolated FILE`; `silik win isolate PREFIX` |
 | Windows virtual machine | programs Wine does not run | `silik win vm create --iso Win11.iso`, `silik win vm start`, `silik win vm app --exe 'C:\...\X2.EXE' --user U` |
 
 ## A double-click
 
-A double-click on an `.exe`, `.msi` or `.lnk` in Files runs `silik win open FILE`. Nothing else is needed: the first
-time, `silik` makes the Wine prefix `default` (the user never has to know what a prefix is), the folder `~/Windows`
-and the sandbox, and prints every command it runs, as it does for everything.
+A double-click on an `.exe`, `.msi` or `.lnk` in Files runs `silik win open FILE`. A file that was not run here
+before is asked about first (below); nothing else is needed: the first time, `silik` makes the Wine prefix `default`
+(the user never has to know what a prefix is; `isolated` for a program run isolated), the folder `~/Windows` and the
+sandbox, and prints every command it runs, as it does for everything.
 
 | File | What runs in the prefix |
 |---|---|
@@ -37,6 +39,43 @@ and the sandbox, and prints every command it runs, as it does for everything.
 - When a program cannot start (Wine is not installed, the sandbox is busy: below), a double-click has no terminal to
   say so: `silik` also sends a desktop notification (`notify-send`).
 - The COMMAND bar takes a path to a Windows file the same way (twin line `silik win open /path/setup.exe`).
+
+## The first time a file runs
+
+A file that arrived a minute ago must not be one click from this session's keyboard and screen. The first time a
+file is opened (`silik win open`, `silik win install`, `silik win run PREFIX -- /a/file/of/this/system`) the owner
+is asked, in a window after a double-click (`/usr/libexec/silik-win-ask`: GTK 3, the COMMAND bar's paper and ink),
+as text in a terminal; English, Catalan, Spanish:
+
+```
+silik: setup-tool-1.2.exe has not been run here before
+  File       /home/u/Downloads/setup-tool-1.2.exe (12.3 MB)
+  From       https://downloads.example.org/tools/setup-tool-1.2.exe
+  SHA-256    175f04f8ced6277b9d20a639f11c6ae544c411db84cdd43f419cc5398d7f275b
+  Signature  carries a signature block (not checked: nothing on this system checks it)
+  [1] Run isolated (default)
+  [2] Run in the normal box
+  [3] Cancel
+```
+
+- **From** is the address a download tool wrote on the file (the attribute `user.xdg.origin.url`: `curl --xattr`,
+  `wget --xattr`; Firefox writes none on Linux [A: not run here]), else whether it lies in the Downloads folder. It
+  is the sender's word.
+- **Signature** says whether the program carries an Authenticode block, never that it is good: nothing in the base
+  verifies one, and a publisher's name read out of a block nobody verified would be the attacker's to choose, so no
+  name is shown. The SHA-256 is what can be compared with the publisher's page.
+- The answer is kept, by the file's SHA-256, in `~/.local/share/silikos/win-approved` (mode 0600; a line a file:
+  delete a line to be asked again). The same file opens the same way from then on without a question; a changed
+  file is a new file.
+- No question: `--yes` (scripts; not kept as an answer); `--isolated`, or a prefix marked isolated (the careful
+  way is already chosen); `--no-sandbox` (typed, and said in capitals); a file inside a prefix (installed there).
+- With no terminal and no window to ask in, the file does not run (exit code 2). When the program cannot run
+  isolated here (no Xephyr, no display), the question says why, offers the normal box and Cancel, and Cancel is
+  the default.
+
+`silik dev install FILE` (ST's and TI's installers; ST's runs as root) asks the same way before it runs anything:
+the command and whose rights it gets, the file and the installer inside an archive with their SHA-256, where the
+file says it came from; `--yes` for scripts, and without a terminal and without `--yes` nothing runs.
 
 ## Installed programs are applications
 
@@ -76,8 +115,9 @@ program sees:
 | `/tmp`, `$XDG_RUNTIME_DIR` | its own, empty at start |
 | processes | its own only (a process namespace) |
 | environment | `HOME`, `PATH`, `USER`, the locale, `DISPLAY`, the Wine switches; nothing else (no tokens). The session bus address is set to one that does not exist: left unset, a library starts a bus of its own inside (below) |
-| the X11 display, the sound sockets (PulseAudio, PipeWire), the GPU devices (`/dev/dri`, `/dev/nvidia*`) | passed |
+| the X11 display, the sound sockets (PulseAudio, PipeWire), the GPU devices (`/dev/dri`, `/dev/nvidia*`) | passed (isolated: none of them; below) |
 | network | on; `--no-net` gives the sandbox no network |
+| the kernel's session keyring | a new, empty one (the session's, with what it links, is not inherited) |
 
 How it is built, and why it is one sandbox per prefix and not one per program: the programs of a prefix must talk
 to one `wineserver`; the wineserver knows them by process id, and it is the wineserver that opens their files. So a
@@ -108,14 +148,72 @@ Consequences to know:
 - Without `bwrap`, `silik` says in one line that the programs run without the sandbox, and runs them.
 - The status bar's last command is the short form: `nsenter ... WINEDEBUG=-all WINEPREFIX=… wine setup.exe`.
 
+## Isolated: a display of its own
+
+X11 does not separate its clients: a program with the session's display can read every key typed in any window,
+take pictures of the screen, read the clipboard and type into other windows, a terminal included. The normal box
+passes that display. `--isolated` does not:
+
+| | the normal box | isolated |
+|---|---|---|
+| display | the session's X server | an X server of its own: Xephyr, one window of the session titled "SilikOS: isolated Windows programs (PREFIX)", which is the program's whole screen. The box is given that server's socket and key, nothing of the session's |
+| network namespace | the session's | its own, always. (The session's X server also listens on an abstract socket, which has no file to hide: a box that shares the network namespace reaches it, and EL 9's login lets every program of the user in without the key) |
+| network | this machine's, `localhost` included | through `pasta` (the package passt): out to the network as the user's own connections; nothing that listens on this machine is reachable, `localhost` or its own address; no port of the box is opened. Without passt, or with `--no-net`: none |
+| keyboard, screen, clipboard of the session | readable, writable | not reachable. No clipboard bridge: text does not cross; files do, through `~/Windows` |
+| sound (PulseAudio, PipeWire) | passed | not passed; `--sound` passes it (a program can then record) |
+| GPU devices | passed | not passed: OpenGL is drawn in software (Mesa llvmpipe) |
+| the Downloads folder | shown, read-only | not shown: the opened file alone (its folder when it lies in one of its own) |
+| the session bus, the keyring daemon, the COMMAND bar's socket | not there | not there |
+
+- **Which prefix.** `silik win open --isolated FILE` uses the prefix `isolated`, never `default`: the programs of
+  one prefix are not protected from each other, so the ones you trust and the ones you do not never share one.
+  `--prefix NAME --isolated` makes another. A prefix made isolated is marked (`~/.local/share/silikos/win-isolated`,
+  beside the prefixes and not inside one: a program cannot take its own mark away) and runs isolated from then on,
+  its installed programs' entries too, with no switch; `silik win isolate PREFIX` marks an existing one,
+  `--off` takes the mark away, no name lists them. A marked prefix never falls back to the session's display: where
+  it cannot run isolated it does not run (exit code 69).
+- **Its screen.** 1280x800, or `SILIK_WIN_SCREEN=WIDTHxHEIGHT`. The nested server has no window manager, so
+  windowed programs run on Wine's own desktop (`wine explorer /desktop=silik,1280x800 PROGRAM`: title bars, a task
+  bar, drawn by Wine); a console program typed in a terminal keeps the terminal. The session's keyboard layout is
+  given to the server (`setxkbmap -display :N ...`: Xephyr's own switches change the layout's name only). The
+  server never grabs the session's keyboard (`-no-host-grab`): keys go to the box only while its window has the
+  focus, as with any window.
+- **The box and its window end together.** One small process (`silik-win-box` in `ps`) holds the X server and
+  `bwrap` and ends the one when the other goes: closing the window ends every program of the box, with or without
+  a window of its own; when the last program has gone the window closes; `silik win stop PREFIX` ends both.
+
+The lines, as printed:
+
+```
+$ setpriv --pdeathsig TERM Xephyr -displayfd 3 -auth $XDG_RUNTIME_DIR/silik-win/isolated/Xauthority -nolisten tcp -nolisten local -noreset -no-host-grab -screen 1280x800 -title 'SilikOS: isolated Windows programs (isolated)' -name silik-win-isolated 3>…/display &
+$ env XAUTHORITY=…/Xauthority setxkbmap -display :1 -rules evdev -model pc105 -layout es -variant cat
+$ env -i /usr/bin/bwrap --unshare-user --unshare-pid --unshare-ipc --unshare-uts --unshare-cgroup-try --unshare-net --new-session --cap-drop ALL --die-with-parent --info-fd 4 … --ro-bind /tmp/.X11-unix/X1 /tmp/.X11-unix/X1 --ro-bind …/Xauthority …/Xauthority … -- env … DISPLAY=:1 … wineserver --foreground 4>…/session.json &
+$ pasta --quiet --config-net -t none -u none -T none -U none --no-map-gw --userns /proc/16971/ns/user --netns /proc/16971/ns/net
+$ env -i nsenter --preserve-credentials -t 16971 -U -m -p -i -u -n -C -- setpriv --no-new-privs --pdeathsig KILL setsid --wait env -C … DISPLAY=:1 … wine explorer /desktop=silik,1280x800 ~/Downloads/setup.exe
+```
+
+**What isolated does not do** (for a program that is hostile and capable, the Windows VM is still the answer):
+
+- The nested server is the wall, and it is a program: a fault in Xephyr's handling of requests is a way to the
+  session. It runs outside the box, as the user.
+- No hardware graphics: programs that need Direct3D at speed are slow or do not start [A: not tried].
+- Its screen has one size; on a HiDPI screen its text is small (the scale is not passed) [A: not tried].
+- `~/Windows` is shared with every prefix: what is there, an isolated program reads and can change.
+- With network (pasta) it reaches the local network and the internet as this machine does.
+- The kernel, `/etc` and `/sys` read-only, the user keyring: as for the normal box, below.
+
 **What the sandbox does not do:**
 
-- **The display, and through it the files.** X11 does not separate its clients: a program with the display can read
-  the keyboard and the screen and send keys to other windows, e.g. type a command into an open terminal. So under
-  X11 (the desktop's session) the sandbox keeps honest programs from reaching your files by mistake, but it does not
-  stop a hostile one: for a program you do not trust, the Windows VM (`silik win vm`).
-- Sound: a program can play and record.
-- Network (unless `--no-net`): it is this machine's network, with what listens on `localhost`.
+- **The display, and through it the files** (the normal box). A program with the session's display can read the
+  keyboard and the screen and send keys to other windows, e.g. type a command into an open terminal. The normal box
+  keeps honest programs from reaching your files by mistake; it does not stop a hostile one. For a program you do
+  not trust: isolated (above), or the Windows VM (`silik win vm`).
+- Sound (the normal box, and isolated with `--sound`): a program can play and record.
+- Network (the normal box, unless `--no-net`): it is this machine's network, with what listens on `localhost`.
+- The kernel's keyrings: a sandbox starts with an empty session keyring, but a program of the same user can still
+  link the user keyring by its number and read what is in it (run: a test key was read that way). Where Kerberos
+  tickets (`KEYRING:` caches), CIFS or eCryptfs keys are kept there, they are in reach; a system-call filter would
+  close it and there is none.
 - The programs of one prefix are not protected from each other (they can read each other's memory through the
   wineserver). For a program that must not reach the others, or must have no network at all: a prefix of its own.
 - The kernel: there is no system-call filter. A program can make its own namespaces inside the sandbox; a kernel
@@ -144,11 +242,11 @@ that have the prefix's runtime folder mounted).
   and among its attributes the right to load policy and to set enforcing). It is there so that Wine's kind of code
   runs at all. What holds a Windows program is bubblewrap (no capabilities, no new privileges, its own namespaces);
   with `--no-sandbox`, or without bubblewrap installed, nothing does.
-- **`--no-net` takes the network away and nothing else**: the program still has this session's X11 display, and
-  with it the keyboard and the other windows (above). It is not how to run a program you do not trust.
-- **A double click runs it.** `.exe`, `.msi`, `.lnk` and `.bat` files open with `silik win open`, without a
-  question: a file that arrived by mail is one click from running with the reach described above. Whether to ask
-  first for a file in `~/Downloads` is the owner's to decide (the audit's finding B2).
+- **`--no-net` takes the network away and nothing else**: in the normal box the program still has this session's
+  X11 display, and with it the keyboard and the other windows (above). The way to run a program you do not trust
+  is `--isolated`.
+- **A double click asks first**, once per file (above). `--yes`, and a file answered "normal box" before, run with
+  the reach of the normal box.
 - **.NET and HTML: Wine Mono and Wine Gecko are packages of the system** (`silik-wine-mono`, `silik-wine-gecko`:
   upstream's binary archives unpacked under `/opt/silik-wine/share/wine`, `wine/silik-wine-addons.spec`). WineHQ's
   Wine otherwise offers to download them with a dialog: "Wine Mono Installer" the first time a prefix is made (behind
@@ -226,6 +324,38 @@ start-menu shortcut (its program is then `win/silik-test` in `silik win apps`); 
 with wixl (`silik win open silik.msi` installs it). The same three on an installed SilikOS (the CI's virtual machine, run
 42968357962): all pass, and the installed program, typed as `win/silik-test` in the COMMAND bar, opens its window and
 is in the rail under its name.
+
+Run on 13/11/2026 for `--isolated`, the question and the keyring:
+
+- **An attack from inside the box**, in an AlmaLinux 9.8 container as an ordinary user, with the base's own
+  bubblewrap 0.6.3, Xephyr 1.20.11, pasta and util-linux, a session on Xvfb with a key, a window, a clipboard, EL 9's
+  `xhost +si:localuser` and stand-ins for Wine's programs (they run a Linux program in the box: the attacker).
+  Isolated: the session's display does not open by its socket's file, by its abstract socket or over TCP; a picture
+  of the session's screen has 0 bytes; the session's window is not among the box's windows; the clipboard and the
+  primary selection have no owner; a key logger (XQueryKeymap, and XInput2 raw events) sees nothing of what is
+  typed into the session; keys the box types with XTEST do not arrive in the session (its window got the 6 the
+  owner typed); no socket of the runtime folder is there; a server on `127.0.0.1` refuses; with pasta an address
+  outside answers, with `--no-net` only `lo` exists. The same program in the normal box: opens the session's display
+  (also by the abstract socket), a 9 MB picture of the screen, both selections read, the five keys of the password
+  seen, two keys typed into the session, the `localhost` server open, the sound sockets connected. The session bus,
+  the keyring daemon's socket and the COMMAND bar's socket are in neither box.
+- The box's server refuses a program of the same user without its key; the key file is 0600.
+- The layout: a session set to es/cat, the key right of L pressed over the box's window arrives as `ntilde`
+  (with Xephyr's own `-xkb-layout es` it arrived as a semicolon).
+- Closing the window ends every program (one without a window too) in 2 s; killing `silik-win-box` ends the server
+  and the sandbox; `silik win stop` leaves nothing; a prefix opened again after that starts clean.
+- **With a real Wine** (9.0, on the build machine, with EL 9's Xephyr binary): a window program run isolated
+  draws on Wine's desktop inside the box's window (picture) and is not a window of the session; a console program
+  writes to `W:\`, does not see `~/.ssh`, exits 0 and its box is gone 8 s later; the question as text and through
+  the window's protocol, the answers kept (0600) and used the second time; the normal box as before.
+- The question's window in English, Catalan (dark) and Spanish, each answered with a key (pictures).
+- The kernel's keyring: before, a key of the session's keyring was read in both boxes; after, the box's session
+  keyring is empty and that key is refused; the user keyring is still linked by number and read.
+
+Not run for these: an installed SilikOS (SELinux enforcing: pasta, Xephyr and the box together; the checks
+`win.isolated.*` and `win.question.*` of the CI's installed-system test are for that), the real shell around the box's
+window, a GPU, HiDPI, a Wayland session, sound in an isolated box, Firefox's attributes on a downloaded file, a
+real third-party installer isolated, Wine 11 isolated.
 
 Not run: the rail and the applications list of the real shell with a Wine window; sound, a GPU, NVIDIA devices, a
 Wayland session; a real `.msi`; a 32-bit program on the installed system (one ran in the Wine workflow's container);

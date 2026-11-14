@@ -183,6 +183,17 @@ for _lang, _words in (
     TEXT[_lang].update(_words)
 
 
+# Windows programs with a display of their own (`silik win open --isolated`, `silik win isolate`: docs/WINDOWS.md)
+for _lang, _words in (
+        ("en", {"win_open_isolated": "run with Wine, isolated: a display of its own, away from this session's keyboard and screen",
+                "win_isolated": "the Wine prefixes whose programs always run isolated (a display of their own)"}),
+        ("ca", {"win_open_isolated": "executa amb Wine, aïllat: una pantalla pròpia, lluny del teclat i la pantalla d'aquesta sessió",
+                "win_isolated": "els prefixos de Wine els programes dels quals s'executen sempre aïllats (una pantalla pròpia)"}),
+        ("es", {"win_open_isolated": "ejecuta con Wine, aislado: una pantalla propia, lejos del teclado y la pantalla de esta sesión",
+                "win_isolated": "los prefijos de Wine cuyos programas se ejecutan siempre aislados (una pantalla propia)"})):
+    TEXT[_lang].update(_words)
+
+
 def lang_of(env=None):
     env = os.environ if env is None else env
     for k in ("SILIK_LANG", "LC_ALL", "LC_MESSAGES", "LANG"):
@@ -442,6 +453,7 @@ def system_items(t, boxes=(), prefixes=(), programs=(), vendors=()):
         Item("win/vm-usb", t["win_usb"], [SILIK, "win", "vm", "usb"], True),
         Item("win/vm", t["winvm"], [SILIK, "win", "vm", "start"], True),
         Item("win/routes", t["win_routes"], [SILIK, "win", "routes"], True),
+        Item("win/isolated", t["win_isolated"], [SILIK, "win", "isolate"], True),
     ]
     for b in boxes:
         n = b["name"] if isinstance(b, dict) else b
@@ -531,6 +543,9 @@ def match(items, query, t, limit=9, asked=None):
             return Item(shown, t["open"], ["xdg-open", full])
         p = os.path.expanduser(q)
         out = [opens(q, p)] if os.path.exists(p) else []
+        if out and out[0].argv[1:3] == ["win", "open"] and wine_here():
+            # the path typed is a Windows file: the second row runs it away from this session's display
+            out.append(Item(q, t["win_open_isolated"], [SILIK, "win", "open", "--isolated", p]))
         d, base = (p, "") if p.endswith("/") else os.path.split(p)
         try:
             for n in sorted(os.listdir(d or "/")):

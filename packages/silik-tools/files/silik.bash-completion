@@ -108,7 +108,7 @@ _silik() {
     1) COMPREPLY=($(compgen -W "status update identity look session eda dev win power speed bench hw secure doctor vendor manifest snapshot rollback $pl --dry-run --version" -- "$cur"));;
     2) case $g in
          eda) COMPREPLY=($(compgen -W "list create setup enter run import-vm rm check kernel-arg tools try bench tune" -- "$cur"));;
-         win) COMPREPLY=($(compgen -W "list open create run install stop rm sync apps routes vm" -- "$cur"));;
+         win) COMPREPLY=($(compgen -W "list open create run install isolate stop rm sync apps routes vm" -- "$cur"));;
          hw)  COMPREPLY=($(compgen -W "probe check nvidia driver" -- "$cur"));;
          dev) COMPREPLY=($(compgen -W "tools try install can serial ccache" -- "$cur"));;
          power) COMPREPLY=($(compgen -W "show performance balanced saver auto apply check charge profiles zram trim --json" -- "$cur"));;
@@ -125,8 +125,11 @@ _silik() {
        esac;;
     3) case "$g ${COMP_WORDS[2]}" in
          "eda setup"|"eda enter"|"eda run"|"eda rm") _silik_names "$cur" "" < <(silik -q eda list 2>/dev/null | awk '$1 != "no" {print $1}');;
-         "win run"|"win install"|"win stop"|"win rm") _silik_names "$cur" "--no-net --no-sandbox" < <(silik -q win list 2>/dev/null | grep -v '^no ');;
-         "win open") COMPREPLY=($(compgen -W "--prefix --no-net --no-sandbox" -- "$cur") $(compgen -f -- "$cur"));;
+         "win run"|"win install") _silik_names "$cur" "--isolated --sound --no-net --no-sandbox --yes" < <(silik -q win list 2>/dev/null | grep -v '^no ');;
+         "win stop"|"win rm") _silik_names "$cur" "" < <(silik -q win list 2>/dev/null | grep -v '^no ');;
+         "win isolate") _silik_names "$cur" "--off" < <(silik -q win list 2>/dev/null | grep -v '^no ');;
+         "win create") COMPREPLY=($(compgen -W "--isolated --arch" -- "$cur"));;
+         "win open") COMPREPLY=($(compgen -W "--prefix --isolated --sound --no-net --no-sandbox --yes" -- "$cur") $(compgen -f -- "$cur"));;
          "win vm") COMPREPLY=($(compgen -W "create start stop app usb" -- "$cur"));;
          "secure level") COMPREPLY=($(compgen -W "hardened default --list --json" -- "$cur"));;
          "secure status") COMPREPLY=($(compgen -W "--json --offline" -- "$cur"));;
@@ -137,7 +140,7 @@ _silik() {
          "eda try") COMPREPLY=($(compgen -W "all sim schematic layout postlayout gds digital waves gates verilate vhdl lint synth device" -- "$cur"));;
          "eda tune") COMPREPLY=($(compgen -W "--threads --undo" -- "$cur"));;
          "dev try") COMPREPLY=($(compgen -W "all build libc cxx debug probe dfu stlink" -- "$cur"));;
-         "dev install") COMPREPLY=($(compgen -f -- "$cur"));;
+         "dev install") COMPREPLY=($(compgen -W "--yes" -- "$cur") $(compgen -f -- "$cur"));;
          "dev can") COMPREPLY=($(compgen -W "list up down --fd --listen" -- "$cur"));;
          "dev ccache"|"power zram"|"power trim") COMPREPLY=($(compgen -W "on off" -- "$cur"));;
          "power auto") COMPREPLY=($(compgen -W "--ac --battery" -- "$cur"));;

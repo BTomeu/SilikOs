@@ -533,6 +533,11 @@ for = 150 ms
         def keys():                    # Ctrl-C once the bench is open and the first step waits, and once more right after
             while not os.path.exists(os.path.join(self.out, "can-can.log")):
                 time.sleep(0.01)
+            # (while the bench starts its programs the runner holds Ctrl-C back with a handler of its own, and a busy
+            # machine makes that last: wait until the handler is the one the test started with, then for the step)
+            end = time.time() + 15
+            while signal.getsignal(signal.SIGINT) is not before and time.time() < end:
+                time.sleep(0.01)
             time.sleep(0.3)
             os.kill(os.getpid(), signal.SIGINT)
             time.sleep(0.1)

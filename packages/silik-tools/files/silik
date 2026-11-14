@@ -7,7 +7,7 @@
 #   silik update channel [stable | next | off]           SilikOS's own packages: the repository they are updated from
 #   silik eda   list | create NAME --el 6|7|8 | setup NAME | enter NAME | run NAME -- CMD... | import-vm DISK --name NAME
 #               | rm NAME | check | kernel-arg
-#   silik win   open [--prefix P --no-net --no-sandbox] FILE [ARGS] | apps | sync | stop [PREFIX]
+#   silik win   open [--prefix P --isolated --no-net --no-sandbox --yes] FILE [ARGS] | apps | sync | stop [PREFIX]
 #               | list | create PREFIX | run [--no-net --no-sandbox] PREFIX -- PROG.exe [ARGS] | install PREFIX SETUP.exe | rm PREFIX
 #               | vm create --iso WIN.iso [--name N --ram GB --disk GB --cpus N] | vm start [N] | vm stop [N]
 #               | vm app --exe 'C:\path\app.exe' --user U | vm usb [attach|detach VID:PID] [--name N]
@@ -798,6 +798,15 @@ WINE_SHARE = "/opt/silik-wine/share/wine:/usr/share/wine:/opt/wine"     # where 
 # (dbus-launch --autolaunch, through the display), and that bus never ends, so the sandbox never ends either. Seen
 # with SDL2 on the system, which Wine loads when it is there: every Windows program left a sandbox behind.
 WIN_NO_BUS = "unix:path=/nonexistent/no-session-bus-in-the-sandbox"
+# An isolated sandbox (`--isolated`, or a prefix marked so: docs/WINDOWS.md) is for a program the owner does not
+# trust with the session. X11 does not separate its clients, so such a program gets an X server of its own (Xephyr,
+# a window of this session that is its whole screen), a network namespace of its own (the session's server also
+# listens on an abstract socket, which a box that shares the network namespace reaches without the socket's file),
+# no GPU device, and no sound unless asked.
+WIN_ISOLATED = "isolated"                             # the prefix of `silik win open --isolated` when none is named
+WIN_SCREEN = "1280x800"                               # the size of an isolated program's screen ($SILIK_WIN_SCREEN)
+WIN_ENV_ISOLATED = ("LANG", "LANGUAGE", "TZ", "TERM")  # what an isolated program keeps of the environment (plus LC_*)
+X11_SOCKETS = "/tmp/.X11-unix"
 
 
 def prefix_dir(n):
@@ -830,6 +839,65 @@ def bwrap_bin():
 
 def win_boxed(a):
     return bool(bwrap_bin()) and not getattr(a, "no_sandbox", False)
+
+
+def xephyr_bin():
+    return os.environ.get("SILIK_XEPHYR") or shutil.which("Xephyr")
+
+
+def pasta_bin():
+    return os.environ.get("SILIK_PASTA") or shutil.which("pasta")
+
+
+def win_cannot_isolate():
+    """why a program cannot have a display of its own here; '' when it can"""
+    if not bwrap_bin():
+        return "bwrap (bubblewrap) is not installed"
+    if not xephyr_bin():
+        return "Xephyr is not installed (the package xorg-x11-server-Xephyr)"
+    if not (os.environ.get("DISPLAY") or "").startswith(":"):
+        return "this session has no local X11 display to open the program's own display in"
+    return ""
+
+
+def win_marks_file():
+    """the names of the prefixes that always run isolated, one per line. Beside the prefixes, not inside one: a
+    prefix is writable by its programs, and a program must not be able to take its own mark away"""
+    return os.path.join(os.path.dirname(WINE_ROOT), "win-isolated")
+
+
+def win_marked():
+    return set(l.strip() for l in read(win_marks_file()).splitlines() if valid_name(l.strip()))
+
+
+def win_private_write(path, text):
+    """writes a file of this user's alone (0600, its folder 0700 when made here), not through a link"""
+    os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+    tmp = "%s.%d.tmp" % (path, os.getpid())
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+    os.replace(tmp, path)
+
+
+def win_mark(ctx, name, on=True):
+    """marks the prefix as one that always runs isolated (or takes the mark away)"""
+    names = win_marked()
+    if (name in names) == on:
+        return
+    names = names | {name} if on else names - {name}
+    if not ctx.quiet:
+        if on:
+            print("$ echo %s >> %s" % (shlex.quote(name), shlex.quote(win_marks_file())), flush=True)
+        else:
+            print("$ sed -i %s %s" % (shlex.quote("/^%s$/d" % name.replace(".", "\\.")), shlex.quote(win_marks_file())), flush=True)
+    if not ctx.dry:
+        win_private_write(win_marks_file(), "".join(n + "\n" for n in sorted(names)))
+
+
+def win_iso(a, name):
+    """True when the prefix's programs run isolated: asked for (--isolated), or the prefix is marked"""
+    return win_boxed(a) and (bool(getattr(a, "isolated", False)) or name in win_marked())
 
 
 def _under(p, top):
@@ -895,16 +963,22 @@ def win_narrow(folder):
     return not hidden and not any(_under(t, folder) for t in taken)
 
 
+def win_downloads():
+    """the Downloads folder: the one XDG_DOWNLOAD_DIR names in the user's user-dirs.dirs, else ~/Downloads"""
+    home = os.path.expanduser("~")
+    v = os.path.join(home, "Downloads")
+    cfg = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.join(home, ".config"), "user-dirs.dirs")
+    for l in read(cfg).splitlines():
+        if l.startswith("XDG_DOWNLOAD_DIR="):
+            v = l.split("=", 1)[1].strip().strip('"').replace("$HOME", home)
+    return os.path.normpath(v)
+
+
 def win_always():
     """the folders every sandbox shows read-only: $SILIK_WIN_SHOW (a colon list), by default the Downloads folder"""
     v = os.environ.get("SILIK_WIN_SHOW")
     if v is None:
-        home = os.path.expanduser("~")
-        v = os.path.join(home, "Downloads")
-        cfg = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.join(home, ".config"), "user-dirs.dirs")
-        for l in read(cfg).splitlines():
-            if l.startswith("XDG_DOWNLOAD_DIR="):
-                v = l.split("=", 1)[1].strip().strip('"').replace("$HOME", home)
+        v = win_downloads()
     return [p for p in (os.path.normpath(x) for x in v.split(":") if x) if os.path.isdir(p) and win_narrow(p)]
 
 
@@ -914,17 +988,22 @@ def wine_opt():
     return "/".join(wine.split("/")[:3]) if wine.startswith("/opt/") and wine.count("/") > 2 else None
 
 
-def win_show(f, d):
+def win_show(f, d, iso=False):
     """what the sandbox must show, read-only, for file f to open: nothing when it is seen already (the prefix, the
     shared folder, the system, Wine's own folder, a folder always shown), else its folder, or f alone when the
-    folder is too much"""
-    if any(_under(f, t) for t in [win_shared(), d, "/usr", "/etc"] + [p for p in [wine_opt()] if p] + win_always()):
+    folder is too much. An isolated sandbox (`iso`) is not shown the Downloads folder: a file that lies directly
+    in it is shown alone, so that a program nobody trusts yet cannot read, and send away, the other downloads"""
+    always = [] if iso else win_always()
+    if any(_under(f, t) for t in [win_shared(), d, "/usr", "/etc"] + [p for p in [wine_opt()] if p] + always):
         return []
-    return [os.path.dirname(f)] if win_narrow(os.path.dirname(f)) else [f]
+    folder = os.path.dirname(f)
+    return [folder] if win_narrow(folder) and not (iso and folder in win_always()) else [f]
 
 
-def win_env(d, display=True):
-    """the environment of a sandboxed command, whole: nothing else crosses (no session bus address, no tokens)"""
+def win_env(d, display=True, iso=None):
+    """the environment of a sandboxed command, whole: nothing else crosses (no session bus address, no tokens).
+    `iso`: the sandbox's own display ({"display": number, "xauth": its key file, "sound": bool}) when it is an
+    isolated one: then nothing of the session's display, GPU or sound is named either"""
     home = os.path.expanduser("~")
     path = [p for p in (os.environ.get("PATH") or "").split(":") if p and any(_under(p, t) for t in ("/usr", "/bin", "/sbin"))]
     wine = shutil.which("wine") or ""
@@ -934,7 +1013,13 @@ def win_env(d, display=True):
          "XDG_RUNTIME_DIR": os.environ.get("XDG_RUNTIME_DIR") or "/run/user/%d" % os.getuid()}
     e["USER"] = e["LOGNAME"] = os.environ.get("USER") or os.environ.get("LOGNAME") or "user"
     e["DBUS_SESSION_BUS_ADDRESS"] = WIN_NO_BUS
-    if display:
+    if display and iso:
+        keep = WIN_ENV_ISOLATED + (("PULSE_SERVER",) if iso.get("sound") else ())
+        for k, v in os.environ.items():
+            if k in keep or k.startswith("LC_"):
+                e[k] = v
+        e["DISPLAY"], e["XAUTHORITY"] = ":%s" % iso["display"], iso["xauth"]
+    elif display:
         for k, v in os.environ.items():
             if k in WIN_ENV or k.startswith("LC_"):
                 e[k] = v
@@ -944,16 +1029,21 @@ def win_env(d, display=True):
     return ["%s=%s" % (k, e[k]) for k in sorted(e)]
 
 
-def win_sandbox(name, d, show=(), net=True, info_fd=None):
+def win_sandbox(name, d, show=(), net=True, info_fd=None, iso=None):
     """the bwrap command line of a prefix's sandbox, up to "--": new user, process, IPC and host-name namespaces
     (and network, without `net`); the system read-only, the prefix and the shared folder read-write, `show`
-    read-only, the display, sound and GPU; nothing else of the home folder"""
+    read-only, the display, sound and GPU; nothing else of the home folder.
+    `iso` (win_env's): an isolated sandbox. Its own network namespace always (its network, when it has one, comes
+    from pasta: win_pasta); of the display, the socket and the key of its own server only; no GPU device; the sound
+    sockets only when asked"""
     home, rt, shared = os.path.expanduser("~"), win_runtime(name), win_shared()
     xrd_host = os.environ.get("XDG_RUNTIME_DIR") or ""
     xrd = xrd_host or "/run/user/%d" % os.getuid()
     # env -i: the first process of the sandbox is bwrap itself, and it must not carry this command's environment
     a = ["env", "-i", bwrap_bin() or "bwrap", "--unshare-user", "--unshare-pid", "--unshare-ipc", "--unshare-uts", "--unshare-cgroup-try"]
-    a += ([] if net else ["--unshare-net"]) + ["--new-session", "--cap-drop", "ALL"]
+    a += ([] if net and not iso else ["--unshare-net"]) + ["--new-session", "--cap-drop", "ALL"]
+    if iso:
+        a += ["--die-with-parent"]      # (its parent is the process that also holds its display: win_isolated_start)
     if info_fd is not None:
         a += ["--info-fd", str(info_fd)]
 
@@ -979,28 +1069,34 @@ def win_sandbox(name, d, show=(), net=True, info_fd=None):
     resolv = os.path.realpath("/etc/resolv.conf")
     if net and resolv.startswith("/run/") and os.path.exists(resolv):   # a link into /run (systemd-resolved)
         ro(resolv)
-    # GPU
-    if os.path.isdir("/dev/dri"):
-        a += ["--dev-bind", "/dev/dri", "/dev/dri"]
-    try:
-        for n in sorted(os.listdir("/dev")):
-            if n.startswith("nvidia"):
-                a += ["--dev-bind", "/dev/" + n, "/dev/" + n]
-    except OSError:
-        pass
+    # GPU (an isolated sandbox has none: its display draws in software, and a GPU device is one more door)
+    if not iso:
+        if os.path.isdir("/dev/dri"):
+            a += ["--dev-bind", "/dev/dri", "/dev/dri"]
+        try:
+            for n in sorted(os.listdir("/dev")):
+                if n.startswith("nvidia"):
+                    a += ["--dev-bind", "/dev/" + n, "/dev/" + n]
+        except OSError:
+            pass
     for p in ("/sys/dev", "/sys/devices", "/sys/class", "/sys/bus"):
         if os.path.isdir(p):
             ro(p)
-    # the X11 display and its key
-    disp = os.environ.get("DISPLAY") or ""
-    sock = "/tmp/.X11-unix/X" + disp[1:].split(".")[0] if disp.startswith(":") else ""
-    if sock and os.path.exists(sock):
-        ro(sock)
-    xa = os.environ.get("XAUTHORITY") or os.path.join(home, ".Xauthority")
-    if os.path.isfile(xa):
-        ro(xa)
+    if iso:
+        # its own display: that server's socket and key, nothing of the session's
+        ro("%s/X%s" % (X11_SOCKETS, iso["display"]))
+        ro(iso["xauth"])
+    else:
+        # the X11 display and its key
+        disp = os.environ.get("DISPLAY") or ""
+        sock = "/tmp/.X11-unix/X" + disp[1:].split(".")[0] if disp.startswith(":") else ""
+        if sock and os.path.exists(sock):
+            ro(sock)
+        xa = os.environ.get("XAUTHORITY") or os.path.join(home, ".Xauthority")
+        if os.path.isfile(xa):
+            ro(xa)
     # sound: the PulseAudio and PipeWire sockets
-    for s in ("pulse/native", "pipewire-0"):
+    for s in ("pulse/native", "pipewire-0") if not iso or iso.get("sound") else ():
         if xrd_host and os.path.exists(os.path.join(xrd_host, s)):
             ro(os.path.join(xrd_host, s))
     # the prefix and the shared folder, read-write; the folders shown, read-only
@@ -1008,6 +1104,186 @@ def win_sandbox(name, d, show=(), net=True, info_fd=None):
     for p in show:
         ro(p)
     return a + ["--remount-ro", "/", "--chdir", d, "--"]
+
+
+def win_no_keys():
+    """what a sandbox's first process and every program entering it call before they start: a new, empty session
+    keyring of the kernel (keyctl(KEYCTL_JOIN_SESSION_KEYRING, NULL)). Without it they inherit this session's, and
+    with it whatever the session keeps there and in the user keyring linked into it (a Kerberos ticket cache of
+    the KEYRING kind, CIFS credentials, an eCryptfs key): run on EL 9, a key of the session was read from inside the
+    box. Returns the function to call in the child, or None where the call is not known (not x86_64 or aarch64).
+    It is not the whole answer: a program of the same user can still link the USER keyring by its number (seen);
+    only a system-call filter would stop that (docs/WINDOWS.md)."""
+    nr = {"x86_64": 250, "aarch64": 219}.get(os.uname().machine)
+    if nr is None:
+        return None
+    try:
+        import ctypes
+        call = ctypes.CDLL(None).syscall
+    except (OSError, AttributeError):
+        return None
+    args = (ctypes.c_long(nr), ctypes.c_long(1), ctypes.c_long(0))
+
+    def join():
+        call(*args)
+    return join
+
+
+# -- an isolated sandbox's own display
+WIN_TITLE = {"en": "SilikOS: isolated Windows programs (%s)", "ca": "SilikOS: programes de Windows aïllats (%s)",
+             "es": "SilikOS: programas de Windows aislados (%s)"}
+
+
+def win_lang():
+    """en, ca or es: the language of what a person is asked or shown (as the COMMAND bar chooses it)"""
+    for k in ("SILIK_LANG", "LC_ALL", "LC_MESSAGES", "LANG"):
+        v = (os.environ.get(k) or "")[:2].lower()
+        if v in WIN_TITLE:
+            return v
+    return "en"
+
+
+def win_xauth_entry(cookie):
+    """one entry of an X authority file: this key, for any host and any display number (the file is one display's)"""
+    def field(b):
+        return len(b).to_bytes(2, "big") + b
+    return (0xffff).to_bytes(2, "big") + field(b"") + field(b"") + field(b"MIT-MAGIC-COOKIE-1") + field(cookie)
+
+
+def win_xkb(text):
+    """the session's keyboard layout, read from its `setxkbmap -query` (rules, model, layout, variant, options), as
+    the switches that give it to another server with setxkbmap. A nested server starts with the US layout whatever
+    the session has, and Xephyr 1.20.11's own -xkb-layout and -keybd switches only change the layout's NAME (seen
+    in a session set to es/cat: the key right of L stayed a semicolon); setxkbmap from outside changes the keys."""
+    out = []
+    for l in text.splitlines():
+        k, _, v = l.partition(":")
+        k, v = k.strip(), v.strip()
+        if k in ("rules", "model", "layout", "variant", "options") and v and all(c.isalnum() or c in "-_:,+()." for c in v):
+            out += ["-" + k.replace("options", "option"), v]
+    return out
+
+
+def win_xkb_set(ctx, iso):
+    """gives the sandbox's own server the session's keyboard layout (a client from outside, with the server's key)"""
+    xkb = win_xkb(ctx.query(["setxkbmap", "-query"]))
+    if xkb:
+        ctx.run(["env", "XAUTHORITY=" + iso["xauth"], "setxkbmap", "-display", ":%s" % iso["display"]] + xkb, check=False)
+
+
+def win_screen():
+    """WIDTHxHEIGHT of an isolated program's screen: $SILIK_WIN_SCREEN, else WIN_SCREEN"""
+    v = os.environ.get("SILIK_WIN_SCREEN") or ""
+    w, _, h = v.partition("x")
+    return v if w.isdigit() and h.isdigit() and 320 <= int(w) <= 16384 and 200 <= int(h) <= 16384 else WIN_SCREEN
+
+
+def win_xephyr(name, rt, displayfd):
+    """the nested X server of an isolated sandbox: a window of this session, titled with the prefix's name, that is
+    the whole screen of the prefix's programs.
+    -displayfd: the server takes a free display number and writes it when it is ready; -auth: its own key, so that
+    nothing else of this user connects by chance; no TCP and no abstract socket (-nolisten local: the socket's file
+    is then the only way in, and only this sandbox is given it); -noreset: it stays between two programs;
+    -no-host-grab: it never takes the session's keyboard or pointer for itself (Xephyr's Ctrl+Shift grab is off).
+    setpriv --pdeathsig: it ends with the process that started it (win_isolated_start), as the sandbox does."""
+    return ["setpriv", "--pdeathsig", "TERM", xephyr_bin() or "Xephyr", "-displayfd", str(displayfd), "-auth", os.path.join(rt, "Xauthority"),
+            "-nolisten", "tcp", "-nolisten", "local", "-noreset", "-no-host-grab", "-screen", win_screen(),
+            "-title", WIN_TITLE[win_lang()] % name, "-name", "silik-win-isolated"]
+
+
+def win_pasta(pid):
+    """the network of an isolated sandbox: pasta (the package passt) joins the sandbox's network namespace and
+    carries its connections out as this user's own. No port of the sandbox is opened to this machine (-t/-u none),
+    none of this machine's loopback ports is reachable from inside (-T/-U none), and the gateway's address is not
+    this machine (--no-map-gw): what listens on localhost here is not there. pasta leaves when the namespace goes."""
+    return [pasta_bin() or "pasta", "--quiet", "--config-net", "-t", "none", "-u", "none", "-T", "none", "-U", "none", "--no-map-gw",
+            "--userns", "/proc/%s/ns/user" % pid, "--netns", "/proc/%s/ns/net" % pid]
+
+
+def win_display_alive(n):
+    """True when the X server of display number n answers on its socket"""
+    import socket
+    s = socket.socket(socket.AF_UNIX)
+    try:
+        s.settimeout(2)
+        s.connect("%s/X%s" % (X11_SOCKETS, n))
+        return True
+    except (OSError, ValueError):
+        return False
+    finally:
+        s.close()
+
+
+def win_isolated_start(ctx, name, d, rt, show, net, fd, iso, tail, logf):
+    """starts an isolated sandbox: its X server, then bwrap, both children of ONE small process that stays (a
+    child of this command, named silik-win-box) and does nothing but wait for the first of the two to end, and then
+    end the other: the window closed by the owner ends every program of the box at once, with or without a window
+    of its own (one without would otherwise run on, unseen, with the network), and the end of the sandbox takes
+    its window away. Both die with that process too (setpriv --pdeathsig, bwrap --die-with-parent).
+    Returns (that process's id, the display number)."""
+    import secrets
+    disp = os.path.join(rt, "display")
+    for f in (disp, iso["xauth"]):
+        try:
+            os.unlink(f)
+        except OSError:
+            pass
+    xfd = os.open(iso["xauth"], os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    os.write(xfd, win_xauth_entry(secrets.token_bytes(16)))
+    os.close(xfd)
+    win_echo(ctx, win_xephyr(name, rt, 3), "3>%s &" % shlex.quote(disp))
+    sys.stdout.flush()
+    sys.stderr.flush()
+    pid = os.fork()
+    if pid == 0:                                    # the child: it starts the two, waits, and ends what is left
+        rc = 127
+        try:
+            os.setsid()
+            # nothing of this command stays open in it (the prefix's lock above all: it would be held for ever)
+            os.closerange(3, fd)
+            os.closerange(fd + 1, 4096)
+            (win_no_keys() or (lambda: None))()         # (the X server and the sandbox: no key of the session's)
+            log = os.open(logf, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            os.dup2(os.open(os.devnull, os.O_RDONLY), 0)
+            os.dup2(log, 1)
+            os.dup2(log, 2)
+            try:
+                import ctypes
+                ctypes.CDLL(None).prctl(15, b"silik-win-box", 0, 0, 0)      # PR_SET_NAME: what `ps` and `top` call it
+            except (OSError, AttributeError):
+                pass
+            dfd = os.open(disp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            x = subprocess.Popen(win_xephyr(name, rt, dfd), pass_fds=(dfd,))
+            os.close(dfd)
+            t0, n = time.time(), ""
+            while not n.endswith("\n"):
+                if x.poll() is not None or time.time() - t0 > 20:
+                    raise OSError("the X server (Xephyr) did not start")
+                time.sleep(0.02)
+                n = read(disp)
+            b = subprocess.Popen(win_sandbox(name, d, show, net, info_fd=fd, iso=dict(iso, display=n.strip())) + tail(n.strip()), pass_fds=(fd,))
+            os.close(fd)
+            gone = 0
+            while gone not in (x.pid, b.pid):
+                gone = os.wait()[0]
+            for other in (x, b):
+                if other.pid != gone:
+                    other.terminate()           # (bwrap: its sandbox dies with it; Xephyr: it closes its window)
+                    os.waitpid(other.pid, 0)
+            rc = 0
+        except BaseException as e:      # (nothing of this command's own exit path may run in the child)
+            try:
+                os.write(2, ("silik: %s\n" % e).encode())
+            except OSError:
+                pass
+        os._exit(rc)
+    t0, n = time.time(), ""
+    while not n.endswith("\n"):
+        if os.waitpid(pid, os.WNOHANG)[0] or time.time() - t0 > 25:
+            die("the display of prefix %s did not start: %s" % (name, " ".join(read(logf).split()[-40:]) or "no message"))
+        time.sleep(0.02)
+        n = read(disp)
+    return pid, n.strip()
 
 
 def win_runtime_make(rt):
@@ -1027,11 +1303,16 @@ def win_runtime_make(rt):
 
 def win_session_info(name):
     """the running sandbox of the prefix: {"pid": its first process as this system numbers it, "ns": its process
-    namespace, "show": the folders it shows read-only, "net": True with network}; {} when none runs"""
+    namespace, "show": the folders it shows read-only, "net": True with network, "iso": win_env's dictionary when
+    it is an isolated one}; {} when none runs"""
     try:
         s = json.loads(read(os.path.join(win_runtime(name), "session")) or "{}")
         pid = s["pid"]
         if os.readlink("/proc/%d/ns/pid" % pid) != s["ns"] or not os.readlink("/proc/%d/ns/mnt" % pid):
+            return {}
+        # an isolated sandbox whose display has gone (its window was closed) can show nothing: it is over, and
+        # win_reap ends what is left of it
+        if s.get("iso") and not win_display_alive(s["iso"]["display"]):
             return {}
         kids = read("/proc/%d/task/%d/children" % (pid, pid), None)
         if kids is None:        # this kernel does not list children: the first process is enough
@@ -1086,22 +1367,32 @@ def win_server_socket(rt):
     return ""
 
 
-def win_session(ctx, name, d, show=(), net=True):
+def win_session(ctx, name, d, show=(), net=True, iso=False, sound=False):
     """the prefix's running sandbox, started when there is none: bwrap with the prefix's wineserver as its first
     program. Every program of the prefix then enters it (win_enter): they must share the wineserver, and the
-    wineserver is what opens their files, so they share its view. Returns win_session_info's dictionary."""
+    wineserver is what opens their files, so they share its view. Returns win_session_info's dictionary.
+    `iso`: an isolated one, with an X server of its own started first and, with `net`, pasta for its network."""
     s = win_session_info(name)
     if s:
         return s
     win_reap(ctx, name)                 # (what an earlier sandbox of this prefix may have left)
     rt = win_runtime(name)
-    show = sorted(set(win_always()) | set(show))
+    show = sorted((set() if iso else set(win_always())) | set(show))
     show = [p for p in show if not any(p != q and _under(p, q) for q in show)]
-    tail = ["env"] + win_env(d) + wine_argv(d, ["wineserver", "--foreground"])[1:]
+    iso = {"display": "N", "xauth": os.path.join(rt, "Xauthority"), "sound": bool(sound)} if iso else None
+
+    def tail(n=None):
+        return ["env"] + win_env(d, iso=dict(iso, display=n) if n else iso) + wine_argv(d, ["wineserver", "--foreground"])[1:]
+
     info = os.path.join(rt, "session.json")
     if ctx.dry:
-        win_echo(ctx, win_sandbox(name, d, show, net, info_fd=3) + tail, "3>%s &" % shlex.quote(info))
-        return {"pid": 0, "ns": "", "show": show, "net": net}
+        if iso:
+            win_echo(ctx, win_xephyr(name, rt, 3), "3>%s &" % shlex.quote(os.path.join(rt, "display")))
+            win_xkb_set(ctx, iso)
+        win_echo(ctx, win_sandbox(name, d, show, net, info_fd=3, iso=iso) + tail(), "3>%s &" % shlex.quote(info))
+        if iso and net:
+            ctx.echo(win_pasta("PID"))
+        return {"pid": 0, "ns": "", "show": show, "net": net, "iso": iso}
     win_runtime_make(rt)
     with open(os.path.join(rt, "lock"), "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
@@ -1112,23 +1403,47 @@ def win_session(ctx, name, d, show=(), net=True):
             shutil.rmtree(os.path.join(rt, sub), ignore_errors=True)
             os.mkdir(os.path.join(rt, sub), 0o700)
         fd = os.open(info, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        argv = win_sandbox(name, d, show, net, info_fd=fd) + tail
+        logf = os.path.join(rt, "session.log")
+        if iso:
+            box, n = win_isolated_start(ctx, name, d, rt, show, net, fd, iso, tail, logf)
+            iso = dict(iso, display=n)
+            win_xkb_set(ctx, iso)
+            argv = win_sandbox(name, d, show, net, info_fd=fd, iso=iso) + tail(n)
+
+            def ended():
+                try:
+                    return os.waitpid(box, os.WNOHANG)[0] != 0
+                except ChildProcessError:
+                    return True
+        else:
+            argv = win_sandbox(name, d, show, net, info_fd=fd) + tail()
         win_echo(ctx, argv, "%d>%s &" % (fd, shlex.quote(info)))
         ctx.note(win_short(argv))
-        logf = os.path.join(rt, "session.log")
-        with open(logf, "wb") as log:
-            p = subprocess.Popen(argv, pass_fds=(fd,), stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
+        if not iso:
+            with open(logf, "wb") as log:
+                p = subprocess.Popen(argv, pass_fds=(fd,), stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True,
+                                     preexec_fn=win_no_keys())
+
+            def ended():
+                return p.poll() is not None
         os.close(fd)
         t0, pid = time.time(), 0
         while not (pid and win_server_socket(rt)):
-            if p.poll() is not None or time.time() - t0 > 30:
+            if ended() or time.time() - t0 > 30:
                 die("the sandbox of prefix %s did not start: %s" % (name, " ".join(read(logf).split()[-40:]) or "no message"))
             time.sleep(0.05)
             try:
                 pid = int(json.loads(read(info) or "{}").get("child-pid", 0))
             except ValueError:
                 pid = 0
+        if iso and net:
+            # (pasta puts itself in the background once the network is there, and leaves with the namespace)
+            rc, _ = ctx.run(win_pasta(pid), check=False)
+            if rc:
+                print("silik: pasta exited %d: the programs of prefix %s have no network" % (rc, name), file=sys.stderr)
         s = {"pid": pid, "ns": os.readlink("/proc/%d/ns/pid" % pid), "show": show, "net": net}
+        if iso:
+            s["iso"] = iso
         with open(os.path.join(rt, "session"), "w") as f:
             json.dump(s, f)
         return s
@@ -1141,7 +1456,7 @@ def win_enter(ctx, d, s, cmd, cwd=None, display=True):
     kinds = (("user", "-U"), ("mnt", "-m"), ("pid", "-p"), ("ipc", "-i"), ("uts", "-u"), ("net", "-n"), ("cgroup", "-C"))
     try:
         flags = [f for k, f in kinds if os.readlink("/proc/%d/ns/%s" % (pid, k)) != os.readlink("/proc/self/ns/" + k)] if pid else \
-                ["-U", "-m", "-p", "-i", "-u"] + ([] if s.get("net", True) else ["-n"])
+                ["-U", "-m", "-p", "-i", "-u"] + ([] if s.get("net", True) and not s.get("iso") else ["-n"])
     except OSError as e:
         print("silik: %s" % e, file=sys.stderr)
         return 126
@@ -1151,13 +1466,13 @@ def win_enter(ctx, d, s, cmd, cwd=None, display=True):
     # env -i first: what enters the sandbox carries none of this command's environment, not even for a moment
     argv = ["env", "-i", "nsenter", "--preserve-credentials", "-t", str(pid or "PID")] + flags + \
            ["--", "setpriv", "--no-new-privs", "--pdeathsig", "KILL", "setsid", "--wait", "env", "-C", cwd] + \
-           win_env(d, display) + cmd[1:]
+           win_env(d, display, s.get("iso")) + cmd[1:]
     ctx.echo(argv)
     if ctx.dry:
         return 0
     ctx.note(win_short(argv))
     try:
-        rc = subprocess.run(argv, check=False).returncode
+        rc = subprocess.run(argv, check=False, preexec_fn=win_no_keys()).returncode
     except OSError as e:
         print("silik: %s" % e, file=sys.stderr)
         return 126
@@ -1179,8 +1494,21 @@ def win_outside(d):
         return False
 
 
-def win_exec(ctx, name, d, cmd, a=None, show=(), cwd=None, arch=None):
-    """runs a Wine command of prefix `name` (in its sandbox when bwrap is there) and returns its exit code"""
+WIN_CONSOLE = ("cmd", "cmd.exe", "reg", "reg.exe", "winepath", "wineboot", "wineserver")   # Wine's own programs without a window
+
+
+def win_desktop(cmd):
+    """a windowed program of an isolated sandbox runs on Wine's own desktop (`wine explorer /desktop=NAME,SIZE
+    PROGRAM`): the nested server has no window manager, and without one a program's windows have no title bar and
+    cannot be moved or closed (seen with Wine 9.0 in Xephyr). Wine's desktop draws them itself, with a task bar."""
+    return cmd[:1] + ["explorer", "/desktop=silik,%s" % win_screen()] + cmd[1:] if cmd[:1] == ["wine"] and cmd[1:2] != ["explorer"] else cmd
+
+
+def win_exec(ctx, name, d, cmd, a=None, show=(), cwd=None, arch=None, window=True):
+    """runs a Wine command of prefix `name` (in its sandbox when bwrap is there) and returns its exit code.
+    `window`: False for a console program typed in a terminal (it is not put on Wine's desktop when isolated)"""
+    if window and win_iso(a, name):
+        cmd = win_desktop(list(cmd))
     tail = wine_argv(d, cmd, arch)
     if not win_boxed(a):
         if not getattr(ctx, "win_said", False):       # once per command, however many Wine commands it takes
@@ -1198,10 +1526,19 @@ def win_exec(ctx, name, d, cmd, a=None, show=(), cwd=None, arch=None):
         rc, _ = ctx.run(tail, check=False)
         return rc
     net = not getattr(a, "no_net", False)
+    iso, sound = win_iso(a, name), bool(getattr(a, "sound", False))
+    if iso and not ctx.dry and win_cannot_isolate():
+        win_die(ctx, "prefix %s runs isolated, and it cannot here: %s" % (name, win_cannot_isolate()), 69)
+    if iso and net and not pasta_bin():
+        net = False
+        if not getattr(ctx, "win_net_said", False):
+            ctx.win_net_said = True
+            print("silik: pasta (the package passt) is not installed: the isolated programs of prefix %s run without network" % name, file=sys.stderr)
     rc = 0
 
     def fits(s):
-        return s["net"] == net and all(any(_under(p, q) for q in s["show"]) for p in show)
+        return s["net"] == net and bool(s.get("iso")) == iso and (not iso or not sound or bool(s["iso"].get("sound"))) and \
+            all(any(_under(p, q) for q in s["show"]) for p in show)
 
     for again in (False, True):
         s = win_session_info(name)
@@ -1213,18 +1550,23 @@ def win_exec(ctx, name, d, cmd, a=None, show=(), cwd=None, arch=None):
                 time.sleep(0.1)
             s = win_session_info(name)
             if s and not fits(s):
-                what = "%s network" % ("with" if s["net"] else "without") if s["net"] != net else \
+                what = ("with a display of its own (isolated)" if s.get("iso") else "on this session's display (not isolated)") if bool(s.get("iso")) != iso else \
+                       "%s network" % ("with" if s["net"] else "without") if s["net"] != net else \
+                       "without sound" if iso and sound and not s["iso"].get("sound") else \
                        "not showing " + " ".join(p for p in show if not any(_under(p, q) for q in s["show"]))
                 win_die(ctx, "the programs of prefix %s are running in a sandbox %s, and a running sandbox is not changed: close them "
                         "(or `silik win stop %s`) and run this again, or put the file in %s" % (name, what, name, win_shared()), 75)
         if not s and not ctx.dry and win_outside(d):
             win_die(ctx, "prefix %s is in use by a Wine started outside the sandbox: close its programs (`silik win stop %s`) first" % (name, name))
-        s = s or win_session(ctx, name, d, show, net)
+        fresh = not s
+        s = s or win_session(ctx, name, d, show, net, iso, sound)
         t0 = time.time()
         rc = win_enter(ctx, d, s, tail, cwd)
         # the sandbox can end while this program was entering it (the same 3 s): the program then failed or was
-        # killed at once, and is started again in a new one
-        if ctx.dry or again or rc not in (1, 126, 137) or time.time() - t0 > 5:
+        # killed at once, and is started again in a new one. (An isolated sandbox also ends when its window is
+        # closed, and a closed window is not opened again: not one this command started itself, and one that was
+        # running only within 2 s)
+        if ctx.dry or again or rc not in (1, 126, 137) or time.time() - t0 > (2 if s.get("iso") else 5) or (fresh and s.get("iso")):
             break
         while win_session_info(name) and time.time() - t0 < 1.5:
             time.sleep(0.1)
@@ -1234,14 +1576,19 @@ def win_exec(ctx, name, d, cmd, a=None, show=(), cwd=None, arch=None):
     return rc
 
 
-def win_prepare(ctx, name, a=None, create=False, arch="win64"):
-    """before a program runs: the prefix (made on first use when `create`), its home, the shared folder, drive W:"""
-    d, shared = prefix_dir(name), win_shared()
-    new = not os.path.isdir(d)
+def win_need_wine(ctx):
+    """ends the command, saying what to do, when Wine is not on this machine"""
     if not ctx.dry and not shutil.which("wine"):
         if not x86():
             win_die(ctx, ARM_WINE % (host_arch(), win_route_here()), 127)
         win_die(ctx, "Wine is not installed (the package silik-wine: `sudo dnf install silik-wine`): Windows programs cannot run here yet", 127)
+
+
+def win_prepare(ctx, name, a=None, create=False, arch="win64"):
+    """before a program runs: the prefix (made on first use when `create`), its home, the shared folder, drive W:"""
+    d, shared = prefix_dir(name), win_shared()
+    new = not os.path.isdir(d)
+    win_need_wine(ctx)
     if new and not create:
         if ctx.dry:
             return d
@@ -1320,20 +1667,49 @@ def win_create(ctx, a):
     d = prefix_dir(a.prefix)
     if os.path.isdir(d):
         die("prefix %s exists" % a.prefix)
+    if getattr(a, "isolated", False):
+        if win_cannot_isolate() and not ctx.dry:
+            die("an isolated prefix cannot run here: " + win_cannot_isolate(), 69)
+        win_mark(ctx, a.prefix)
     win_prepare(ctx, a.prefix, a, create=True, arch=a.arch)
+    return 0
+
+
+def win_isolate(ctx, a):
+    """marks a prefix as one whose programs always run isolated, or (--off) takes the mark away; no prefix: the list"""
+    if not a.prefix:
+        for n in sorted(win_marked()):
+            print(n)
+        if not win_marked():
+            print("no prefix is marked isolated; `silik win isolate PREFIX` marks one, `silik win open --isolated FILE` uses the prefix \"%s\"" % WIN_ISOLATED)
+        return 0
+    d = prefix_dir(a.prefix)
+    if not os.path.isdir(d) and not ctx.dry:
+        die("no prefix %s (silik win list)" % a.prefix)
+    if win_session_info(a.prefix) and not ctx.dry:
+        die("the programs of prefix %s are running: close them (`silik win stop %s`) first" % (a.prefix, a.prefix), 75)
+    win_mark(ctx, a.prefix, not a.off)
+    if not ctx.dry:
+        print("prefix %s: %s" % (a.prefix, "its programs run on this session's display again: they can read its keyboard, screen and clipboard" if a.off
+                                 else "its programs run isolated from now on (a display of their own)"))
     return 0
 
 
 def win_run(ctx, a):
     d = prefix_dir(a.prefix)
     if not a.cmd:
-        die("silik win run [--no-net] [--no-sandbox] PREFIX -- PROGRAM.exe [ARGS]", 2)
+        die("silik win run [--isolated] [--no-net] [--no-sandbox] PREFIX -- PROGRAM.exe [ARGS]", 2)
     win_prepare(ctx, a.prefix, a)
     cmd, show = list(a.cmd), []
     if os.path.isabs(cmd[0]) and os.path.isfile(cmd[0]):      # a file of this system: what `open` does for it
         cmd[0] = os.path.realpath(cmd[0])
-        show = win_show(cmd[0], d)
-    rc = win_exec(ctx, a.prefix, d, ["wine"] + cmd, a, show=show)
+        if not _under(cmd[0], "/usr"):                          # (the system's own programs are not asked about)
+            win_gate(ctx, a, cmd[0], a.prefix)
+        show = win_show(cmd[0], d, win_iso(a, a.prefix))
+    # a console program typed in a terminal keeps the terminal (its output, its exit code)
+    prog = cmd[0] if os.path.isabs(cmd[0]) else win_unix(d, cmd[0])
+    console = win_tty() and (cmd[0].lower() in WIN_CONSOLE or bool(prog and win_cui(prog)))
+    rc = win_exec(ctx, a.prefix, d, ["wine"] + cmd, a, show=show, window=not console)
     win_after(ctx, a.prefix)
     return rc
 
@@ -1355,6 +1731,229 @@ def win_cui(f):
         return False
 
 
+# -- a file that was not run here before: the question (the audit's finding B2)
+# A double click must not run a file that arrived a minute ago with this session's keyboard and screen in reach. The
+# first time a file is opened (by its SHA-256: a changed file is a new file) the owner is asked: isolated (the
+# default), the normal box, or not at all. The answer is kept in ~/.local/share/silikos/win-approved (0600) and the
+# file opens that way from then on. No question for: --yes, --isolated or a prefix marked isolated (the careful way
+# is already chosen), --no-sandbox (typed, and said in capitals), a file inside a prefix (installed there).
+WIN_ASK = "/usr/libexec/silik-win-ask"          # the question as a window (the package silik-win); $SILIK_WIN_ASK
+WIN_Q = {
+    "en": {"title": "Windows program", "head": "%s has not been run here before",
+           "file": "File", "from": "From", "sha": "SHA-256", "sig": "Signature",
+           "from_dl": "the Downloads folder; the file carries no mark of where it came from", "from_none": "no mark of where it came from",
+           "signed": "carries a signature block (not checked: nothing on this system checks it)", "unsigned": "none",
+           "sig_na": "not looked at for this kind of file",
+           "note": "Isolated: the program gets a display of its own (a window that is its whole screen) and cannot read this session's "
+                   "keyboard, screen or clipboard. In the normal box it shares this session's display: it can read what you type and see the screen.",
+           "cannot": "Isolated is not possible here: %s",
+           "isolated": "Run isolated", "box": "Run in the normal box", "nobox": "Run WITHOUT a sandbox", "cancel": "Cancel",
+           "choice": "Choice", "default": "default", "not_run": "not run"},
+    "ca": {"title": "Programa de Windows", "head": "%s no s'ha executat mai aquí",
+           "file": "Fitxer", "from": "Origen", "sha": "SHA-256", "sig": "Signatura",
+           "from_dl": "la carpeta de baixades; el fitxer no porta cap marca d'on ve", "from_none": "sense cap marca d'on ve",
+           "signed": "porta un bloc de signatura (no comprovat: res en aquest sistema el comprova)", "unsigned": "cap",
+           "sig_na": "no es mira en aquest tipus de fitxer",
+           "note": "Aïllat: el programa té una pantalla pròpia (una finestra que és tota la seva pantalla) i no pot llegir el teclat, la "
+                   "pantalla ni el porta-retalls d'aquesta sessió. A la caixa normal comparteix la pantalla de la sessió: pot llegir el que escrius i veure la pantalla.",
+           "cannot": "L'execució aïllada no és possible aquí: %s",
+           "isolated": "Executa aïllat", "box": "Executa a la caixa normal", "nobox": "Executa SENSE caixa", "cancel": "Cancel·la",
+           "choice": "Tria", "default": "per defecte", "not_run": "no s'ha executat"},
+    "es": {"title": "Programa de Windows", "head": "%s no se ha ejecutado nunca aquí",
+           "file": "Archivo", "from": "Origen", "sha": "SHA-256", "sig": "Firma",
+           "from_dl": "la carpeta de descargas; el archivo no lleva ninguna marca de dónde viene", "from_none": "sin ninguna marca de dónde viene",
+           "signed": "lleva un bloque de firma (no comprobado: nada en este sistema lo comprueba)", "unsigned": "ninguna",
+           "sig_na": "no se mira en este tipo de archivo",
+           "note": "Aislado: el programa tiene una pantalla propia (una ventana que es toda su pantalla) y no puede leer el teclado, la "
+                   "pantalla ni el portapapeles de esta sesión. En la caja normal comparte la pantalla de la sesión: puede leer lo que escribes y ver la pantalla.",
+           "cannot": "La ejecución aislada no es posible aquí: %s",
+           "isolated": "Ejecutar aislado", "box": "Ejecutar en la caja normal", "nobox": "Ejecutar SIN caja", "cancel": "Cancelar",
+           "choice": "Elige", "default": "por defecto", "not_run": "no se ha ejecutado"},
+}
+
+
+def win_plain(text, limit=300):
+    """a text that came with a file (an address in its attributes, its name), fit to be shown: printable characters
+    only (no escape sequence reaches a terminal, no line break a window), cut at `limit`"""
+    t = "".join(c if c.isprintable() else "?" for c in text)
+    return t if len(t) <= limit else t[:limit - 1] + "…"
+
+
+def win_origin(f):
+    """where the file says it came from: the address a browser or a download tool wrote on it as an extended
+    attribute (user.xdg.origin.url; curl --xattr and wget --xattr write it, Chromium did until 2019; Firefox writes
+    none on Linux [A: not run here]). '' when it has none. What it says is the sender's word, not a fact."""
+    for k in ("user.xdg.origin.url", "user.xdg.referrer.url"):
+        try:
+            v = os.getxattr(f, k).decode("utf-8", "replace").strip()
+        except (OSError, AttributeError):
+            v = ""
+        if v:
+            return win_plain(v)
+    return ""
+
+
+def win_signed(f):
+    """True when the file is a PE program that carries an Authenticode signature block (the certificate table of
+    its header is not empty and lies inside the file), False when it is one without, None when it is not a PE
+    file. Presence only: Python's standard library cannot verify the signature, and a name read out of a block
+    nobody verified would be the attacker's to choose, so no publisher is shown."""
+    try:
+        size = os.path.getsize(f)
+        with open(f, "rb") as fh:
+            head = fh.read(4096)
+            pe = int.from_bytes(head[0x3c:0x40], "little")
+            if head[:2] != b"MZ" or pe <= 0 or pe > size - 256:
+                return None
+            fh.seek(pe)
+            h = fh.read(24 + 240)
+    except OSError:
+        return None
+    if h[:4] != b"PE\0\0":
+        return None
+    magic = int.from_bytes(h[24:26], "little")
+    dirs = 24 + {0x10b: 96, 0x20b: 112}.get(magic, 0)
+    if dirs == 24 or int.from_bytes(h[dirs - 4:dirs], "little") < 5:
+        return False
+    at, n = int.from_bytes(h[dirs + 32:dirs + 36], "little"), int.from_bytes(h[dirs + 36:dirs + 40], "little")
+    return n > 8 and 0 < at and at + n <= size
+
+
+def win_sha256(f):
+    import hashlib
+    h = hashlib.sha256()
+    with open(f, "rb") as fh:
+        for block in iter(lambda: fh.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def win_approved_file():
+    return os.path.join(os.path.dirname(WINE_ROOT), "win-approved")
+
+
+def win_approved():
+    """{SHA-256: "isolated" | "box"}: the files this owner answered the question for, and how each runs"""
+    out = {}
+    for l in read(win_approved_file()).splitlines():
+        w = l.split(None, 2)
+        if len(w) >= 2 and len(w[0]) == 64 and w[1] in ("isolated", "box"):
+            out[w[0]] = w[1]
+    return out
+
+
+def win_approve(ctx, sha, mode, name):
+    """keeps the owner's answer for this file: SHA-256, how it runs, its name (for the person reading the list)"""
+    line = "%s %s %s" % (sha, mode, win_plain(name, 120))
+    if not ctx.quiet:
+        print("$ echo %s >> %s" % (shlex.quote(line), shlex.quote(win_approved_file())), flush=True)
+    if ctx.dry:
+        return
+    keep = [l for l in read(win_approved_file()).splitlines() if l.split(None, 1)[:1] != [sha]]
+    win_private_write(win_approved_file(), "".join(l + "\n" for l in keep + [line]))
+
+
+def win_size(n):
+    for unit, k in (("GB", 1 << 30), ("MB", 1 << 20), ("kB", 1 << 10)):
+        if n >= k:
+            return "%.1f %s" % (n / k, unit)
+    return "%d B" % n
+
+
+def win_decide(yes=False, isolated=False, no_sandbox=False, inside=False, approved=None):
+    """what happens before a file runs: "go" (as the switches say), "isolated" (the owner chose it for this file
+    before), or "ask" """
+    if yes or isolated or no_sandbox or inside or approved == "box":
+        return "go"
+    return "isolated" if approved == "isolated" else "ask"
+
+
+def win_question(f, sha, lang, cannot="", boxed=True):
+    """the question for file f, as data: the same for the terminal and for the window.
+    {"title", "head", "rows": [[label, value]], "note", "buttons": [[id, label]], "default": id}.
+    `cannot`: why it cannot run isolated here ('' when it can); `boxed`: False when there is no sandbox at all"""
+    t = WIN_Q[lang]
+    origin = win_origin(f)
+    sig = win_signed(f) if f.lower().endswith(".exe") else None
+    try:
+        size = " (%s)" % win_size(os.path.getsize(f))
+    except OSError:
+        size = ""
+    rows = [[t["file"], win_plain(f) + size],
+            [t["from"], origin or t["from_dl" if _under(f, win_downloads()) else "from_none"]],
+            [t["sha"], sha],
+            [t["sig"], t["sig_na"] if sig is None else t["signed" if sig else "unsigned"]]]
+    buttons = ([] if cannot else [["isolated", t["isolated"]]]) + [["box", t["box" if boxed else "nobox"]], ["cancel", t["cancel"]]]
+    return {"title": t["title"], "head": t["head"] % win_plain(os.path.basename(f), 80), "rows": rows,
+            "note": t["note"] + ("\n" + t["cannot"] % cannot if cannot else ""), "buttons": buttons,
+            "default": "cancel" if cannot else "isolated"}
+
+
+def win_ask_text(q, lang, ask=input):
+    """the question in a terminal; returns the chosen button's id (Enter: the default; anything else: cancel)"""
+    t = WIN_Q[lang]
+    w = max(len(r[0]) for r in q["rows"])
+    print("silik: " + q["head"], file=sys.stderr)
+    for label, value in q["rows"]:
+        print("  %-*s  %s" % (w, label, value), file=sys.stderr)
+    for l in q["note"].split("\n"):
+        print("  " + l, file=sys.stderr)
+    for i, (key, label) in enumerate(q["buttons"]):
+        print("  [%d] %s%s" % (i + 1, label, " (%s)" % t["default"] if key == q["default"] else ""), file=sys.stderr)
+    try:
+        v = ask("%s [1-%d]: " % (t["choice"], len(q["buttons"]))).strip()
+    except EOFError:
+        return "cancel"
+    if not v:
+        return q["default"]
+    return q["buttons"][int(v) - 1][0] if v.isdigit() and 1 <= int(v) <= len(q["buttons"]) else "cancel"
+
+
+def win_ask_window(q, lang):
+    """the question as a window (silik-win-ask: GTK 3, the COMMAND bar's look); the chosen button's id, or None when
+    the window cannot be shown"""
+    exe = os.environ.get("SILIK_WIN_ASK") or WIN_ASK
+    if not os.path.isfile(exe):
+        return None
+    try:
+        p = subprocess.run([exe, "--lang", lang], input=json.dumps(q), stdout=subprocess.PIPE, universal_newlines=True, check=False)
+    except OSError:
+        return None
+    v = p.stdout.strip()
+    return v if p.returncode == 0 and v in [b[0] for b in q["buttons"]] else None
+
+
+def win_gate(ctx, a, f, name):
+    """before file f runs in prefix `name`: asks the owner when the file was not run here before (the answer is
+    kept), and sets a.isolated when the answer, now or then, is "isolated". Ends the command when the answer is no."""
+    inside = _under(f, WINE_ROOT)
+    marked = name in win_marked() and win_boxed(a)
+    first = win_decide(getattr(a, "yes", False), getattr(a, "isolated", False) or marked, getattr(a, "no_sandbox", False), inside)
+    if first == "go" or not os.path.isfile(f):
+        return
+    sha = win_sha256(f)
+    what = win_decide(approved=win_approved().get(sha))
+    if what == "ask":
+        lang = win_lang()
+        q = win_question(f, sha, lang, win_cannot_isolate(), win_boxed(a))
+        if ctx.dry:
+            print("silik: (not a dry run: the question \"%s\" comes here; --yes skips it)" % q["head"], file=sys.stderr)
+            return
+        if sys.stdin is not None and sys.stdin.isatty():
+            what = win_ask_text(q, lang)
+        else:
+            what = win_ask_window(q, lang) if os.environ.get("DISPLAY") else None
+            if what is None:
+                win_die(ctx, "%s was not run here before, and there is nowhere to ask: run it from a terminal, or with --yes "
+                        "(silik win open --yes --isolated FILE: on a display of its own)" % os.path.basename(f), 2)
+        if what not in ("isolated", "box"):
+            print("silik: %s: %s" % (os.path.basename(f), WIN_Q[lang]["not_run"]), file=sys.stderr)
+            sys.exit(1)
+        win_approve(ctx, sha, what, os.path.basename(f))
+    if what == "isolated":
+        a.isolated = True
+
+
 def win_open(ctx, a):
     """what a double-click on a Windows file runs. Installers and portable programs are not told apart: both run in
     the prefix (the one named, or "default", made on first use); an installer installs into it. Without a terminal
@@ -1365,9 +1964,14 @@ def win_open(ctx, a):
         win_die(ctx, "%s: not a Windows program (%s)" % (a.file, " ".join(WIN_EXT)), 2)
     if not os.path.isfile(f) and not ctx.dry:
         win_die(ctx, "no such file: " + a.file)
-    name = a.prefix or WIN_DEFAULT
+    win_need_wine(ctx)                      # (no question about a program that cannot run here at all)
+    win_gate(ctx, a, f, a.prefix or WIN_DEFAULT)
+    # an isolated program never goes into "default", where the trusted ones are: the prefix "isolated" is for those
+    name = a.prefix or (WIN_ISOLATED if getattr(a, "isolated", False) and win_boxed(a) else WIN_DEFAULT)
+    if getattr(a, "isolated", False) and win_boxed(a) and (name == WIN_ISOLATED or not os.path.isdir(prefix_dir(name))):
+        win_mark(ctx, name)                 # a prefix made isolated stays so (the prefix "isolated" always is)
     d, shared = win_prepare(ctx, name, a, create=True), win_shared()
-    show = win_show(f, d) if win_boxed(a) else []
+    show = win_show(f, d, win_iso(a, name)) if win_boxed(a) else []
     if show:
         print("silik: %s is shown to the program, read-only (the file is outside %s)" % (show[0], shared), file=sys.stderr)
     if ext == ".exe":
@@ -1378,9 +1982,10 @@ def win_open(ctx, a):
         cmd = ["cmd", "/c", win_path(f, d, shared)]
     else:                                   # .lnk: Wine's start follows the shortcut (and does not wait for its program)
         cmd = ["start", win_path(f, d, shared)]
-    window = not win_tty() and (ext in (".bat", ".cmd") or (ext == ".exe" and win_cui(f)))
+    console = ext in (".bat", ".cmd") or (ext == ".exe" and win_cui(f))
+    window = not win_tty() and console
     cmd = ["wine"] + (["wineconsole"] if window else []) + cmd
-    rc = win_exec(ctx, name, d, cmd + list(a.cmd or []), a, show=show, cwd=os.path.dirname(f))
+    rc = win_exec(ctx, name, d, cmd + list(a.cmd or []), a, show=show, cwd=os.path.dirname(f), window=not (console and win_tty()))
     win_after(ctx, name)
     return rc
 
@@ -1417,6 +2022,7 @@ def win_rm(ctx, a):
     if win_session_info(a.prefix) or (not ctx.dry and win_outside(d)):      # its programs end first
         win_stop(ctx, a)
     ctx.run(["rm", "-rf", "--", d, win_runtime(a.prefix)])
+    win_mark(ctx, a.prefix, False)
     if not ctx.dry:
         win_sync_all(ctx)
     return 0
@@ -4877,10 +5483,49 @@ def dev_pick_installer(work, setup_rx):
         ", ".join(os.path.relpath(p, work) for p in match), shlex.quote(match[0])))
 
 
+def dev_install_facts(name, src, run, root):
+    """what the owner is shown before a vendor's installer runs (the audit's finding B5: the installer was chosen by
+    its file name and ran, ST's as root, without a word): the command and whose rights it gets, the file, its size,
+    where it says it came from, its SHA-256. A list of (label, text) rows."""
+    def sha(f):
+        try:
+            return "%s  (%s)" % (win_sha256(f), win_size(os.path.getsize(f)))
+        except OSError:
+            return "(the file is read when this is not a dry run)"
+    rows = [("runs", " ".join(shlex.quote(x) for x in ((["sudo", "sh"] if root else []) + [run]))),
+            ("as", "root: it installs packages on the system" if root else "you (%s): it installs into your own folders" % (os.environ.get("USER") or "this user")),
+            ("file", win_plain(src)), ("SHA-256", sha(src))]
+    if run != src:
+        rows += [("inside", win_plain(os.path.basename(run))), ("SHA-256", sha(run))]
+    rows += [("from", (win_origin(src) if os.path.isfile(src) else "") or "no mark of where it came from on the file"),
+             ("signature", "none this system can check: compare the SHA-256 with the one on %s's download page" % (
+                 (re.findall(r"\((\w+)\)$", name) or ["the vendor"])[0]))]
+    return rows
+
+
+def dev_install_ask(ctx, a, name, src, run, root):
+    """shows dev_install_facts and asks; --yes (for scripts) and --dry-run do not ask. Ends the command on a no."""
+    rows = dev_install_facts(name, src, run, root)
+    print("silik: about to run the installer of %s" % name, file=sys.stderr)
+    for k, v in rows:
+        print("  %-9s  %s" % (k, v), file=sys.stderr)
+    if ctx.dry or getattr(a, "yes", False):
+        return
+    if not sys.stdin.isatty():
+        die("an installer is not run without a yes: add --yes (after reading the lines above)", 2)
+    try:
+        ok = input("silik: run it? [y/N] ").strip().lower() in ("y", "yes", "s", "si", "sí")
+    except EOFError:
+        ok = False
+    if not ok:
+        die("nothing run", 1)
+
+
 def dev_install(ctx, a):
     """runs a vendor's own installer from the file the user downloaded (an archive is unpacked first, and removed
     after). The installer shows its licence and asks what it asks: nothing here answers for the user, and nothing is
-    downloaded. Its exit code is this command's."""
+    downloaded. Before it runs the owner is shown what will run and as whom, and asked (--yes for scripts). Its exit
+    code is this command's."""
     src = os.path.abspath(os.path.expanduser(a.file))
     ide = dev_which_ide(src)
     if not ide:
@@ -4903,6 +5548,12 @@ def dev_install(ctx, a):
         run = os.path.join(work, "<the installer inside>") if ctx.dry else dev_pick_installer(work, setup_rx)
     elif not ctx.dry and not low.endswith((".sh", ".run")):
         die("not a Linux installer (.sh, .run, or an archive of one): " + os.path.basename(src))
+    try:
+        dev_install_ask(ctx, a, name, src, run, key == "stm32cubeide")
+    except SystemExit:
+        if work:
+            ctx.run(["rm", "-rf", work])        # (a no leaves no unpacked archive behind)
+        raise
     before = set(dev_find_ides(exe, roots)) if not ctx.dry else set()
     if key == "stm32cubeide":
         # ST's bundle for RPM systems installs packages (the IDE, the ST-LINK server, the probes' device rules): as root
@@ -10810,6 +11461,7 @@ def parser(only=None):
         x = d.add_parser("serial", help="the serial ports (USB adapters, RS-232 / RS-485, boards' virtual COM ports) and what they are")
         x.add_argument("--json", action="store_true"); x.set_defaults(fn=dev_serial)
         x = d.add_parser("install", help="runs the installer of STM32CubeIDE or Code Composer Studio that you downloaded (FILE: .zip, .sh or .run)")
+        x.add_argument("--yes", action="store_true", help="do not ask before the installer runs (for scripts)")
         x.add_argument("file"); x.set_defaults(fn=dev_install)
         x = d.add_parser("ccache", help="the compiler cache: on | off (no argument: its state); rebuilds of unchanged files come from it")
         x.add_argument("action", nargs="?", choices=["on", "off"]); x.set_defaults(fn=dev_ccache)
@@ -10817,15 +11469,24 @@ def parser(only=None):
     if only in (None, "win"):
         def box(x):   # the sandbox switches, before the positional arguments
             x.add_argument("--no-net", action="store_true", help="the program has no network (it still shares this session's screen and keyboard: "
-                           "not a way to run a program you do not trust; that is `silik win vm`)")
+                           "not a way to run a program you do not trust; that is --isolated, or `silik win vm`)")
             x.add_argument("--no-sandbox", action="store_true", help="run without the sandbox: the program sees the whole home folder")
+            x.add_argument("--isolated", action="store_true", help="for a program you do not trust with this session: a display of its own (a window "
+                           "that is its whole screen), so it cannot read this session's keyboard, screen or clipboard; its own network "
+                           "namespace; no GPU, no sound. A prefix made so stays so")
+            x.add_argument("--sound", action="store_true", help="with --isolated: the program may play and record sound")
             return x
         x = w.add_parser("list"); x.add_argument("--json", action="store_true"); x.set_defaults(fn=win_list)
         x = box(w.add_parser("open", help="what a double-click runs: FILE.exe .msi .bat .cmd .lnk, in the prefix \"default\" or --prefix NAME"))
-        x.add_argument("--prefix"); x.add_argument("file"); x.add_argument("cmd", nargs=argparse.REMAINDER); x.set_defaults(fn=win_open)
+        x.add_argument("--prefix"); x.add_argument("--yes", action="store_true", help="do not ask before a file that was not run here before")
+        x.add_argument("file"); x.add_argument("cmd", nargs=argparse.REMAINDER); x.set_defaults(fn=win_open)
         x = box(w.add_parser("create")); x.add_argument("prefix"); x.add_argument("--arch", default="win64", choices=["win64", "win32"]); x.set_defaults(fn=win_create)
-        x = box(w.add_parser("run")); x.add_argument("prefix"); x.add_argument("cmd", nargs=argparse.REMAINDER); x.set_defaults(fn=win_run)
-        x = box(w.add_parser("install")); x.add_argument("prefix"); x.add_argument("setup"); x.add_argument("args", nargs=argparse.REMAINDER); x.set_defaults(fn=win_install)
+        x = box(w.add_parser("run")); x.add_argument("--yes", action="store_true", help="do not ask before a file that was not run here before")
+        x.add_argument("prefix"); x.add_argument("cmd", nargs=argparse.REMAINDER); x.set_defaults(fn=win_run)
+        x = box(w.add_parser("install")); x.add_argument("--yes", action="store_true", help="do not ask before a file that was not run here before")
+        x.add_argument("prefix"); x.add_argument("setup"); x.add_argument("args", nargs=argparse.REMAINDER); x.set_defaults(fn=win_install)
+        x = w.add_parser("isolate", help="the prefix's programs always run isolated (a display of their own); --off: no longer; no PREFIX: which are")
+        x.add_argument("--off", action="store_true"); x.add_argument("prefix", nargs="?"); x.set_defaults(fn=win_isolate)
         x = w.add_parser("stop", help="end every program of the prefix"); x.add_argument("prefix"); x.set_defaults(fn=win_stop)
         x = w.add_parser("rm"); x.add_argument("prefix"); x.add_argument("--yes", action="store_true"); x.set_defaults(fn=win_rm)
         x = w.add_parser("sync", help="installed Windows programs become applications of the desktop"); x.set_defaults(fn=win_sync)
@@ -10971,7 +11632,7 @@ def parser(only=None):
     return p
 
 
-WIN_SWITCHES = ("--prefix", "--no-net", "--no-sandbox")
+WIN_SWITCHES = ("--prefix", "--no-net", "--no-sandbox", "--isolated", "--sound", "--yes")
 
 
 GROUPS = ("eda", "dev", "win", "power", "speed", "bench", "hw", "secure", "vendor", "manifest", "snapshot")   # the groups with commands of their own (parser(only=...))
@@ -11019,7 +11680,7 @@ def main(argv=None):
             w = words[i]
             if w.split("=")[0] in WIN_SWITCHES:
                 if seen:
-                    die("the switches %s go before %s: silik win %s [--prefix P] [--no-net] [--no-sandbox] %s"
+                    die("the switches %s go before %s: silik win %s [--prefix P] [--isolated] [--no-net] [--no-sandbox] %s"
                         % ("/".join(WIN_SWITCHES), "FILE" if a.fn is win_open else "PREFIX",
                            {win_open: "open", win_run: "run", win_install: "install"}[a.fn],
                            {win_open: "FILE [ARGS]", win_run: "PREFIX -- PROG.exe [ARGS]", win_install: "PREFIX SETUP [ARGS]"}[a.fn]), 2)

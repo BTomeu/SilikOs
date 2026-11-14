@@ -184,6 +184,23 @@ for example `/etc/sysctl.d/90-local.conf` with `kernel.yama.ptrace_scope = 0`.
   [A] AlmaLinux 9 gives no updates to an old minor release: when 9.x+1 is out, the security updates are its packages.
 - **Remote access.** `--keep-ssh`; use keys, not passwords.
 
+## Windows programs
+
+A program run by `silik win` in the normal box shares the session's X server, and X11 hides nothing from a client:
+the round of 13/11/2026 ran a key logger, a screenshot, a clipboard read and typed keys from inside it, all
+successful. It also found that hiding the server's socket file is not enough: the server listens on an abstract
+socket that any process in the same network namespace reaches, and EL 9's login admits every program of the user
+without the key. `silik win open --isolated` (the default answer of the question a file gets the first time it is
+opened) gives the program an X server of its own (Xephyr), a network namespace of its own with `pasta` for outbound
+connections only, no GPU device, no sound, and not the Downloads folder; the same attack then fails on every count.
+Both boxes now start with an empty kernel session keyring (the session's was inherited before). What remains: the
+nested server is a program and a fault in it is a way out; `~/Windows` is shared with every prefix; a program of
+the same user can still link the kernel's user keyring by number (a system-call filter would close it; there is
+none); nothing verifies an Authenticode signature; isolated means software graphics. For a hostile and capable
+program the Windows VM is still the answer. Run in an EL 9 container with an attack program standing in for Wine,
+and with a real Wine on the build machine; not yet seen on an installed system with SELinux enforcing (the CI's
+`win.isolated.*` rows).
+
 ## USB devices and what listens
 
 **USB devices.** A device plugged in while the screen is locked is refused (the base's USBGuard, switched by
@@ -258,14 +275,14 @@ signing key or a signed package; a secret in the repository or its history.
 | S6 | Well-signed metadata can be served again later, or one channel's as the other's | medium | **fixed**: a revision and the channel's name under the signature; a dnf plugin refuses older metadata and the other channel's (run: refused). Holding updates back is noticed (45 days), not prevented |
 | P1 | `silik manifest apply FILE --kernel` gave the file's kernel arguments to the boot loader: `init=FILE`, `selinux=0`, `systemd.debug_shell`. Run | medium | **fixed**: a list of what a manifest may set, by name and value; the rest is said, never set |
 | P2 | `silik manifest apply FILE` turned automatic updates off, took packages back to old versions, made a box from any registry | medium | **fixed**: updates are never lowered, no downgrade without `--downgrade`, no image a file names |
-| B1 | `--no-net` reads as isolation and takes only the network: the program keeps the X11 display, so the keyboard | medium | said plainly (`docs/WINDOWS.md`, the option's help); a display of its own for such a program: open |
-| B2 | A double click runs an `.exe`, `.msi`, `.lnk` or `.bat` without a question | medium | said; asking first for a downloaded file: the owner's call |
+| B1 | `--no-net` reads as isolation and takes only the network: the program keeps the X11 display, so the keyboard | medium | **fixed for programs run isolated**: `--isolated` gives the program an X server, a network namespace and a keyring of its own; the attack run from inside (key logger, screenshot, clipboard, typing, `localhost`) fails on every count, and succeeds in the normal box. Not yet seen on an installed system |
+| B2 | A double click runs an `.exe`, `.msi`, `.lnk` or `.bat` without a question | medium | **fixed**: a file not run here before is asked about, isolated being the default answer; with nowhere to ask it does not run |
 | B3 | Wine's SELinux domain was described as a restriction; in the base's policy it is unconfined | medium | said: the boundary is bubblewrap |
 | P3 | As root with a user's `XDG_RUNTIME_DIR` (after `su` without a dash), `silik` wrote its note through a link the user had put there. Run | low | **fixed**: not through a link, not in another user's folder |
 | P4 | A Wine prefix named with `$(...)` in it ran at the TAB key. Run | low | **fixed**: names are completed as text |
 | P5 | A plugin file writable by a group was loaded | low | **fixed** |
 | B4 | A command line typed after `$` in the bar, secrets and all, went to the session log; the log's mode followed the umask | low | **fixed**: the line is not kept; 0700 / 0600 always |
-| B5 | `silik dev install` runs ST's installer as root, chosen by its file name | low | open: show the path and ask |
+| B5 | `silik dev install` runs ST's installer as root, chosen by its file name | low | **fixed**: the command, whose rights it gets, the file and its SHA-256 are shown, then it asks (`--yes` for scripts) |
 | S7 | A fork's pull request could start hours of CI here by naming its branch `main` | low | **fixed** in the CI's jobs; the repository workflow checks the run through the API (the workflow file, green, this repository, main or a tag on main): not run on GitHub yet |
 | S8 | Released packages restored from the build cache without a check | low | **fixed, not run on GitHub yet**: a build the cache gives back is used only when it is byte for byte a release's own file (`tools/cache_check.py`, run against the real releases) |
 | S9 | The ISO release had no checksum | low | **fixed**: `SHA256SUMS` in the release (not signed: no key yet) |
@@ -301,7 +318,7 @@ What a system like GrapheneOS has and SilikOS does not, and why:
 | Verified boot of everything | every partition, keys the owner can set | Secure Boot covers the boot loader and the kernel when it is on; the initramfs and the kernel's arguments are not covered on bare metal. The kernel locks itself down under Secure Boot (the base's build) |
 | Disk always encrypted | always | a tick in the installer; `silik secure status` and `silik disk` say bad without it, and the first login says it once. Ticked by the kickstart: not possible without the installer taking every disk (read) |
 | A hardened memory allocator | yes | no: none is packaged for EL 9, and changing glibc would end the binary identity with RHEL that the EDA tools need |
-| Every program in its own box, with its own permissions | yes | no: what the user starts runs as the user, on X11, where programs see each other's keys and windows. Wine has bubblewrap; an untrusted program belongs in `silik win vm` |
+| Every program in its own box, with its own permissions | yes | no: what the user starts runs as the user, on X11, where programs see each other's keys and windows. Wine has bubblewrap; an untrusted Windows program runs isolated (`silik win open --isolated`: a display, a network and a keyring of its own), or in `silik win vm` |
 | USB refused while locked | yes | built: the base's USBGuard with SilikOS's configuration, switched by GNOME's own USB protection (`silik usb`, `docs/USB.md`); checked with the real daemon in a container, not yet seen with a device (the CI's `usb.*` rows) |
 | Fast patches | frequent releases, installed in the background and in effect at the next restart | daily, automatic, with a snapshot to go back to; a kernel fix protects after a restart the owner does (the base has no live patches) |
 

@@ -1,0 +1,190 @@
+#!/usr/bin/python3
+# silik-win-ask: the question `silik win open` asks before a Windows file that was not run here before, as a window
+# (docs/WINDOWS.md, "The first time a file runs"). A double-click has no terminal to ask in.
+#
+#   silik-win-ask [--lang en|ca|es] [--theme light|dark] < QUESTION.json
+#
+# QUESTION is what silik's win_question() makes: {"title", "head", "rows": [[label, value]], "note",
+# "buttons": [[id, label]], "default": id}. The id of the chosen button is printed; Escape or closing the window
+# prints "cancel". This program decides nothing and runs nothing: every word it shows and the choice's meaning are
+# silik's. Enter takes the focused button (at first the default one), the digits 1..9 the button of that number,
+# as in the terminal's form of the question.
+#
+# The look is the COMMAND bar's: its paper, ink and frame (silik_command's THEMES and css_values when that module
+# is on the system, the same values written here when it is not), Cascadia Mono, no title bar, the focused key in
+# inverse video.
+import json
+import sys
+
+BAR_MODULE = "/usr/share/silikos/python"
+# (the bar's THEMES, for a system without the bar)
+THEMES = {
+    "light": {"paper": "#f7f6f3", "paper2": "#eeede9", "ink": "#1a1b1e", "muted": "#6b6d72", "rule": "#dcdad5", "frame": "#1a1b1e"},
+    "dark": {"paper": "#17181b", "paper2": "#1f2024", "ink": "#ecebe7", "muted": "#9a9b9f", "rule": "#33353a", "frame": "#ecebe7"},
+}
+RADIUS = 6
+WIDTH = 760
+CSS = """
+window.silik-ask { background: %(paper)s; border: 1px solid %(frame)s; border-radius: %(radius)s; }
+.silik-ask * { font-family: "Cascadia Mono", "DejaVu Sans Mono", monospace; font-size: 11pt; color: %(ink)s; }
+.silik-ask .head { font-weight: 600; }
+.silik-ask .key, .silik-ask .note { color: %(muted)s; }
+.silik-ask .note { font-size: 10pt; }
+.silik-ask .rule { background: %(rule)s; min-height: 1px; }
+.silik-ask .foot { background: %(paper2)s; border-radius: 0 0 %(inner)s %(inner)s; padding: 10px 14px; }
+.silik-ask button { background: transparent; background-image: none; border: 1px solid %(ink)s; border-radius: 4px;
+                    padding: 6px 14px; box-shadow: none; text-shadow: none; outline: none; }
+.silik-ask button:focus { background: %(ink)s; }
+.silik-ask button:focus label { color: %(paper)s; }
+"""
+
+
+def options(argv):
+    """{"lang", "theme"} from the command line (None when not given); (status, text) for help or a wrong line"""
+    o = {"lang": None, "theme": None}
+    i = 0
+    while i < len(argv):
+        if argv[i] in ("--lang", "--theme") and i + 1 < len(argv):
+            o[argv[i][2:]] = argv[i + 1]
+            i += 1
+        elif argv[i] in ("-h", "--help"):
+            return 0, "silik-win-ask [--lang en|ca|es] [--theme light|dark] < QUESTION.json"
+        else:
+            return 2, "silik-win-ask: unknown option " + argv[i]
+        i += 1
+    return o
+
+
+def question(text):
+    """the question read from JSON, or None when it is not one: every part a string, at least one button, the
+    default one of them"""
+    try:
+        q = json.loads(text)
+        ok = all(isinstance(q[k], str) for k in ("title", "head", "note", "default")) and \
+            all(isinstance(r, list) and len(r) == 2 and all(isinstance(x, str) for x in r) for r in q["rows"] + q["buttons"]) and \
+            q["buttons"] and q["default"] in [b[0] for b in q["buttons"]]
+        return q if ok else None
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+def look(theme, composited):
+    """the stylesheet's values: the bar's own when its module is there"""
+    try:
+        if BAR_MODULE not in sys.path:
+            sys.path.insert(0, BAR_MODULE)
+        import silik_command as bar
+        if theme not in bar.THEMES:
+            theme = bar.desktop_theme()
+        return bar.css_values(theme, composited, None)
+    except Exception:       # (no bar on this system, or one that changed: the values above)
+        v = dict(THEMES[theme if theme in THEMES else "light"])
+        v.update(radius="%dpx" % RADIUS if composited else "0", inner="%dpx" % (RADIUS - 1) if composited else "0")
+        return v
+
+
+def ask(q, theme=None):
+    """shows the question; returns the chosen button's id ("cancel" when the window is closed)"""
+    import gi
+    gi.require_version("Gtk", "3.0")
+    gi.require_version("Gdk", "3.0")
+    from gi.repository import Gdk, Gtk, Pango
+
+    screen = Gdk.Screen.get_default()
+    css = Gtk.CssProvider()
+    css.load_from_data((CSS % look(theme, screen.is_composited())).encode())
+    Gtk.StyleContext.add_provider_for_screen(screen, css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+    chosen = ["cancel"]
+    win = Gtk.Window(title=q["title"])
+    win.set_decorated(False)
+    win.set_default_size(WIDTH, -1)
+    win.set_resizable(False)
+    win.set_position(Gtk.WindowPosition.CENTER)
+    win.set_keep_above(True)
+    win.set_type_hint(Gdk.WindowTypeHint.DIALOG)
+    win.get_style_context().add_class("silik-ask")
+    visual = screen.get_rgba_visual()
+    if visual and screen.is_composited():
+        win.set_visual(visual)
+
+    def label(text, cls, wrap=True, selectable=False):
+        l = Gtk.Label(label=text, xalign=0, yalign=0)
+        l.get_style_context().add_class(cls)
+        if wrap:
+            l.set_line_wrap(True)
+            l.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+            l.set_max_width_chars(64)
+        l.set_selectable(selectable)
+        return l
+
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+    body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+    body.set_border_width(14)
+    body.pack_start(label(q["head"], "head"), False, False, 0)
+    grid = Gtk.Grid(column_spacing=16, row_spacing=4)
+    for i, (k, v) in enumerate(q["rows"]):
+        grid.attach(label(k, "key", wrap=False), 0, i, 1, 1)
+        grid.attach(label(v, "value"), 1, i, 1, 1)
+    body.pack_start(grid, False, False, 0)
+    for part in q["note"].split("\n"):
+        body.pack_start(label(part, "note"), False, False, 0)
+    box.pack_start(body, True, True, 0)
+    rule = Gtk.Box()
+    rule.get_style_context().add_class("rule")
+    box.pack_start(rule, False, False, 0)
+    foot = Gtk.Box(spacing=10)
+    foot.get_style_context().add_class("foot")
+    buttons = {}
+
+    def choose(_w, key):
+        chosen[0] = key
+        Gtk.main_quit()
+
+    for i, (key, text) in enumerate(q["buttons"]):
+        b = Gtk.Button(label="%d %s" % (i + 1, text))      # (digit first, as the rail's keys)
+        b.set_relief(Gtk.ReliefStyle.NONE)
+        b.connect("clicked", choose, key)
+        foot.pack_start(b, False, False, 0)
+        buttons[key] = b
+    box.pack_start(foot, False, False, 0)
+    win.add(box)
+
+    def on_key(_w, ev):
+        if ev.keyval == Gdk.KEY_Escape:
+            Gtk.main_quit()
+            return True
+        n = ev.keyval - Gdk.KEY_1
+        if 0 <= n < len(q["buttons"]) and not ev.state & (Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.MOD1_MASK):
+            choose(None, q["buttons"][n][0])
+            return True
+        return False
+
+    win.connect("key-press-event", on_key)
+    win.connect("delete-event", lambda *_: Gtk.main_quit())
+    win.show_all()
+    buttons[q["default"]].grab_focus()
+    win.present()
+    Gtk.main()
+    return chosen[0]
+
+
+def main(argv=None):
+    o = options(list(sys.argv[1:] if argv is None else argv))
+    if isinstance(o, tuple):
+        print(o[1], file=sys.stderr if o[0] else sys.stdout)
+        return o[0]
+    q = question(sys.stdin.read())
+    if q is None:
+        print("silik-win-ask: the question on standard input is not one (silik win open makes it)", file=sys.stderr)
+        return 2
+    try:
+        print(ask(q, o["theme"]))
+    except Exception as e:      # (no GTK, no display: silik then says there is nowhere to ask)
+        print("silik-win-ask: %s" % e, file=sys.stderr)
+        return 3
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

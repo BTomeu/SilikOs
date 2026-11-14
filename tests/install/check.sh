@@ -279,7 +279,7 @@ if command -v wine > /dev/null; then
     has win.selinux-label "$(ls -Z /opt/silik-wine/bin/wine 2>&1)" wine_exec_t
     # (the command's own exit code is printed after it: the status of `systemd-run --wait` is the unit's, which is also
     # a failure when something else of the unit went wrong, e.g. a process of it killed for lack of memory)
-    o=$(insession sh -c 'timeout 300 silik win open /home/tester/Downloads/hello.exe; echo "silik-exit $?"'); unit=$?
+    o=$(insession sh -c 'timeout 300 silik win open --yes /home/tester/Downloads/hello.exe; echo "silik-exit $?"'); unit=$?
     rc=$(echo "$o" | sed -n 's/^silik-exit //p' | tail -1); o=$(echo "$o" | grep -v '^silik-exit ')
     [ "$unit" = 0 ] || say win.open.unit info "the session's unit of that command ended with $unit (the command itself: ${rc:-?})"
     r=$(tr -d '\r' < /home/tester/Windows/silikos-ci.txt 2> /dev/null)   # a Windows program ends its lines with CR LF
@@ -305,7 +305,7 @@ if command -v wine > /dev/null; then
     if [ -f /mnt/silikci/win.exe ]; then
       install -o tester -g tester -m 0644 /mnt/silikci/win.exe /home/tester/Downloads/win.exe
       if insession xwininfo -root > /dev/null 2>&1; then
-        asuser systemd-run --quiet --user --collect -p WorkingDirectory=/home/tester -E DISPLAY=:0 silik win open /home/tester/Downloads/win.exe > /dev/null 2>&1
+        asuser systemd-run --quiet --user --collect -p WorkingDirectory=/home/tester -E DISPLAY=:0 silik win open --yes /home/tester/Downloads/win.exe > /dev/null 2>&1
         w=""; for i in $(seq 1 20); do sleep 3; w=$(insession xwininfo -root -tree | grep '"Silik Test"' | head -1); [ -n "$w" ] && break; done
         has win.window "$w" '"win.exe"'
         insession silik win stop default > /dev/null 2>&1
@@ -316,14 +316,14 @@ if command -v wine > /dev/null; then
     # a 32-bit Windows program
     if [ -f /mnt/silikci/hello32.exe ]; then
       install -o tester -g tester -m 0644 /mnt/silikci/hello32.exe /home/tester/Downloads/hello32.exe
-      insession timeout 300 silik -q win open /home/tester/Downloads/hello32.exe 'Z:\home\tester\.ssh\id_test' 'W:\silikos-ci32.txt' > /tmp/ci-32.out 2>&1
+      insession timeout 300 silik -q win open --yes /home/tester/Downloads/hello32.exe 'Z:\home\tester\.ssh\id_test' 'W:\silikos-ci32.txt' > /tmp/ci-32.out 2>&1
       is win.32bit "$(tr -d '\r' < /home/tester/Windows/silikos-ci32.txt 2> /dev/null)" "ran secret=hidden"
     fi
     # an installer: it copies a program into the prefix and makes a start-menu shortcut; the program must then be an
     # application of this desktop, and start as one
     if [ -f /mnt/silikci/setup.exe ] && [ -f /home/tester/Downloads/win.exe ]; then
       install -o tester -g tester -m 0644 /mnt/silikci/setup.exe /home/tester/Downloads/setup.exe
-      insession timeout 300 silik -q win open /home/tester/Downloads/setup.exe > /tmp/ci-setup.out 2>&1
+      insession timeout 300 silik -q win open --yes /home/tester/Downloads/setup.exe > /tmp/ci-setup.out 2>&1
       has win.installer "$(asuser silik win apps | tr '\n' ' '; tail -2 /tmp/ci-setup.out | tr '\r\n' '  ')" "win/silik-test"
       e=$(find /home/tester/.local/share/applications -path '*silik-win*' -name '*.desktop' 2> /dev/null | head -1)
       has win.installer-entry "$(grep -E '^(Name|Exec|StartupWMClass)=' "$e" 2>&1 | tr '\n' ' ')" "Exec=silik win run default -- "
@@ -337,7 +337,7 @@ if command -v wine > /dev/null; then
     # a Windows Installer package: a double-click on an .msi installs it
     if [ -f /mnt/silikci/silik.msi ]; then
       install -o tester -g tester -m 0644 /mnt/silikci/silik.msi /home/tester/Downloads/silik.msi
-      insession timeout 300 silik -q win open /home/tester/Downloads/silik.msi > /tmp/ci-msi.out 2>&1
+      insession timeout 300 silik -q win open --yes /home/tester/Downloads/silik.msi > /tmp/ci-msi.out 2>&1
       has win.msi "$(ls '/home/tester/.local/share/silikos/wine/default/drive_c/Program Files/SilikMsi/' 2>&1 | tr '\n' ' '; tail -2 /tmp/ci-msi.out | tr '\r\n' '  ')" "silikmsi.exe"
     fi
     # .NET: a program compiled with Wine Mono's own compiler and run, both in the sandbox (the package silik-wine-mono)
@@ -351,6 +351,55 @@ if command -v wine > /dev/null; then
       has win.dotnet "$(cat /home/tester/Windows/silikos-ci-net.txt 2> /dev/null; echo; tail -3 /tmp/ci-net.out | tr '\n' ' ')" "a .NET program ran"
     else
       say win.dotnet info "no Wine Mono on the ISO (the release wine-* has silik-wine-mono once the workflow Wine has made it)"
+    fi
+    # (the commands above say --yes: a file that was not run here before is asked about first, and nobody answers here)
+    # a file not run before, with no terminal and no window to ask in, does not run
+    cp /home/tester/Downloads/hello.exe /home/tester/Downloads/never-run.exe; printf x >> /home/tester/Downloads/never-run.exe; chown tester:tester /home/tester/Downloads/never-run.exe
+    o=$(insession sh -c 'SILIK_WIN_ASK=/nonexistent timeout 60 silik -q win open /home/tester/Downloads/never-run.exe; echo "silik-exit $?"')
+    has win.question.no-answer-no-run "$(echo "$o" | tr '\n' ' ')" "nowhere to ask"
+    has win.question.exit "$o" "silik-exit 2"
+    # an isolated program: a display of its own (Xephyr), its own network namespace, pasta for its network
+    say win.isolated.parts info "$(rpm -q xorg-x11-server-Xephyr passt 2>&1 | tr '\n' ' '); the session's access list: $(asuser xhost 2>&1 | tr '\n' ' ')"
+    rm -f /home/tester/Windows/silikos-ci-iso.txt
+    insession timeout 300 silik -q win open --isolated --yes /home/tester/Downloads/hello.exe 'Z:\home\tester\.ssh\id_test' 'W:\silikos-ci-iso.txt' > /tmp/ci-iso.out 2>&1
+    is win.isolated.ran "$(tr -d '\r' < /home/tester/Windows/silikos-ci-iso.txt 2> /dev/null)" "ran secret=hidden"
+    [ -s /home/tester/Windows/silikos-ci-iso.txt ] || tail -6 /tmp/ci-iso.out | while read -r line; do say win.isolated.output info "$line"; done
+    is win.isolated.marked "$(asuser silik win isolate | tr '\n' ' ')" "isolated "
+    if [ -f /home/tester/Downloads/win.exe ] && insession xwininfo -root > /dev/null 2>&1; then
+      asuser systemd-run --quiet --user --collect -p WorkingDirectory=/home/tester -E DISPLAY=:0 silik win open --isolated --yes /home/tester/Downloads/win.exe > /dev/null 2>&1
+      w=""; for i in $(seq 1 20); do sleep 3; w=$(insession xwininfo -root -tree | grep 'isolated Windows programs (isolated)' | head -1); [ -n "$w" ] && break; done
+      has win.isolated.window "$w" '"silik-win-isolated"'
+      # the program's own window is on ITS display, not on the session's
+      is win.isolated.not-on-the-session "$(insession xwininfo -root -tree | grep -c '"Silik Test"')" 0
+      s=/run/user/$uid/silik-win/isolated
+      pid=$(python3 -c "import json; print(json.load(open('$s/session'))['pid'])" 2> /dev/null)
+      disp=$(python3 -c "import json; print(json.load(open('$s/session'))['iso']['display'])" 2> /dev/null)
+      inbox() { asuser nsenter --preserve-credentials -t "$pid" -U -m -p -i -u -n -- setpriv --no-new-privs env -i PATH=/usr/bin:/usr/sbin "$@"; }
+      try='import socket, sys
+s = socket.socket(socket.AF_UNIX)
+try:
+    s.connect(sys.argv[1].replace("@", "\0")); print("CONNECTED")
+except OSError as e: print("failed:", e.strerror)'
+      if [ -n "$pid" ]; then
+        has win.isolated.own-display "$(inbox python3 -c "$try" /tmp/.X11-unix/X$disp)" CONNECTED
+        # the session's X server from inside: by its socket's file, and by its abstract socket (reachable from any
+        # process that shares the network namespace, with no file to hide)
+        has win.isolated.session-socket "$(inbox python3 -c "$try" /tmp/.X11-unix/X0)" "failed"
+        has win.isolated.session-abstract "$(inbox python3 -c "$try" @/tmp/.X11-unix/X0)" "failed"
+        has win.isolated.session-bus "$(inbox python3 -c "$try" /run/user/$uid/bus)" "failed"
+        is win.isolated.runtime-folder "$(inbox ls -A /run/user/$uid | tr '\n' ' ')" "silik-win "
+        say win.isolated.x-sockets info "$(inbox ls /tmp/.X11-unix | tr '\n' ' ')"
+        # its network: pasta's (an address beside lo), and nothing of this machine's loopback
+        net=$(inbox ip -o -4 addr 2>&1 | awk '{print $2}' | tr '\n' ' ')
+        if ! ip route 2> /dev/null | grep -q '^default'; then say win.isolated.network info "this machine has no default route: pasta has nothing to carry ($net)"
+        else case "$net" in "lo ") say win.isolated.network FAIL "only lo: pasta did not give the box a network ($(pgrep -u tester -c pasta) pasta; $(tail -3 /tmp/ci-iso.out | tr '\n' ' '))";; *) say win.isolated.network ok "$net";; esac; fi
+        say win.isolated.selinux info "Xephyr $(ps -o label= -C Xephyr 2>&1 | head -1) pasta $(ps -o label= -C pasta,pasta.avx2 2>&1 | head -1)"
+      else
+        say win.isolated.box FAIL "no running sandbox of the prefix isolated: $(ls $s 2>&1 | tr '\n' ' ')"
+      fi
+      insession silik win stop isolated > /dev/null 2>&1
+      sleep 4
+      is win.isolated.ends "$(pgrep -u tester -x Xephyr | wc -l) $(pgrep -u tester -x bwrap | wc -l) $(pgrep -u tester pasta | wc -l)" "0 0 0"
     fi
     # the SELinux domain a Windows program runs in, read by a Windows program (cmd) from the sandbox
     insession timeout 120 silik -q win run default -- cmd /c "type Z:\\proc\\self\\attr\\current > W:\\silikos-ci-domain.txt" > /dev/null 2>&1
