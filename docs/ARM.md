@@ -137,15 +137,15 @@ Ordered from most certain to least, by what each vendor publishes. None of this 
 | VM on a Mac with Apple silicon | RHEL 9 uses 4K pages (Apple silicon supports only 4K and 16K: RHEL 8, with 64K, did not boot there) † [S23]; Red Hat installed RHEL 9 ARM in UTM 4.0 † [S24]; Parallels lists RHEL 10 and 9 for Macs with M chips † [S25]; VMware Fusion, "RHEL 9 or later" (with a note about `vmwgfx` at installation) † [S26] | medium-high: RHEL 9 is named there; AlmaLinux is not (same binaries [A]) |
 | Hyper-V on a Windows on ARM (Snapdragon X) | Arm's guide: Windows 11 22H2 or later can run Linux VMs on Windows on Arm (example: Ubuntu) † [S27]; EL 9's aarch64 kernel carries `CONFIG_HYPERV=m` (read) and `hyperv-daemons` is in AppStream; Microsoft's guest list names no ARM64 distributions † [S28] | medium: nobody names EL 9 |
 | Raspberry Pi 5 | AlmaLinux's images for the Pi carry **another kernel** (`raspberrypi2-kernel4`, from Raspberry Pi's sources; repository `raspberrypi`), not EL 9's 5.14 [S8] | **not the same base**: our `noarch` packages should install there [A], but it stops being "identical to RHEL 9". As an experiment |
-| Snapdragon X directly (without Windows) | — | no: `docs/DRIVERS.md` |
+| Snapdragon X directly (without Windows), the X1-26 among them | — | no, with EL 9's kernel or with EL 10's (read 14/11/2026): `docs/DRIVERS.md`, section "ARM" |
 
 Inside a VM (Mac, Hyper-V) there is no KVM if the host does not give nested virtualisation (Apple: M3 or later with
 macOS 15 for Linux guests, according to user reports † [S29]): `silik win routes` says so.
 
 **How to do it in a VM (not run):**
 
-1. `SILIK_ARCH=aarch64 bash tools/build_iso.sh` (`docs/BUILD.md`) → `build/SilikOS-9.8-aarch64-netinstall.iso`
-   (the CI workflow, job `arm`, builds it at each run and leaves it as an artifact on a `v*` tag).
+1. The ISO: from the CI (Actions → CI → the last green run of `main` → Artifacts → `silikos-iso-aarch64`, kept
+   14 days since 14/11/2026), or `SILIK_ARCH=aarch64 bash tools/build_iso.sh` (`docs/BUILD.md`) → `build/SilikOS-9.8-aarch64-netinstall.iso`
 2. A new VM of ARM64 architecture, **UEFI**, with network (it is a network ISO) and disk for the 4.8 GB of the set and
    the work. UTM: "Virtualize" → Linux → the ISO [A]. Hyper-V: generation 2, Secure Boot with the template "Microsoft
    UEFI Certificate Authority" [A].
