@@ -1,6 +1,6 @@
 # Bench OS: how the user space and the toolchains of SilikOS's base (AlmaLinux 9, and SilikOS's own builds on it)
 # compare with Ubuntu 24.04, Debian stable, Fedora, openSUSE Tumbleweed and AlmaLinux 10 on engineering workloads
-# (tools/bench_os/README.md, docs/RENDIMENT.md): each system's official container image on the runner's kernel, so
+# (tools/bench_os/README.md, docs/PERFORMANCE.md): each system's official container image on the runner's kernel, so
 # NOT a comparison of kernels, boot time or desktop responsiveness. By hand only: it takes hours and builds nothing.
 # The table is the run's summary; the lines it is made from are the artifact.
 name: Bench OS

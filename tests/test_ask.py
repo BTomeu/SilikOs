@@ -1168,7 +1168,7 @@ class Wiring(unittest.TestCase):
         for n in names:                                                             # each is a link to the handbook of docs/
             self.assertTrue(os.path.islink(os.path.join(d, n)), n)
             self.assertEqual(os.path.realpath(os.path.join(d, n)), os.path.join(os.path.realpath(ROOT), "docs", n))
-        for internal in ("STATUS.md", "PLAN.md", "COMERCIAL.md", "ESTRATEGIA.md", "PUBLIC.md"):
+        for internal in ("STATUS.md", "PLAN.md", "COMMERCIAL.md", "STRATEGY.md", "PUBLIC.md"):
             self.assertNotIn(internal, names)
         self.assertEqual(ask.doc_dir(), d)
 

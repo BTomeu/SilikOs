@@ -9092,7 +9092,7 @@ def doc_updates(st, rows):
 
 
 # the weight of the installed system: how many packages and how much they take, as the rpm database has it (the
-# figures of a new installation, and of other systems, by the same count: docs/NUMEROS.md, tools/weigh.sh)
+# figures of a new installation, and of other systems, by the same count: docs/NUMBERS.md, tools/weigh.sh)
 DOC_WEIGHT_TOP = 5
 
 

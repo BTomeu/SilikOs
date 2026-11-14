@@ -629,7 +629,7 @@ class Package(unittest.TestCase):
         k = text(PKG + "/files/RPM-GPG-KEY-SilikOS")
         doc = text("docs/REPO.md")
         if not k.startswith(BEGIN):
-            self.assertIn("Empremta de la clau de SilikOS: *(encara no n'hi ha)*", doc)
+            self.assertIn("Fingerprint of SilikOS's key: *(there is none yet)*", doc)
             return
         if not shutil.which("gpg"):
             self.skipTest("gpg is not installed")

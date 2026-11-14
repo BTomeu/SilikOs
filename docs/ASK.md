@@ -93,7 +93,7 @@ cores, shared with other jobs at that moment); 20 runs of the whole command each
 For scale, there and then: `silik --version` 0.039 s, `silik status` 0.042 s, `python3 -c pass` 0.010 s (medians).
 The search itself (about 400 entries read, cut into words and ranked) is 0.05 to 0.07 s of each; the rest is Python
 starting, `silik` loading and the doctor's probes. Not measured on an installed SilikOS, where the doctor has real
-devices and services to read (`silik doctor` whole is 0.14 to 0.27 s on a clean EL 9, `docs/CONCEPTE.md`).
+devices and services to read (`silik doctor` whole is 0.14 to 0.27 s on a clean EL 9, `docs/CONCEPT.md`).
 
 ## The COMMAND bar
 

@@ -72,7 +72,7 @@ instalado y deja que se revise a sí mismo; el informe y las imágenes están en
 [`ci-results`](../../tree/ci-results). La última ejecución completa cuando se escribió esto es la 43464588417 del
 13/11/2026 (commit f14e5cd): 121 comprobaciones correctas, ninguna fallida, 15 GB de disco; el sistema instalado
 arrancó en 11,3 a 12,0 s (9,3 s en la ejecución anterior: depende del runner) con unos 985 MB en uso (una máquina
-virtual: `docs/NUMEROS.md`) y volvió atrás de una actualización
+virtual: `docs/NUMBERS.md`) y volvió atrás de una actualización
 en un disco LVM real (`docs/ROLLBACK.md`). Al lado del AlmaLinux 9 Workstation de serie en una misma máquina virtual
 (workflow Compare, ejecución 43446488850) usó de 151 a 166 MB menos de memoria y llegó al escritorio de 0,65 a 0,85 s
 más tarde: su sesión es X11, por las herramientas EDA, y la de la base es Wayland. No arranca más rápido que su base.
@@ -90,7 +90,7 @@ de GitHub iniciada):
 - **La ISO de red (2 GB; la instalación descarga 2,5 GB más)**: lo mismo en **CI**, artefacto `silikos-iso`.
 
 Escribe la `.iso` en una memoria USB tal como es, byte a byte (balenaEtcher; Rufus en modo «DD Image»; `dd`), y
-arranca el ordenador desde ella. [`docs/PRIMERA-HORA.md`](docs/PRIMERA-HORA.md) (en catalán) tiene todos los pasos,
+arranca el ordenador desde ella. [`docs/FIRST-HOUR.md`](docs/FIRST-HOUR.md) (en inglés) tiene todos los pasos,
 también para un sistema en un disco externo que deja en paz el disco del ordenador. Nada se ha ejecutado todavía en
 un ordenador de verdad: `docs/STATUS.md`.
 
@@ -102,11 +102,12 @@ python3 -m unittest discover -s tests
 bash tools/build_iso.sh           # la ISO de instalación por red (necesita repo.almalinux.org)
 ```
 
-[`docs/BUILD.md`](docs/BUILD.md) tiene los pasos y qué necesita cada uno. [`docs/PRIMERA-HORA.md`](docs/PRIMERA-HORA.md) es la
-primera hora con una placa, una sonda y un adaptador CAN (en catalán). También: `docs/PLAN.md` (decisiones y
+[`docs/BUILD.md`](docs/BUILD.md) tiene los pasos y qué necesita cada uno. [`docs/FIRST-HOUR.md`](docs/FIRST-HOUR.md) es la
+primera hora con una placa, una sonda y un adaptador CAN (en inglés). También: `docs/PLAN.md` (decisiones y
 fases), `docs/HARDWARE.md` (Ryzen 7 5800HS + RTX 3050, Snapdragon X, SilikOS en ARM / aarch64), `docs/DRIVERS.md` (para qué hardware
 tiene controlador el núcleo de la base; `silik hw check`), `docs/EDA.md`,
-`docs/DEV.md`, `docs/WINDOWS.md`, `docs/POWER.md`, `docs/CONCEPTE.md` (la idea desde cero, en catalán). `site/` es un
+`docs/DEV.md`, `docs/WINDOWS.md`, `docs/POWER.md`, `docs/CONCEPT.md` (la idea desde cero, en inglés), `docs/OVERVIEW.md`
+(lo grande que es, qué hace bien, qué tiene de propio, a quién le sirve). `site/` es un
 sitio estático con el mismo contenido (`tools/gen_site.py`; todavía no está desplegado).
 
 ## Licencia, marca, seguridad

@@ -167,7 +167,7 @@ and 13(8), first sentence):
 **What the act does not say.** It asks for the bill of materials of the *product*. It does not ask, in the text
 read, for a bill of materials of the machines a product is built on. Annex III lists "Operating systems" among the
 important products of class I (point 11): that is about an operating system placed on the market as a product, and
-is the question `docs/COMERCIAL.md` (B4) leaves to a lawyer for SilikOS itself.
+is the question `docs/COMMERCIAL.md` (B4) leaves to a lawyer for SilikOS itself.
 
 ## 3. Which question each command helps to answer
 

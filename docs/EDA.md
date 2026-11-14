@@ -64,7 +64,7 @@ fedora"` and `VERSION_ID`; only the display names say SilikOS. If an installer o
 
 No vendor software and no licences. What each vendor says of EL 9 for its current release, the packages its
 requirements name and the licence daemons' needs are data (`silik vendor list`, `silik vendor check cadence synopsys
-flexlm`, `docs/INDUSTRIA.md`): by the search extracts of their platform pages [A], Synopsys's Y-Foundation names
+flexlm`, `docs/INDUSTRY.md`): by the search extracts of their platform pages [A], Synopsys's Y-Foundation names
 AlmaLinux 9.x and Cadence's 2025.x adds Alma 9 with "limited support"; check the page for the release in use. Nothing
 there was tried with a vendor's installer.
 

@@ -2,7 +2,7 @@
 # help: data at rest: what is encrypted (LUKS), TPM and Secure Boot, unlock with TPM2 + PIN, a recovery key. Never formats
 # words: check tpm recovery --json
 # words tpm: enroll remove
-# state: experimental: run on a LUKS2 header in a file with a software TPM; no machine has started with it yet
+# state: experimental: run in virtual machines (an encrypted installation started with Secure Boot and a software TPM; a system on a USB disk); no real machine yet
 """silik disk [--json]                    what is encrypted: /, /home, swap; the LUKS volume (version, cipher, key slots,
                                        tokens), the TPM, Secure Boot, what opens the disk at a start
 silik disk check [--json]              the same, and what to do so that the disk is neither opened nor lost: each

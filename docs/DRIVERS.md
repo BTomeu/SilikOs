@@ -631,7 +631,7 @@ from the build machine), so that it equals AlmaLinux's copy is [A].
 **Proposal** [PROPOSAL, the owner decides]: make AlmaLinux's packages the default for Turing and newer cards (the
 RTX 3050 of the first target is one), and keep NVIDIA's DKMS driver for older cards. The gain is no compiler on the
 machine and no key to enrol with Secure Boot. The cost is the days between a kernel update and its kmod when the kernel
-interface changes: `silik update` should then hold the kernel back (item 2 of `docs/ESTRATEGIA.md`). **Not switched**:
+interface changes: `silik update` should then hold the kernel back (item 2 of `docs/STRATEGY.md`). **Not switched**:
 neither way was run on a machine with an NVIDIA card. `--source almalinux` is there to try it on the Ryzen laptop.
 
 ## 6. Drivers the base lacks: ELRepo's kmod packages

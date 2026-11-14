@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # tests/install/external.sh ISO [OUT_DIR]: SilikOS installed on an external (USB) disk and started from it, as
-# docs/DISK.md ("The system on an external disk, started from the computer's boot menu") and docs/PRIMERA-HORA.md
+# docs/DISK.md ("The system on an external disk, started from the computer's boot menu") and docs/FIRST-HOUR.md
 # tell a person to do it. As tests/install/sealed.sh, whose ways it follows (UEFI firmware with its variables in a
 # file, the shipped kickstart of the ISO + CI-only lines, the checks said on the serial port as
 # SILIKOS-CI|name|verdict|detail, the disk's passphrase typed on the console by sealed-console.py):

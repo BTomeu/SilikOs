@@ -20,7 +20,7 @@ Compare workflow re-measures what it can (section 9).
 
 ## 1. The half second against the stock system: it is before the shell starts
 
-`docs/NUMEROS.md` §9: SilikOS reaches `graphical-session.target` 3.65–3.72 s after the user's manager starts, the
+`docs/NUMBERS.md` §9: SilikOS reaches `graphical-session.target` 3.65–3.72 s after the user's manager starts, the
 stock AlmaLinux 3.13–3.15 s, and GNOME Shell's own unit is not slower (1.74 s against 1.78–1.81 s). The journals of
 two runs say where the rest is. The Compare run (43461175134) printed the stock system's lines; the SilikOS lines of
 that run were cut off (the X server's own log filled the 90 lines kept; the filter is fixed since), so SilikOS's are

@@ -3,7 +3,7 @@
 The owner's question: "how is the performance compared with other operating systems?" What one machine can answer
 fairly: the **user space and the toolchains** each system ships, in its official container image, on the same kernel
 and the same hardware. It is **not** a comparison of kernels, boot time, memory at idle, desktop responsiveness or
-graphics. The numbers measured so far, and what they do not show, are in `docs/RENDIMENT.md`.
+graphics. The numbers measured so far, and what they do not show, are in `docs/PERFORMANCE.md`.
 
     bash tools/bench_os/run_all.sh           # every system, every workload: build/bench-os/results.jsonl, results.md
     bash tools/bench_os/bench.sh fedora synth python     # one system, some workloads (the inputs must exist)

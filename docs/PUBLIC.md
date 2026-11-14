@@ -1,92 +1,92 @@
-# Fer públic el repositori: llista per al propietari (13/11/2026)
+# Making the repository public: a list for the owner (13/11/2026)
 
-Auditoria feta per un agent sobre l'arbre, tot l'historial (128 commits, 1153 blobs) i el que l'API de GitHub deixa
-llegir. No s'ha reescrit ni esborrat res. El que no s'ha pogut llegir des d'aquí (secrets d'Actions, claus de
-desplegament, webhooks, col·laboradors, logs dels runs) està marcat **[mira-ho tu]**. Els noms dels menús de GitHub
-poden haver canviat una mica [A].
+An audit made by an agent of the tree, the whole history (128 commits, 1153 blobs) and what GitHub's API lets one
+read. Nothing was rewritten or deleted. What could not be read from here (Actions secrets, deploy keys,
+webhooks, collaborators, the runs' logs) is marked **[check it yourself]**. The names of GitHub's menus
+may have changed a little [A].
 
-## 1. Abans de prémer "Change visibility"
+## 1. Before pressing "Change visibility"
 
-1. **Les quatre releases porten 20 binaris sense la seva font** (`eda-tools` 14, `wine-11.0` 3, `dev-tools` 2,
-   `eda-optional` 1; GPL/LGPL/MPL; cap `*.src.rpm`, la release `sources-archive` encara no existeix). Privat no és
-   distribuir; públic sí. Són anteriors als SRPM (12/11) i alguns no porten ni el fitxer de llicència (netgen).
-   El que no esborra res: passar-les a esborrany (un esborrany no es veu ni es pot baixar des de fora):
+1. **The four releases carry 20 binaries without their source** (`eda-tools` 14, `wine-11.0` 3, `dev-tools` 2,
+   `eda-optional` 1; GPL/LGPL/MPL; no `*.src.rpm`, the release `sources-archive` does not exist yet). Private is not
+   distributing; public is. They are older than the SRPMs (12/11) and some do not even carry the licence file (netgen).
+   What deletes nothing: turn them into drafts (a draft cannot be seen or downloaded from outside):
    ```bash
    for t in eda-tools eda-optional dev-tools wine-11.0; do gh release edit $t --repo BTomeu/SilikOs --draft; done
    ```
-   Tornar-les a publicar quan cada una tingui els SRPM (punt 4): `gh release edit TAG --repo BTomeu/SilikOs --draft=false`.
-   L'altra opció (decisió teva, esborra): `gh release delete-asset TAG FITXER -y` dels 20; els workflows els tornen a fer.
-2. **Dos documents són estratègia interna**: `docs/COMERCIAL.md` (model de negoci, preus de referència, riscos legals
-   propis) i `docs/ESTRATEGIA.md`. No tenen cap secret; decideix si vols que es llegeixin. Treure'ls de l'arbre no els
-   treu de l'historial (commits cdebd32, b919050, 77b147f); treure'ls de l'historial és reescriure'l:
-   `git filter-repo --invert-paths --path docs/COMERCIAL.md --path docs/ESTRATEGIA.md` i `git push --force` (canvia
-   tots els hash; no recomanat si no cal).
-3. **L'historial d'Actions passa a ser públic**: 133 execucions amb els seus logs i 214 artefactes (RPM sense font,
-   caduquen al cap de 90 dies). **[mira-ho tu]** si un log diu res que no vulguis. Per esborrar-los tots:
+   Publish them again when each one has its SRPMs (point 4): `gh release edit TAG --repo BTomeu/SilikOs --draft=false`.
+   The other option (your decision, it deletes): `gh release delete-asset TAG FILE -y` for the 20; the workflows make them again.
+2. **Two documents are internal strategy**: `docs/COMMERCIAL.md` (business model, reference prices, our own legal
+   risks) and `docs/STRATEGY.md`. They hold no secret; decide whether you want them to be read. Taking them out of
+   the tree does not take them out of the history (commits cdebd32, b919050, 77b147f); taking them out of the history is rewriting it:
+   `git filter-repo --invert-paths --path docs/COMMERCIAL.md --path docs/STRATEGY.md` and `git push --force` (it
+   changes every hash; not recommended unless it is needed).
+3. **The history of Actions becomes public**: 133 runs with their logs and 214 artifacts (RPMs without source;
+   they expire after 90 days). **[check it yourself]** whether a log says anything you do not want. To delete them all:
    `gh run list --repo BTomeu/SilikOs --limit 200 --json databaseId -q '.[].databaseId' | xargs -n1 gh run delete --repo BTomeu/SilikOs`
-4. **[mira-ho tu]** Settings → Secrets and variables → Actions (hauria d'estar buit: els workflows només fan servir
-   el token del run; l'única excepció, des del 13/11, és la clau de signatura dels paquets, que va com a secret de
-   l'environment `package-signing`: `docs/REPO.md`), Environments, Deploy keys, Webhooks, Collaborators.
-5. No hi ha `LICENSE`: el README diu que la llicència no està triada i que fins llavors tots els drets són reservats.
-   Tria-la aviat (`docs/COMERCIAL.md`, pregunta 1): sense llicència ningú pot fer servir el codi.
+4. **[check it yourself]** Settings → Secrets and variables → Actions (it should be empty: the workflows use only
+   the run's token; the one exception, since 13/11, is the package signing key, which goes as a secret of
+   the environment `package-signing`: `docs/REPO.md`), Environments, Deploy keys, Webhooks, Collaborators.
+5. There is no `LICENSE`: the README says that the licence is not chosen and that until then all rights are reserved.
+   Choose it soon (`docs/COMMERCIAL.md`, question 1): without a licence nobody may use the code.
 
-## 2. Settings, en fer-lo públic
+## 2. Settings, when making it public
 
-- **Actions → General → Fork pull request workflows**: *Require approval for all external contributors* (o "all
-  outside collaborators"). El CI s'engega amb `pull_request`: sense això, un desconegut pot fer córrer 3 hores de
-  màquina amb un PR.
-- **Actions → General → Workflow permissions**: *Read repository contents and packages permissions*; desmarcat
-  "Allow GitHub Actions to create and approve pull requests". (Els workflows ja demanen `contents: read` i només
-  escriuen els jobs que ho diuen.)
-- **Actions → General → Actions permissions**: *Allow BTomeu, and select non-BTomeu, actions* → només "Allow actions
-  created by GitHub" (no se'n fa servir cap altra).
-- **Advanced Security** (abans "Code security"): **Private vulnerability reporting** → Enable (és on apunta
-  `SECURITY.md`); Secret scanning i Push protection → Enable (gratuït en un repositori públic).
-- **Rules → Rulesets → New branch ruleset**, objectiu `main` (només `main`: el workflow fa `push --force` a
-  `ci-results`): *Restrict deletions*, *Block force pushes*. Demanar PR o checks per a `main` és cosa teva (avui hi
-  puges directament).
-- **Rules → New tag ruleset**, objectiu `v*`: *Restrict creations* (amb tu com a excepció). Un tag `v*` fa una release
-  amb la ISO. No el posis sobre els altres tags (`eda-tools`, `dev-tools`, `wine-*`, `sources-archive`,
-  `eda-tools-aarch64`): els creen els workflows.
-- **General**: Issues activat (és on apunta `BUG_REPORT_URL` del sistema), Wiki desactivat.
+- **Actions → General → Fork pull request workflows**: *Require approval for all external contributors* (or "all
+  outside collaborators"). The CI starts on `pull_request`: without this, a stranger can run 3 hours of
+  machine time with a PR.
+- **Actions → General → Workflow permissions**: *Read repository contents and packages permissions*; unticked,
+  "Allow GitHub Actions to create and approve pull requests". (The workflows already ask for `contents: read` and
+  only the jobs that say so write.)
+- **Actions → General → Actions permissions**: *Allow BTomeu, and select non-BTomeu, actions* → only "Allow actions
+  created by GitHub" (no other one is used).
+- **Advanced Security** (formerly "Code security"): **Private vulnerability reporting** → Enable (it is where
+  `SECURITY.md` points); Secret scanning and Push protection → Enable (free in a public repository).
+- **Rules → Rulesets → New branch ruleset**, target `main` (only `main`: the workflow does `push --force` to
+  `ci-results`): *Restrict deletions*, *Block force pushes*. Requiring a PR or checks for `main` is up to you (today
+  you push to it directly).
+- **Rules → New tag ruleset**, target `v*`: *Restrict creations* (with you as the exception). A `v*` tag makes a release
+  with the ISO. Do not put it on the other tags (`eda-tools`, `dev-tools`, `wine-*`, `sources-archive`,
+  `eda-tools-aarch64`): the workflows create them.
+- **General**: Issues on (it is where the system's `BUG_REPORT_URL` points), Wiki off.
 
-## 3. Què s'engega tot sol amb el primer push a `main`
+## 3. What starts by itself with the first push to `main`
 
-Fer-lo públic no engega res; el primer push sí, segons els fitxers que toqui:
+Making it public starts nothing; the first push does, depending on the files it touches:
 
-| Workflow | S'engega si el push toca | Què fa | Pes (mesurat en runs anteriors, amb menys eines) |
+| Workflow | Starts if the push touches | What it does | Weight (measured in earlier runs, with fewer tools) |
 |---|---|---|---|
-| CI | qualsevol cosa fora de `docs/`, README, `eda/`, `dev/`, `wine/` | tests, paquets, ISO aarch64, ISO instal·lada en una VM; escriu la branca `ci-results` | 14-47 min (17 runs) |
-| EDA tools | `eda/**`, `tools/build_eda.sh`, `tools/release_keep.sh`, `eda.yml` | 14 eines + KiCad + models 3D + ngspice ARM; escriu `eda-tools`, `eda-optional`, `eda-tools-aarch64`, `sources-archive` | 58-73 min (3 runs, amb memòria cau); sense memòria cau, hores (KiCad: límit 340 min) |
-| Dev tools | `dev/**`, `tools/build_dev.sh`, `tools/release_keep.sh`, `dev.yml`, `packages/silik-dev/**` | 8 eines x86_64 + 3 ARM; escriu `dev-tools`, `sources-archive` | 6 min (3 runs, quan eren 2 eines) |
-| Wine | `wine/**`, `tools/build_wine*.sh`, `tools/release_keep.sh`, `wine.yml` | Wine i els complements; escriu `wine-<versió>`, `sources-archive` | 2-5 min amb memòria cau; uns 30 min sense [A: ho diu el workflow] |
-| Bench | `tools/bench_ngspice_flags.sh`, `bench.yml` | mesura, no escriu res | 15-17 min |
-| Package repository | res directament: s'engega quan un CI de `main` o d'un tag `v*` acaba verd, o si el push toca `site/**` | signa els paquets i publica el repositori (`docs/REPO.md`); escriu les releases `repo-el9-next`, `repo-el9-stable` i el lloc de Pages | no executat encara |
+| CI | anything outside `docs/`, README, `eda/`, `dev/`, `wine/` | tests, packages, the aarch64 ISO, the ISO installed in a VM; writes the branch `ci-results` | 14-47 min (17 runs) |
+| EDA tools | `eda/**`, `tools/build_eda.sh`, `tools/release_keep.sh`, `eda.yml` | 14 tools + KiCad + 3D models + ngspice ARM; writes `eda-tools`, `eda-optional`, `eda-tools-aarch64`, `sources-archive` | 58-73 min (3 runs, with the cache); without the cache, hours (KiCad: limit 340 min) |
+| Dev tools | `dev/**`, `tools/build_dev.sh`, `tools/release_keep.sh`, `dev.yml`, `packages/silik-dev/**` | 8 x86_64 tools + 3 ARM; writes `dev-tools`, `sources-archive` | 6 min (3 runs, when there were 2 tools) |
+| Wine | `wine/**`, `tools/build_wine*.sh`, `tools/release_keep.sh`, `wine.yml` | Wine and the add-ons; writes `wine-<version>`, `sources-archive` | 2-5 min with the cache; about 30 min without [A: the workflow says so] |
+| Bench | `tools/bench_ngspice_flags.sh`, `bench.yml` | measures, writes nothing | 15-17 min |
+| Package repository | nothing directly: it starts when a CI of `main` or of a `v*` tag ends green, or if the push touches `site/**` | signs the packages and publishes the repository (`docs/REPO.md`); writes the releases `repo-el9-next`, `repo-el9-stable` and the Pages site | not run yet |
 
-El merge d'aquesta ronda toca `eda.yml`, `tools/build_eda.sh` i `tools/build_dev.sh`: **s'engegaran CI, EDA tools i
-Dev tools alhora**, i les memòries cau d'EDA no serveixen (canvia l'script). Quan EDA tools, Dev tools o Wine acaben,
-el CI torna a començar sol (`workflow_run`) i cancel·la el CI que hi hagués en marxa a `main`.
+The merge of this round touches `eda.yml`, `tools/build_eda.sh` and `tools/build_dev.sh`: **CI, EDA tools and
+Dev tools will start at the same time**, and EDA's caches are of no use (the script changes). When EDA tools, Dev
+tools or Wine end, the CI starts again by itself (`workflow_run`) and cancels the CI that was running on `main`.
 
-## 4. Ordre a mà perquè la ISO trobi les releases
+## 4. The order by hand so that the ISO finds the releases
 
-1. **Wine** (Actions → Wine → Run workflow), **Dev tools** i **EDA tools** (els dos últims ja s'hauran engegat amb el
-   push; si no, a mà). Poden anar alhora.
-2. Quan acabin: cada release ha de tenir, per cada paquet, el seu `*.src.rpm`
-   (`gh release view TAG --repo BTomeu/SilikOs --json assets -q '.assets[].name'`). Si les havies passat a esborrany,
-   publica-les ara (`--draft=false`).
-3. **CI** a mà (Actions → CI → Run workflow) si no s'ha engegat sol després del pas 2. Un CI que corre mentre una
-   release és un esborrany o és buida fa una ISO sense aquells paquets (ho diu amb un avís "no such release yet") i
-   les comprovacions que els esperen fallen: no és el sistema, és l'ordre.
-4. Mira la branca `ci-results` i `docs/STATUS.md`: tot el que avui diu "written, not run" (jobs ARM, SRPM,
-   `release_keep.sh`, el job `results` nou) es veurà aquí per primer cop.
+1. **Wine** (Actions → Wine → Run workflow), **Dev tools** and **EDA tools** (the last two will already have started
+   with the push; if not, by hand). They can run at the same time.
+2. When they end: each release must have, for each package, its `*.src.rpm`
+   (`gh release view TAG --repo BTomeu/SilikOs --json assets -q '.assets[].name'`). If you had turned them into
+   drafts, publish them now (`--draft=false`).
+3. **CI** by hand (Actions → CI → Run workflow) if it has not started by itself after step 2. A CI that runs while a
+   release is a draft or is empty makes an ISO without those packages (it says so with a warning "no such release
+   yet") and the checks that expect them fail: it is not the system, it is the order.
+4. Look at the branch `ci-results` and `docs/STATUS.md`: everything that today says "written, not run" (ARM jobs,
+   SRPMs, `release_keep.sh`, the new `results` job) will be seen here for the first time.
 
-## 5. Què queda obert
+## 5. What stays open
 
-- Els binaris vells que un build nou del mateix nom substitueix van a `sources-archive` sense SRPM propi (el nou és
-  de la mateixa versió). Si vols l'arxiu net, esborra els 20 fitxers vells abans del primer build (punt 1.1).
-- `installer/installer-base.css` ve de l'anaconda (GPL-2.0-or-later) [A: pels seus comentaris] i no ho diu.
-- Els paquets propis declaren `License: LicenseRef-SilikVolt`, que no està definida.
-- Les accions (`actions/checkout@v4`, `upload-artifact@v4`, `download-artifact@v4`, `cache@v4`) i la imatge
-  `almalinux:9` van fixades per etiqueta, no per hash. Són de GitHub i d'AlmaLinux; fixar-les per hash és una millora.
-- "Binari idèntic a RHEL" encara surt a `docs/PLAN.md`, `docs/ESTRATEGIA.md` i `CLAUDE.md` (AlmaLinux diu
-  compatibilitat ABI: `docs/COMERCIAL.md`, B3).
+- The old binaries that a new build of the same name replaces go to `sources-archive` without an SRPM of their own
+  (the new one is of the same version). If you want the archive clean, delete the 20 old files before the first build (point 1.1).
+- `installer/installer-base.css` comes from anaconda (GPL-2.0-or-later) [A: by its comments] and does not say so.
+- Our own packages declare `License: LicenseRef-SilikVolt`, which is not defined.
+- The actions (`actions/checkout@v4`, `upload-artifact@v4`, `download-artifact@v4`, `cache@v4`) and the image
+  `almalinux:9` are pinned by tag, not by hash. They are GitHub's and AlmaLinux's; pinning them by hash is an improvement.
+- "Binary identical to RHEL" still appears in `docs/PLAN.md`, `docs/STRATEGY.md` and `CLAUDE.md` (AlmaLinux says
+  ABI compatibility: `docs/COMMERCIAL.md`, B3).

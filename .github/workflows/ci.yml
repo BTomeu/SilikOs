@@ -200,7 +200,7 @@ jobs:
             build/install-test/*.ppm
             build/install-test/ci.ks
       # The ISO this job has just installed and checked, to download (Actions, this run, Artifacts): every run of
-      # main and every tag. Until 14/11/2026 only a tag kept it, and there is no tag yet: docs/PRIMERA-HORA.md sent
+      # main and every tag. Until 14/11/2026 only a tag kept it, and there is no tag yet: docs/FIRST-HOUR.md sent
       # people to an artifact that did not exist. A run of main keeps it 14 days (2 GB each); a tag's, 90.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')

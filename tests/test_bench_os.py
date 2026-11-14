@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # The comparison between systems (tools/bench_os): the lines timed.py writes, the tables table.py makes of them, and
 # gen.py's inputs (the same bytes every time; the C project computes the same under every optimisation level, when
-# there is a compiler here). No container is started: the measurements themselves are docs/RENDIMENT.md's.
+# there is a compiler here). No container is started: the measurements themselves are docs/PERFORMANCE.md's.
 import hashlib
 import importlib.util
 import json

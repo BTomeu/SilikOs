@@ -68,7 +68,7 @@ installed system and lets it check itself; the report and the pictures are on th
 [`ci-results`](../../tree/ci-results). The last complete run when this was written is run 43464588417 of
 13/11/2026 (commit f14e5cd): 121 checks ok, none failed, 15 GB on disk; in it the installed system started in 11.3
 to 12.0 s (9.3 s in the run before: it depends on the runner) with about 985 MB in use (a virtual machine:
-`docs/NUMEROS.md`), and went back from an update on a real LVM disk
+`docs/NUMBERS.md`), and went back from an update on a real LVM disk
 (`docs/ROLLBACK.md`). Beside the stock AlmaLinux 9 Workstation in one virtual machine (workflow Compare, run
 43446488850) it used 151 to 166 MB less memory and reached the desktop 0.65 to 0.85 s later: its session is X11, for
 the EDA tools, the base's is Wayland. It is not faster to start than its base. The badge above is the CI's state.
@@ -84,7 +84,7 @@ repository's workflows on GitHub, and each green run keeps it for 14 days (signe
 - **The network ISO (2 GB; the installation downloads 2.5 GB more)**: the same under **CI**, artifact `silikos-iso`.
 
 Write the `.iso` to a USB stick as it is, byte for byte (balenaEtcher; Rufus in "DD Image" mode; `dd`), and start the
-computer from it. [`docs/PRIMERA-HORA.md`](docs/PRIMERA-HORA.md) (in Catalan) has every step, also for a system on an
+computer from it. [`docs/FIRST-HOUR.md`](docs/FIRST-HOUR.md) has every step, also for a system on an
 external disk that leaves the computer's own disk alone. Nothing has run on a real computer yet: `docs/STATUS.md`.
 
 To build it yourself instead (any Linux with `rpmbuild`, `createrepo_c`, `xorriso`, `mtools`, `cpio`, `curl`, `gpg`):
@@ -95,11 +95,12 @@ python3 -m unittest discover -s tests
 bash tools/build_iso.sh           # the network installer ISO (needs repo.almalinux.org)
 ```
 
-[`docs/BUILD.md`](docs/BUILD.md) has the steps and what each needs. [`docs/PRIMERA-HORA.md`](docs/PRIMERA-HORA.md) is the
-first hour with a board, a probe and a CAN adapter (in Catalan). Also: `docs/PLAN.md` (decisions and phases),
+[`docs/BUILD.md`](docs/BUILD.md) has the steps and what each needs. [`docs/FIRST-HOUR.md`](docs/FIRST-HOUR.md) is the
+first hour with a board, a probe and a CAN adapter. Also: `docs/PLAN.md` (decisions and phases),
 `docs/HARDWARE.md` (Ryzen 7 5800HS + RTX 3050, Snapdragon X), `docs/ARM.md` (SilikOS on ARM / aarch64), `docs/DRIVERS.md` (which hardware the base's
 kernel has a driver for; `silik hw check`), `docs/EDA.md`, `docs/DEV.md`,
-`docs/WINDOWS.md`, `docs/POWER.md`, `docs/CONCEPTE.md` (the idea from zero, in Catalan). `site/` is a static site
+`docs/WINDOWS.md`, `docs/POWER.md`, `docs/CONCEPT.md` (the idea from zero), `docs/OVERVIEW.md` (how large it is, what
+it does well, what is its own, who it is useful to). `site/` is a static site
 with the same content (`tools/gen_site.py`; not deployed yet).
 
 ## Licence, brand, security

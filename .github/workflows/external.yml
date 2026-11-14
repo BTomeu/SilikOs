@@ -1,4 +1,4 @@
-# SilikOS on an external disk (docs/DISK.md, docs/PRIMERA-HORA.md): the ISO (the system alone) is built, then
+# SilikOS on an external disk (docs/DISK.md, docs/FIRST-HOUR.md): the ISO (the system alone) is built, then
 # tests/install/external.sh installs it under UEFI, encrypted, onto a disk on USB with the options of the ISO's own
 # entry "on an external disk", beside a disk that stands for the computer's own; the firmware's boot order and that
 # disk must come out as they went in. The installed disk is then started on that computer twice, on another one with

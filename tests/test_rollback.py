@@ -1202,7 +1202,7 @@ class Package(unittest.TestCase):
 
     def test_the_documents(self):
         doc = text("docs/ROLLBACK.md")
-        for w in ("silik rollback", "silik snapshot", "PROPOSTA", "rollback-test", "[A]"):
+        for w in ("silik rollback", "silik snapshot", "PROPOSAL", "rollback-test", "[A]"):
             self.assertIn(w, doc)
         self.assertIn("ROLLBACK.md", text("docs/SECURITY.md"))
         self.assertIn("silik rollback", text("docs/STATUS.md"))

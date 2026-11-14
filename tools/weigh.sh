@@ -23,7 +23,7 @@
 #   weigh.sh --plan                  what would be resolved (the sources and the sets), and stop: no container
 #   weigh.sh --parse [--json] FILE   only the reading of one recorded `dnf install --assumeno` output
 #   weigh.sh --report [--json] DIR   only the report, from a folder an earlier run left (build/weigh)
-# The numbers of a day: docs/NUMEROS.md. The other systems, by the same method: tools/weigh_others.sh.
+# The numbers of a day: docs/NUMBERS.md. The other systems, by the same method: tools/weigh_others.sh.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 
@@ -49,7 +49,7 @@ plan() {
   [ ${#env[@]} -gt 0 ] || { echo "error: no environment or group in the %packages of $ks" >&2; return 1; }
   read -r -a extra <<< "$2"
   # the kernel and the boot loader are not in any group: the installer adds them by itself [A: these names; the
-  # count agreed within one package with an installed system, docs/NUMEROS.md]
+  # count agreed within one package with an installed system, docs/NUMBERS.md]
   case $1 in
     x86_64) boot="kernel grub2-efi-x64 shim-x64 grub2-pc grub2-tools grub2-tools-extra efibootmgr grubby" ;;
     *) boot="kernel grub2-efi-aa64 shim-aa64 grub2-tools grub2-tools-extra efibootmgr grubby" ;;

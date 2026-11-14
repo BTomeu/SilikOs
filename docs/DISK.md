@@ -234,7 +234,9 @@ own system first again: the firmware's setup, or `sudo efibootmgr` (the list) an
 an installation made on the installer's screens has it) shows SilikOS's splash (the ink background, the mark) with
 the question `Please enter passphrase for disk ...` and its entry box, drawn through the kernel's graphics driver;
 the passphrase typed once on the keyboard opens the disk. The theme and the pictures of its dialog are in the
-initramfs. (Three runs before that one stayed black: the test's installer has a console on the serial port, the
+initramfs. The same with the whole desktop on the USB disk (job `desktop`, run 43603388840: 25 checks ok, none
+failed): after the passphrase, the login screen comes up, USBGuard is active with the disk the system is on
+allowed, and no unit has failed. (Three runs before that one stayed black: the test's installer has a console on the serial port, the
 installer wrote it into the installed system, and the splash program then asks there, in text. A computer has no
 such console; with one, `plymouth.ignore-serial-consoles` on the kernel's command line is the base's way.)
 

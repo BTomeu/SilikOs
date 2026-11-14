@@ -152,7 +152,7 @@ class Doc(unittest.TestCase):
         urls = re.findall(r"^- (https://\S+)", sources, re.M)
         self.assertGreaterEqual(len(urls), 20)
         self.assertEqual(len(urls), len(set(urls)))
-        for part in ("[A]", "GNOME Shell 49", "x86-64-v3", "Xwayland", "PROPOSTA"):
+        for part in ("[A]", "GNOME Shell 49", "x86-64-v3", "Xwayland", "PROPOSAL"):
             self.assertIn(part, head, part)
 
     def test_what_the_document_says_was_run_has_its_result_file(self):

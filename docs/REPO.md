@@ -1,87 +1,88 @@
-# El repositori de paquets de SilikOS (13/11/2026)
+# SilikOS's package repository (13/11/2026)
 
-Perquè un SilikOS instal·lat rebi versions noves dels paquets propis (silik, l'escriptori, Wine, KiCad, ngspice,
-OpenOCD...). Tot està fet menys una cosa, que només pots fer tu: **la clau de signatura**. Sense clau, el workflow
-publica el repositori sense signar i ho diu, i cap sistema instal·lat se'l creu (els canals estan apagats i
-`silik update channel` es nega a encendre'ls). Els noms dels menús de GitHub poden haver canviat una mica [A].
+So that an installed SilikOS receives new versions of its own packages (silik, the desktop, Wine, KiCad, ngspice,
+OpenOCD...). Everything is done except one thing, which only you can do: **the signing key**. Without a key, the
+workflow publishes the repository unsigned and says so, and no installed system trusts it (the channels are off and
+`silik update channel` refuses to turn them on). The names of GitHub's menus may have changed a little [A].
 
-## 1. El que has de fer tu, una vegada
+## 1. What you have to do, once
 
-**1. Fes la clau al teu PC** (mai en una sessió al núvol, mai dins del repositori). Cal `gpg`: el porta el Git Bash
-de Git per a Windows [A: mira `gpg --version`] i qualsevol Linux. Guarda-la on tens les altres claus:
+**1. Make the key on your PC** (never in a cloud session, never inside the repository). It needs `gpg`: the Git Bash
+of Git for Windows has it [A: check `gpg --version`] and so does any Linux. Keep it where you have the other keys:
 
 ```bash
 export GNUPGHOME="$HOME/Documents/SilikVolt/licensing/private/silikos-gpg"
 mkdir -p "$GNUPGHOME" && chmod 700 "$GNUPGHOME"
-gpg --quick-generate-key "SilikOS packages (SilikVolt)" rsa4096 sign never    # et demana una contrasenya: posa-n'hi
-gpg --list-secret-keys                                # l'empremta: 40 lletres i xifres; és FPR a les ordres de sota
+gpg --quick-generate-key "SilikOS packages (SilikVolt)" rsa4096 sign never    # it asks you for a passphrase: give it one
+gpg --list-secret-keys                                # the fingerprint: 40 letters and digits; it is FPR in the commands below
 gpg --armor --export-secret-keys FPR > "$GNUPGHOME/silikos-signing-private.asc"
 ```
 
-- Fes-ne una còpia fora de línia (un USB al calaix). Si la perds no es pot signar res més amb ella: caldria canviar
-  de clau (punt 4), i els sistemes que només tenen la vella no la rebrien.
-- `rsa4096`, només per signar, sense subclau i sense caducitat. Per què:
-  - L'rpm d'EL 9.8 (4.16.1.3-40), el gnupg 2.3.3 i el dnf 4.14 verifiquen tant RSA 4096 com ed25519: provat aquí el
-    13/11/2026 amb dues claus de prova (paquets i metadades signats, instal·lats amb `dnf`). La suposició que EL 9 no
-    porta bé ed25519 no val per a 9.8.
-  - Tot i així, RSA 4096: és el que fan servir la clau d'AlmaLinux 9 (llegit: `rsa4096`) i la resta d'EL, funciona
-    en mode FIPS [A: ed25519 no hi és aprovat a RHEL 9; no provat] i en rpm més antics.
-  - Sense caducitat: una clau caducada deixaria tots els sistemes sense actualitzacions dels paquets propis, i el
-    paquet que la renovaria no els arribaria [A: no provat amb una clau caducada]. El canvi de clau es fa amb una
-    segona clau (punt 4).
+- Make an offline copy of it (a USB stick in the drawer). If you lose it, nothing more can be signed with it: the
+  key would have to be changed (point 4), and the systems that have only the old one would not receive the new one.
+- `rsa4096`, for signing only, without a subkey and without an expiry date. Why:
+  - EL 9.8's rpm (4.16.1.3-40), gnupg 2.3.3 and dnf 4.14 verify both RSA 4096 and ed25519: tried here on
+    13/11/2026 with two test keys (packages and metadata signed, installed with `dnf`). The assumption that EL 9
+    does not handle ed25519 well does not hold for 9.8.
+  - Even so, RSA 4096: it is what AlmaLinux 9's key (read: `rsa4096`) and the rest of EL use, it works
+    in FIPS mode [A: ed25519 is not approved there in RHEL 9; not tried] and in older rpm.
+  - Without an expiry date: an expired key would leave every system without updates of SilikOS's own packages, and
+    the package that would renew it would not reach them [A: not tried with an expired key]. A change of key is made
+    with a second key (point 4).
 
-**2. Dona-la al workflow, dins d'un environment** (`docs/PLAN.md`, decisió 10). A GitHub: Settings → Environments →
-New environment → `package-signing`. A dins:
+**2. Give it to the workflow, inside an environment** (`docs/PLAN.md`, decision 10). On GitHub: Settings → Environments →
+New environment → `package-signing`. Inside it:
 
-- **Environment secrets** → `SILIKOS_GPG_PRIVATE_KEY`: tot el contingut de `silikos-signing-private.asc` (amb les
-  línies BEGIN i END); `SILIKOS_GPG_PASSPHRASE`: la contrasenya.
-- **Deployment branches and tags** → Selected → només `main`.
-- **Required reviewers** → tu, si vols que cada signatura esperi el teu vistiplau (és el que diu la decisió 10; el
-  preu és que cada CI verd de `main` et demana un clic).
+- **Environment secrets** → `SILIKOS_GPG_PRIVATE_KEY`: the whole content of `silikos-signing-private.asc` (with the
+  BEGIN and END lines); `SILIKOS_GPG_PASSPHRASE`: the passphrase.
+- **Deployment branches and tags** → Selected → only `main`.
+- **Required reviewers** → you, if you want each signature to wait for your approval (it is what decision 10 says;
+  the price is that every green CI of `main` asks you for a click).
 
-Amb `gh`, des del teu PC:
+With `gh`, from your PC:
 ```bash
 gh secret set SILIKOS_GPG_PRIVATE_KEY --env package-signing --repo BTomeu/SilikOs < "$GNUPGHOME/silikos-signing-private.asc"
-gh secret set SILIKOS_GPG_PASSPHRASE --env package-signing --repo BTomeu/SilikOs      # te la demana
+gh secret set SILIKOS_GPG_PASSPHRASE --env package-signing --repo BTomeu/SilikOs      # it asks you for it
 ```
 
-**3. Posa la clau pública al repositori** (només la pública), amb la versió del paquet pujada, i apunta l'empremta
-aquí sota:
+**3. Put the public key in the repository** (the public one only), with the package's version raised, and write
+the fingerprint down here below:
 
 ```bash
 gpg --armor --export FPR > packages/silikos-repos/files/RPM-GPG-KEY-SilikOS
 sed -i 's/^Version: .*/Version:        0.2.0/' packages/silikos-repos/silikos-repos.spec
-python3 -m unittest discover -s tests       # diuen si el fitxer no és una clau pública, o si hi ha res privat a l'arbre
+python3 -m unittest discover -s tests       # they say whether the file is not a public key, or whether anything private is in the tree
 git add -A && git commit -m "The package signing key (public half)" && git push
 ```
 
-Empremta de la clau de SilikOS: *(encara no n'hi ha)*
+Fingerprint of SilikOS's key: *(there is none yet)*
 
-**4. Activa Pages**: Settings → Pages → Build and deployment → Source: **GitHub Actions**. A Settings → Actions →
-General, "Allow actions created by GitHub" ja deixa passar les dues accions de Pages. Si tens una regla de tags, no
-la posis sobre `repo-el9-*` (els crea el workflow).
+**4. Turn Pages on**: Settings → Pages → Build and deployment → Source: **GitHub Actions**. In Settings → Actions →
+General, "Allow actions created by GitHub" already lets the two Pages actions through. If you have a tag rule, do
+not put it on `repo-el9-*` (the workflow creates them).
 
-**5. Engega'l i mira'l**: Actions → Package repository → Run workflow (canal `next`). El resum ha de dir `signed=yes`
-i la teva empremta. Després:
+**5. Start it and look at it**: Actions → Package repository → Run workflow (channel `next`). The summary must say
+`signed=yes` and your fingerprint. Then:
 
 ```bash
 curl -s https://btomeu.github.io/SilikOs/repo/el9/next/STATE
-curl -s https://btomeu.github.io/SilikOs/repo/RPM-GPG-KEY-SilikOS | gpg --show-keys      # la teva empremta
-# en net, un almalinux:9: instal·la un paquet nostre comprovant les dues signatures
+curl -s https://btomeu.github.io/SilikOs/repo/RPM-GPG-KEY-SilikOS | gpg --show-keys      # your fingerprint
+# from clean, an almalinux:9: it installs one of our packages, checking the two signatures
 docker run --rm almalinux:9 bash -c 'cd /tmp && curl -sO https://btomeu.github.io/SilikOs/repo/RPM-GPG-KEY-SilikOS &&
   dnf -y --repofrompath silikos,https://btomeu.github.io/SilikOs/repo/el9/next/x86_64/ --repo silikos \
     --setopt=silikos.gpgcheck=1 --setopt=silikos.repo_gpgcheck=1 \
     --setopt=silikos.gpgkey=file:///tmp/RPM-GPG-KEY-SilikOS install silikos-repos && rpm -qi silikos-repos | grep Signature'
 ```
 
-L'adreça `https://btomeu.github.io/SilikOs/` és una suposició [A] (no s'hi arriba des de la sessió): el job `deploy`
-diu l'adreça real, comprova que respon i avisa si no és la que porta `packages/silikos-repos/files/silikos.repo`.
+The address `https://btomeu.github.io/SilikOs/` is an assumption [A] (it cannot be reached from the session): the
+job `deploy` says the real address, checks that it answers and warns if it is not the one
+`packages/silikos-repos/files/silikos.repo` has.
 
-**El canal stable** s'omple quan fas un tag `v*` (el seu CI verd el publica), o a mà: Run workflow amb canal
-`stable` (pren l'últim CI verd de `main`, o el run que li diguis).
+**The stable channel** fills when you make a `v*` tag (its green CI publishes it), or by hand: Run workflow with
+channel `stable` (it takes the last green CI of `main`, or the run you tell it).
 
-**Un sistema instal·lat abans de la clau** no té ni clau ni canal: no la pot rebre sola. Una vegada, a mà (mira
-el número de versió a la release; després compara l'empremta amb la d'aquest document):
+**A system installed before the key** has neither key nor channel: it cannot receive the key by itself. Once, by
+hand (look at the version number in the release; then compare the fingerprint with the one in this document):
 
 ```bash
 sudo dnf install https://github.com/BTomeu/SilikOs/releases/download/repo-el9-stable/silikos-repos-0.2.0-1.el9.noarch.rpm
@@ -89,104 +90,105 @@ gpg --show-keys /etc/pki/rpm-gpg/RPM-GPG-KEY-SilikOS
 silik update channel stable
 ```
 
-## 2. Com queda
+## 2. How it ends up
 
-- **Dos canals**, cadascun per a `x86_64` i `aarch64` (els paquets `noarch` són als dos): `stable` (el que ha
-  publicat un tag `v*`) i `next` (cada CI verd de `main`). Es queden les tres últimes versions de cada paquet.
-- **Les metadades a GitHub Pages** (`/repo/el9/<canal>/<arquitectura>/repodata/`; 188 kB tot el lloc a la prova, amb
-  16 paquets per arquitectura) i **els paquets a dues
-  releases** (`repo-el9-next`, `repo-el9-stable`); les metadades diuen l'adreça de cada paquet. Per què: un lloc de
-  Pages no pot passar d'1 GB i té un límit tou de 100 GB al mes; els paquets ja pesen més de 750 MB (només els
-  models 3D de KiCad, 376 MB) i falten KiCad i ARM. Una release no té límit de mida total ni de trànsit (2 GiB per
-  fitxer, 1000 fitxers). Llegit el 13/11/2026 a la font de la documentació de GitHub (github/docs). És el que deia
-  la decisió 10 del pla.
-- **Tot signat**: cada paquet (`rpmsign`) i el `repomd.xml` de cada arquitectura (`repomd.xml.asc`). El sistema
-  instal·lat comprova les dues coses sempre (`gpgcheck=1`, `repo_gpgcheck=1`).
-- **El workflow** `.github/workflows/repo.yml`: `packages` (l'únic job que veu la clau; no té cap token que
-  escrigui; mai l'engega un pull request) → `attest` (GitHub signa d'on surt cada fitxer: `docs/SIGNING.md`) →
-  `release` (puja els paquets signats) → `deploy` (la carpeta `site/` a l'arrel de Pages i el repositori a `/repo/`;
-  se salta, sense fallar, mentre Pages no estigui activat) → `prune` (treu les versions velles). A mà fa el mateix
-  `tools/build_pkgrepo.sh`. Els dies 1 i 15 de cada mes torna a publicar les metadades amb una revisió nova, quan hi
-  ha clau.
-- **D'on surt cada paquet**: un paquet d'una eina (KiCad, Wine, OpenOCD...) només entra al repositori si té
-  l'atestació del workflow que l'ha fet (`docs/SIGNING.md`). La primera vegada cal engegar una vegada *EDA tools*,
-  *Dev tools* i *Wine* (Actions → Run workflow): fins llavors el repositori només porta els paquets propis.
-- **Al sistema instal·lat**: el paquet `silikos-repos` porta `/etc/yum.repos.d/silikos.repo` (els dos canals
-  apagats) i, quan n'hi ha, la clau a `/etc/pki/rpm-gpg/RPM-GPG-KEY-SilikOS`. No toca els repositoris de la base ni
-  `/etc/dnf/dnf.conf`, i no té cap script.
-  - `silik update channel` diu quin canal hi ha; `silik update channel stable | next | off` el canvia ensenyant les
-    ordres, i es nega si no hi ha clau.
-  - `silik update` i l'actualització automàtica de cada dia agafen llavors també els paquets propis. Amb
-    `silik update --auto security` no: el repositori no porta avisos de seguretat, i aquell mode només instal·la
-    el que en té.
-  - `silik doctor` diu el canal, o "SilikOS's own packages are not updated: no repository enabled".
-  - Una instal·lació nova amb la clau surt amb `stable` encès (ho fa el kickstart). El repositori del medi
-    d'instal·lació (`/silikos` de la ISO) no es queda al sistema instal·lat.
-  - Si el repositori no respon, `dnf` el deixa de banda i segueix amb la base; si respon amb una signatura dolenta,
-    també el deixa de banda i no n'instal·la res (provat).
+- **Two channels**, each for `x86_64` and `aarch64` (the `noarch` packages are in both): `stable` (what a `v*` tag
+  has published) and `next` (every green CI of `main`). The last three versions of each package are kept.
+- **The metadata on GitHub Pages** (`/repo/el9/<channel>/<architecture>/repodata/`; 188 kB the whole site in the test,
+  with 16 packages per architecture) and **the packages in two
+  releases** (`repo-el9-next`, `repo-el9-stable`); the metadata say the address of each package. Why: a Pages site
+  cannot exceed 1 GB and has a soft limit of 100 GB a month; the packages already weigh more than 750 MB (KiCad's
+  3D models alone, 376 MB) and KiCad and ARM are still missing. A release has no limit of total size or of traffic
+  (2 GiB per file, 1000 files). Read on 13/11/2026 in the source of GitHub's documentation (github/docs). It is what
+  decision 10 of the plan said.
+- **Everything signed**: each package (`rpmsign`) and the `repomd.xml` of each architecture (`repomd.xml.asc`). The
+  installed system always checks both (`gpgcheck=1`, `repo_gpgcheck=1`).
+- **The workflow** `.github/workflows/repo.yml`: `packages` (the only job that sees the key; it has no token that
+  writes; a pull request never starts it) → `attest` (GitHub signs where each file comes from: `docs/SIGNING.md`) →
+  `release` (uploads the signed packages) → `deploy` (the folder `site/` at the root of Pages and the repository at
+  `/repo/`; it is skipped, without failing, while Pages is not turned on) → `prune` (removes the old versions). By
+  hand, `tools/build_pkgrepo.sh` does the same. On days 1 and 15 of each month it publishes the metadata again with
+  a new revision, when there is a key.
+- **Where each package comes from**: a package of a tool (KiCad, Wine, OpenOCD...) enters the repository only if it
+  has the attestation of the workflow that made it (`docs/SIGNING.md`). The first time, *EDA tools*, *Dev tools* and
+  *Wine* have to be started once (Actions → Run workflow): until then the repository carries only SilikOS's own packages.
+- **On the installed system**: the package `silikos-repos` carries `/etc/yum.repos.d/silikos.repo` (the two channels
+  off) and, when there is one, the key at `/etc/pki/rpm-gpg/RPM-GPG-KEY-SilikOS`. It does not touch the base's
+  repositories or `/etc/dnf/dnf.conf`, and it has no script.
+  - `silik update channel` says which channel is on; `silik update channel stable | next | off` changes it, showing
+    the commands, and refuses if there is no key.
+  - `silik update` and the daily automatic update then take SilikOS's own packages too. With
+    `silik update --auto security` they do not: the repository carries no security advisories, and that mode
+    installs only what has one.
+  - `silik doctor` says the channel, or "SilikOS's own packages are not updated: no repository enabled".
+  - A new installation with the key comes out with `stable` on (the kickstart does it). The repository of the
+    installation medium (`/silikos` of the ISO) does not stay on the installed system.
+  - If the repository does not answer, `dnf` leaves it aside and goes on with the base; if it answers with a bad
+    signature, it also leaves it aside and installs nothing from it (tried).
 
-## 3. El que això NO dona
+## 3. What this does NOT give
 
-- **Cap garantia de servei.** GitHub és l'únic punt: si cau, o tanca el compte, no hi ha actualitzacions dels
-  paquets propis (les de la base segueixen). No hi ha miralls ni CDN propi.
-- **Pages no és per fer-hi negoci**: les seves condicions diuen que no és un allotjament gratuït per a un negoci en
-  línia. Un repositori de paquets d'un sistema obert hi cap [A ⚖️]; si SilikOS es ven, mou-lo (a sota).
-- **La clau val el que val el compte de GitHub.** Qui pugui canviar el workflow de `main` o l'environment pot signar
-  el que vulgui: 2FA al compte, i els "Required reviewers". Si no vols la clau a GitHub de cap manera (és el que
-  recomana `docs/SIGNING.md` per al canal `stable`), signa al teu PC amb `tools/sign_release.sh --key FPR` (crida
-  `tools/build_pkgrepo.sh --gpg-name FPR`, verifica el resultat només amb la clau pública i no accepta cap clau de
-  l'entorn) i puja l'arbre tu.
-- **`next` no és una release provada**: és cada build de `main` que ha passat el CI.
-- **Metadades velles**: `dnf` sol no mira si les metadades són les últimes (provat: amb un arbre antic ben signat
-  instal·la el paquet antic). Ara cada `repomd.xml` porta una revisió sota la signatura, i el plugin de `dnf` del
-  paquet `silikos-repos` rebutja les que siguin més velles que les que el sistema ja ha vist, o les de l'altre
-  canal (provat; `docs/SIGNING.md`). El que queda: retenir actualitzacions no es pot impedir, només avisar (als 45
-  dies [PROPOSTA]), i un sistema acabat d'instal·lar no té memòria. No pot fer instal·lar res que tu no hagis signat.
-- Una versió ja publicada no es torna a publicar amb un altre contingut: si canvies un paquet sense pujar-li la
-  versió, el workflow avisa i deixa el publicat.
+- **No guarantee of service.** GitHub is the single point: if it goes down, or closes the account, there are no
+  updates of SilikOS's own packages (the base's go on). There are no mirrors and no CDN of our own.
+- **Pages is not for doing business on**: its terms say that it is not free hosting for an online
+  business. A package repository of an open system fits there [A ⚖️]; if SilikOS is sold, move it (below).
+- **The key is worth what the GitHub account is worth.** Whoever can change the workflow of `main` or the
+  environment can sign whatever they want: 2FA on the account, and the "Required reviewers". If you do not want the
+  key on GitHub at all (it is what `docs/SIGNING.md` recommends for the channel `stable`), sign on your PC with
+  `tools/sign_release.sh --key FPR` (it calls `tools/build_pkgrepo.sh --gpg-name FPR`, verifies the result with the
+  public key alone and accepts no key from the environment) and upload the tree yourself.
+- **`next` is not a tested release**: it is every build of `main` that has passed the CI.
+- **Old metadata**: `dnf` by itself does not look at whether the metadata are the latest (tried: with an old tree,
+  well signed, it installs the old package). Now each `repomd.xml` carries a revision under the signature, and the
+  `dnf` plugin of the package `silikos-repos` rejects the ones that are older than those the system has already
+  seen, or those of the other channel (tried; `docs/SIGNING.md`). What remains: holding updates back cannot be
+  prevented, only warned about (at 45 days [PROPOSAL]), and a newly installed system has no memory. It cannot make
+  a system install anything that you have not signed.
+- A version already published is not published again with other content: if you change a package without raising
+  its version, the workflow warns and leaves the published one.
 
-**Tenir-ne una còpia en un altre lloc** (un servidor web qualsevol; en un EL 9 o un contenidor `almalinux:9` amb
+**Keeping a copy of it somewhere else** (any web server; on an EL 9 or an `almalinux:9` container with
 `rpm-sign createrepo_c dnf-utils`):
 
 ```bash
 gh release download repo-el9-stable --repo BTomeu/SilikOs --pattern '*.rpm' --dir pub
 bash tools/build_pkgrepo.sh --out mirror --channel stable --published pub --gpg-name FPR --keep 0
-rsync -a --delete mirror/ usuari@servidor:/var/www/silikos/repo/
+rsync -a --delete mirror/ user@server:/var/www/silikos/repo/
 ```
 
-Els paquets queden idèntics (ja signats); les metadades es fan i se signen de nou, amb els paquets dins de l'arbre.
-Després, la segona adreça a `baseurl` de `silikos.repo` (una per línia): `dnf` passa a la segona si la primera no
-respon (provat). Un sistema que ja té un canal encès rep el fitxer nou com a `silikos.repo.rpmnew`, i
-`silik update channel stable` el pren.
+The packages stay identical (already signed); the metadata are made and signed again, with the packages inside the
+tree. Then, the second address in `baseurl` of `silikos.repo` (one per line): `dnf` goes to the second if the first
+does not answer (tried). A system that already has a channel on receives the new file as `silikos.repo.rpmnew`, and
+`silik update channel stable` takes it.
 
-**El nom de host** segueix obert (decisió 10): amb un domini teu a Pages (Settings → Pages → Custom domain) i a
-`silikos.repo`, el repositori es pot moure sense tocar cap sistema instal·lat. Decideix-ho abans que hi hagi
-sistemes amb el canal encès.
+**The host name** is still open (decision 10): with a domain of yours on Pages (Settings → Pages → Custom domain)
+and in `silikos.repo`, the repository can be moved without touching any installed system. Decide it before there
+are systems with the channel on.
 
-## 4. Canviar de clau
+## 4. Changing the key
 
-1. Fes la clau nova (punt 1.1) i afegeix-la al fitxer públic, darrere de la vella:
-   `gpg --armor --export FPR_NOVA >> packages/silikos-repos/files/RPM-GPG-KEY-SilikOS`. Puja la versió de
-   `silikos-repos`. Es publica signat amb la vella, i els sistemes el reben.
-2. Espera setmanes, no dies. Cada sistema rep el fitxer amb les dues claus, i el servei de l'actualització diària
-   (`silikos-update.service`) el torna a posar al clauer d'rpm abans de cada execució.
-3. Llavors canvia els dos secrets per la clau nova. Si la privada no és cap de les públiques del fitxer, el
-   workflow s'atura i no publica res.
-4. Quan no quedi cap paquet signat amb la vella als canals, treu-la del fitxer.
+1. Make the new key (point 1.1) and add it to the public file, after the old one:
+   `gpg --armor --export FPR_NEW >> packages/silikos-repos/files/RPM-GPG-KEY-SilikOS`. Raise the version of
+   `silikos-repos`. It is published signed with the old one, and the systems receive it.
+2. Wait weeks, not days. Each system receives the file with the two keys, and the service of the daily update
+   (`silikos-update.service`) puts it into rpm's keyring again before each run.
+3. Then change the two secrets to the new key. If the private key is none of the public ones in the file, the
+   workflow stops and publishes nothing.
+4. When no package signed with the old one is left in the channels, take it out of the file.
 
-Per què el pas 2 és al servei: el `dnf-automatic` d'EL 9.8 no importa cap clau tot sol, i un sol paquet signat amb
-una clau que rpm no coneix li atura tota l'actualització, la de la base inclosa (vist aquí). Amb la línia del
-servei, la mateixa prova acaba bé. `silik update` i `silik update channel stable` també la importen.
+Why step 2 is in the service: EL 9.8's `dnf-automatic` imports no key by itself, and a single package signed with
+a key that rpm does not know stops its whole update, the base's included (seen here). With the service's line, the
+same test ends well. `silik update` and `silik update channel stable` import it too.
 
-Un sistema que hagi estat apagat durant tot el canvi només té la clau vella: no pot verificar les metadades noves,
-`dnf` deixa el repositori de banda (la base segueix) i cal el pas a mà del final del punt 1 [A: deduït de les
-proves de signatura dolenta, no provat tal qual].
+A system that was switched off during the whole change has only the old key: it cannot verify the new metadata,
+`dnf` leaves the repository aside (the base goes on) and it needs the step by hand at the end of point 1 [A:
+deduced from the bad-signature tests, not tried as such].
 
-## 5. Què s'ha executat i què no
+## 5. What ran and what did not
 
-Executat aquí (contenidor AlmaLinux 9.8, claus de prova fetes dins del contenidor i esborrades): signar, `dnf`
-instal·lant des de l'arbre, un byte canviat a un paquet o a les metadades rebutjat, el repositori repartit entre dos
-servidors amb una redirecció (com Pages i les releases), `silik update channel`, l'actualització automàtica, el
-canvi de clau, el mirall, i els passos del workflow que no necessiten GitHub. **No executat**: el workflow a GitHub
-(l'artefacte del CI, pujar a les releases, Pages, l'environment), l'adreça real de Pages, res en un sistema
-instal·lat de veritat ni en un `aarch64` de veritat. `docs/STATUS.md` té les files.
+Ran here (an AlmaLinux 9.8 container, test keys made inside the container and deleted): signing, `dnf`
+installing from the tree, a byte changed in a package or in the metadata rejected, the repository split between two
+servers with a redirection (as Pages and the releases are), `silik update channel`, the automatic update, the
+change of key, the mirror, and the steps of the workflow that do not need GitHub. **Not run**: the workflow on GitHub
+(the CI's artifact, uploading to the releases, Pages, the environment), the real address of Pages, anything on a
+really installed system or on a real `aarch64`. `docs/STATUS.md` has the rows.

@@ -109,7 +109,7 @@ rig on 13/11/2026, software rendering, not real hardware).
 | `avahi-daemon.service` | enabled by preset in the base, ran from the start (mDNS: `.local` names, printers that announce themselves). With the firewall zone `silikos` unsolicited multicast answers are dropped (`docs/SECURITY.md`), so discovery was already limited | **decided, as a security default (13/11/2026): off on a new installation**, with its socket (the kickstart; `silik secure apply` on a running system). It no longer announces the machine's name on every network. The way back: `silik listen on mdns` |
 | `rsyslog.service` | enabled by preset; writes `/var/log/messages` beside the journal; it is what orders the end of the start after the network | off would save a daemon and a second copy of the log; tools and people that read `/var/log/messages` would find it stale |
 | `org.gnome.Evolution-alarm-notify.desktop` | starts with every session (evolution-data-server 3.40.4), for reminders of calendars of online accounts | off would end those reminders silently for someone who adds a calendar |
-| `dracut-config-rescue` | in the set: a second, generic initramfs in `/boot` for the rescue entry (`51-dracut-rescue.install`); `silik bench system` gives the size of the initramfs images | size only, not speed: with the numbers of `docs/NUMEROS.md` |
+| `dracut-config-rescue` | in the set: a second, generic initramfs in `/boot` for the rescue entry (`51-dracut-rescue.install`); `silik bench system` gives the size of the initramfs images | size only, not speed: with the numbers of `docs/NUMBERS.md` |
 
 ## The start: kernel command line and initramfs
 
@@ -164,7 +164,7 @@ session came up: GNOME Shell's own unit takes 1.74 s with SilikOS's extension an
 half second is the X11 session outside the shell. The third run (43560434143, 14/11/2026, with round 7's session
 changes): 160 to 175 MB less memory, the desktop 0.08 to 0.71 s later (the base's own two starts differ by 0.41 s),
 the shell's unit 1.39-1.45 s against 1.43-1.49 s stock. What the rig gained (30-90 ms) cannot be told from this
-measure's noise. The tables and what they do not show: `docs/NUMEROS.md` §9.
+measure's noise. The tables and what they do not show: `docs/NUMBERS.md` §9.
 
 What these measures are not: a virtual machine has no firmware or boot-loader time, a virtual disk, software
 rendering and 4 GB of memory; a runner is a shared machine. They compare two states of one system on one machine in

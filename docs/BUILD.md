@@ -5,7 +5,7 @@
 | Packages + repository | `bash tools/build_rpms.sh` (and their source packages in `build/srpm/`) | `rpmbuild`, `createrepo_c` (any Linux; nothing is compiled) |
 | Tests | `python3 -m unittest discover -s tests` | Python >= 3.9 |
 | Dependency names | `bash tools/check_deps.sh` | an EL9 system with its repositories and EPEL |
-| The weight (packages, download, installed size; nothing is installed) | `bash tools/weigh.sh [--json] [--plan] [--leave-out A,B]`; other systems: `bash tools/weigh_others.sh`; the day's numbers: `docs/NUMEROS.md` | docker or podman, `python3`, the network |
+| The weight (packages, download, installed size; nothing is installed) | `bash tools/weigh.sh [--json] [--plan] [--leave-out A,B]`; other systems: `bash tools/weigh_others.sh`; the day's numbers: `docs/NUMBERS.md` | docker or podman, `python3`, the network |
 | Installer ISO | `bash tools/build_iso.sh [AlmaLinux-9-…-boot.iso]` (the base ISO is checked first: its sha256 against AlmaLinux's signed `CHECKSUM`) | `xorriso`, `mtools`, `cpio`, `curl`, `gpg`, `implantisomd5` (isomd5sum), repo.almalinux.org |
 | Installer ISO for ARM | `SILIK_ARCH=aarch64 bash tools/build_iso.sh` (AlmaLinux's aarch64 boot ISO: UEFI only) | the same |
 | The SilikOS 10 lab ISO (EL 10; not the product: `docs/EL10.md`, section 9) | inside EL 10: `el10/box.sh -- bash -c 'dnf -y -q install rpm-build createrepo_c cpio && bash el10/build_rpms.sh'`; then `bash el10/build_iso.sh [AlmaLinux-10-…-boot.iso]` (the base ISO is checked first, against AlmaLinux OS 10's signed `CHECKSUM`); the result: `build/el10/SilikOS-10.N-lab-x86_64-netinstall.iso`. Its test in a virtual machine: `bash el10/lab/run.sh ISO`; the workflow `EL 10 lab` does all of it on the branch `el10-lab` | docker; `xorriso` (1.5.4 or later), `mtools`, `cpio`, `curl`, `gpg`, `implantisomd5`, repo.almalinux.org; for the test: `qemu-system-x86_64` and KVM |
@@ -28,7 +28,7 @@ repositories, so the machine needs a network (cable or a phone's USB tether if t
 With the ISO (write it to a USB stick): language, keyboard and time zone, then **Installation Destination** (choose the
 disk and how to use it: nothing is preselected or erased), **User Creation**, Begin Installation. A cable or a phone's
 USB tether connects by itself; with Wi-Fi only, join the network in **Network & Host Name** and then open
-**Installation Source** once more. About 1530 packages (2.5 GB) are downloaded (resolved on 13/11/2026: `docs/NUMEROS.md`).
+**Installation Source** once more. About 1530 packages (2.5 GB) are downloaded (resolved on 13/11/2026: `docs/NUMBERS.md`).
 
 Without the ISO, on an installed AlmaLinux / Rocky / RHEL 9 Workstation:
 

@@ -199,7 +199,7 @@ EL 9 the installer or the IDE says so, and that is the next thing to fix.
 
 **Before a vendor's installer is run**, `silik vendor check stm32cubeide` (or `jlink`, `ccs`, `mcuxpresso`, `zephyr`,
 `esp-idf`, `yocto`, `peak`, `kvaser`, `visa-open`...) says what the vendor's page names for that tool and what this
-system lacks of it, with the command for each; `silik vendor prepare TOOL` runs those (`docs/INDUSTRIA.md`: what was
+system lacks of it, with the command for each; `silik vendor prepare TOOL` runs those (`docs/INDUSTRY.md`: what was
 read, how, and that none was tried with the installer). `silik vendor lib libtinfo.so.5` names the EL 9 package of a
 library an installer or a tool says it cannot load.
 

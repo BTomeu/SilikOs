@@ -73,7 +73,7 @@ instal·lat i deixa que es revisi ell mateix; l'informe i les imatges són a la 
 [`ci-results`](../../tree/ci-results). L'última execució completa quan es va escriure això és la 43464588417 del
 13/11/2026 (commit f14e5cd): 121 comprovacions correctes, cap de fallada, 15 GB de disc; el sistema instal·lat hi va
 arrencar en 11,3 a 12,0 s (9,3 s a l'execució anterior: depèn del runner) amb uns 985 MB en ús (una màquina virtual:
-`docs/NUMEROS.md`) i va tornar enrere d'una actualització
+`docs/NUMBERS.md`) i va tornar enrere d'una actualització
 en un disc LVM real (`docs/ROLLBACK.md`). Al costat de l'AlmaLinux 9 Workstation de sèrie en una mateixa màquina virtual (workflow
 Compare, execució 43446488850) va fer servir de 151 a 166 MB menys de memòria i va arribar a l'escriptori de 0,65 a
 0,85 s més tard: la seva sessió és X11, per les eines EDA, i la de la base és Wayland. No arrenca més ràpid que la
@@ -91,7 +91,7 @@ iniciada):
 - **La ISO de xarxa (2 GB; la instal·lació en baixa 2,5 GB més)**: el mateix a **CI**, artefacte `silikos-iso`.
 
 Escriu la `.iso` en un llapis USB tal com és, byte a byte (balenaEtcher; Rufus en mode «DD Image»; `dd`), i arrenca
-l'ordinador des del llapis. [`docs/PRIMERA-HORA.md`](docs/PRIMERA-HORA.md) té tots els passos, també per a un sistema
+l'ordinador des del llapis. [`docs/FIRST-HOUR.md`](docs/FIRST-HOUR.md) té tots els passos, també per a un sistema
 en un disc extern que deixa en pau el disc de l'ordinador. Res s'ha executat encara en un ordinador de veritat:
 `docs/STATUS.md`.
 
@@ -103,11 +103,12 @@ python3 -m unittest discover -s tests
 bash tools/build_iso.sh           # la ISO d'instal·lació per xarxa (necessita repo.almalinux.org)
 ```
 
-[`docs/BUILD.md`](docs/BUILD.md) té els passos i què necessita cadascun. [`docs/PRIMERA-HORA.md`](docs/PRIMERA-HORA.md) és la
+[`docs/BUILD.md`](docs/BUILD.md) té els passos i què necessita cadascun. [`docs/FIRST-HOUR.md`](docs/FIRST-HOUR.md) és la
 primera hora amb una placa, una sonda i un adaptador CAN. També: `docs/PLAN.md` (decisions i fases),
 `docs/HARDWARE.md` (Ryzen 7 5800HS + RTX 3050, Snapdragon X, SilikOS a ARM / aarch64), `docs/DRIVERS.md` (per a quin maquinari
 té controlador el nucli de la base; `silik hw check`), `docs/EDA.md`, `docs/DEV.md`,
-`docs/WINDOWS.md`, `docs/POWER.md`, `docs/CONCEPTE.md` (la idea des de zero). `site/` és un lloc estàtic amb el
+`docs/WINDOWS.md`, `docs/POWER.md`, `docs/CONCEPT.md` (la idea des de zero, en anglès), `docs/OVERVIEW.md`
+(la mida que té, què fa bé, què té de propi, a qui li serveix). `site/` és un lloc estàtic amb el
 mateix contingut (`tools/gen_site.py`; encara no està desplegat).
 
 ## Llicència, marca, seguretat
