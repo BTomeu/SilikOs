@@ -1,5 +1,5 @@
 Name:           silikos-repos
-Version:        0.2.1
+Version:        0.2.2
 Release:        1%{?dist}
 Summary:        SilikOS's own package repository: two channels, off until chosen, its signing key and its replay check
 License:        LicenseRef-SilikVolt

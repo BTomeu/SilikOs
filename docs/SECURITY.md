@@ -418,6 +418,28 @@ not reached and old metadata are still said by the two commands only. `docs/SIGN
 and in the package repository's workflow (2 without an attestation left out). The offline ISO's gate ran as well
 (run 43560436638); the tag check has not run.
 
+## The third pass, 14/11/2026: attackers who did not know the system
+
+The owner: "go on with attacks as if you did not know the system: it is good to make it fail". Four reviewers who
+had seen none of the code or of this document started from what an attacker has (the installed packages, a shell as
+a normal user, the public repository) and had to run every claim. What they proved, and what was done:
+
+| | What was run | Severity | State |
+|---|---|---|---|
+| T1 | **SilikOS's channel could replace a package of the base.** A `tar` with epoch 99 put in a channel was taken by dnf as the upgrade of the base's tar; a package with a name of SilikOS's and `Obsoletes:` removed a base package, and passed every check of the signer (it looked at the file's name only). Nothing but "we only put our own packages there" stood between a build of `main` (or one stray `Obsoletes:` in a spec) and the base of every machine | medium (needs the signer or `main`; then every machine) | **closed, three guards, each run with real rpm and dnf** (`tools/build_pkgrepo.sh`, silikos-repos 0.2.2): the channels' repository file takes only SilikOS's own names (`includepkgs`: each tool by its name and `NAME-*`, never `NAME*`: `magic*` was also EPEL's `magicmirror`); the dnf plugin leaves out, per package, one that is called otherwise, obsoletes anything or provides another package's name; the signer leaves the same out, never signed, and takes a published one out of the channel. With a signer that was fooled (the script as it was), the shipped client is offered the harmless package alone; with the plugin alone, or the list alone for the name, the same |
+| T2 | **A pipe in the place of the status bar's message file left the session black at its start**, at every login until somebody removed it from a console: the shell read `$XDG_RUNTIME_DIR/silik-last`, which any program of the user can replace, with a call that waits for ever on a pipe. 30 MB written there again and again held the shell at a whole processor (16 s to answer) | high for the pipe (the desktop is gone, and nothing says why), medium for the flood | **closed** (silikos-desktop 0.18.2): only a regular file is opened (asked without following a link), only its first 1024 bytes are read, away from the shell's own thread, one reading at a time. Run in the rig's GNOME Shell 40: with the pipe in place the session starts and answers in 0.03 s; the flood costs the shell 0.77 s of processor in 20 s; a link to another file, a NUL or bytes that are no text show nothing |
+| T3 | The message line of the status bar says whatever a program of the user wrote into that file: a sentence that reads as the system speaking | medium (a place to phish from; no privilege) | **as designed, now said**: that line is the user's programs' line (the last command `silik` ran), not the system's word. The update and power fields are read from root's files and cannot be forged by a user (run: the reviewer could not). Nothing typed there is run |
+| T4 | A `.desktop` file in the user's own applications folder can carry the name of a system entry; Start shows the name, the COMMAND bar shows the real command line before Enter (run: the line shown is the line executed) | low (any desktop) | not changed |
+
+What held, each tried for real: no way from a normal user's program or from another user to root, to the owner's
+session, or to a forged `ok` (the isolated interpreter of `silik`, sudo's clean environment, the plugin loader's
+ownership check, names and arguments never through a shell, the notes of root not a user's to write); the
+provenance gate and the release check fail closed with a stand-in `gh` (no answer is never "vouched"; a changed
+byte, an extra file, a path with `..` are refused); no text of a pull request, a branch or a commit reaches a
+workflow's shell; every download of the builds is held to a commit, a sha256 or a signature. Not run by them: an
+installed system (no KVM where they worked), Sigstore itself, the desktop packages for the local attacker (disk).
+`main` and the tags are still unprotected on GitHub: the owner's step, which T1's guards do not replace.
+
 ## What SilikOS does not do
 
 No antivirus, no FIPS mode or CIS / STIG profile, no encryption of a disk in use, no confinement of the

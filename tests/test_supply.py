@@ -38,6 +38,7 @@ def load(name, rel):
 
 plug = load("silikos_repo", "packages/silikos-repos/files/silikos_repo.py")
 cache_check = load("cache_check", "tools/cache_check.py")
+mirror = load("silik_mirror_plugin", "packages/silik-tools/files/plugins/mirror.py")
 STATE = plug.STATE                     # (the tests of the plugin put a file of their own in its place)
 DAY = 86400
 NOW = 1794600000                       # 13/11/2026
@@ -184,6 +185,81 @@ class Notes(unittest.TestCase):
         self.assertEqual(state["silikos"]["said"]["verdict"], "warn")
 
 
+class NeverTheBase(unittest.TestCase):
+    """SilikOS's repository adds packages and never replaces one of the base (the owner's rule). The third pass of
+    14/11/2026 ran it: a `tar-99:999` in a channel was taken as the upgrade of the base's tar, and a package with a
+    name of SilikOS's and `Obsoletes: sudo` passed every check of the signer. Three guards now, each alone enough for
+    its case: the includepkgs of silikos.repo (dnf's own), the plugin (per package), the signer (build_pkgrepo.sh)"""
+
+    def test_one_list_in_three_places(self):
+        repo = text("packages/silikos-repos/files/silikos.repo")
+        lines = re.findall(r"(?m)^includepkgs=(.*)$", repo)
+        self.assertEqual(len(lines), 2)                                     # (both channels)
+        self.assertEqual(lines[0], lines[1])
+        self.assertEqual(tuple(lines[0].split()), plug.OWN_NAMES)
+        self.assertEqual(plug.OWN_NAMES, mirror.OWN_INCLUDE)
+        self.assertEqual(len(re.findall(r"(?m)^\[", repo)), 2)
+
+    def test_the_list_names_nothing_of_the_base_and_no_open_ended_name(self):
+        import fnmatch
+        for base in ("glibc", "tzdata", "bash", "sudo", "kernel", "kernel-core", "openssl", "systemd", "dnf", "rpm", "polkit", "selinux-policy",
+                     "python3", "tar", "magicmirror", "magicmirror-rpm-macros", "libserialport", "nvcli", "sigrokdecode", "kicadx", "silik", "silikos"):
+            self.assertFalse([g for g in plug.OWN_NAMES if fnmatch.fnmatchcase(base, g)], base)
+        for g in plug.OWN_NAMES:        # a name, or NAME-*: never NAME* (magic* was also EPEL's magicmirror)
+            self.assertRegex(g, r"^[a-z0-9][a-z0-9-]*(-\*)?$", g)
+        for own in ("silik-tools", "silikos-desktop", "silikstudio", "ngspice", "kicad-footprints", "opencascade-devel", "sigrok-firmware-fx2lafw",
+                    "silik-wine-mono", "qucs-s", "dfu-util"):
+            self.assertTrue(plug.ours(own), own)
+
+    def test_what_makes_a_package_foreign(self):
+        f = plug.foreign
+        self.assertIsNone(f("silik-tools", [], ["silik-tools = 0.10.2-1.el9", "config(silik-tools) = 0.10.2-1.el9"]))
+        self.assertIsNone(f("ngspice", [], ["ngspice = 47-2", "ngspice(x86-64) = 47-2", "libngspice.so.0()(64bit)", "pkgconfig(ngspice) = 47",
+                                            "application()", "/usr/bin/ngspice", "bundled(x)"]))
+        self.assertEqual(f("tar", [], ["tar = 99:999-1"]), "is not one of SilikOS's names")
+        self.assertEqual(f("glibc", [], []), "is not one of SilikOS's names")
+        self.assertEqual(f("silik-extras", ["sudo < 100"], ["silik-extras = 1-1"]), "obsoletes another package (sudo < 100)")
+        self.assertEqual(f("silik-extras", [], ["silik-extras = 1-1", "sudo = 100"]), "provides the name of a package that is not SilikOS's (sudo)")
+        self.assertEqual(f("silik-extras", [], ["glibc"]), "provides the name of a package that is not SilikOS's (glibc)")
+        self.assertEqual(f("silik-tools", ["silik-old < 2"], []), "obsoletes another package (silik-old < 2)")     # (none at all: nothing of ours needs one)
+
+    def test_the_plugin_leaves_such_a_package_out_and_keeps_the_rest(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        pkgs = [FakePkg("silik-tools"), FakePkg("tar"), FakePkg("silik-extras", obsoletes=["sudo < 100"]), FakePkg("ngspice"),
+                FakePkg("silik-hook", provides=["silik-hook = 1-1", "systemd = 999"])]
+        base = FakeBase([FakeRepo("silikos", "100", ("silikos-channel=stable",), pkgs=pkgs), FakeRepo("baseos", "", pkgs=[FakePkg("tar"), FakePkg("glibc")])])
+        with mock.patch.object(plug, "STATE", os.path.join(d, "s")), mock.patch.object(plug.time, "time", return_value=NOW), \
+                mock.patch.object(plug.os, "geteuid", return_value=0), self.assertLogs("dnf", level="ERROR") as log:
+            plug.SilikosRepo(base, None).sack()
+        self.assertEqual(base.excluded, [])                                  # (the channel itself is good and stays)
+        self.assertEqual(base.left_out, ["tar", "silik-extras", "silik-hook"])
+        said = "\n".join(log.output)
+        self.assertIn("LEFT OUT tar-1-1.x86_64 of silikos: it is not one of SilikOS's names", said)
+        self.assertIn("LEFT OUT silik-extras-1-1.x86_64 of silikos: it obsoletes another package (sudo < 100)", said)
+        self.assertIn("it provides the name of a package that is not SilikOS's (systemd)", said)
+        self.assertIn("SilikOS's repository never replaces a package of the base", said)
+
+    def test_a_package_that_cannot_be_judged_leaves_and_the_bases_repositories_are_not_touched(self):
+        class Broken(FakePkg):
+            @property
+            def obsoletes(self):
+                raise RuntimeError("no such attribute here")
+
+            @obsoletes.setter
+            def obsoletes(self, v):
+                pass
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        base = FakeBase([FakeRepo("silikos-next", "100", ("silikos-channel=next",), pkgs=[Broken("silik-tools"), FakePkg("xschem")]),
+                         FakeRepo("appstream", "", pkgs=[FakePkg("tar", obsoletes=["oldtar < 1"])])])
+        with mock.patch.object(plug, "STATE", os.path.join(d, "s")), mock.patch.object(plug.time, "time", return_value=NOW), \
+                mock.patch.object(plug.os, "geteuid", return_value=0), self.assertLogs("dnf", level="ERROR") as log:
+            plug.SilikosRepo(base, None).sack()
+        self.assertEqual((base.excluded, base.left_out), ([], ["silik-tools"]))
+        self.assertIn("could not be judged (RuntimeError)", "\n".join(log.output))
+
+
 class StatusBar(unittest.TestCase):
     """the desktop's status bar says a refusal too (the update field: "update repository refused"): the shell
     extension reads the plugin's notes. Its function is run here by a JavaScript engine on what the plugin writes"""
@@ -240,11 +316,23 @@ class StatusBar(unittest.TestCase):
 
 
 # ---------------------------------------------------------------- the plugin against a made-up dnf
+class FakePkg:
+    """a package of a repository as the plugin reads it (hawkey's Package: name, obsoletes, provides)"""
+
+    def __init__(self, name, obsoletes=(), provides=None):
+        self.name, self.obsoletes = name, list(obsoletes)
+        self.provides = list(provides) if provides is not None else ["%s = 1-1" % name, "%s(x86-64) = 1-1" % name]
+
+    def __repr__(self):
+        return "%s-1-1.x86_64" % self.name
+
+
 class FakeRepo:
-    def __init__(self, rid, revision, tags=(), repo_gpgcheck=True, age=0, loaded=True, held=None):
+    def __init__(self, rid, revision, tags=(), repo_gpgcheck=True, age=0, loaded=True, held=None, pkgs=None):
         self.id, self.repo_gpgcheck, self._repo = rid, repo_gpgcheck, self
         self.revision, self.tags, self.age, self.loaded = revision, tags, age, loaded
         self.held = loaded if held is None else held       # dnf holds packages of it (a repository that loaded)
+        self.pkgs = [FakePkg("silik-tools"), FakePkg("ngspice")] if pkgs is None else list(pkgs)
 
     def getRevision(self):
         if not self.loaded:
@@ -269,7 +357,8 @@ class FakeBase:
         self._repos = repos
         self.sack = self
         self.conf = FakeConf(arch) if arch else None
-        self.excluded = []
+        self.excluded = []                  # repositories taken out whole
+        self.left_out = []                  # packages taken out one by one
 
     def iter_enabled(self):
         return iter(self._repos)
@@ -277,12 +366,18 @@ class FakeBase:
     def query(self):
         return self
 
-    def filterm(self, reponame):
+    def filterm(self, reponame=None, pkg=None):
+        if pkg is not None:                 # (the packages the plugin takes out one by one: _own_only)
+            self._q = ("pkgs", [p.name for p in pkg])
+            return list(pkg)
         self._q = reponame
-        return ["pkg-a", "pkg-b"] if any(r.id == reponame and r.held for r in self._repos) else []
+        return [p for r in self._repos if r.id == reponame and r.held for p in r.pkgs]
 
     def add_excludes(self, q):
-        self.excluded.append(self._q)
+        if isinstance(self._q, tuple):
+            self.left_out += self._q[1]
+        else:
+            self.excluded.append(self._q)
 
 
 class Plugin(unittest.TestCase):
@@ -443,7 +538,7 @@ class Plugin(unittest.TestCase):
         for word in ("subprocess", "urllib", "socket", "os.system", "eval(", "exec(", "import xml", "xml.etree", "open(self"):
             self.assertNotIn(word, s, word)
         imports = sorted(set(re.findall(r"(?m)^(?:    )?import ([a-z.]+)", s)))
-        self.assertEqual(imports, ["dnf", "json", "logging", "os", "time"])
+        self.assertEqual(imports, ["dnf", "fnmatch", "json", "logging", "os", "time"])
         spec = text("packages/silikos-repos/silikos-repos.spec")
         self.assertIn("%{_prefix}/lib/python3.9/site-packages/dnf-plugins", spec)
         self.assertIn("%{buildroot}$plug/silikos_repo.py", spec)
@@ -1203,6 +1298,58 @@ class Vouched(unittest.TestCase):
             self.assertIn("::error title=release::this tag is on %s, which is not a commit of main: no release, no attestation" % sha, out)
         with open(self.log) as f:
             self.assertIn("api repos/o/r/compare/%s...main -q .behind_by" % on, f.read())
+
+
+class NotOurs(test_repo.Build):
+    """(the third pass) the signer never signs a package that would replace one of the base: a name that is not
+    SilikOS's, an Obsoletes, a Provides of another package's name"""
+
+    def test_such_a_package_is_left_out_and_said_and_the_rest_is_published(self):
+        test_repo.pubkey(self.key, test_repo.KEY_A)
+        test_repo.rpm(self.inn, "tar-999-1.el9.x86_64.rpm")
+        test_repo.rpm(self.inn, "silik-extras-1-1.el9.noarch.rpm", obsoletes="sudo < 100", provides="silik-extras = 1-1,sudo = 100")
+        test_repo.rpm(self.inn, "silik-hook-1-1.el9.noarch.rpm", provides="silik-hook = 1-1,systemd = 999")
+        test_repo.rpm(self.inn, "magicmirror-1-1.el9.noarch.rpm")
+        test_repo.rpm(self.inn, "kicad-10.0.8-1.silik.el9.x86_64.rpm", provides="kicad = 10.0.8-1.silik.el9,kicad(x86-64) = 10.0.8-1.silik.el9,"
+                      "libkicad_3dsg.so.10.0.8()(64bit),application(org.kicad.kicad.desktop),/usr/bin/kicad")
+        rc, out, err = self.build("--pool", self.pool, "--baseurl", "https://x/y", key=test_repo.KEY_A)
+        self.assertEqual(rc, 0, err)
+        self.assertIn("tar-999-1.el9.x86_64.rpm is called tar, which is not one of SilikOS's names: it is left out, never signed", err)
+        self.assertIn("silik-extras-1-1.el9.noarch.rpm obsoletes another package (sudo < 100): it is left out, never signed", err)
+        self.assertIn("silik-hook-1-1.el9.noarch.rpm provides the name of a package that is not SilikOS's (systemd): it is left out", err)
+        self.assertIn("magicmirror-1-1.el9.noarch.rpm is called magicmirror, which is not one of SilikOS's names", err)
+        self.assertIn("4 that are not SilikOS's to bring left out", out)
+        pool = sorted(f for f in os.listdir(self.pool) if f.endswith(".rpm"))
+        self.assertEqual(pool, ["kicad-10.0.8-1.silik.el9.x86_64.rpm", "ngspice-47-1.silik.el9.x86_64.rpm", "ngspice-47-2.silik.el9.aarch64.rpm",
+                                "silik-tools-0.6.14-1.el9.noarch.rpm", "silik-tools-0.6.14-1.el9.src.rpm"])
+        for f in pool:                                                      # (what is published is signed; what was left out never was)
+            with open(os.path.join(self.pool, f)) as fh:
+                self.assertIn("sig=" + test_repo.KEY_A, fh.read(), f)
+        for f in ("tar-999-1.el9.x86_64.rpm", "silik-extras-1-1.el9.noarch.rpm"):
+            with open(os.path.join(self.inn, f)) as fh:
+                self.assertIn("sig=\n", fh.read(), f)
+
+    def test_one_already_published_leaves_the_channel_even_signed(self):
+        test_repo.pubkey(self.key, test_repo.KEY_A)
+        pub = os.path.join(self.d, "pub")
+        test_repo.rpm(pub, "silik-tools-0.6.13-1.el9.noarch.rpm", sig=test_repo.KEY_A)
+        test_repo.rpm(pub, "glibc-9.99-1.el9.x86_64.rpm", sig=test_repo.KEY_A)          # (signed by the key: a signer that was fooled once)
+        test_repo.rpm(pub, "silik-extras-1-1.el9.noarch.rpm", sig=test_repo.KEY_A, obsoletes="sudo < 100")
+        un = os.path.join(self.d, "unvouched")
+        write(un, "")
+        rc, out, err = self.build("--published", pub, "--unvouched", un, "--pool", self.pool, "--baseurl", "https://x/y", key=test_repo.KEY_A)
+        self.assertEqual(rc, 0, err)
+        self.assertIn("glibc-9.99-1.el9.x86_64.rpm is published and is called glibc, which is not one of SilikOS's names: it leaves the channel", err)
+        self.assertIn("silik-extras-1-1.el9.noarch.rpm is published and obsoletes another package (sudo < 100): it leaves the channel", err)
+        self.assertIn("2 that are not SilikOS's to bring left out", out)
+        with open(os.path.join(self.pool, "DELETE")) as f:
+            self.assertEqual(sorted(f.read().split()), ["glibc-9.99-1.el9.x86_64.rpm", "silik-extras-1-1.el9.noarch.rpm"])
+        self.assertNotIn("glibc-9.99-1.el9.x86_64.rpm", os.listdir(self.pool))
+
+    def test_the_signer_reads_the_list_an_installed_system_has(self):
+        sh = text("tools/build_pkgrepo.sh")
+        self.assertIn("""allowed=$(sed -n 's/^includepkgs=//p' "$root/packages/silikos-repos/files/silikos.repo" | sort -u)""", sh)
+        self.assertIn("must have one includepkgs list, the same in both channels", sh)
 
 
 class Names(test_repo.Build):

@@ -34,6 +34,7 @@
 # `dnf --disableplugin=silikos-repo` is the explicit word that turns it off for one run.
 #
 # The judgement is judge(), a function of plain values, so that the tests run it without dnf.
+import fnmatch
 import json
 import logging
 import os
@@ -48,6 +49,16 @@ except ImportError:                 # (the tests, on a machine without dnf)
 
 STATE = "/var/lib/silikos/repo-revision"
 OWN = {"silikos": "stable", "silikos-next": "next"}       # repository id (packages/silikos-repos/files/silikos.repo): channel
+# The names a SilikOS channel may carry (the includepkgs of silikos.repo and the mirror's OWN_INCLUDE: the tests hold
+# the three together). A package of a channel that is called otherwise, that obsoletes another package, or that
+# provides the name of a package that is not SilikOS's is left out of the run: the channel adds, it never replaces
+# the base (owner's rule; the third pass of 14/11/2026 upgraded the base's tar from a channel and removed a package
+# through an Obsoletes of a package with a name of SilikOS's).
+OWN_NAMES = ("silik-*", "silikos-*", "silikstudio", "silikstudio-*", "ngspice", "ngspice-*", "magic", "magic-*",
+             "netgen", "netgen-*", "xschem", "xschem-*", "klayout", "klayout-*", "yosys", "yosys-*",
+             "nvc", "nvc-*", "qucs-s", "qucs-s-*", "devsim", "devsim-*", "kicad", "kicad-*",
+             "opencascade", "opencascade-*", "nng", "nng-*", "openocd", "openocd-*", "dfu-util", "dfu-util-*",
+             "stm32flash", "stm32flash-*", "savvycan", "savvycan-*", "sigrok", "sigrok-*", "sdcc", "sdcc-*")
 CHANNEL_TAG = "silikos-channel="
 ARCH_TAG = "silikos-arch="
 WARN_DAYS = 45              # [PROPOSAL] the metadata are published again twice a month: three missed, said
@@ -124,6 +135,25 @@ def judge(rid, revision, tags, signed, mark, now, age=0, warn_days=WARN_DAYS, ba
         return ("warn", "stale", "%s: the newest metadata this mirror gives are of %s, %d days ago: updates may be "
                 "held back" % (rid, when(rev), (now - rev) // DAY), rev)
     return ("ok", "", "", max(rev, mark))
+
+
+def ours(name, allowed=OWN_NAMES):
+    return any(fnmatch.fnmatchcase(name, g) for g in allowed)
+
+
+def foreign(name, obsoletes, provides, allowed=OWN_NAMES):
+    """why a package of a SilikOS channel is not taken, or None. NAME: the package's; OBSOLETES, PROVIDES: its
+    capabilities as text ("sudo < 100", "libx.so.1()(64bit)", "kicad = 10.0"). A capability with a parenthesis or a
+    path is not a package's name (a library, a file, pkgconfig(x), config(x)); one without is"""
+    if not ours(name, allowed):
+        return "is not one of SilikOS's names"
+    for o in obsoletes:
+        return "obsoletes another package (%s)" % str(o)[:80]
+    for p in provides:
+        cap = str(p).split(" ", 1)[0]
+        if cap and "(" not in cap and not cap.startswith("/") and not ours(cap, allowed):
+            return "provides the name of a package that is not SilikOS's (%s)" % cap[:80]
+    return None
 
 
 def read_state(path=None):
@@ -248,6 +278,26 @@ class SilikosRepo(_Plugin):
                      "the other repositories go on.", text, n)
         return n
 
+    def _own_only(self, rid):
+        """the packages of the channel RID that are not SilikOS's to bring leave this run -> how many. A package that
+        cannot be judged leaves too"""
+        bad = []
+        for pkg in self.base.sack.query().filterm(reponame=rid):
+            try:
+                why = foreign(pkg.name, list(pkg.obsoletes), list(pkg.provides))
+            except Exception as e:
+                why = "could not be judged (%s)" % type(e).__name__
+            if why:
+                bad.append(pkg)
+                if len(bad) <= 5:
+                    logger.error("silikos-repo: LEFT OUT %s of %s: it %s. SilikOS's repository never replaces a package of the base.",
+                                 pkg, rid, why)
+        if bad:
+            self.base.sack.add_excludes(self.base.sack.query().filterm(pkg=bad))
+            if len(bad) > 5:
+                logger.error("silikos-repo: and %d more packages of %s left out for the same reasons.", len(bad) - 5, rid)
+        return len(bad)
+
     def _one(self, repo, state, now, arch):
         """one repository judged -> its notes changed"""
         rid = repo.id
@@ -271,6 +321,8 @@ class SilikosRepo(_Plugin):
             self._refuse(rid, text)
         elif verdict == "warn":
             logger.warning("silikos-repo: %s.", text)
+        if verdict != "refuse" and rid in OWN:
+            self._own_only(rid)
         return note(state, rid, verdict, why, text, new, revision, now, now - max(0, age))
 
     def _check(self):

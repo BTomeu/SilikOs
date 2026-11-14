@@ -126,6 +126,52 @@ function readText(path) {
     } catch (e) { return ''; }
 }
 
+/* The message file ($XDG_RUNTIME_DIR/silik-last) is the user's own: any program of theirs can put anything in its
+   place. The third pass of 14/11/2026 did: a pipe that nobody writes to left the session black at its start (the
+   shell waited on it for ever), and 30 MB written again and again held the shell at a whole processor. So it is
+   never read as the other files are: only a regular file (asked without following a link and without opening it),
+   only its first LAST_MAX bytes, away from the shell's own thread, one reading at a time. The status bar shows the
+   first line and nothing else. What it says is still whatever the user's programs wrote: it is their line, not the
+   system's word (docs/SECURITY.md). */
+const LAST_MAX = 1024;
+
+/* the first line of BYTES (a Uint8Array, at most LAST_MAX of them) as text, '' when it is no text; DECODE: UTF-8
+   bytes to a string, throwing on what is not UTF-8 */
+function lastLine(bytes, decode) {
+    let n = bytes.indexOf(10);
+    if (n < 0) {
+        n = bytes.length;
+        if (n >= LAST_MAX) {                 /* cut by the limit: a character that lost its end goes */
+            let k = n;
+            while (k > 0 && (bytes[k - 1] & 0xC0) === 0x80) k--;
+            if (k > 0 && bytes[k - 1] >= 0xC0) {
+                const lead = bytes[k - 1];
+                if (n - (k - 1) < (lead < 0xE0 ? 2 : lead < 0xF0 ? 3 : 4)) n = k - 1;
+            }
+        }
+    }
+    const line = bytes.subarray(0, n);
+    if (line.indexOf(0) >= 0) return '';
+    try { return decode(line).trim(); } catch (e) { return ''; }
+}
+
+/* DONE(text) is called once, later, with the message file's first line ('' when there is none to show) */
+function readLast(file, done) {
+    let info = null;
+    try { info = file.query_info('standard::type', Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null); } catch (e) { /* no file yet */ }
+    if (!info || info.get_file_type() !== Gio.FileType.REGULAR) { done(''); return; }
+    file.read_async(GLib.PRIORITY_DEFAULT, null, (f, res) => {
+        let stream = null;
+        try { stream = f.read_finish(res); } catch (e) { done(''); return; }
+        stream.read_bytes_async(LAST_MAX, GLib.PRIORITY_DEFAULT, null, (st, r) => {
+            let text = '';
+            try { text = lastLine(st.read_bytes_finish(r).toArray(), imports.byteArray.toString); } catch (e) { text = ''; }
+            try { st.close(null); } catch (e) { /* closed with the object */ }
+            done(text);
+        });
+    });
+}
+
 function osRelease() {
     const o = {};
     for (const line of readText('/etc/os-release').split('\n')) {
@@ -630,6 +676,8 @@ class SilikShell {
         this._startApps = null;
         this._catKeys = null;
         if (this._mon) { this._mon.cancel(); this._mon = null; }
+        this._lastGen = (this._lastGen || 0) + 1;                    /* (a reading on its way shows nothing any more) */
+        this._lastBusy = this._lastAgain = false;
         if (this._updMon) { this._updMon.cancel(); this._updMon = null; }
         if (this._holdMon) { this._holdMon.cancel(); this._holdMon = null; }
         if (this._seenMon) { this._seenMon.cancel(); this._seenMon = null; }
@@ -1432,7 +1480,18 @@ class SilikShell {
     }
 
     _syncMsg() {
-        const s = readText(this._last.get_path());
+        if (this._lastBusy) { this._lastAgain = true; return; }       /* one reading at a time; the newest state after it */
+        this._lastBusy = true;
+        const gen = this._lastGen = (this._lastGen || 0) + 1;
+        readLast(this._last, s => {
+            if (gen !== this._lastGen) return;                       /* the look was taken down meanwhile */
+            this._lastBusy = false;
+            this._showMsg(s);
+            if (this._lastAgain) { this._lastAgain = false; this._syncMsg(); }
+        });
+    }
+
+    _showMsg(s) {
         if (this._flow) { this._flow.syncMsg(s); return; }
         const i = s.indexOf(' ');
         if (s && i > 0) { this._msgT.text = s.slice(0, i); this._msgX.text = s.slice(i + 1).split('\n')[0]; }

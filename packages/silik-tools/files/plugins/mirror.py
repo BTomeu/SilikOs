@@ -809,10 +809,15 @@ def enabled_repos(ctx):
 
 # The names SilikOS's own repository may bring (dnf's includepkgs): its own packages and the tools it builds because
 # the base has none. Nothing of the base: an own repository that offered a `glibc` or a `tzdata` would not be taken.
-# (tests/test_mirror.py holds this list to the specs of packages/, eda/, dev/ and wine/.)
-OWN_INCLUDE = ("silik-*", "silikos-*", "ngspice*", "magic*", "netgen*", "xschem*", "klayout*", "yosys*", "nvc*", "qucs-s*", "devsim*",
-               "kicad*", "opencascade*", "nng*", "openocd*", "dfu-util*", "stm32flash*", "savvycan*", "sigrok*", "libsigrok*",
-               "libserialport*", "pulseview*", "sdcc*")
+# Each tool by its name and NAME-* (its sub-packages), never NAME*: `magic*` was also EPEL's magicmirror (seen
+# 14/11/2026). The same list is the includepkgs of the online channels (packages/silikos-repos/files/silikos.repo)
+# and the dnf plugin's OWN_NAMES; tests/test_supply.py holds the three together, and tests/test_mirror.py holds this
+# one to the specs of packages/, eda/, dev/ and wine/.
+OWN_INCLUDE = ("silik-*", "silikos-*", "silikstudio", "silikstudio-*", "ngspice", "ngspice-*", "magic", "magic-*",
+               "netgen", "netgen-*", "xschem", "xschem-*", "klayout", "klayout-*", "yosys", "yosys-*", "nvc",
+               "nvc-*", "qucs-s", "qucs-s-*", "devsim", "devsim-*", "kicad", "kicad-*", "opencascade",
+               "opencascade-*", "nng", "nng-*", "openocd", "openocd-*", "dfu-util", "dfu-util-*", "stm32flash",
+               "stm32flash-*", "savvycan", "savvycan-*", "sigrok", "sigrok-*", "sdcc", "sdcc-*")
 
 
 def own_on(mirror_key, unsigned):

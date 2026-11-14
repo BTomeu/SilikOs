@@ -60,7 +60,15 @@ if me == "rpm":
     elif "-qp" in a:
         d = fields(a[-1])
         fmt = val("--qf")
-        if fmt == "%{ARCH}":
+        called = d.get("name") or os.path.basename(a[-1])
+        pkg = called[:-4].rsplit(".", 1)[0].rsplit("-", 2)          # NAME, VERSION, RELEASE
+        if "--obsoletes" in a:
+            sys.stdout.write("".join(x + "\n" for x in d.get("obsoletes", "").split(",") if x))
+        elif "--provides" in a:
+            sys.stdout.write("".join(x + "\n" for x in (d.get("provides") or "%s = %s-%s" % tuple(pkg)).split(",") if x))
+        elif fmt == "%{NAME}":
+            sys.stdout.write(pkg[0])
+        elif fmt == "%{ARCH}":
             sys.stdout.write(arch(a[-1]))
         elif fmt and fmt.startswith("%{NAME}-%{VERSION}-%{RELEASE}"):
             # what the header says the package is called: the file's own name, or the field name= of a made-up one
@@ -136,9 +144,12 @@ def write(path, value):
         f.write(value)
 
 
-def rpm(d, name, sig="", body="x", called=None):
-    """a made-up package file NAME; CALLED: what its header says it is called, when that is not its file name"""
-    write(os.path.join(d, name), "FAKERPM\nsig=%s\nbody=%s\n%s" % (sig, body, "name=%s\n" % called if called else ""))
+def rpm(d, name, sig="", body="x", called=None, obsoletes="", provides=""):
+    """a made-up package file NAME; CALLED: what its header says it is called, when that is not its file name;
+    OBSOLETES, PROVIDES: its capabilities, comma separated (PROVIDES empty: its own name, as rpmbuild writes)"""
+    write(os.path.join(d, name), "FAKERPM\nsig=%s\nbody=%s\n%s%s%s" % (sig, body, "name=%s\n" % called if called else "",
+                                                                     "obsoletes=%s\n" % obsoletes if obsoletes else "",
+                                                                     "provides=%s\n" % provides if provides else ""))
 
 
 def pubkey(path, *fprs):

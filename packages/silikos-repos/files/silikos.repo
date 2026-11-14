@@ -5,6 +5,9 @@
 # of every package and of the repository's metadata is checked (gpgcheck, repo_gpgcheck): do not turn them off.
 # A repository that does not answer is skipped, so that it never stops the base's updates; one that answers with a
 # bad signature is refused.
+# Only SilikOS's own names are taken from it (includepkgs): a package called as one of the base's is never offered
+# from here, whatever its version, and the dnf plugin silikos-repo leaves out one that obsoletes another package or
+# provides another package's name. The base is never replaced from SilikOS's repository.
 
 [silikos]
 name=SilikOS 9 - stable
@@ -15,6 +18,7 @@ repo_gpgcheck=1
 gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-SilikOS
 skip_if_unavailable=1
 metadata_expire=6h
+includepkgs=silik-* silikos-* silikstudio silikstudio-* ngspice ngspice-* magic magic-* netgen netgen-* xschem xschem-* klayout klayout-* yosys yosys-* nvc nvc-* qucs-s qucs-s-* devsim devsim-* kicad kicad-* opencascade opencascade-* nng nng-* openocd openocd-* dfu-util dfu-util-* stm32flash stm32flash-* savvycan savvycan-* sigrok sigrok-* sdcc sdcc-*
 
 [silikos-next]
 name=SilikOS 9 - next
@@ -25,3 +29,4 @@ repo_gpgcheck=1
 gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-SilikOS
 skip_if_unavailable=1
 metadata_expire=6h
+includepkgs=silik-* silikos-* silikstudio silikstudio-* ngspice ngspice-* magic magic-* netgen netgen-* xschem xschem-* klayout klayout-* yosys yosys-* nvc nvc-* qucs-s qucs-s-* devsim devsim-* kicad kicad-* opencascade opencascade-* nng nng-* openocd openocd-* dfu-util dfu-util-* stm32flash stm32flash-* savvycan savvycan-* sigrok sigrok-* sdcc sdcc-*

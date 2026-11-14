@@ -151,10 +151,31 @@ own_name() {
   esac
   [ -n "$want" ] && [ "$(printf '%s' "$b" | tr '~^' '..')" = "$(printf '%s' "$want" | tr '~^' '..')" ]
 }
+# The channel adds packages, it never replaces the base (the owner's rule; the third pass of 14/11/2026 took the
+# base's tar from a channel and removed a package through an Obsoletes). What it may carry is the includepkgs line
+# of the repository file an installed system has: one list for the signer and for the client.
+#   foreign FILE: why FILE is not for SilikOS's channel (one line), nothing when it is:
+#   a name that is not in the list; any Obsoletes; a Provides that is a package's name (no parenthesis, no path:
+#   not a library, a file, pkgconfig(x)...) and is not in the list.
+allowed=$(sed -n 's/^includepkgs=//p' "$root/packages/silikos-repos/files/silikos.repo" | sort -u)
+[ -n "$allowed" ] && [ "$(printf '%s\n' "$allowed" | wc -l)" = 1 ] \
+  || { echo "error: packages/silikos-repos/files/silikos.repo must have one includepkgs list, the same in both channels" >&2; exit 2; }
+is_ours() { local g; set -f; for g in $allowed; do case $1 in $g) set +f; return 0 ;; esac; done; set +f; return 1; }
+foreign() {
+  local n o p
+  n=$(rpm -qp --nosignature --qf '%{NAME}' "$1" 2> /dev/null) || { echo "cannot be read"; return; }
+  is_ours "$n" || { echo "is called $(printf '%s' "$n" | tr -c 'A-Za-z0-9._+-' '?' | cut -c1-60), which is not one of SilikOS's names"; return; }
+  o=$(rpm -qp --nosignature --obsoletes "$1" 2> /dev/null | head -1)
+  [ -z "$o" ] || { echo "obsoletes another package ($(printf '%s' "$o" | tr -c 'A-Za-z0-9._+<>= -' '?' | cut -c1-60))"; return; }
+  rpm -qp --nosignature --provides "$1" 2> /dev/null | while read -r p _; do
+    case $p in ''|*\(*|/*) continue ;; esac
+    is_ours "$p" || { echo "provides the name of a package that is not SilikOS's ($(printf '%s' "$p" | tr -c 'A-Za-z0-9._+-' '?' | cut -c1-60))"; break; }
+  done
+}
 contents() { rpm -qp --nosignature --qf '[%{FILEDIGESTS} %{FILEMODES:octal} %{FILENAMES}\n]' "$1" 2> /dev/null; rpm -qp --nosignature --scripts --triggers -R "$1" 2> /dev/null; }
 
 # ---- the pool: what is published, then what is new
-: > "$tmp/upload"; : > "$tmp/delete"; : > "$tmp/was"; dropped=0; misnamed=0
+: > "$tmp/upload"; : > "$tmp/delete"; : > "$tmp/was"; dropped=0; misnamed=0; notours=0
 if [ -n "$published" ] && [ -d "$published" ]; then
   for f in "$published"/*.rpm; do
     [ -f "$f" ] || continue
@@ -169,6 +190,12 @@ if [ -n "$published" ] && [ -d "$published" ]; then
            echo "$b" >> "$tmp/delete" ;;
       esac
       continue
+    fi
+    why=$(foreign "$f")
+    if [ -n "$why" ]; then
+      # (published, and not SilikOS's to bring, even signed: it leaves the channel and the release)
+      warn "$b is published and $why: it leaves the channel"
+      echo "$b" >> "$tmp/delete"; notours=$((notours + 1)); continue
     fi
     if [ -n "$unvouched" ] && grep -qxF "$b" "$unvouched" && ! signed_ok "$f"; then
       # (published, of unknown origin, and not signed by our key: it leaves the channel and the release)
@@ -188,6 +215,12 @@ for d in ${ins[@]+"${ins[@]}"}; do
     if ! own_name "$f"; then
       misnamed=$((misnamed + 1))
       warn "$(printf '%s' "$b" | tr -c 'A-Za-z0-9._+~^-' '?' | cut -c1-80) is not called what its package is ($(rpm -qp --nosignature --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}' "$f" 2> /dev/null | tr -c 'A-Za-z0-9._+~^-' '?' | cut -c1-80)): left out, not signed"
+      continue
+    fi
+    why=$(foreign "$f")
+    if [ -n "$why" ]; then
+      notours=$((notours + 1))
+      warn "$b $why: it is left out, never signed (SilikOS's repository never replaces a package of the base)"
       continue
     fi
     if [ -f "$pool/$b" ]; then
@@ -315,7 +348,7 @@ EOF
 # (a name that is put there in this run is never also removed: the release would lose the file the metadata name.
 # It happens when a published file of unknown origin leaves and the real package of that name is among the new ones)
 sort -u "$tmp/upload" > "$pool/UPLOAD"; sort -u "$tmp/delete" | grep -vxFf "$pool/UPLOAD" > "$pool/DELETE" || :
-say "$(grep -c . "$tmp/list.x86_64" || :) packages for x86_64, $(grep -c . "$tmp/list.aarch64" || :) for aarch64; $new new, $same already published under their name, $resigned signed again, $pruned older left out, $dropped of unknown origin left out, $misnamed under a name that is not their package's left out"
+say "$(grep -c . "$tmp/list.x86_64" || :) packages for x86_64, $(grep -c . "$tmp/list.aarch64" || :) for aarch64; $new new, $same already published under their name, $resigned signed again, $pruned older left out, $dropped of unknown origin left out, $misnamed under a name that is not their package's left out, $notours that are not SilikOS's to bring left out"
 say "revision $revision ($(date -u -d "@$revision" +%Y-%m-%dT%H:%M:%SZ 2> /dev/null || echo "seconds since 1970")), in every repomd.xml with the channel's name"
 if [ "$signing" = 1 ]; then say "signed with $fpr: every package, and repomd.xml.asc of each architecture"
 else say "NOT SIGNED (no key was given): no installed system accepts this tree"; fi
