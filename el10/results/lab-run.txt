@@ -1,0 +1,59 @@
+# workflow EL 10 lab, run 43587575827, job install 132425376057, commit 47a6434, a GitHub runner ubuntu-24.04 with KVM: el10/lab/run.sh
+installing from SilikOS-10.2-lab-x86_64-netinstall.iso (label SilikOS-10-2-x86_64), 4 CPUs, 6144 MB; the installer's console: build/el10/lab-test/install.log
+  ... Installing passt-selinux.noarch (716/1557)
+  ... Installing usbguard.x86_64 (1264/1557)
+  ... Configuring microcode_ctl.noarch
+installed: the disk holds 11G; the installer said: anaconda 40.22.3.46-1.el10_2.alma.1 for SilikOS 10.2 started.
+SilikOS 10 lab installation test: SilikOS-10.2-lab-x86_64-netinstall.iso, 2026-11-14T11:07Z, disk after installation 11G
+ok    installer.name               anaconda 40.22.3.46-1.el10_2.alma.1 for SilikOS 10.2 started.
+ok    base.release                 AlmaLinux release 10.
+ok    base.kernel                  .el10
+ok    name.pretty                  SilikOS 10.2
+ok    name.id                      almalinux
+ok    name.base-fields             as the base's own file: ID="almalinux" ID_LIKE="rhel centos fedora" VERSION_ID="10.2" PLATFORM_ID="platform:el10" CPE_NAME="cpe:/o:almalinux:almalinux:10.2"
+ok    name.boot-entries            SilikOS
+ok    package.silik-tools          silik-tools-0.10.4-1.el10.noarch
+ok    package.silik-command        silik-command-0.9.0-1.el10.noarch
+ok    package.silikos-branding     silikos-branding-0.5.0-1.el10.noarch
+ok    package.silikos-desktop      silikos-desktop-0.18.3-1.el10.noarch
+ok    package.silikos-security     silikos-security-0.5.1-1.el10.noarch
+ok    package.silikos-power        silikos-power-0.2.2-1.el10.noarch
+ok    package.silik-eda-compat     silik-eda-compat-0.2.1-1.el10.noarch
+ok    package.silik-eda-open       silik-eda-open-0.3.0-1.el10.noarch
+ok    package.silik-dev            silik-dev-0.5.1-1.el10.noarch
+ok    package.none-of-el9          0
+ok    layout.root-thin             /dev/mapper/silikos_ip--10--0--2--15-root is a thin volume (Vwi-aotz--): the installer read el10/installer/conf.d from images/product.img
+info  layout.lvs                    [lvol0_pmspare] ewi------- 28.00m; pool00 twi-aotz-- 26.31g; [pool00_tdata] Twi-ao---- 26.31g; [pool00_tmeta] ewi-ao---- 28.00m; root Vwi-aotz-- pool00 26.31g; swap -wi-ao---- 4.00g;
+ok    target.default               graphical.target
+ok    target.graphical             active
+ok    gdm.active                   active
+ok    gdm.wayland                  nothing in /etc/gdm/custom.conf turns Wayland off
+ok    session.wayland              wayland
+info  session.desktop              session 1 of tester: type wayland, desktop , active
+ok    session.shell                GNOME Shell 49
+ok    shell.metadata               "49"
+ok    shell.enabled                silik-shell@silikvolt.com
+ok    shell.active                 the shell says state 1.0 (active), no error
+ok    shell.no-js-error            no JS ERROR that names silik-shell@silikvolt.com in the session's journal (0 JS ERROR lines in all)
+info  shell.warnings
+ok    silik.status-system          SilikOS 10.2
+ok    silik.status-base            AlmaLinux release 10.2
+info  silik.status                 system SilikOS 10.2;base AlmaLinux release 10.2 (Lavender Lion);arch x86_64;kernel 6.12.0-211.74.2.el10_2.x86_64;vsyscall xonly;session -;gpu Device [1234:1111] (rev 02);
+ok    silik.look                   {"look": "island", "looks": ["silik", "bar", "island"], "accent": "ink", "accents": ["ink", "steel", "steel-vivid", "cobalt", "cobalt-vivid", "silicon", "silicon-vivid", "volt", "volt-vivid", "spark"]
+info  silik.doctor                 21 rows ok; not ok: ◆ warn     base               AlmaLinux release 10.2 (Lavender Lion): SilikOS is made for ;◆ warn     SilikOS packages   9 of 11: silikos-branding 0.5.0, silikos-desktop 0.18.3, sil;◆ warn     SilikOS repository SilikOS's own packages are not updated: no repository enable;▼ bad
+ok    terminal.runs                ptyxis -- COMMAND ran the command in the session (ptyxis-47.13-1.el10.x86_64)
+ok    theme.gtk                    /usr/share/themes/SilikOS/gtk-3.0/gtk.css, 2279 lines
+ok    theme.gtk-setting            'SilikOS'
+info  theme.shell                  no shell theme (not made on GNOME Shell 49: known, docs/EL10.md)
+ok    security.selinux             Enforcing
+ok    security.firewalld           active
+ok    security.zone                silikos
+ok    security.sshd                disabled
+info  security.authselect          Profile ID: local Enabled features: - without-nullok
+ok    security.nullok              without-nullok
+info  security.usbguard            usbguard active, usbguard-dbus active
+ok    units.failed                 systemctl --failed: none
+info  units.user-failed            the user's:
+info  boot.time                    Bootup is not yet finished (org.freedesktop.systemd1.Manager.FinishTimestampMonotonic=0).
+info  memory                       used 1159 MB of 5662 MB
+40 ok, 0 failed

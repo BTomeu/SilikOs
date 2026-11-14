@@ -74,7 +74,7 @@ clean() { tr -d '\r' < "$1" | sed 's/\x1b\[[0-9;?]*[A-Za-z]//g; s/\x1b[()][A-Z0-
   done ) &
 rc=0; wait $qpid || rc=$?
 # what the installer said it is (the name in images/product.img's /.buildstamp), for the report
-started=$(clean "$out/install.log" | grep -a -m1 "anaconda .* for .* started" | cut -c1-160 || true)
+started=$(clean "$out/install.log" | grep -a "anaconda .* for .* started" | sed -n '1p' | cut -c1-160 || true)
 if [ $rc -ne 0 ]; then
   echo "error: the installation did not finish (exit $rc; 124 = time limit of $t_install min). Last lines of its console:" >&2
   clean "$out/install.log" | tail -60 >&2

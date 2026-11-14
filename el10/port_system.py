@@ -90,7 +90,7 @@ KICKSTART_RULES = [
     ("no-silikos-repos", LEFT_OUT["silikos-repos"], "lit", "boom-boot\nsilikos-repos\n", "boom-boot\n", 1),
     ("authselect-profile",
      "an installation with no profile selected gets the base's default profile with the switch: on EL 10 that profile is "
-     "`local` [A: RHEL 10's documentation, from memory; the lab's check says which profile the installed system has]", "lit",
+     "`local` (seen: the system the lab installs has the profile local with without-nullok, workflow run 43587575827)", "lit",
      "else authselect select sssd without-nullok --force || :; fi", "else authselect select local without-nullok --force || :; fi", 1),
 ]
 

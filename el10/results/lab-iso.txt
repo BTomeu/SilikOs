@@ -1,0 +1,23 @@
+# workflow EL 10 lab, run 43587575827, job install 132425376057, commit 47a6434: el10/build_iso.sh (the base's ISO checked, the lab ISO made and read back) and el10/lab/menu.sh
+base: AlmaLinux-10-latest-x86_64-boot.iso  sha256 b3f865468075bcada8f208d830289302c67529789d668041d24e8d6fc697ba6a, in AlmaLinux's CHECKSUM signed by EE6DB7B98F5BF5EDD9DA0DE5DEE5C11CC2A1E572
+libisofs: NOTE : EFI image start and size: 511104 * 2048 , 17816 * 512
+label SilikOS-10-2-x86_64; BIOS menu: 7 entries; UEFI menu (eltorito_img2_uefi.img): 6 entries; for an external disk: Install SilikOS 10.2 lab on an external disk (the boot order of this computer is kept)
+boot records of the image:
+  El Torito boot img :   1  BIOS  y   none  0x0000  0x00      4         150
+  El Torito boot img :   2  UEFI  y   none  0x0000  0x00  22528      511647
+  System area summary: MBR protective-msdos-label grub2-mbr cyl-align-off GPT
+  MBR partition table:   N Status  Type        Start       Blocks
+  MBR partition      :   1   0x00  0xee            1      2069179
+  GPT partition name :   1  490053004f003900360036003000
+  GPT partition GUID :   1  03377055bdb9b947914c7d98bd017840
+  GPT type GUID      :   1  a2a0d0ebe5b9334487c068b6b72699c7
+  GPT partition flags:   1  0x1000000000000001
+  GPT partition name :   2  41007000700065006e006400650064003200
+  GPT partition GUID :   2  03377055bdb9b947914f7d98bd017840
+  GPT type GUID      :   2  28732ac11ff8d211ba4b00a0c93ec93b
+  GPT partition flags:   2  0x0000000000000000
+-rw-r--r-- 1 runner runner 1059782656 Nov 14 10:58 build/el10/SilikOS-10.2-lab-x86_64-netinstall.iso
+[uefi-usb] started; the menu's picture: menu-uefi-usb.png
+[uefi-cd] started; the menu's picture: menu-uefi-cd.png
+[bios-usb] started; the menu's picture: menu-bios-usb.png
+pictures: 6 in build/el10/lab-menu
