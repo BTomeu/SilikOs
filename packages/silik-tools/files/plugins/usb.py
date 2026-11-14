@@ -255,7 +255,7 @@ def status(silik, ctx, a):
                 st["inserted"], st["implicit"] or "?"))
         if st["devices"] is None:
             lines.append("devices   %s" % ("the daemon does not run" if st["active"][UNITS[0]] is False else
-                                           "the daemon answers root and the administrators (group wheel) only: sudo silik usb"))
+                                           "the daemon answers root only: sudo silik usb"))
         elif not st["devices"]:
             lines.append("devices   none")
         else:

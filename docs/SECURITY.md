@@ -213,7 +213,11 @@ that is there at the start, a program running as the user, Thunderbolt / PCIe, o
 Found while building it: GNOME 40's own way of adding its rule is refused by EL 9's USBGuard ("Invalid parent
 ID"), so with the base's configuration alone every device plugged in later would be refused, a keyboard included;
 SilikOS ships the rule and a permissive configuration of its own instead (the base's file is not touched). Any
-active local session may switch the two settings GNOME needs (a polkit rule), not only an administrator's. Built
+active local session may make the two calls GNOME needs without a password (a polkit rule), not only an
+administrator's: through them a program in that session can also accept a device for good or switch the protection
+off until the desktop next switches it (polkit cannot tell the calls apart). The daemon's own socket answers root
+alone (the base's file also lets the group `wheel` in): a program that merely runs as the owner, outside the
+active session, reaches nothing without `sudo`. Built
 and checked with the real daemon in a container; not yet seen with a device (the CI's `usb.*` rows).
 
 **Listening services.** On a new installation nothing of the base listens beyond the machine: the NFS v3 port
@@ -344,6 +348,22 @@ printers a command each: proposed, the owner's call.
 Refused, with the reason: a different kernel or glibc (the product is binary identity with RHEL 9); application
 allowlisting by default (it stops compiled programs and tools in `/opt`); no user namespaces (podman and bubblewrap
 are made of them); `noexec` on `/tmp` (vendor installers); kernel lockdown at "confidentiality" (no kernel tracing).
+
+## The second pass, 14/11/2026
+
+After the round's six merges a reviewer who had written none of it attacked the new code as a program running as
+the normal desktop user and as a second unprivileged user, each claim run in a throw-away AlmaLinux 9.8 container
+with the built packages. Nothing gave root; nothing let a user without `wheel` weaken a protection or plant an
+"ok" in `silik secure status`; a user's environment does not redirect root's reads through `sudo` (`env_reset`
+strips the `SILIK_*` test switches). `silik secure level` goes there and back cleanly (its note is root's, 0600; a
+planted note cannot make `level default` remove a file that is not the level's own; kernel arguments are removed
+only if the command itself added them); `silik disk` keeps the PIN and the passphrase out of every command line,
+log and note; the repository plugin refuses replayed, unsigned and mislabelled metadata and its note is not a
+user's to write; the plugins pass no input to a shell. Two things about USBGuard were found: the daemon's own
+socket answered the group `wheel` without a password, as the base's file has it, so a program running as the
+owner could switch the policy and add a rule: **closed** (root alone; `silik usb allow` goes through `sudo`). And
+the polkit rule gives an active local session more than the two switches it is for (above, "USB devices"): said,
+not closable in polkit. The passes on the Windows box and on the supply chain: below, when they are in.
 
 ## What SilikOS does not do
 

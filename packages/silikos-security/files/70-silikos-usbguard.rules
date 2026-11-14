@@ -9,8 +9,12 @@
 // and reads with getParameter and listRules, which usbguard-dbus's own policy already gives an active session.
 // Without this file the two calls above ask for an administrator's password at every login and every lock.
 //
-// Not given: appendRule and removeRule (the rules stay root's: /etc/usbguard/rules.d/90-silikos-gnome.conf is the
-// rule the desktop looks for, so it has none to add), and nothing to a session that is not the one at the
+// Not given: appendRule and removeRule (/etc/usbguard/rules.d/90-silikos-gnome.conf is the rule the desktop looks
+// for, so it has none to add). What this does give away, said plainly (the second pass of 14/11/2026): setParameter
+// is one action for both of the daemon's parameters, and applyDevicePolicy takes a "permanent" flag polkit cannot
+// see, so a program in the active local session can accept a device for good, or switch the protection off until
+// the desktop next switches it. That is the price of the desktop doing this without a password; a session that is
+// not active and local gets nothing. And nothing is given to a session that is not the one at the
 // machine's own screen and keyboard (remote, or switched away from). The login screen's own user is refused
 // outright: after "log in as another user" from a locked session it must not be the one that opens USB again.
 polkit.addRule(function(action, subject) {

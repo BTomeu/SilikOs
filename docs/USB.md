@@ -51,7 +51,8 @@ silik usb level off               the desktop switches nothing: every device is 
 ```
 
 Each prints the commands it runs (`usbguard allow-device N`, `gsettings set ...`) and takes `--dry-run`. The daemon
-answers root and the administrators (group `wheel`): another user's `silik usb allow` goes through `sudo`.
+answers root alone (the base's own file also lets the group `wheel` in without a password; SilikOS's does not):
+`silik usb allow` and `block` go through `sudo` for everybody.
 `allow` and `block` are for the device as it is plugged in now; nothing is written to the rules. A rule of your own
 (a device that is never accepted) goes in `/etc/usbguard/rules.conf`, which is read before SilikOS's rule
 (usbguard-rules.conf(5)), then `sudo systemctl restart usbguard`; a rule added with `usbguard block-device -p` lands

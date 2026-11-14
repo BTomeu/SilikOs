@@ -314,7 +314,7 @@ class Commands(unittest.TestCase):
                 mock.patch.object(usb.os.path, "isdir", lambda p: True), mock.patch.object(usb.os.path, "exists", lambda p: True):
             rc, out, err, ran = main([], cmd)
         self.assertEqual(rc, 0)
-        self.assertIn("devices   the daemon answers root and the administrators (group wheel) only: sudo silik usb", out)
+        self.assertIn("devices   the daemon answers root only: sudo silik usb", out)
         self.assertEqual(ran, [])                                             # (a look never asks for a password)
 
     def test_allow_one(self):
@@ -424,11 +424,13 @@ class Package(unittest.TestCase):
         self.assertEqual(c["PresentControllerPolicy"], "keep")
         # the rest as the base's usbguard 1.1.4-2.el9 has it (read from the package, 13/11/2026)
         base = {"RuleFile": "/etc/usbguard/rules.conf", "RuleFolder": "/etc/usbguard/rules.d/", "DeviceManagerBackend": "uevent",
-                "IPCAllowedUsers": "root", "IPCAllowedGroups": "wheel", "IPCAccessControlFiles": "/etc/usbguard/IPCAccessControl.d/",
+                "IPCAllowedUsers": "root", "IPCAccessControlFiles": "/etc/usbguard/IPCAccessControl.d/",
                 "DeviceRulesWithPort": "false", "AuditBackend": "FileAudit", "AuditFilePath": "/var/log/usbguard/usbguard-audit.log"}
         for k, v in base.items():
             self.assertEqual(c[k], v, k)
-        self.assertEqual(len(c), len(base) + 5)
+        # not the base's `wheel`: a program that runs as an administrator does not reach the daemon without sudo
+        self.assertEqual(c["IPCAllowedGroups"], "")
+        self.assertEqual(len(c), len(base) + 6)             # (the five above and IPCAllowedGroups, below)
 
     def test_the_rule_is_the_one_gnome_looks_for(self):
         # gsd-usb-protection-manager.c (gnome-settings-daemon 40.0.1): #define ALLOW_ALL "allow id *:* label \"GNOME_SETTINGS_DAEMON_RULE\"",
