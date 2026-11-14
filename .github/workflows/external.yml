@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['tests/install/external*', 'tests/install/must-external.txt', 'tests/install/sealed-console.py', 'tests/install/rows.py',
+    paths: ['tests/install/external*', 'tests/install/media.sh', 'tests/install/must-external.txt', 'tests/install/sealed-console.py', 'tests/install/rows.py',
             '.github/workflows/external.yml', 'tools/build_iso.sh', 'kickstart/**', 'packages/silik-tools/files/plugins/disk.py']
 concurrency:
   group: external-${{ github.ref }}
@@ -63,3 +63,52 @@ jobs:
             build/external-test/*.log
             build/external-test/*.txt
             build/external-test/*.ks
+
+  # The ISO as a person starts it (tests/install/media.sh): the one disk of a USB controller, UEFI firmware with
+  # Secure Boot on, its own signed boot loader and its own menu; the entry for an external disk is chosen with the
+  # keyboard and must start the installer. The screen is read (a picture, then OCR), and the machine's memory is
+  # searched for the kernel's command line. The other tests give the installer's kernel to QEMU directly.
+  medium:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with: { persist-credentials: false }
+      - name: KVM for the runner's user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+      - name: Tools, the firmware, disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          bash tools/ci_apt.sh rpm createrepo-c xorriso mtools cpio isomd5sum qemu-system-x86 qemu-utils ovmf imagemagick tesseract-ocr
+          df -h /
+      - name: Packages
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src almalinux:9 bash -c 'dnf -y -q install rpm-build createrepo_c > /dev/null && bash tools/build_rpms.sh'
+          sudo chown -R "$(id -u):$(id -g)" build
+      - name: The ISO (the system alone)
+        run: |
+          createrepo_c --quiet build/repo && ls build/repo
+          bash tools/build_iso.sh
+      - name: The ISO as a USB stick, Secure Boot on; its menu; the entry for an external disk starts the installer
+        run: bash tests/install/media.sh build/SilikOS-*-netinstall.iso build/media-test
+      - name: The report
+        if: always()
+        run: |
+          {
+            echo '### The SilikOS ISO started as a USB stick, Secure Boot on'
+            echo '```'
+            cat build/media-test/report.txt 2>/dev/null || echo 'no report'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        if: always()
+        with:
+          name: media-test
+          path: |
+            build/media-test/*.log
+            build/media-test/*.txt
+            build/media-test/*.png
