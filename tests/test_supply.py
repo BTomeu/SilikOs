@@ -184,6 +184,61 @@ class Notes(unittest.TestCase):
         self.assertEqual(state["silikos"]["said"]["verdict"], "warn")
 
 
+class StatusBar(unittest.TestCase):
+    """the desktop's status bar says a refusal too (the update field: "update repository refused"): the shell
+    extension reads the plugin's notes. Its function is run here by a JavaScript engine on what the plugin writes"""
+    JS = "packages/silikos-desktop/files/shell-ext/extension.js"
+
+    def test_the_field_reads_the_plugins_file_in_three_languages(self):
+        js = text(self.JS)
+        self.assertIn("const UPDATE_SEEN = '%s';" % plug.STATE, js)
+        self.assertEqual(plug.STATE, silik.REPO_SEEN)
+        self.assertIn("if (updateRefused(readText(UPDATE_SEEN), Date.now() / 1000)) said.push(ut.refused);", js)
+        self.assertIn("for (const id of [%s])" % ", ".join("'%s'" % k for k in sorted(plug.OWN)), js)       # (SilikOS's channels, both)
+        block = js[js.index("const UPDATE_TEXT = {"):js.index("};", js.index("const UPDATE_TEXT = {"))]
+        words = re.findall(r"refused: '([^']+)'", block)
+        self.assertEqual(words, ["repository refused", "repositori rebutjat", "repositorio rechazado"])
+        self.assertIn("this._seenMon.cancel()", js)                 # (the watch on the folder ends with the extension)
+
+    @unittest.skipUnless(shutil.which("node"), "node is not installed (the function is run by a JavaScript engine)")
+    def test_what_the_plugin_notes_is_what_the_field_says(self):
+        js = text(self.JS)
+        i = js.index("const UPDATE_REFUSED_DAYS")
+        fn = js[i:js.index("\n}\n", i) + 3]
+        self.assertIn("function updateRefused(text, now)", fn)
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        path = os.path.join(d, "repo-revision")
+
+        def field(state, now):
+            if state is not None:
+                if isinstance(state, str):
+                    write(path, state)
+                else:
+                    plug.write_state(state, path)
+            src = fn + "\nprocess.stdout.write(String(updateRefused(require('fs').readFileSync(process.argv[1], 'utf8'), Number(process.argv[2]))));"
+            r = subprocess.run(["node", "-e", src, path, str(now)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            return r.stdout
+
+        state = {}
+        plug.note(state, "silikos", "refuse", "rollback", "old metadata", 60, "50", NOW)           # the plugin's own note of a refusal
+        self.assertEqual(field(state, NOW + 5), "true")
+        self.assertEqual(field(None, NOW + 2 * 86400), "true")
+        self.assertEqual(field(None, NOW + 3 * 86400 + 1), "false")                             # (a channel turned off since: nobody renews it)
+        plug.note(state, "silikos", "ok", "", "", 61, "61", NOW + 100)                            # a good run takes the note away
+        self.assertEqual(field(state, NOW + 101), "false")
+        plug.note(state, "silikos-next", "refuse", "unsigned", "x", 0, None, NOW + 200)
+        self.assertEqual(field(state, NOW + 201), "true")
+        state = {}
+        plug.note(state, "silikos", "warn", "stale", "45 days", 61, "61", NOW)                    # a warning is not a refusal
+        plug.note(state, "baseos", "refuse", "x", "x", 0, None, NOW)                            # (never written for the base; not read either)
+        self.assertEqual(field(state, NOW + 1), "false")
+        for junk in ("", "not json", "[1, 2]", "null", '{"silikos": 5}', '{"silikos": {"said": "refuse"}}'):
+            self.assertEqual(field(junk, NOW), "false", junk)
+
+
+
 # ---------------------------------------------------------------- the plugin against a made-up dnf
 class FakeRepo:
     def __init__(self, rid, revision, tags=(), repo_gpgcheck=True, age=0, loaded=True, held=None):

@@ -48,10 +48,26 @@ const POWER_WORD = { 'throughput-performance': 'performance', 'balanced': 'balan
 const UPDATE_NOSNAP = '/run/silikos/no-snapshot';
 const UPDATE_HOLD = '/etc/silikos/update.hold';
 const UPDATE_TEXT = {
-    en: { nosnap: 'no snapshot', hold: 'waiting since the rollback' },
-    ca: { nosnap: 'sense instantània', hold: 'en espera des de la tornada enrere' },
-    es: { nosnap: 'sin instantánea', hold: 'en espera desde la vuelta atrás' },
+    en: { nosnap: 'no snapshot', hold: 'waiting since the rollback', refused: 'repository refused' },
+    ca: { nosnap: 'sense instantània', hold: 'en espera des de la tornada enrere', refused: 'repositori rebutjat' },
+    es: { nosnap: 'sin instantánea', hold: 'en espera desde la vuelta atrás', refused: 'repositorio rechazado' },
 };
+/* and a third: the dnf plugin of silikos-repos refused the metadata of a SilikOS channel in its last run (replayed,
+   unsigned, another channel's or architecture's: docs/SIGNING.md), so nothing of SilikOS was updated: `silik update`
+   says which and why. The plugin's own notes are read (root's file, 0644). A note is renewed by every run that
+   refuses again (the daily update): one older than three days is of a channel that was turned off since */
+const UPDATE_SEEN = '/var/lib/silikos/repo-revision';
+const UPDATE_REFUSED_DAYS = 3;
+function updateRefused(text, now) {
+    try {
+        const d = JSON.parse(text || '{}');
+        for (const id of ['silikos', 'silikos-next']) {
+            const s = d && d[id] && d[id].said;
+            if (s && s.verdict === 'refuse' && now - (s.when || 0) < UPDATE_REFUSED_DAYS * 86400) return true;
+        }
+    } catch (e) { /* not the plugin's file: nothing is said from it */ }
+    return false;
+}
 
 const TEXT = {
     en: { ready: 'ready', upd: 'update', restart: 'restart to finish', ws: 'workspace', base: 'base', kernel: 'kernel', host: 'host', open: 'open', windows: 'Windows',
@@ -616,6 +632,7 @@ class SilikShell {
         if (this._mon) { this._mon.cancel(); this._mon = null; }
         if (this._updMon) { this._updMon.cancel(); this._updMon = null; }
         if (this._holdMon) { this._holdMon.cancel(); this._holdMon = null; }
+        if (this._seenMon) { this._seenMon.cancel(); this._seenMon = null; }
         this._upd = null;
         for (const m of this._pwMons || []) m.cancel();
         this._pwMons = null;
@@ -1373,11 +1390,13 @@ class SilikShell {
         const sync = () => {
             const wait = dir.get_child('restart').query_exists(null);
             /* the same field, the same look: "update restart to finish", "update no snapshot" (an update was made
-               without a snapshot of /: `silik snapshot status` says why), "update waiting since the rollback" */
+               without a snapshot of /: `silik snapshot status` says why), "update waiting since the rollback",
+               "update repository refused" (`silik update` says which and why) */
             const said = [];
             if (wait) said.push(this._t.restart);
             if (GLib.file_test(UPDATE_HOLD, GLib.FileTest.EXISTS)) said.push(ut.hold);
             if (GLib.file_test(UPDATE_NOSNAP, GLib.FileTest.EXISTS)) said.push(ut.nosnap);
+            if (updateRefused(readText(UPDATE_SEEN), Date.now() / 1000)) said.push(ut.refused);
             if (this._upd) {
                 const val = this._upd.get_last_child();
                 if (val) val.text = said.join(', ');
@@ -1396,6 +1415,10 @@ class SilikShell {
             this._holdMon = Gio.File.new_for_path(GLib.path_get_dirname(UPDATE_HOLD)).monitor_directory(Gio.FileMonitorFlags.NONE, null);
             this._holdMon.connect('changed', sync);
         } catch (e) { this._holdMon = null; }
+        try {       /* (the plugin's notes: replaced whole at the end of a run of dnf as root) */
+            this._seenMon = Gio.File.new_for_path(GLib.path_get_dirname(UPDATE_SEEN)).monitor_directory(Gio.FileMonitorFlags.NONE, null);
+            this._seenMon.connect('changed', sync);
+        } catch (e) { this._seenMon = null; }
         sync();
     }
 

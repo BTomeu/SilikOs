@@ -1163,7 +1163,7 @@ class Desktop(unittest.TestCase):
         self.assertIn("const UPDATE_HOLD = '%s';" % silik.SNAP_HOLD, js)
         block = js[js.index("const UPDATE_TEXT = {"):js.index("};", js.index("const UPDATE_TEXT = {"))]
         for lang, word in (("en", "no snapshot"), ("ca", "sense instantània"), ("es", "sin instantánea")):
-            self.assertRegex(block, r"%s: \{ nosnap: '%s', hold: '[^']+' \}" % (lang, word))
+            self.assertRegex(block, r"%s: \{ nosnap: '%s', hold: '[^']+', refused: '[^']+' \}" % (lang, word))
         self.assertIn("this._t.upd", js)                                            # the same field as "restart to finish": no new look
         css = "".join(text(os.path.join("packages/silikos-desktop/files/shell-ext", f)) for f in os.listdir(os.path.join(ROOT, "packages/silikos-desktop/files/shell-ext")) if f.endswith(".css"))
         self.assertNotIn("nosnap", css)

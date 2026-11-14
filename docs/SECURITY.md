@@ -411,8 +411,9 @@ updates by default (`allow-updates=false`: its updates page is hidden; updates a
 the metadata and takes the snapshot); `pkcon` typed by hand, or a user who turns the setting back, still goes
 around it; the Actions cache check can be replaced by
 the entry it checks (needs code running in a build job of main); a release token can make a channel offer an older
-genuine version to a machine that installs a tool for the first time; a refusal is said by `silik update` and
-`silik doctor`, not in the status bar. `docs/SIGNING.md` has the table. The provenance checks themselves
+genuine version to a machine that installs a tool for the first time; a refusal is said by `silik update`,
+`silik doctor` and, since silikos-desktop 0.18.1, the status bar (`update repository refused`); a channel that is
+not reached and old metadata are still said by the two commands only. `docs/SIGNING.md` has the table. The provenance checks themselves
 (`gh attestation verify`) ran on GitHub on 14/11/2026: in the CI's install job (27 tool packages, all vouched for)
 and in the package repository's workflow (2 without an attestation left out). The tag check and the offline ISO's
 gate have not run.
