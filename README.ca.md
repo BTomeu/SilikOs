@@ -60,8 +60,9 @@ ensenya i no executa res. El COMMAND bar (Super+Espai) ensenya la mateixa línia
 
 ## Estat
 
-Un prototip verificat en màquines virtuals i contenidors, no un producte. No s'ha executat, entre d'altres: cap
-maquinari real (controladors gràfics, Wi-Fi, suspensió, adaptadors CAN, programar una placa), cap eina de fabricant
+Un prototip verificat en màquines virtuals i contenidors, no un producte; un ordinador real, l'AMD Ryzen del
+propietari, l'executa des de la imatge de disc (16/11/2026, segons el seu informe). No s'ha comprovat, entre d'altres: el
+maquinari real peça per peça (controladors gràfics, Wi-Fi, suspensió, adaptadors CAN, programar una placa), cap eina de fabricant
 (Cadence, Synopsys, Altium, STM32CubeIDE), la màquina virtual de Windows, SilikOS instal·lat en una màquina ARM (els paquets i les eines es
 construeixen i es proven als runners ARM de GitHub). El repositori d'on un sistema
 instal·lat actualitzaria els paquets de SilikOS està construït però no publicat (`docs/REPO.md`): la clau de
@@ -95,8 +96,8 @@ iniciada):
 
 Escriu la `.iso` en un llapis USB tal com és, byte a byte (balenaEtcher; Rufus en mode «DD Image»; `dd`), i arrenca
 l'ordinador des del llapis. [`docs/FIRST-HOUR.md`](docs/FIRST-HOUR.md) té tots els passos, també per a un sistema
-en un disc extern que deixa en pau el disc de l'ordinador. Res s'ha executat encara en un ordinador de veritat:
-`docs/STATUS.md`.
+en un disc extern que deixa en pau el disc de l'ordinador. Un ordinador de veritat ja l'executa: l'AMD Ryzen del
+propietari, des de la imatge de disc (16/11/2026); què s'hi ha vist i què no: `docs/STATUS.md`.
 
 Per construir-la tu mateix (qualsevol Linux amb `rpmbuild`, `createrepo_c`, `xorriso`, `mtools`, `cpio`, `curl`, `gpg`):
 

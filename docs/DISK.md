@@ -308,7 +308,8 @@ itself is never started). The USB disk was 24 GB larger than the image: after th
 with the machine stopped, the partition table's second copy is at the disk's last sector, the third partition
 ends there, and the volume of `/` is 45.9 GiB in LVM's record (26.7 in the image). Inside an installed system
 (the rollback test, run 43617065807) the same command took `/` from 39 to 375 GiB on a disk made 420 GB larger,
-with snapshots in the pool, and a second run wrote nothing. **Not seen**: a real computer and a real disk; the
+with snapshots in the pool, and a second run wrote nothing. **On a real computer**: the owner, 16/11/2026: "Installat al ryzen i funciona tot be" (installed on their AMD Ryzen computer and everything works). **Not seen** by
+these tests: a real disk read from outside after the first start; the
 first-start setup beyond its first screen; an encrypted system (the command refuses it); the file system's size
 on a GPT disk from inside (`docs/STATUS.md`).
 

@@ -60,8 +60,9 @@ muestra y no ejecuta nada. El COMMAND bar (Super+Espacio) muestra la misma líne
 
 ## Estado
 
-Un prototipo verificado en máquinas virtuales y contenedores, no un producto. No se ha ejecutado, entre otros: ningún
-hardware real (controladores gráficos, Wi-Fi, suspensión, adaptadores CAN, programar una placa), ninguna herramienta
+Un prototipo verificado en máquinas virtuales y contenedores, no un producto; un ordenador real, el AMD Ryzen del
+propietario, lo ejecuta desde la imagen de disco (16/11/2026, según su informe). No se ha comprobado, entre otros: el
+hardware real pieza a pieza (controladores gráficos, Wi-Fi, suspensión, adaptadores CAN, programar una placa), ninguna herramienta
 de fabricante (Cadence, Synopsys, Altium, STM32CubeIDE), la máquina virtual de Windows, SilikOS instalado en una máquina ARM (los paquetes y las herramientas
 se construyen y se prueban en los runners ARM de GitHub). El repositorio del que un
 sistema instalado actualizaría los paquetes de SilikOS está construido pero no publicado (`docs/REPO.md`): la clave
@@ -94,8 +95,8 @@ de GitHub iniciada):
 
 Escribe la `.iso` en una memoria USB tal como es, byte a byte (balenaEtcher; Rufus en modo «DD Image»; `dd`), y
 arranca el ordenador desde ella. [`docs/FIRST-HOUR.md`](docs/FIRST-HOUR.md) (en inglés) tiene todos los pasos,
-también para un sistema en un disco externo que deja en paz el disco del ordenador. Nada se ha ejecutado todavía en
-un ordenador de verdad: `docs/STATUS.md`.
+también para un sistema en un disco externo que deja en paz el disco del ordenador. Un ordenador de verdad ya lo
+ejecuta: el AMD Ryzen del propietario, desde la imagen de disco (16/11/2026); qué se vio y qué no: `docs/STATUS.md`.
 
 Para construirla tú mismo (cualquier Linux con `rpmbuild`, `createrepo_c`, `xorriso`, `mtools`, `cpio`, `curl`, `gpg`):
 

@@ -5,9 +5,9 @@ ISO to flashing the board and seeing the CAN bus, in less than an hour (it is th
 without asking anybody anything. If you had to ask at some step, that step is wrong: write it down
 (section 9).
 
-Each step says how far it has been tried. **Nothing in this guide has been done on real hardware yet**: the
-installation and the commands have run in a virtual machine (GitHub's CI, 13/11/2026); the probe, the board and the
-CAN adapter have not.
+Each step says how far it has been tried. **One real computer so far**: the owner wrote the disk image (section 1)
+to a disk and started it on their AMD Ryzen computer, and everything worked (16/11/2026, their report). The rest of
+the guide has run in a virtual machine (GitHub's CI, 13/11/2026); the probe, the board and the CAN adapter have not.
 
 ## 0. What you need
 

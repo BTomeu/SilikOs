@@ -46,8 +46,9 @@ serial port and counted on the host; a check that is missing is a failure):
 | The disk image | the installed system as a file to write straight onto a disk, with no installer: not encrypted, no user yet, every driver in the initramfs; started on USB with Secure Boot on and on SATA up to the first-start setup; at that first start it takes the whole disk (`silik disk grow`); the same for the SilikOS 10 lab | 13 ok, 0 failed, each version (run 43617065747) |
 | SilikOS 10 lab | the same idea on AlmaLinux 10.2 (GNOME Shell 49, Wayland): built, installed, started | 40 ok, 0 failed (run 43592340177) |
 
-**None of this has run on a real computer yet.** The virtual machines are KVM on GitHub's runners; the firmware is
-OVMF, the disks are images. That is the largest thing still missing, and it is said in every document.
+**One real computer so far.** The owner wrote the disk image to a disk and started it on their AMD Ryzen computer:
+"everything works" (16/11/2026, their report; the details of that machine were not given). Everything else in this
+table ran in virtual machines: KVM on GitHub's runners, OVMF firmware, disk images.
 
 ## 3. What it does
 
@@ -132,8 +133,8 @@ whose vendor tools need RHEL 10 only (the EL 10 track exists as a lab system, `d
 
 ## 7. What it is not, and what is missing
 
-- **Not run on real hardware.** No laptop, no adapter, no probe, no board, no instrument. The first real
-  installation is the owner's (`docs/FIRST-HOUR.md`).
+- **One real computer, little real hardware.** The owner's AMD Ryzen runs it from the disk image (16/11/2026); no
+  laptop, no adapter, no probe, no board, no instrument yet.
 - **No vendor tool was ever run on it.** Virtuoso, Vivado, MATLAB and the rest are the person's own, with their
   licence; SilikOS prepares the place and says so, it does not bring them. Whether each runs is not known until
   somebody with a licence tries.

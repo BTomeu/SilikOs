@@ -55,7 +55,8 @@ prints them and runs nothing. The COMMAND bar (Super+Space) shows the same line 
 
 ## State
 
-A prototype verified in virtual machines and containers, not a product. Not run, among others: any real hardware
+A prototype verified in virtual machines and containers, not a product; one real computer, the owner's AMD Ryzen, runs
+it from the disk image (16/11/2026, their report). Not checked, among others: real hardware one by one
 (graphics drivers, Wi-Fi, suspend, CAN adapters, flashing a board), any vendor tool (Cadence, Synopsys, Altium,
 STM32CubeIDE), the Windows virtual machine, SilikOS installed on an ARM machine (its packages and tools are built and tried on
 GitHub's ARM runners). The repository an installed system would update
@@ -88,7 +89,8 @@ repository's workflows on GitHub, and each green run keeps it for 14 days (signe
 
 Write the `.iso` to a USB stick as it is, byte for byte (balenaEtcher; Rufus in "DD Image" mode; `dd`), and start the
 computer from it. [`docs/FIRST-HOUR.md`](docs/FIRST-HOUR.md) has every step, also for a system on an
-external disk that leaves the computer's own disk alone. Nothing has run on a real computer yet: `docs/STATUS.md`.
+external disk that leaves the computer's own disk alone. One real computer has run it: the owner's AMD Ryzen, from
+the disk image (16/11/2026); what was and was not seen there: `docs/STATUS.md`.
 
 To build it yourself instead (any Linux with `rpmbuild`, `createrepo_c`, `xorriso`, `mtools`, `cpio`, `curl`, `gpg`):
 
